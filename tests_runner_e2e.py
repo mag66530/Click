@@ -109,6 +109,13 @@ def write_tasks(pid: str, cities: list[str], text: str = "Текст поста 
         json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
+
+def last_log(pid: str) -> str:
+    """Текст последнего файла лога прогона."""
+    names = runner.list_logs(pid, limit=1)
+    return runner.read_log(pid, names[0]) if names else ""
+
+
 def wait_done(pid: str, timeout: float = 25) -> dict:
     end = time.time() + timeout
     while time.time() < end:
@@ -258,7 +265,8 @@ def scenario_wrong_account(pid: str) -> None:
     print("\n▸ Чужой аккаунт в Яндексе → прогон не стартует")
     CALLS.clear(); SCRIPT.clear()
     original = yb.verify_account
-    yb.verify_account = lambda page, email: {"matched": False, "emails": ["someone@else.ru"], "checked": True}  # type: ignore
+    yb.verify_account = lambda page, email: {  # type: ignore
+        "state": "other", "matched": False, "emails": ["someone@else.ru"], "checked": True}
     try:
         write_tasks(pid, ["Уфа"], text="Текст для проверки аккаунта")
         runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru",
@@ -269,6 +277,50 @@ def scenario_wrong_account(pid: str) -> None:
         check("в ошибке названы оба аккаунта",
               "test@yandex.ru" in (state.get("error") or "") and "someone@else.ru" in (state.get("error") or ""),
               str(state.get("error")))
+    finally:
+        yb.verify_account = original  # type: ignore[assignment]
+
+
+def scenario_account_unknown(pid: str) -> None:
+    """
+    Проверка аккаунта не смогла ничего определить – это НЕ повод стоять.
+    Ровно на этом падал живой прогон: «залогинен НЕ ТОТ аккаунт, найдено:
+    не определено» при полностью правильном аккаунте.
+    """
+    print("\n▸ Аккаунт определить не удалось → прогон всё равно идёт")
+    CALLS.clear(); SCRIPT.clear()
+    original = yb.verify_account
+    yb.verify_account = lambda page, email: {  # type: ignore
+        "state": "unknown", "matched": True, "emails": [], "checked": True}
+    try:
+        write_tasks(pid, ["Тверь"], text="Текст при неопределённом аккаунте")
+        runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru",
+                             strict_account_check=True)
+        state = wait_done(pid)
+        check("прогон дошёл до конца", state.get("status") == "done", str(state.get("status")))
+        # В очереди могли остаться файлы прошлых сценариев – важно, что наш город ушёл.
+        check("город опубликован", "Тверь" in CALLS, str(CALLS))
+        check("в логе предупреждение, а не остановка",
+              "не удалось определить аккаунт" in last_log(pid).lower(), "нет предупреждения")
+    finally:
+        yb.verify_account = original  # type: ignore[assignment]
+
+
+def scenario_no_session(pid: str) -> None:
+    print("\n▸ Сессии нет вовсе → понятная остановка, а не «чужой аккаунт»")
+    CALLS.clear(); SCRIPT.clear()
+    original = yb.verify_account
+    yb.verify_account = lambda page, email: {  # type: ignore
+        "state": "anonymous", "matched": False, "emails": [], "checked": True}
+    try:
+        write_tasks(pid, ["Курск"], text="Текст без сессии")
+        runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru",
+                             strict_account_check=True)
+        state = wait_done(pid)
+        err = (state.get("error") or "").lower()
+        check("прогон остановлен", state.get("status") == "error", str(state.get("status")))
+        check("сказано про сессию, а не про чужой аккаунт",
+              "никто не залогинен" in err and "не тот аккаунт" not in err, err)
     finally:
         yb.verify_account = original  # type: ignore[assignment]
 
@@ -287,6 +339,8 @@ def main() -> int:
         scenario_stop(pid)
         runner.clear_ledger(pid)
         scenario_wrong_account(pid)
+        scenario_account_unknown(pid)
+        scenario_no_session(pid)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

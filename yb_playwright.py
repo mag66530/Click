@@ -549,39 +549,59 @@ def is_404(page: Page) -> bool:
 
 def verify_account(page: Page, expected_email: str) -> dict:
     """
-    Сравниваем по ЛОГИНУ (часть до @), а не по «первому email на странице»:
-    Яндекс показывает в профиле ещё и привязанные адреса, из-за чего
-    mepen88@yandex.ru с привязанным mepen888@gmail.com считался «чужим».
+    Кто сейчас залогинен в Яндексе. Возвращает state:
 
-    Возвращает {'matched': bool, 'emails': [...], 'checked': bool}.
-    Если проверить не удалось (сеть) – matched=True, работу не блокируем.
+      ok        – нужный аккаунт;
+      other     – НАЙДЕН другой аккаунт (только это повод останавливать прогон);
+      anonymous – не залогинен вовсе, паспорт увёл на страницу входа;
+      unknown   – определить не удалось: страница не отдала ни логина, ни почты.
+
+    Разделение принципиальное. Раньше «ничего не нашли» приравнивалось к «чужой
+    аккаунт», и прогон падал с текстом «залогинен НЕ ТОТ аккаунт, найдено: не
+    определено» – при том что аккаунт был правильный, просто страница профиля
+    не отдала данные. Останавливать работу из-за неудачи самой проверки нельзя.
+
+    Сравниваем по ЛОГИНУ (часть до @): в профиле Яндекс показывает и привязанные
+    адреса, из-за чего mepen88@yandex.ru с привязанным mepen888@gmail.com
+    когда-то считался чужим.
     """
     expected = (expected_email or "").lower().strip()
     login = expected.split("@")[0]
     if not login:
-        return {"matched": True, "emails": [], "checked": False}
+        return {"state": "unknown", "matched": True, "emails": [], "checked": False}
+
     try:
         page.goto(PROFILE_URL, wait_until="domcontentloaded", timeout=30_000)
-        page.wait_for_timeout(1500)
-        return {
-            **page.evaluate(
-                """(login) => {
-                    const body = document.body.textContent || '';
-                    const esc = login.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
-                    const wordRx = new RegExp('(^|[^\\\\w.-])' + esc + '([^\\\\w.-]|$)', 'i');
-                    const mailRx = new RegExp('(^|[^\\\\w.+-])' + esc + '@(yandex\\\\.(ru|com|by|kz|ua)|ya\\\\.ru)', 'i');
-                    return {
-                        matched: wordRx.test(body) || mailRx.test(body),
-                        emails: (body.match(/[\\w.+-]+@[\\w-]+\\.[\\w.-]+/g) || []).slice(0, 8),
-                    };
-                }""",
-                login,
-            ),
-            "checked": True,
-        }
+        try:                                   # профиль – SPA, ждём тишины в сети
+            page.wait_for_load_state("networkidle", timeout=8_000)
+        except Exception:                      # noqa: BLE001
+            page.wait_for_timeout(2_000)
+
+        if re.search(r"passport\.yandex\.[a-z.]+/auth", page.url or "", re.I):
+            return {"state": "anonymous", "matched": False, "emails": [], "checked": True}
+
+        found = page.evaluate(
+            """(login) => {
+                const body = document.body.textContent || '';
+                const esc = login.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const wordRx = new RegExp('(^|[^\\w.-])' + esc + '([^\\w.-]|$)', 'i');
+                const mailRx = new RegExp('(^|[^\\w.+-])' + esc + '@(yandex\\.(ru|com|by|kz|ua)|ya\\.ru)', 'i');
+                return {
+                    matched: wordRx.test(body) || mailRx.test(body),
+                    emails: (body.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []).slice(0, 8),
+                    hasText: body.trim().length > 40,
+                };
+            }""",
+            login,
+        )
+        if found.get("matched"):
+            return {"state": "ok", "matched": True, "emails": found.get("emails") or [], "checked": True}
+        if found.get("emails"):
+            return {"state": "other", "matched": False, "emails": found["emails"], "checked": True}
+        return {"state": "unknown", "matched": True, "emails": [], "checked": True}
     except Exception as e:  # noqa: BLE001
         warn(f"⚠️ Не удалось проверить аккаунт Яндекса: {e}")
-        return {"matched": True, "emails": [], "checked": False}
+        return {"state": "unknown", "matched": True, "emails": [], "checked": False}
 
 
 # ════════════════════════════════════════════════════════════════════

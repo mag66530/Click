@@ -36,7 +36,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-03-projbadge"
+UI_BUILD = "2026-08-03-cities-on-top"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -150,17 +150,38 @@ def _default_subproject(project_id: str) -> dict:
     }
 
 
+# Что из конфига храним снаружи (в репозитории). Пароль от Яндекса – НИКОГДА:
+# он остаётся только в этом контейнере.
+_KEPT = ("countries", "email", "kpSheetUrl", "kpSyncedAt")
+
+
 def load_raw_config(project_id: str) -> dict:
     fp = config_path(project_id)
     if fp.exists():
         try:
             raw = json.loads(fp.read_text(encoding="utf-8"))
             if raw.get("projects"):
-                return raw
+                return _merge_kept(project_id, raw)
         except (json.JSONDecodeError, OSError):
             pass
     sub = _default_subproject(project_id)
-    return {"projects": [sub], "activeProjectId": sub["id"], "settings": {}}
+    return _merge_kept(project_id, {"projects": [sub], "activeProjectId": sub["id"], "settings": {}})
+
+
+def _merge_kept(project_id: str, raw: dict) -> dict:
+    """
+    Города и настройки проекта поднимаем из репозитория, если локально пусто.
+    В облаке файловая система временная: без этого после каждого перезапуска
+    список городов пришлось бы набирать заново.
+    """
+    saved = repo_store.load(f"project-{project_id}")
+    if not saved:
+        return raw
+    sub = next((x for x in raw["projects"] if x["id"] == raw.get("activeProjectId")), raw["projects"][0])
+    for key in _KEPT:
+        if key in saved and not sub.get(key):
+            sub[key] = saved[key]
+    return raw
 
 
 def get_config(project_id: str) -> dict:
@@ -200,6 +221,19 @@ def save_config(project_id: str) -> None:
     tmp = fp.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(fp)
+    _save_kept(project_id, raw)
+
+
+def _save_kept(project_id: str, raw: dict) -> None:
+    """Города и настройки – наружу, чтобы пережили перезапуск. Пароль не берём."""
+    sub = next((x for x in raw["projects"] if x["id"] == raw.get("activeProjectId")), raw["projects"][0])
+    data = {k: sub.get(k) for k in _KEPT if sub.get(k)}
+    if not data.get("countries"):
+        return
+    try:
+        repo_store.save(f"project-{project_id}", data, f"Click: города и настройки {project_id}")
+    except Exception as e:  # noqa: BLE001
+        st.session_state["_store_error"] = str(e)
 
 
 def country_by_id(config: dict, cid: str) -> dict | None:
@@ -457,30 +491,67 @@ def status_pills(project_id: str) -> list[tuple[str, str]]:
     return pills
 
 
-def city_selector(key_prefix: str, country: dict, default_all: bool = False) -> list[str]:
+def city_selector(key_prefix: str, country: dict, default_all: bool = True) -> list[str]:
     """
-    Выбор городов страны. По умолчанию НИЧЕГО не выбрано – так в оригинале,
-    чтобы случайно не отправить пост во все 137 городов.
+    Города страны – строка-заголовок и сетка галочек, как в оригинале.
+    По умолчанию выбраны ВСЕ города страны: в оригинале выбор страны означал
+    «шлём во все её города», а лишние снимают руками.
     """
     state_key = f"{key_prefix}-cities-{country['id']}"
     options = [c["id"] for c in country["cities"]]
-    names = {c["id"]: c["name"] for c in country["cities"]}
     if state_key not in st.session_state:
         st.session_state[state_key] = list(options) if default_all else []
+    chosen = set(st.session_state.get(state_key) or [])
+    n = len(chosen)
 
-    c1, c2, c3 = st.columns([1, 1, 2])
-    c1.button("Выбрать все", key=f"{key_prefix}-all-{country['id']}", use_container_width=True,
-              on_click=_set_cities, args=(state_key, list(options)))
-    c2.button("Снять все", key=f"{key_prefix}-none-{country['id']}", use_container_width=True,
-              on_click=_set_cities, args=(state_key, []))
-    selected = st.session_state.get(state_key) or []
-    c3.markdown(
-        f'<div style="padding-top:8px"><span class="badge badge-{"accent" if selected else "muted"}">'
-        f'выбрано {len(selected)} из {len(options)}</span></div>',
-        unsafe_allow_html=True,
-    )
-    return st.multiselect("Города", options=options, format_func=lambda cid: names.get(cid, cid),
-                          key=state_key, label_visibility="collapsed")
+    idx = abs(hash(country["id"])) % 10_000          # ключ контейнера – только латиница
+    open_key = f"{key_prefix}-open-{country['id']}"
+    is_open = st.session_state.get(open_key) is True
+    html(T.tile_css([(f"tile-row-city-{key_prefix}-{idx}",
+                      row_vars(country, chosen, "свернуть ▾" if is_open else "изменить ▸"))]))
+    with st.container(key=f"tile-row-city-{key_prefix}-{idx}"):
+        st.button(country["name"], key=f"{key_prefix}-row-{country['id']}",
+                  use_container_width=True, type="primary" if is_open else "secondary",
+                  on_click=_flip, args=(open_key,))
+    if not is_open:
+        return [c for c in options if c in chosen]
+
+    with st.container(border=True):
+        head, hint = st.columns([1, 4])
+        head.button("Снять все" if n == len(options) else "Выбрать все",
+                    key=f"{key_prefix}-toggle-{country['id']}",
+                    on_click=_set_cities_sync,
+                    args=(state_key, options, [] if n == len(options) else list(options)))
+        with hint:
+            html('<div class="hint" style="padding-top:9px">Кликайте по городам '
+                 'чтобы исключить или добавить</div>')
+        with st.container(key="city-grid"):
+            per_row = 7
+            for i in range(0, len(country["cities"]), per_row):
+                cols = st.columns(per_row)
+                for col, ct in zip(cols, country["cities"][i:i + per_row]):
+                    wkey = f"{key_prefix}-cb-{ct['id']}"
+                    col.checkbox(ct["name"], value=ct["id"] in chosen, key=wkey,
+                                 on_change=_city_toggle, args=(state_key, ct["id"], wkey))
+    return [c for c in options if c in set(st.session_state.get(state_key) or [])]
+
+
+def _flip(key: str) -> None:
+    st.session_state[key] = not st.session_state.get(key)
+
+
+def _set_cities_sync(state_key: str, options: list[str], value: list[str]) -> None:
+    """Меняем и набор, и сами галочки – иначе счётчик уедет, а галочки останутся."""
+    st.session_state[state_key] = list(value)
+    prefix = state_key.split("-cities-")[0]
+    for cid in options:
+        st.session_state[f"{prefix}-cb-{cid}"] = cid in value
+
+
+def _city_toggle(state_key: str, city_id: str, widget_key: str) -> None:
+    cur = set(st.session_state.get(state_key) or [])
+    cur.add(city_id) if st.session_state.get(widget_key) else cur.discard(city_id)
+    st.session_state[state_key] = list(cur)
 
 
 def _toggle_open(open_key: str, value: str) -> None:
@@ -510,12 +581,14 @@ def _toggle_all_countries(key_prefix: str, country_ids: list[str], turn_on: bool
             st.session_state[f"{key_prefix}-{cid}-cities-{cid}"] = []
 
 
-def country_picker(key_prefix: str, config: dict, title: str = "Страны") -> list[dict]:
+def country_picker(key_prefix: str, config: dict, title: str = "Страны",
+                   with_cities: bool = False, cities: dict | None = None) -> list[dict]:
     """
     Выбор стран карточками, как в оригинале: флаг, название, «N гор.».
     Сама карточка – HTML (Streamlit такого не умеет), клик – кнопкой под ней.
     """
     countries = config["countries"]
+    cities = cities if cities is not None else {}
     if not countries:
         return []
 
@@ -553,7 +626,15 @@ def country_picker(key_prefix: str, config: dict, title: str = "Страны") -
                               type="primary" if active else "secondary",
                               on_click=_toggle_country, args=(key_prefix, c["id"]))
 
-    return [c for c in countries if st.session_state.get(cb_key(c["id"]))]
+        chosen = [c for c in countries if st.session_state.get(cb_key(c["id"]))]
+        # Города выбираются здесь же, под странами – как в оригинале, а не внизу
+        # страницы рядом с предпросмотром.
+        if with_cities and chosen:
+            st.divider()
+            for c in chosen:
+                cities[c["id"]] = city_selector(key_prefix, c)
+
+    return chosen
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -905,7 +986,9 @@ def tab_compose(project_id: str, config: dict) -> None:
     type_def = next(t for t in types if t["id"] == post_type)
 
     # ─── Страны для публикации: карточки со счётчиком городов, как в оригинале ───
-    selected_countries = country_picker("compose", config, title="🌍 Страны для публикации")
+    per_country: dict[str, list[str]] = {}
+    selected_countries = country_picker("compose", config, title="🌍 Страны для публикации",
+                                        with_cities=True, cities=per_country)
 
     # ─── Текст и картинки – одна карточка, названная типом поста ───
     text_card = st.container(border=True)
@@ -972,12 +1055,12 @@ def tab_compose(project_id: str, config: dict) -> None:
         st.info("Выберите хотя бы одну страну выше.")
         return
 
-    per_country: dict[str, list[str]] = {}
-    for country in selected_countries:
-        with st.expander(country["name"], expanded=len(selected_countries) <= 2):
-            per_country[country["id"]] = city_selector(f"compose-{country['id']}", country)
-            if (body or "").strip():
-                st.caption("Так пост уйдёт в Яндекс:")
+    if (body or "").strip():
+        with st.container(border=True):
+            html('<div class="card-title">👁 Так пост уйдёт в Яндекс</div>')
+            for country in selected_countries:
+                html(f'<div class="hint" style="margin:8px 0 4px">{flag(country["name"])} '
+                     f'<b style="color:var(--text)">{T.esc(country["name"])}</b></div>')
                 html(T.preview_box(build_final_text(project_id, country["name"], post_type, body)))
 
     total_cities = sum(len(v) for v in per_country.values())
@@ -1039,8 +1122,13 @@ def tab_compose(project_id: str, config: dict) -> None:
                          use_container_width=True, key="btn-save-queue"):
                 saved = save_queue_to_tasks(project_id, config, queue)
                 st.session_state["queue"] = []
-                st.toast(f"Сохранено файлов задач: {saved}. Откройте «Запуск».")
-                time.sleep(0.8)
+                # Сразу переносим на «Запуск»: дальше человеку всё равно туда.
+                # Раздел держим и в своём ключе, и в ключе виджета – иначе радио
+                # восстановит прежнюю вкладку из собственного состояния.
+                st.session_state["section_name"] = SECTIONS[0]
+                st.session_state["main-section"] = SECTIONS[0]
+                st.toast(f"Сохранено файлов задач: {saved}. Открываю «Запуск».")
+                time.sleep(0.6)
                 st.rerun()
         with c2:
             with st.container(key="danger-clear-queue"):

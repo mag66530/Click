@@ -419,20 +419,36 @@ def _publish_worker(
         _append_log(project_id, "INFO", "🌐 Браузер запущен")
 
         # ── Защита от публикации не с того аккаунта ──
+        # Останавливаемся ТОЛЬКО если нашли чужой аккаунт или сессии нет вовсе.
+        # «Определить не удалось» – это неудача проверки, а не повод не работать:
+        # раньше из-за этого прогон падал с «залогинен НЕ ТОТ аккаунт, найдено:
+        # не определено» при полностью правильном аккаунте.
         if expected_email:
             check = yb.verify_account(browser.page, expected_email)
-            if check.get("checked") and not check.get("matched"):
-                found = ", ".join(check.get("emails") or []) or "не определено"
+            state = check.get("state") or (
+                "ok" if check.get("matched") else ("other" if check.get("emails") else "unknown"))
+            if state == "other":
                 msg = (f"В Яндексе залогинен НЕ ТОТ аккаунт. Проект ожидает {expected_email}, "
-                       f"на странице профиля найдено: {found}.")
+                       f"на странице профиля найдено: {', '.join(check.get('emails') or [])}.")
+            elif state == "anonymous":
+                msg = ("В Яндексе никто не залогинен – сессия истекла или ещё не создавалась. "
+                       "Войдите в разделе «Настройки».")
+            else:
+                msg = ""
+
+            if msg:
                 _append_log(project_id, "ERROR", "❌ ОСТАНОВКА: " + msg)
                 if strict_account_check:
                     save_report("finished")
-                    push_state("error", 0, "", msg + " Сбросьте сессию в «Настройках» и войдите под нужным аккаунтом.")
+                    push_state("error", 0, "", msg)
                     return
                 _append_log(project_id, "WARN", "⚠️ Строгая проверка выключена – продолжаю на свой страх и риск")
-            elif check.get("checked"):
+            elif state == "ok":
                 _append_log(project_id, "INFO", f"✓ Аккаунт совпадает ({expected_email})")
+            else:
+                _append_log(project_id, "WARN",
+                            "⚠️ Не удалось определить аккаунт на странице профиля Яндекса – "
+                            "продолжаю, публикация пойдёт под текущей сессией")
 
         recent_durations: list[int] = []
         protocol_fails = 0

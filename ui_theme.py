@@ -96,6 +96,16 @@ def css(theme: str = "dark") -> str:
 [data-testid="stStatusWidget"] * {{ pointer-events: auto; }}
 [data-testid="stToolbar"] {{ right: 8px; }}
 [data-testid="stDecoration"] {{ display: none; }}
+/* Подсказка (help у кнопок). Внутри у неё обычный markdown, а ему общее правило
+   даёт приглушённый цвет текста – на светлой теме получалось тёмное на тёмном. */
+[data-testid="stTooltipContent"], [role="tooltip"] {{
+  background: #10131d !important; border: 1px solid #323a52 !important;
+  border-radius: var(--r-sm) !important; box-shadow: var(--shadow-md);
+}}
+[data-testid="stTooltipContent"] *, [role="tooltip"] [data-testid="stMarkdownContainer"] *,
+[data-testid="stTooltipContent"] p, [role="tooltip"] p {{
+  color: #e8eaf3 !important; font-size: 12.5px !important;
+}}
 /* Блоки с <style> Streamlit кладёт в обычный элемент страницы. Сами они нулевой
    высоты, но между элементами стоит отступ 16px – два таких блока и давали
    пустую полосу над шапкой. Убираем их из потока; на сами стили это не влияет. */

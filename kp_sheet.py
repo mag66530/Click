@@ -51,7 +51,15 @@ from typing import Any
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 SPRAV_RX = re.compile(r"yandex\.[a-z.]+/sprav/\d+", re.I)
-DELETED_RX = re.compile(r"удал", re.I)
+
+# Значения колонки «Статус» у Яндекс.Бизнеса (список из выпадающего в КП):
+# Активная, Онлайн, Тех. проблемы, Удалена, Добавить.
+#   Удалена / Добавить  – карточки для работы нет, город не берём;
+#   Тех. проблемы       – берём, но помечаем: молча пропустить город хуже,
+#                         чем попробовать и увидеть ошибку в отчёте;
+#   Активная / Онлайн / пусто – обычная работа.
+SKIP_STATUS_RX = re.compile(r"удал|добав|заблок", re.I)
+WARN_STATUS_RX = re.compile(r"тех|проблем", re.I)
 
 
 # ─── Ссылка на таблицу ──────────────────────────────────────────────
@@ -168,13 +176,44 @@ def _read_values(file_id: str, sa_info: dict) -> list[list[str]]:
     if not titles:
         raise RuntimeError("В таблице нет листов")
 
-    rng = requests.utils.quote(f"'{titles[0]}'")
-    r = requests.get(f"{base}/values/{rng}",
-                     params={"majorDimension": "ROWS", "valueRenderOption": "FORMATTED_VALUE"},
-                     headers=headers, timeout=60)
-    if r.status_code != 200:
-        raise RuntimeError(f"Не удалось прочитать лист «{titles[0]}»: HTTP {r.status_code}")
-    return [[("" if v is None else str(v)) for v in row] for row in (r.json() or {}).get("values", [])]
+    def read(title: str) -> list[list[str]]:
+        rng = requests.utils.quote(f"'{title}'")
+        r = requests.get(f"{base}/values/{rng}",
+                         params={"majorDimension": "ROWS", "valueRenderOption": "FORMATTED_VALUE"},
+                         headers=headers, timeout=60)
+        if r.status_code != 200:
+            raise RuntimeError(f"Не удалось прочитать лист «{title}»: HTTP {r.status_code}")
+        return [[("" if v is None else str(v)) for v in row] for row in (r.json() or {}).get("values", [])]
+
+    tried = []
+    for title in _sheet_order(titles):
+        rows = read(title)
+        cities, diag = parse_rows(rows)
+        if cities:
+            diag["sheet"] = title
+            return rows
+        tried.append(f"«{title}»: {diag.get('error') or 'городов не нашлось'}")
+    raise RuntimeError("Ни на одном листе не нашлось таблицы с городами и ссылками "
+                       "на Яндекс.Бизнес. Проверено – " + "; ".join(tried[:6]))
+
+
+def _sheet_order(titles: list[str]) -> list[str]:
+    """
+    Порядок обхода листов. Первым идёт «Карта присутствия» – в КП именно на нём
+    города. Название сверяем без пробелов и с допуском на опечатку: в реальном
+    файле лист называется «Карта присутсвия».
+    """
+    def key(t: str) -> tuple[int, int]:
+        n = re.sub(r"[^а-яё]", "", (t or "").lower())
+        if n.startswith("картаприсут"):
+            return (0, 0)
+        if "присут" in n or "город" in n:
+            return (1, 0)
+        if n in {"сводка", "нетрогать", "приоритеты"}:
+            return (3, 0)
+        return (2, 0)
+
+    return sorted(titles, key=key)
 
 
 def _norm(s: str) -> str:
@@ -222,6 +261,19 @@ def parse_rows(rows: list[list[str]]) -> tuple[list[dict], dict]:
     diag["urlColumn"] = best_col
     diag["urlHeader"] = rows[header_idx][best_col] if best_col < len(rows[header_idx]) else ""
 
+    # 2б. Контакты города – слева от блоков площадок, названия однозначные.
+    def find(*names: str) -> int:
+        for want in names:
+            for c, h in enumerate(header):
+                if h == want:
+                    return c
+        return -1
+
+    col_site = find("url", "сайт")
+    col_email = find("почта", "email", "e-mail")
+    col_phone = find("общий город", "общий\nгород", "телефон")
+    diag["contactColumns"] = {"site": col_site, "email": col_email, "phone": col_phone}
+
     # 3. «Статус» – ближайшая колонка справа от ссылок (у Яндекса свой, у 2ГИС свой)
     col_status = -1
     for c in range(best_col + 1, min(best_col + 5, len(header))):
@@ -244,14 +296,21 @@ def parse_rows(rows: list[list[str]]) -> tuple[list[dict], dict]:
             diag["skippedNoUrl"] += 1
             continue
         status = cell(col_status) if col_status >= 0 else ""
-        if status and DELETED_RX.search(status):
+        if status and SKIP_STATUS_RX.search(status):
             diag["skippedDeleted"] += 1
             continue
+        if status and WARN_STATUS_RX.search(status):
+            diag["withProblems"] = diag.get("withProblems", 0) + 1
         cities.append({
             "country": country,
             "name": name,
             "url": "https://" + m.group(0) if not url_raw.lower().startswith("http") else url_raw,
             "status": status,
+            # Контакты из той же строки КП – ими можно подставлять окончания постов,
+            # чтобы номер и почта менялись правкой таблицы, а не кода.
+            "site": cell(col_site),
+            "email": cell(col_email),
+            "phone": cell(col_phone),
         })
 
     diag["cities"] = len(cities)

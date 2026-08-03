@@ -359,8 +359,15 @@ def _toggle_theme() -> None:
 
 
 @st.cache_data(show_spinner=False)
-def _css(theme_name: str) -> str:
-    """31 КБ строки незачем собирать заново на каждой перерисовке."""
+def _css(theme_name: str, build: str) -> str:
+    """
+    31 КБ строки незачем собирать заново на каждой перерисовке.
+
+    ВАЖНО: в ключе кэша обязателен build. Кэш Streamlit живёт в процессе и
+    переживает и перерисовки, и перезагрузку модуля – без метки сборки после
+    обновления приложения продолжал бы отдаваться СТАРЫЙ CSS, и любая правка
+    оформления просто не доезжала бы до экрана.
+    """
     return T.css(theme_name)
 
 
@@ -380,14 +387,17 @@ _TILE_SAFETY_CSS = """
 
 
 def inject_css() -> None:
-    st.markdown(_css(theme()), unsafe_allow_html=True)
-    st.markdown(_TILE_SAFETY_CSS, unsafe_allow_html=True)
+    st.markdown(_css(theme(), UI_BUILD) + _TILE_SAFETY_CSS, unsafe_allow_html=True)
     if getattr(T, "BUILD", "") != UI_BUILD:
         st.error("Интерфейс загружен частично (стиль от прежней сборки). "
                  "Нажмите «Reboot app» в меню Streamlit – это лечится перезапуском.")
 
 
-def html(markup: str) -> None:
+def html(markup: str | None) -> None:
+    """Пустое не рисуем: иначе Streamlit заводит лишний элемент страницы, а он
+    тянет за собой отступ 16px – так над шапкой и набегала пустая полоса."""
+    if not markup:
+        return
     st.markdown(markup, unsafe_allow_html=True)
 
 

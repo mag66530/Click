@@ -1,24 +1,24 @@
 """
-runner.py — прогон публикации/актуализации. Замена main() из publish.js и actualize.js.
+runner.py – прогон публикации/актуализации. Замена main() из publish.js и actualize.js.
 
 Почему это отдельный модуль, а не код внутри Streamlit-страницы:
 Streamlit перерисовывает скрипт при КАЖДОМ действии пользователя и при каждом
 переподключении вкладки. Если запускать публикацию прямо в теле `if st.button(...)`,
 то повторный прогон того же запроса (двойной клик, реконнект, F5 во время работы)
-стартует публикацию ВТОРОЙ РАЗ — ровно это и приводило к дублям постов.
+стартует публикацию ВТОРОЙ РАЗ – ровно это и приводило к дублям постов.
 
 Здесь три независимых уровня защиты от дубля:
 
-  1. ЛОК-ФАЙЛ `.run.lock`  — второй прогон по проекту физически не стартует,
+  1. ЛОК-ФАЙЛ `.run.lock`  – второй прогон по проекту физически не стартует,
      пока идёт первый. Проверяется до создания потока.
-  2. РЕЕСТР `.published.jsonl` — на каждый (companyId + хэш текста) пишется отметка.
+  2. РЕЕСТР `.published.jsonl` – на каждый (companyId + хэш текста) пишется отметка.
      Повторная публикация того же текста в тот же город в течение DEDUP_WINDOW_HOURS
      не выполняется, город помечается 'skipped-duplicate'. Это спасает и при
      обрыве прогона на середине: перезапуск не публикует заново то, что уже ушло.
-  3. ЗАПРЕТ РЕТРАЯ ПОСЛЕ КЛИКА — если клик «Создать» уже был сделан, повторная
+  3. ЗАПРЕТ РЕТРАЯ ПОСЛЕ КЛИКА – если клик «Создать» уже был сделан, повторная
      попытка запрещена, статус 'unknown' («проверьте вручную»).
 
-Состояние прогона лежит в файлах (а не в st.session_state) — поэтому прогресс
+Состояние прогона лежит в файлах (а не в st.session_state) – поэтому прогресс
 виден в любой вкладке и переживает перерисовку страницы.
 """
 
@@ -125,7 +125,7 @@ def read_state(project_id: str) -> dict:
         return {"status": "idle"}
 
     # Прогон помечен running, но процесс, который его вёл, уже не жив
-    # (перезапуск Streamlit) — показываем честно, а не «вечно идёт».
+    # (перезапуск Streamlit) – показываем честно, а не «вечно идёт».
     if state.get("status") == "running" and state.get("ownerPid") != os.getpid():
         state = {**state, "status": "interrupted",
                  "error": "Прогон прерван перезапуском приложения. Данные о выполненных городах сохранены."}
@@ -142,7 +142,7 @@ def is_running(project_id: str) -> bool:
 
 def request_stop(project_id: str) -> None:
     p_stop(project_id).write_text(str(int(time.time())), encoding="utf-8")
-    _append_log(project_id, "WARN", "⏹  Запрошена остановка — завершу после текущего города")
+    _append_log(project_id, "WARN", "⏹  Запрошена остановка – завершу после текущего города")
 
 
 def read_live_log(project_id: str, tail: int = 40_000) -> str:
@@ -240,12 +240,12 @@ def _acquire_lock(project_id: str, run_id: str) -> bool:
             data = json.loads(fp.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             data = {}
-        # Лок от живого прогона в ЭТОМ же процессе — отказ.
+        # Лок от живого прогона в ЭТОМ же процессе – отказ.
         if data.get("ownerPid") == os.getpid():
             thread = _threads.get(project_id)
             if thread and thread.is_alive():
                 return False
-        # Иначе лок протухший (приложение перезапускали) — забираем.
+        # Иначе лок протухший (приложение перезапускали) – забираем.
     fp.write_text(json.dumps({"runId": run_id, "ownerPid": os.getpid(), "at": _now_iso()},
                              ensure_ascii=False), encoding="utf-8")
     return True
@@ -286,7 +286,7 @@ def _archive(fp: Path) -> None:
 
 
 def _click_happened(result: dict) -> bool:
-    """Был ли клик «Создать». Если да — повторять НЕЛЬЗЯ ни при каких условиях."""
+    """Был ли клик «Создать». Если да – повторять НЕЛЬЗЯ ни при каких условиях."""
     step = (result.get("steps") or {}).get("publish")
     return step in ("clicked", "click-error-no-api", "unknown", "api-confirmed", "dom-confirmed", "api-rejected")
 
@@ -306,12 +306,12 @@ def start_publish(
 ) -> tuple[bool, str]:
     """
     Запускает публикацию в фоновом потоке. Возвращает (запущено?, сообщение).
-    Повторный вызов при активном прогоне ничего не делает — это и есть защита
+    Повторный вызов при активном прогоне ничего не делает – это и есть защита
     от «нажал кнопку дважды → опубликовалось дважды».
     """
     with _lock:
         if is_running(project_id):
-            return False, "Публикация уже идёт — второй запуск заблокирован."
+            return False, "Публикация уже идёт – второй запуск заблокирован."
         thread = _threads.get(project_id)
         if thread and thread.is_alive():
             return False, "Предыдущий прогон ещё не завершился."
@@ -411,7 +411,7 @@ def _publish_worker(
     processed = 0
     try:
         _append_log(project_id, "INFO", "═" * 46)
-        _append_log(project_id, "INFO", f"ЗАПУСК ПУБЛИКАЦИИ · {total} городов · аккаунт {expected_email or account or '—'}")
+        _append_log(project_id, "INFO", f"ЗАПУСК ПУБЛИКАЦИИ · {total} городов · аккаунт {expected_email or account or '–'}")
         _append_log(project_id, "INFO", "═" * 46)
         save_report("in-progress")
 
@@ -430,7 +430,7 @@ def _publish_worker(
                     save_report("finished")
                     push_state("error", 0, "", msg + " Сбросьте сессию в «Настройках» и войдите под нужным аккаунтом.")
                     return
-                _append_log(project_id, "WARN", "⚠️ Строгая проверка выключена — продолжаю на свой страх и риск")
+                _append_log(project_id, "WARN", "⚠️ Строгая проверка выключена – продолжаю на свой страх и риск")
             elif check.get("checked"):
                 _append_log(project_id, "INFO", f"✓ Аккаунт совпадает ({expected_email})")
 
@@ -440,14 +440,14 @@ def _publish_worker(
         for fp, cfg in files:
             if stopped:
                 break
-            country = cfg.get("country") or cfg.get("projectName") or "—"
+            country = cfg.get("country") or cfg.get("projectName") or "–"
             city_tasks = cfg.get("tasks") or []
             _append_log(project_id, "INFO", f"📦 ПАКЕТ: {country} ({len(city_tasks)} городов)")
 
             for i, task in enumerate(city_tasks):
                 if should_stop():
                     stopped = True
-                    _append_log(project_id, "INFO", "⏹  Получен сигнал остановки — завершаю")
+                    _append_log(project_id, "INFO", "⏹  Получен сигнал остановки – завершаю")
                     break
 
                 processed += 1
@@ -460,7 +460,7 @@ def _publish_worker(
                     when = str(dup.get("at", ""))[:19].replace("T", " ")
                     res = {
                         "status": "skipped-duplicate",
-                        "reason": f"Этот же текст уже отправлен в «{city}» {when} UTC — повтор пропущен.",
+                        "reason": f"Этот же текст уже отправлен в «{city}» {when} UTC – повтор пропущен.",
                         "cityName": city, "companyUrl": task.get("companyUrl"),
                         "steps": {}, "durationMs": 0, "country": country, "package": country,
                     }
@@ -480,7 +480,7 @@ def _publish_worker(
                 results.append(res)
                 tally(res["status"])
 
-                # Фото в раздел «Товары» — только после успешной публикации, изолированно
+                # Фото в раздел «Товары» – только после успешной публикации, изолированно
                 photos = task.get("productPhotos") or []
                 if photos and res["status"] in ("ok", "no-image"):
                     try:
@@ -503,7 +503,7 @@ def _publish_worker(
                     protocol_fails += 1
                     if protocol_fails >= PROTOCOL_FAIL_LIMIT:
                         _append_log(project_id, "WARN",
-                                    f"💀 {PROTOCOL_FAIL_LIMIT} города подряд упали по таймауту протокола — перезапускаю браузер")
+                                    f"💀 {PROTOCOL_FAIL_LIMIT} города подряд упали по таймауту протокола – перезапускаю браузер")
                         try:
                             browser.restart()
                             protocol_fails = 0
@@ -519,7 +519,7 @@ def _publish_worker(
                     _append_log(project_id, "INFO", f"⏱️  Пауза {delay_s:.0f} сек...")
                     _sleep_interruptible(delay_s, should_stop)
 
-                # Детектор «Яндекс тормозит» — даём остыть
+                # Детектор «Яндекс тормозит» – даём остыть
                 if res.get("durationMs"):
                     recent_durations.append(res["durationMs"])
                     if len(recent_durations) > SLOW_WINDOW:
@@ -561,7 +561,7 @@ def _publish_worker(
             browser.close()
         except Exception:
             pass
-        # Полностью обработанные файлы уводим в done/ (частично обработанные оставляем —
+        # Полностью обработанные файлы уводим в done/ (частично обработанные оставляем –
         # при повторном запуске реестр не даст переопубликовать уже сделанные города).
         if not stopped:
             for fp in processed_files:
@@ -586,7 +586,7 @@ def _publish_one_city(
 
     Ретрай разрешён ТОЛЬКО если первая попытка упала ДО клика «Создать»
     (кнопка «Добавить пост» не найдена, поле текста не найдено, контекст умер).
-    Если клик был — статус 'unknown', повтор запрещён: дубль хуже, чем ручная проверка.
+    Если клик был – статус 'unknown', повтор запрещён: дубль хуже, чем ручная проверка.
     """
     retryable = ("Кнопка «Добавить пост» не найдена", "Execution context was destroyed",
                  "Target closed", "Не найдено поле для текста", "Target page, context or browser has been closed")
@@ -599,7 +599,7 @@ def _publish_one_city(
                "cityName": task.get("cityName"), "companyUrl": task.get("companyUrl"),
                "steps": {}, "durationMs": 0}
 
-    # Любой исход, где клик уже был — фиксируем в реестре, чтобы никакой
+    # Любой исход, где клик уже был – фиксируем в реестре, чтобы никакой
     # повторный запуск не отправил этот же текст в этот же город второй раз.
     if _click_happened(res) or res["status"] in ("ok", "no-image", "unknown"):
         _ledger_add(project_id, _text_key(task.get("companyId"), task.get("companyUrl"), task.get("postText", "")),
@@ -608,20 +608,20 @@ def _publish_one_city(
     if res["status"] in ("ok", "no-image"):
         return res
     if res["status"] == "unknown":
-        yb.warn(f"  ⚠️ [{task.get('cityName')}] результат неопределён — ретрай ЗАПРЕЩЁН во избежание дубля")
+        yb.warn(f"  ⚠️ [{task.get('cityName')}] результат неопределён – ретрай ЗАПРЕЩЁН во избежание дубля")
         return res
     if _click_happened(res):
-        yb.warn(f"  ⚠️ [{task.get('cityName')}] клик «Создать» уже был — ретрай ЗАПРЕЩЁН")
+        yb.warn(f"  ⚠️ [{task.get('cityName')}] клик «Создать» уже был – ретрай ЗАПРЕЩЁН")
         res["status"] = "unknown"
         res["reason"] = ("Клик «Создать» сделан, но публикация не подтверждена. "
-                         "Проверьте Яндекс.Бизнес вручную — возможно пост опубликован.")
+                         "Проверьте Яндекс.Бизнес вручную – возможно пост опубликован.")
         return res
     if not any(x.lower() in (res.get("reason") or "").lower() for x in retryable):
         return res
     if should_stop():
         return res
 
-    yb.info(f"  🔄 [{task.get('cityName')}] первая попытка упала ДО клика — безопасный ретрай")
+    yb.info(f"  🔄 [{task.get('cityName')}] первая попытка упала ДО клика – безопасный ретрай")
     if any(x in (res.get("reason") or "") for x in ("Execution context", "Target closed", "has been closed")):
         try:
             browser.new_page()
@@ -662,8 +662,8 @@ def _second_pass(
     Второй проход по проблемным городам.
 
     Отличие от publish.js: города со статусом 'unknown' по умолчанию НЕ публикуются
-    заново — только проверяются на наличие свежего поста. Если свежий пост найден,
-    статус повышается до 'ok'. Если нет — так и остаётся 'unknown' («проверьте вручную»),
+    заново – только проверяются на наличие свежего поста. Если свежий пост найден,
+    статус повышается до 'ok'. Если нет – так и остаётся 'unknown' («проверьте вручную»),
     потому что именно автоповтор после неподтверждённого клика и давал дубли.
     Включить старое поведение можно галочкой «Повторять неопределённые».
     """
@@ -677,13 +677,13 @@ def _second_pass(
 
     for n, failed in enumerate(candidates):
         if should_stop():
-            yb.info("⏹  Остановка — прерываю второй проход")
+            yb.info("⏹  Остановка – прерываю второй проход")
             return
         task = failed.get("_task")
         if not task:
             continue
         city = task.get("cityName", "?")
-        yb.info(f"🔁 [{n + 1}/{len(candidates)}] {city} — проверяю ленту...")
+        yb.info(f"🔁 [{n + 1}/{len(candidates)}] {city} – проверяю ленту...")
         push_state()
 
         fresh = None
@@ -703,7 +703,7 @@ def _second_pass(
         if fresh:
             marker = {"moderation": "плашка «Публикация на модерации»",
                       "fresh-time": "метка «только что / N минут назад»"}.get(fresh.get("reason", ""), "свежий пост")
-            yb.info(f"  ✅ {city}: {marker} в ленте — статус обновлён на «опубликован»")
+            yb.info(f"  ✅ {city}: {marker} в ленте – статус обновлён на «опубликован»")
             _downgrade(counters, failed["status"])
             failed.update({"status": "ok", "reason": f"Свежий пост найден в ленте ({marker})", "retried": True})
             counters["ok"] += 1
@@ -712,17 +712,17 @@ def _second_pass(
             continue
 
         if failed["status"] == "unknown" and not retry_unknown:
-            yb.warn(f"  ⚠️ {city}: свежий пост не найден, но клик «Создать» уже был — "
+            yb.warn(f"  ⚠️ {city}: свежий пост не найден, но клик «Создать» уже был – "
                     f"повтор НЕ делаю (риск дубля). Проверьте вручную.")
             continue
 
         if _click_happened(failed):
-            yb.warn(f"  ⚠️ {city}: клик уже был — повтор запрещён")
+            yb.warn(f"  ⚠️ {city}: клик уже был – повтор запрещён")
             continue
 
         dup = recent_publication(project_id, task)
         if dup:
-            yb.warn(f"  ⏭ {city}: в реестре уже есть отправка этого текста — повтор пропущен")
+            yb.warn(f"  ⏭ {city}: в реестре уже есть отправка этого текста – повтор пропущен")
             continue
 
         try:
@@ -858,7 +858,7 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
         for fp, cfg in files:
             if stopped:
                 break
-            country = cfg.get("country") or "—"
+            country = cfg.get("country") or "–"
             city_tasks = cfg.get("tasks") or []
             for i, task in enumerate(city_tasks):
                 if should_stop():

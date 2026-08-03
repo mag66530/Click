@@ -2105,7 +2105,7 @@ MPE_ENDINGS = {
 }
 
 # ─── СМУ: старая логика окончаний по странам (перенесено из _ui.js) ───
-# У СМУ нет "endings" в projects.js (endings=None) — вместо этого окончание поста
+# У СМУ нет "endings" в projects.js (endings=None) – вместо этого окончание поста
 # строится из COUNTRY_TEMPLATES (контакты по стране) + POST_TYPES (тип поста).
 COUNTRY_TEMPLATES = {
   "Россия":      {"site": "stalmetural.ru", "email": "info@stalmetural.ru", "phone": "+7 (499) 130-36-69",  "currency": "₽",   "currencyCode": "RUB"},

@@ -1,2 +1,4 @@
 streamlit>=1.37
 playwright>=1.44
+google-auth>=2.20.0
+requests>=2.28

@@ -1,5 +1,5 @@
 """
-yb_playwright.py — движок Яндекс.Бизнеса на Playwright.
+yb_playwright.py – движок Яндекс.Бизнеса на Playwright.
 
 Это построчный перенос логики publish.js / actualize.js (Puppeteer) на Playwright,
 включая ВСЕ проверки, которые в первой версии переноса были потеряны:
@@ -10,22 +10,22 @@ yb_playwright.py — движок Яндекс.Бизнеса на Playwright.
   • проверка 404
   • ввод текста ДО картинки + подтверждение, что текст доехал в DOM
     (иначе Яндекс публикует обрезанный пост)
-  • перехват API-ответа Яндекса на клик «Создать» — ГЛАВНЫЙ источник истины:
+  • перехват API-ответа Яндекса на клик «Создать» – ГЛАВНЫЙ источник истины:
         HTTP 2xx → пост точно создан
         HTTP 4xx → Яндекс отклонил
         нет ответа → fallback на DOM → иначе статус 'unknown' («проверьте вручную»)
   • распознавание тоста «не удалось загрузить» на картинке → статус 'no-image'
   • проверка, что залогинен ИМЕННО аккаунт проекта (защита от публикации не туда)
-  • checkPostAlreadyExists — поиск СВЕЖЕГО поста (плашка «Публикация на модерации»
+  • checkPostAlreadyExists – поиск СВЕЖЕГО поста (плашка «Публикация на модерации»
     или метка «N минут назад») перед повторной попыткой, чтобы не создать дубль
   • загрузка фото в раздел «Товары» (uploadProductPhotos)
   • скачивание картинок по URL (ImgBB / Imgur / Я.Диск / Google Drive) с ретраями
 
-Статусы публикации — те же 4, что в оригинале:
-    'ok'        — пост опубликован
-    'no-image'  — пост опубликован, но картинка не прикрепилась
-    'unknown'   — клик сделан, подтверждения нет. РЕТРАЙ ЗАПРЕЩЁН (риск дубля)
-    'failed'    — до клика «Создать» не дошли, публиковать безопасно повторно
+Статусы публикации – те же 4, что в оригинале:
+    'ok'        – пост опубликован
+    'no-image'  – пост опубликован, но картинка не прикрепилась
+    'unknown'   – клик сделан, подтверждения нет. РЕТРАЙ ЗАПРЕЩЁН (риск дубля)
+    'failed'    – до клика «Создать» не дошли, публиковать безопасно повторно
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ UA = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
-# Таймауты — 1:1 из DEFAULTS в publish.js
+# Таймауты – 1:1 из DEFAULTS в publish.js
 NAVIGATION_TIMEOUT = 45_000
 ACTION_TIMEOUT = 15_000
 API_WAIT_TIMEOUT = 8.0      # сколько ждём POST-ответ Яндекса после клика «Создать»
@@ -118,7 +118,7 @@ def build_posts_url(company_url: str | None, company_id: str | None = None) -> s
       .../sprav/40691746/edit/photos/       → .../sprav/40691746/edit/posts/
       .../sprav/188702920373/p/edit/        → .../sprav/188702920373/p/edit/posts/
 
-    НИКОГДА не возвращает /sprav/{id}/posts/ — такого пути нет, Яндекс отдаёт 404.
+    НИКОГДА не возвращает /sprav/{id}/posts/ – такого пути нет, Яндекс отдаёт 404.
     """
     if company_url:
         m = re.match(r"^(https?://[^/]+/sprav/\d+/(?:p/)?edit)\b", company_url)
@@ -126,7 +126,7 @@ def build_posts_url(company_url: str | None, company_id: str | None = None) -> s
             return m.group(1) + "/posts/"
         m = re.match(r"^(https?://[^/]+/sprav/\d+)", company_url)
         if m:
-            # Формат неизвестен — берём более частый «новый», со /p/
+            # Формат неизвестен – берём более частый «новый», со /p/
             return m.group(1) + "/p/edit/posts/"
     if company_id:
         return f"https://yandex.ru/sprav/{company_id}/p/edit/posts/"
@@ -223,7 +223,7 @@ def _download_direct(url: str, temp_dir: Path) -> str:
 
 def download_image(url: str, temp_dir: Path) -> str:
     """
-    До 5 попыток с нарастающей паузой — спасает от «Client network socket disconnected»,
+    До 5 попыток с нарастающей паузой – спасает от «Client network socket disconnected»,
     ETIMEDOUT, ECONNRESET и коротких провалов ImgBB. Порт downloadImage из publish.js.
     """
     direct = resolve_image_url(url)
@@ -241,7 +241,7 @@ def download_image(url: str, temp_dir: Path) -> str:
     reason = str(last_err) if last_err else "неизвестная сетевая ошибка"
     if re.search(r"socket|TLS|timed out|timeout|ETIMEDOUT|ECONNRESET|getaddrinfo|Name or service", reason, re.I):
         raise RuntimeError(
-            f"Сеть нестабильна — не удалось скачать картинку за {len(pauses)} попыток. "
+            f"Сеть нестабильна – не удалось скачать картинку за {len(pauses)} попыток. "
             "Проверьте интернет / антивирус, либо попробуйте через несколько минут."
         )
     raise RuntimeError(f"Не удалось скачать картинку: {reason}")
@@ -249,7 +249,7 @@ def download_image(url: str, temp_dir: Path) -> str:
 
 # ════════════════════════════════════════════════════════════════════
 #  Браузер: ОДИН на весь прогон (в первой версии переноса Firefox
-#  перезапускался на каждый город — это ×10 времени и рваная сессия)
+#  перезапускался на каждый город – это ×10 времени и рваная сессия)
 # ════════════════════════════════════════════════════════════════════
 
 # Какой движок реально заработал в этом процессе. Считаем один раз.
@@ -304,16 +304,16 @@ def _default_order() -> list[str]:
     """
     Какой движок пробовать первым.
 
-    ЛОКАЛЬНО — Chromium: все селекторы Яндекс.Бизнеса писались и проверялись
-    под Chrome (оригинал — Puppeteer/Chrome), это максимальная точность.
+    ЛОКАЛЬНО – Chromium: все селекторы Яндекс.Бизнеса писались и проверялись
+    под Chrome (оригинал – Puppeteer/Chrome), это максимальная точность.
 
-    В ОБЛАКЕ — Firefox: там Chromium не поднимается. Причины выяснены на живом
+    В ОБЛАКЕ – Firefox: там Chromium не поднимается. Причины выяснены на живом
     Streamlit Cloud ещё при первом переносе и подтвердились сейчас:
-      • нет системных библиотек (libgbm.so.1) — доставить их нельзя, packages.txt
+      • нет системных библиотек (libgbm.so.1) – доставить их нельзя, packages.txt
         собирается из имён пакетов, которых в этом образе может просто не быть;
       • на бесплатном тарифе (~1 ГБ RAM) headless Chromium падал на тяжёлой
         SPA-странице Яндекс.Паспорта.
-    Firefox требует заметно меньше и того, и другого — и в облаке работает.
+    Firefox требует заметно меньше и того, и другого – и в облаке работает.
 
     Порядок именно такой ещё и ради экономии: в облаке браузер скачивается при
     первом запуске. Начав с Chromium, мы бы выкачали 150 МБ, выяснили что он не
@@ -326,7 +326,7 @@ def resolve_engine(force: str | None = None) -> str:
     """
     Выбирает движок, который РЕАЛЬНО запускается здесь. Результат кэшируется
     на процесс. Жёстко задать: CLICK_BROWSER=chromium | firefox.
-    Если браузер не скачан — скачиваем и пробуем снова.
+    Если браузер не скачан – скачиваем и пробуем снова.
     """
     global _ENGINE
     if _ENGINE and not force:
@@ -349,12 +349,12 @@ def resolve_engine(force: str | None = None) -> str:
                     info(f"⬇️  Скачиваю браузер {engine} (разово, 1-3 минуты)…")
                     subprocess.run([sys.executable, "-m", "playwright", "install", engine], check=False)
                     # install-deps ставит системные пакеты через apt и требует root.
-                    # В облаке root'а нет — вызывать бессмысленно, только шум в логах.
+                    # В облаке root'а нет – вызывать бессмысленно, только шум в логах.
                     if hasattr(os, "geteuid") and os.geteuid() == 0:
                         subprocess.run([sys.executable, "-m", "playwright", "install-deps", engine],
                                        check=False)
                     continue
-                problems.append(f"{engine} — {_short_error(e)}")
+                problems.append(f"{engine} – {_short_error(e)}")
                 break
 
     where = ("Streamlit Cloud" if in_cloud() else "этой машине")
@@ -363,13 +363,13 @@ def resolve_engine(force: str | None = None) -> str:
         + "\n".join(f"• {p}" for p in problems)
         + "\n\nЧто делать:\n"
         "• Локально: `python -m playwright install chromium` (или firefox).\n"
-        "• В облаке: перезапустите приложение (Manage app → Reboot). Если не помогло — "
+        "• В облаке: перезапустите приложение (Manage app → Reboot). Если не помогло – "
         "задайте переменную CLICK_BROWSER=firefox в настройках приложения."
     )
 
 
 def current_engine() -> str | None:
-    """Какой движок выбран сейчас (None — ещё не запускали браузер). Для интерфейса."""
+    """Какой движок выбран сейчас (None – ещё не запускали браузер). Для интерфейса."""
     return _ENGINE
 
 
@@ -397,7 +397,7 @@ def has_saved_session(project_id: str) -> bool:
 class YbBrowser:
     """
     Живёт весь прогон: один запуск браузера на 137 городов вместо 137 запусков.
-    Умеет пересоздавать вкладку — это лечит «Execution context was destroyed»,
+    Умеет пересоздавать вкладку – это лечит «Execution context was destroyed»,
     ради чего в publish.js был browser.newPage().
     """
 
@@ -424,7 +424,7 @@ class YbBrowser:
         self.page = self.context.new_page()
 
     def new_page(self) -> Page:
-        """Пересоздать вкладку — сбрасывает подвисшие контексты, cookies остаются (тот же context)."""
+        """Пересоздать вкладку – сбрасывает подвисшие контексты, cookies остаются (тот же context)."""
         try:
             if self.page and not self.page.is_closed():
                 self.page.close()
@@ -441,7 +441,7 @@ class YbBrowser:
             warn(f"Не удалось сохранить сессию: {e}")
 
     def restart(self) -> None:
-        """Полный перезапуск браузера — аналог детектора зависшего Chrome в publish.js."""
+        """Полный перезапуск браузера – аналог детектора зависшего Chrome в publish.js."""
         self.save_session()
         self.close()
         time.sleep(3)
@@ -496,7 +496,7 @@ def find_clickable_by_text(page: Page, regex_src: str, flags: str = "i") -> dict
 
 
 def wait_for_text_button(page: Page, regex_src: str, timeout_ms: int = 10_000, flags: str = "i") -> dict | None:
-    """Ждём появления кнопки, а не проверяем один раз — React дорисовывает UI не мгновенно."""
+    """Ждём появления кнопки, а не проверяем один раз – React дорисовывает UI не мгновенно."""
     deadline = time.time() + timeout_ms / 1000
     while time.time() < deadline:
         hit = find_clickable_by_text(page, regex_src, flags)
@@ -544,7 +544,7 @@ def is_404(page: Page) -> bool:
 
 
 # ════════════════════════════════════════════════════════════════════
-#  Проверка аккаунта (порт защиты из publish.js — publish не с того аккаунта)
+#  Проверка аккаунта (порт защиты из publish.js – publish не с того аккаунта)
 # ════════════════════════════════════════════════════════════════════
 
 def verify_account(page: Page, expected_email: str) -> dict:
@@ -554,7 +554,7 @@ def verify_account(page: Page, expected_email: str) -> dict:
     mepen88@yandex.ru с привязанным mepen888@gmail.com считался «чужим».
 
     Возвращает {'matched': bool, 'emails': [...], 'checked': bool}.
-    Если проверить не удалось (сеть) — matched=True, работу не блокируем.
+    Если проверить не удалось (сеть) – matched=True, работу не блокируем.
     """
     expected = (expected_email or "").lower().strip()
     login = expected.split("@")[0]
@@ -591,9 +591,9 @@ def verify_account(page: Page, expected_email: str) -> dict:
 _CHECK_EXISTS_JS = r"""
 (needle) => {
   // Свежесть поста определяем ТОЛЬКО по явным маркерам Яндекса:
-  //   1) плашка «Публикация на модерации» — 100% только что отправленный пост
+  //   1) плашка «Публикация на модерации» – 100% только что отправленный пост
   //   2) метка времени «только что» / «N минут назад»
-  // Просто совпадение текста — это может быть ПРОШЛАЯ публикация, не считаем свежей.
+  // Просто совпадение текста – это может быть ПРОШЛАЯ публикация, не считаем свежей.
   const FRESH_TIME = /^(\s*(только что|меньше минуты|минут[уы]?\s+назад|\d+\s+минут[уы]?\s+назад|несколько\s+минут\s+назад)\s*)$/i;
   const MODERATION = /Публикация\s+на\s+модерации/i;
   const posts = document.querySelectorAll('[class*="Post"], [class*="post-card"], [class*="PostsList"] [class*="card"]');
@@ -687,7 +687,7 @@ def _attach_images(page: Page, image_paths: list[str]) -> tuple[bool, str]:
         except Exception:
             return False, "Превью не появилось за 8 секунд"
 
-        # Превью появилось — но Яндекс мог показать тост «Не удалось загрузить».
+        # Превью появилось – но Яндекс мог показать тост «Не удалось загрузить».
         page.wait_for_timeout(1500)
         toast = page.evaluate(_ERROR_TOAST_JS)
         if toast:
@@ -725,7 +725,7 @@ _FIND_PUBLISH_BTN_JS = r"""
     const text = (b.textContent || '').trim();
     if (!text || text.length > 30) continue;
     const low = text.toLowerCase();
-    // Запрещённые — чтобы никогда не нажать «Сохранить черновик» / «Отменить» / «Удалить»
+    // Запрещённые – чтобы никогда не нажать «Сохранить черновик» / «Отменить» / «Удалить»
     if (/(черновик|отмен|удал|закр|назад|отказ|войти|выйти|настрой|регистр)/i.test(low)) continue;
     const r = b.getBoundingClientRect();
     if (r.width < 30 || r.height < 18) continue;
@@ -770,7 +770,7 @@ _DOM_FALLBACK_JS = r"""
 
 
 def _is_publish_api_response(url: str, method: str) -> bool:
-    """Фильтр «интересных» ответов — тот же, что в publish.js."""
+    """Фильтр «интересных» ответов – тот же, что в publish.js."""
     if method not in ("POST", "PUT"):
         return False
     if not re.search(r"sprav|/api/|/posts?\b", url, re.I):
@@ -822,7 +822,7 @@ def publish_to_city(
         result["durationMs"] = int((time.time() - started) * 1000)
         return result
 
-    info(f"📍 {label} — начинаем...")
+    info(f"📍 {label} – начинаем...")
 
     company_id = task.get("companyId") or extract_company_id(task.get("companyUrl"))
     posts_url = build_posts_url(task.get("companyUrl"), company_id) or task.get("companyUrl")
@@ -843,7 +843,7 @@ def publish_to_city(
             error(f"  ❌ Страница не найдена (404): {posts_url}")
             return finish("failed", f"Страница не найдена (404): {posts_url}. Проверьте URL карточки в «Городах».")
 
-        # Яндекс мог редиректнуть старый ID на новый — пересобираем URL под новый формат
+        # Яндекс мог редиректнуть старый ID на новый – пересобираем URL под новый формат
         effective_id = company_id
         if company_id and f"/sprav/{company_id}/" not in actual_url:
             m = re.search(r"/sprav/(\d+)/", actual_url)
@@ -862,7 +862,7 @@ def publish_to_city(
         if wait_ui_ready(page):
             info("  ✅ Интерфейс прогрузился")
         else:
-            warn("  ⚠️ Интерфейс не успел прогрузиться за 15 сек — продолжаю всё равно")
+            warn("  ⚠️ Интерфейс не успел прогрузиться за 15 сек – продолжаю всё равно")
         page.wait_for_timeout(800)
 
         result["steps"]["navigate"] = "ok"
@@ -931,7 +931,7 @@ def publish_to_city(
     page.wait_for_timeout(700)
     result["steps"]["addButton"] = "ok"
 
-    # ─── 3. ТЕКСТ (строго ДО картинки — как в оригинале) ───
+    # ─── 3. ТЕКСТ (строго ДО картинки – как в оригинале) ───
     text = task.get("postText") or ""
     try:
         text_field = page.wait_for_selector(
@@ -955,7 +955,7 @@ def publish_to_city(
         text_field.type(text, delay=0)
 
         # КРИТИЧНО: убеждаемся, что весь текст реально доехал в DOM.
-        # Без этого клик «Создать» может произойти раньше — и Яндекс публикует обрезанный пост.
+        # Без этого клик «Создать» может произойти раньше – и Яндекс публикует обрезанный пост.
         try:
             page.wait_for_function(
                 """(expected) => {
@@ -972,7 +972,7 @@ def publish_to_city(
             )
             info(f"  ✓ Текст введён полностью ({len(text)} символов)")
         except Exception:
-            warn("  ⚠️ Текст не подтверждён в DOM за 10 сек — публикация может быть с обрезанным текстом")
+            warn("  ⚠️ Текст не подтверждён в DOM за 10 сек – публикация может быть с обрезанным текстом")
             page.wait_for_timeout(2000)
 
         page.wait_for_timeout(300)
@@ -1032,7 +1032,7 @@ def publish_to_city(
         else:
             result["steps"]["image"] = "failed"
             result["imageError"] = upload_error
-            warn(f"  ⚠️ {upload_error} — публикуем без картинки")
+            warn(f"  ⚠️ {upload_error} – публикуем без картинки")
 
     # ─── 5. Кнопка публикации ───
     pub = page.evaluate(_FIND_PUBLISH_BTN_JS)
@@ -1088,7 +1088,7 @@ def publish_to_city(
                       else "Пост опубликован без картинки (API подтвердил)")
             page.wait_for_timeout(800)
             out = finish(status, reason)
-            info(f"  ✅ {label} — {reason} ({out['durationMs'] / 1000:.1f} сек)")
+            info(f"  ✅ {label} – {reason} ({out['durationMs'] / 1000:.1f} сек)")
             return out
         if api_result["status"] >= 400:
             result["steps"]["publish"] = "api-rejected"
@@ -1096,14 +1096,14 @@ def publish_to_city(
             return finish("failed", f"Яндекс отклонил публикацию: HTTP {api_result['status']}")
 
     if click_error and not api_result:
-        # Клик упал и API-ответа нет — чаще всего это УСПЕШНАЯ публикация с навигацией.
+        # Клик упал и API-ответа нет – чаще всего это УСПЕШНАЯ публикация с навигацией.
         # Ретрай запрещён: лучше «проверьте вручную», чем дубль.
         result["steps"]["publish"] = "click-error-no-api"
-        warn("  ⚠️ Клик дал ошибку, API-ответа не было — возможно опубликовано")
+        warn("  ⚠️ Клик дал ошибку, API-ответа не было – возможно опубликовано")
         return finish(
             "unknown",
             f"Клик дал ошибку ({click_error[:100]}), но API-ответа не было. "
-            "Возможно опубликовано — проверьте вручную.",
+            "Возможно опубликовано – проверьте вручную.",
         )
 
     if click_error:
@@ -1111,7 +1111,7 @@ def publish_to_city(
         error(f"  ❌ Ошибка клика «Создать»: {click_error}")
         return finish("failed", f"Ошибка клика «Создать»: {click_error}")
 
-    # API-ответа не поймали — смотрим DOM: форма закрылась и пост появился в ленте?
+    # API-ответа не поймали – смотрим DOM: форма закрылась и пост появился в ленте?
     page.wait_for_timeout(2000)
     try:
         fb = page.evaluate(_DOM_FALLBACK_JS, text.strip())
@@ -1123,7 +1123,7 @@ def publish_to_city(
         status = "no-image" if result["steps"]["image"] == "failed" else "ok"
         reason = "Пост опубликован (по DOM)" if status == "ok" else "Пост опубликован без картинки (по DOM)"
         out = finish(status, reason)
-        info(f"  ✅ {label} — {reason} ({out['durationMs'] / 1000:.1f} сек)")
+        info(f"  ✅ {label} – {reason} ({out['durationMs'] / 1000:.1f} сек)")
         return out
 
     result["steps"]["publish"] = "unknown"
@@ -1264,7 +1264,7 @@ def upload_product_photos(page: Page, task: dict, photo_urls: list[str], temp_di
     if section.get("error") or not section.get("hasUploadLabel"):
         result["errors"].append("Секция «Товары» или кнопка загрузки не найдена")
         result["failed"] = len(local)
-        warn("  ⚠️ Секция «Товары» не найдена — возможно изменилась разметка Яндекса")
+        warn("  ⚠️ Секция «Товары» не найдена – возможно изменилась разметка Яндекса")
         return result
 
     before = section.get("count", 0)
@@ -1358,9 +1358,9 @@ _ACTUALIZE_TOAST_JS = r"""
 def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict:
     """
     Статусы (как в actualize.js):
-      'actualized' — кнопку нажали
-      'not-needed' — кнопки нет, актуализация не требуется (это НЕ ошибка)
-      'failed'     — не открылась страница / ошибка клика
+      'actualized' – кнопку нажали
+      'not-needed' – кнопки нет, актуализация не требуется (это НЕ ошибка)
+      'failed'     – не открылась страница / ошибка клика
     """
     started = time.time()
     label = f"[{idx + 1}/{total}] {task.get('cityName', '?')}"
@@ -1378,7 +1378,7 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
         result["durationMs"] = int((time.time() - started) * 1000)
         return result
 
-    info(f"🏙  {label} — актуализация...")
+    info(f"🏙  {label} – актуализация...")
     edit_url = build_edit_url(task.get("companyUrl"))
     if not edit_url:
         return finish("failed", "Не удалось определить URL раздела «Данные»")
@@ -1401,7 +1401,7 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
         page.wait_for_timeout(400)
 
     if not coords:
-        out = finish("not-needed", "Кнопка «Данные актуальны» не найдена — актуализация не требуется")
+        out = finish("not-needed", "Кнопка «Данные актуальны» не найдена – актуализация не требуется")
         info(f"  ✓ {label}: {out['reason']} ({out['durationMs'] / 1000:.1f} сек)")
         return out
 
@@ -1578,8 +1578,96 @@ class YbLoginFlow:
     def screenshot(self) -> bytes:
         return self.page.screenshot(full_page=True)
 
+    # ── Автоматический вход ──────────────────────────────────────────
+    # Логин и пароль у нас уже есть в «Настройках», поэтому нет смысла заставлять
+    # человека вводить их руками по картинке. Читаем, ЧТО просит страница, и
+    # заполняем сами. Останавливаемся только там, где человек действительно нужен:
+    # код из SMS/почты, капча, подтверждение в приложении.
+
+    def detect_step(self) -> str:
+        """
+        Что сейчас на экране Яндекса:
+          'login'    – просит логин или e-mail
+          'password' – просит пароль
+          'code'     – просит код (SMS / почта / приложение)
+          'captcha'  – капча
+          'done'     – похоже, уже вошли
+          'unknown'  – не разобрали, нужен человек
+        """
+        try:
+            if self.page.locator(EMAIL_CODE_NEXT_BUTTON).count() > 0:
+                return "code"
+            if self.page.locator('input[type="password"]').count() > 0 or \
+                    self.page.locator(PASSWORD_NEXT_BUTTON).count() > 0:
+                return "password"
+
+            page_text = (self.page.inner_text("body") or "").lower()
+            if self.page.locator('img[src*="captcha"], [class*="captcha" i], [data-testid*="captcha"]').count() > 0 \
+                    or "captcha" in page_text or "введите символы" in page_text:
+                return "captcha"
+            if re.search(r"\bкод\b|подтвержд|confirmation code|one-time", page_text) and \
+                    self.page.locator(GENERIC_TEXT_FIELD).count() > 0:
+                return "code"
+            if self.page.locator(LOGIN_NEXT_BUTTON).count() > 0 or \
+                    self.page.locator(GENERIC_TEXT_FIELD).count() > 0:
+                return "login"
+            if "passport" not in self.page.url or "profile" in self.page.url:
+                return "done"
+        except Exception:
+            return "unknown"
+        return "unknown"
+
+    def auto_login(self, email: str, password: str, max_steps: int = 6) -> dict:
+        """
+        Пробует войти сам по сохранённым email и паролю.
+
+        Возвращает {'ok': bool, 'step': ..., 'reason': ..., 'screenshot': bytes}.
+        ok=False – не провал, а «дальше нужен человек»: код, капча или
+        неизвестный экран. Браузер при этом остаётся живым, и пользователь
+        продолжает ровно с этого места обычным пошаговым вводом.
+        """
+        reasons = {
+            "code": "Яндекс просит код – его может ввести только человек.",
+            "captcha": "Яндекс показывает капчу – введите её вручную по картинке.",
+            "unknown": "Не разобрал, что просит страница, – дальше вручную.",
+        }
+        last = "unknown"
+        for _ in range(max_steps):
+            self._dismiss_cookie_banner()
+            step = self.detect_step()
+            last = step
+
+            if step == "login":
+                if not email:
+                    return {"ok": False, "step": "login", "screenshot": self.screenshot(),
+                            "reason": "В «Настройках» не заполнен email аккаунта Яндекса."}
+                self._submit_generic_field(email, LOGIN_NEXT_BUTTON)
+                self._skip_post_login_prompts()
+                continue
+
+            if step == "password":
+                if not password:
+                    return {"ok": False, "step": "password", "screenshot": self.screenshot(),
+                            "reason": "В «Настройках» не заполнен пароль – введите его здесь вручную."}
+                self._submit_generic_field(password, PASSWORD_NEXT_BUTTON)
+                self._skip_post_login_prompts()
+                continue
+
+            if step == "done" or self.is_logged_in():
+                return {"ok": True, "step": "done", "screenshot": self.screenshot(),
+                        "reason": "Вход выполнен автоматически."}
+
+            return {"ok": False, "step": step, "screenshot": self.screenshot(),
+                    "reason": reasons.get(step, reasons["unknown"])}
+
+        if self.is_logged_in():
+            return {"ok": True, "step": "done", "screenshot": self.screenshot(),
+                    "reason": "Вход выполнен автоматически."}
+        return {"ok": False, "step": last, "screenshot": self.screenshot(),
+                "reason": "Слишком много шагов – дальше вручную."}
+
     def is_logged_in(self) -> bool:
-        # Не уходим на /profile, пока виден незавершённый шаг проверки —
+        # Не уходим на /profile, пока виден незавершённый шаг проверки –
         # переход обнуляет непройденную проверку кода и откатывает вход на первый экран.
         if self.page.locator(EMAIL_CODE_NEXT_BUTTON).count() > 0:
             return False
@@ -1591,7 +1679,7 @@ class YbLoginFlow:
         return "passport" not in url or "profile" in url
 
     def current_account(self) -> str | None:
-        """Какой аккаунт реально залогинен — показываем в UI после входа."""
+        """Какой аккаунт реально залогинен – показываем в UI после входа."""
         try:
             self.page.goto(PROFILE_URL, wait_until="domcontentloaded")
             self.page.wait_for_timeout(1200)

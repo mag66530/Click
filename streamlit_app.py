@@ -1,10 +1,10 @@
 """
-streamlit_app.py — Click на Streamlit. Интерфейс повторяет оригинальное
+streamlit_app.py – Click на Streamlit. Интерфейс повторяет оригинальное
 приложение (app.js + _ui.js): те же 6 разделов, тот же дизайн, та же логика
 черновик → очередь → задачи → прогон → отчёт.
 
 Публикацией занимается runner.py (фоновый поток + защита от дублей),
-браузером — yb_playwright.py (порт publish.js/actualize.js на Playwright).
+браузером – yb_playwright.py (порт publish.js/actualize.js на Playwright).
 Здесь только интерфейс и работа с конфигом проекта.
 
 Запуск:  streamlit run streamlit_app.py
@@ -21,6 +21,7 @@ from pathlib import Path
 
 import streamlit as st
 
+import kp_sheet
 import paths
 import projects_data as pdata
 import runner
@@ -31,7 +32,7 @@ from playwright_worker import PlaywrightWorker
 ROOT = Path(__file__).parent
 USERS_DATA = paths.data_root()
 
-st.set_page_config(page_title="Click — публикация постов", page_icon="📮", layout="wide")
+st.set_page_config(page_title="Click – публикация постов", page_icon="📮", layout="wide")
 
 SALT = "click-salt-v1-2026"
 SECTIONS = ["🚀 Запуск", "📤 Публикация", "🔄 Актуализация", "🏙 Города", "📊 Отчёт", "⚙️ Настройки"]
@@ -103,7 +104,7 @@ def safe_filename(s: str) -> str:
 
 def _slug(s: str) -> str:
     """
-    Идентификатор из названия. ВАЖНО: кириллицу оставляем — если её вырезать,
+    Идентификатор из названия. ВАЖНО: кириллицу оставляем – если её вырезать,
     у всех русских названий получится один и тот же slug, а значит одинаковые id
     у разных стран/городов (и Streamlit падает на дублях ключей виджетов).
     """
@@ -118,7 +119,7 @@ def _default_subproject(project_id: str) -> dict:
         by_country.setdefault(city["country"], []).append(city)
     countries = []
     for n, (cname, cities) in enumerate(by_country.items()):
-        # Индекс в id — страховка от совпадения slug'ов у разных названий.
+        # Индекс в id – страховка от совпадения slug'ов у разных названий.
         countries.append({
             "id": f"c-{project_id}-{n}-{_slug(cname)}",
             "name": cname,
@@ -163,14 +164,18 @@ def get_config(project_id: str) -> dict:
 
 
 def get_settings(project_id: str) -> dict:
-    raw = st.session_state.get(f"_cfg_{project_id}") or load_raw_config(project_id)
-    settings = raw.setdefault("settings", {})
-    settings.setdefault("headless", True)
-    settings.setdefault("delayBetweenPosts", 3)
-    settings.setdefault("strictAccountCheck", True)
-    settings.setdefault("retryUnknown", False)
-    settings.setdefault("dedupWindowHours", runner.DEDUP_WINDOW_HOURS)
-    return settings
+    """
+    Параметры прогона НЕ настраиваются: зашиты безопасные значения.
+    Любая из этих ручек в чужих руках – способ получить дубли или публикацию
+    не с того аккаунта, а выигрыша от них нет.
+    """
+    return {
+        "headless": True,               # окна браузера нет ни в облаке, ни локально
+        "delayBetweenPosts": 3,         # меньше – ловим антифлуд Яндекса
+        "strictAccountCheck": True,     # чужой аккаунт – стоп, а не «опубликуем куда-нибудь»
+        "retryUnknown": False,          # повтор после неподтверждённого клика = дубль
+        "dedupWindowHours": runner.DEDUP_WINDOW_HOURS,
+    }
 
 
 def save_config(project_id: str) -> None:
@@ -189,7 +194,7 @@ def country_by_id(config: dict, cid: str) -> dict | None:
 
 
 # ════════════════════════════════════════════════════════════════════
-#  Текст поста — построчный порт buildFinalText из _ui.js
+#  Текст поста – построчный порт buildFinalText из _ui.js
 # ════════════════════════════════════════════════════════════════════
 
 def build_final_text(project_id: str, country_name: str, post_type: str, body: str) -> str:
@@ -299,7 +304,7 @@ def save_queue_to_tasks(project_id: str, config: dict, queue: list[dict]) -> int
 def save_actualize_tasks(project_id: str, config: dict, selection: dict[str, list[str]]) -> int:
     folder = project_base(project_id) / "tasks-actualize"
     folder.mkdir(parents=True, exist_ok=True)
-    for old in folder.glob("*.json"):          # чистим прошлые — иначе прогон подхватит лишнее
+    for old in folder.glob("*.json"):          # чистим прошлые – иначе прогон подхватит лишнее
         old.unlink(missing_ok=True)
     ts = int(time.time() * 1000)
     total = 0
@@ -352,14 +357,16 @@ def html(markup: str) -> None:
 
 
 def status_pills(project_id: str) -> list[tuple[str, str]]:
+    """Те же три пилюли, что в оригинале: установка, авторизация, очередь."""
     files, cities = runner.count_pending(project_id)
     state = runner.read_state(project_id)
     pills = [
-        ("ok", "Сессия Яндекса") if yb.has_saved_session(project_id) else ("err", "Нет входа в Яндекс"),
-        ("info", f"Задач: {files} · городов: {cities}"),
+        ("ok", "Программа установлена"),
+        ("ok", "Авторизован") if yb.has_saved_session(project_id) else ("warn", "Требуется вход"),
+        ("info", f"{cities_word(cities)} в очереди") if cities else ("warn", "Очередь пуста"),
     ]
     if state.get("status") == "running":
-        pills.append(("warn", f"Идёт {'публикация' if state.get('action') == 'publish' else 'актуализация'}"))
+        pills.append(("warn", "Идёт " + ("публикация" if state.get("action") == "publish" else "актуализация")))
     elif state.get("status") == "error":
         pills.append(("err", "Последний прогон с ошибкой"))
     return pills
@@ -367,7 +374,7 @@ def status_pills(project_id: str) -> list[tuple[str, str]]:
 
 def city_selector(key_prefix: str, country: dict, default_all: bool = False) -> list[str]:
     """
-    Выбор городов страны. По умолчанию НИЧЕГО не выбрано — так в оригинале,
+    Выбор городов страны. По умолчанию НИЧЕГО не выбрано – так в оригинале,
     чтобы случайно не отправить пост во все 137 городов.
     """
     state_key = f"{key_prefix}-cities-{country['id']}"
@@ -393,8 +400,11 @@ def city_selector(key_prefix: str, country: dict, default_all: bool = False) -> 
                           key=state_key, label_visibility="collapsed")
 
 
-def country_picker(key_prefix: str, config: dict) -> list[dict]:
-    """Чекбоксы стран + «выбрать все» / «снять все» (в оригинале — пилюли стран)."""
+def country_picker(key_prefix: str, config: dict, title: str = "Страны") -> list[dict]:
+    """
+    Выбор стран карточками, как в оригинале: флаг, название, «N гор.».
+    Сама карточка – HTML (Streamlit такого не умеет), клик – кнопкой под ней.
+    """
     countries = config["countries"]
     if not countries:
         return []
@@ -402,21 +412,36 @@ def country_picker(key_prefix: str, config: dict) -> list[dict]:
     def cb_key(country_id: str) -> str:
         return f"{key_prefix}-cb-{country_id}"
 
-    c1, c2, _ = st.columns([1, 1, 3])
-    if c1.button("Все страны", key=f"{key_prefix}-all-countries", use_container_width=True):
-        for c in countries:
-            st.session_state[cb_key(c["id"])] = True
-        st.rerun()
-    if c2.button("Снять страны", key=f"{key_prefix}-none-countries", use_container_width=True):
-        for c in countries:
-            st.session_state[cb_key(c["id"])] = False
-            st.session_state[f"{key_prefix}-{c['id']}-cities-{c['id']}"] = []
-        st.rerun()
+    chosen = [c for c in countries if st.session_state.get(cb_key(c["id"]))]
 
-    cols = st.columns(min(4, max(1, len(countries))))
-    for i, c in enumerate(countries):
-        with cols[i % len(cols)]:
-            st.checkbox(f"{flag(c['name'])} {c['name']} ({len(c['cities'])})", key=cb_key(c["id"]))
+    with st.container(border=True):
+        head, act = st.columns([3, 1])
+        head.markdown(
+            f'<div class="card-title">{title} '
+            f'<span class="badge badge-{"accent" if chosen else "muted"}">{len(chosen)}</span></div>',
+            unsafe_allow_html=True)
+        all_on = len(chosen) == len(countries)
+        if act.button("Снять все" if all_on else "Выбрать все",
+                      key=f"{key_prefix}-toggle-countries", use_container_width=True):
+            for c in countries:
+                st.session_state[cb_key(c["id"])] = not all_on
+                if all_on:
+                    st.session_state[f"{key_prefix}-{c['id']}-cities-{c['id']}"] = []
+            st.rerun()
+
+        per_row = 4
+        for start in range(0, len(countries), per_row):
+            cols = st.columns(per_row)
+            for col, c in zip(cols, countries[start:start + per_row]):
+                active = bool(st.session_state.get(cb_key(c["id"])))
+                with col, st.container(key=f"tile-{key_prefix}-{c['id']}"):
+                    html(T.country_card(flag(c["name"]), c["name"], len(c["cities"]), active))
+                    if st.button(c["name"], key=f"{key_prefix}-pick-{c['id']}", use_container_width=True):
+                        st.session_state[cb_key(c["id"])] = not active
+                        if active:
+                            st.session_state[f"{key_prefix}-{c['id']}-cities-{c['id']}"] = []
+                        st.rerun()
+
     return [c for c in countries if st.session_state.get(cb_key(c["id"]))]
 
 
@@ -428,7 +453,7 @@ def show_login() -> None:
     inject_css()
     html('<div class="auth-wrap"><div class="auth-logo">➤</div>'
          '<div class="auth-title">Click</div>'
-         '<div class="auth-sub">Пакетная публикация в Яндекс.Бизнес — выберите проект</div></div>')
+         '<div class="auth-sub">Пакетная публикация в Яндекс.Бизнес – выберите проект</div></div>')
 
     selected = st.session_state.get("selected_project_id")
     cols = st.columns(3)
@@ -468,7 +493,7 @@ def _render_live_panel(project_id: str, was_running: bool = False) -> None:
     status = state.get("status")
     action_ru = "Публикация" if state.get("action") == "publish" else "Актуализация"
 
-    # Прогон только что закончился — перерисовываем страницу целиком, чтобы
+    # Прогон только что закончился – перерисовываем страницу целиком, чтобы
     # разблокировалась кнопка запуска и обновились счётчики в шапке.
     if was_running and status != "running":
         st.rerun()
@@ -488,7 +513,7 @@ def _render_live_panel(project_id: str, was_running: bool = False) -> None:
         ))
         st.progress(min(1.0, current / total))
     elif status == "done":
-        st.success(f"{action_ru} завершена. Отчёт — во вкладке «Отчёт».")
+        st.success(f"{action_ru} завершена. Отчёт – во вкладке «Отчёт».")
     elif status == "stopped":
         st.warning(f"{action_ru} остановлена пользователем. Сделанное сохранено в отчёте.")
     elif status == "error":
@@ -523,7 +548,7 @@ def tab_run(project_id: str, config: dict) -> None:
                 f"{cities_word(cities)} готово" if cities else ""))
 
     html(T.step(3, "Публикация",
-                "Браузер работает скрыто. Каждый город подтверждается ответом API Яндекса — "
+                "Браузер работает скрыто. Каждый город подтверждается ответом API Яндекса – "
                 "в отчёт попадает реальный результат, а не «наверное получилось».",
                 "active" if (cities and has_session and not running) else ("done" if running else "locked")))
 
@@ -554,10 +579,10 @@ def tab_run(project_id: str, config: dict) -> None:
             st.rerun()
 
     if not has_creds:
-        st.warning("В «Настройках» не указан email Яндекс.Бизнеса — без него не работает "
+        st.warning("В «Настройках» не указан email Яндекс.Бизнеса – без него не работает "
                    "защита от публикации не с того аккаунта.")
     if running:
-        st.caption("Кнопка запуска заблокирована, пока идёт прогон — это защита от повторного старта "
+        st.caption("Кнопка запуска заблокирована, пока идёт прогон – это защита от повторного старта "
                    "и дублей постов.")
 
     st.divider()
@@ -583,7 +608,7 @@ def tab_run(project_id: str, config: dict) -> None:
                     data = json.loads(fp.read_text(encoding="utf-8"))
                 except (json.JSONDecodeError, OSError):
                     continue
-                html(f'<div class="city-row"><span class="city-row-name">{T.esc(data.get("country", "—"))}</span>'
+                html(f'<div class="city-row"><span class="city-row-name">{T.esc(data.get("country", "–"))}</span>'
                      f'<span class="city-row-url">{T.esc(fp.name)}</span>'
                      f'<span class="badge badge-accent">{len(data.get("tasks") or [])} гор.</span></div>')
             with st.container(key="danger-clear-tasks"):
@@ -605,41 +630,51 @@ def tab_compose(project_id: str, config: dict) -> None:
 
     queue: list[dict] = st.session_state.setdefault("queue", [])
 
-    # ─── Шаг 1: тип поста ───
-    html('<div class="card-title">1 · Тип поста</div>')
+    # ─── Тип поста: плитки, как в оригинале ───
     types = pdata.POST_TYPES
-    post_type = st.radio(
-        "Тип поста",
-        options=[t["id"] for t in types],
-        format_func=lambda tid: next(f"{t['icon']} {t['title']}" for t in types if t["id"] == tid),
-        horizontal=True, label_visibility="collapsed", key="compose-type",
-    )
+    post_type = st.session_state.get("compose-type") or types[0]["id"]
+    with st.container(border=True):
+        html('<div class="card-title">📄 Тип поста</div>')
+        cols = st.columns(len(types))
+        for col, t in zip(cols, types):
+            with col, st.container(key=f"tile-pt-{t['id']}"):
+                html(T.post_type_card(t, t["id"] == post_type))
+                if st.button(t["title"], key=f"pt-{t['id']}", use_container_width=True):
+                    st.session_state["compose-type"] = t["id"]
+                    st.rerun()
+    type_def = next(t for t in types if t["id"] == post_type)
 
-    # ─── Шаг 2: текст ───
-    html('<div class="card-title">2 · Текст поста</div>')
-    body = st.text_area(
-        "Основной текст (контакты и хэштеги добавятся автоматически)",
-        height=200, key="compose-body",
-        placeholder="Например: Поступление на склад — балка двутавровая 20Б1, ГОСТ Р 57837-2017…",
-    )
+    # ─── Страны для публикации: карточки со счётчиком городов, как в оригинале ───
+    selected_countries = country_picker("compose", config, title="🌍 Страны для публикации")
 
-    # ─── Шаг 3: картинки ───
-    html('<div class="card-title">3 · Картинки (необязательно)</div>')
-    c1, c2 = st.columns(2)
-    with c1:
-        uploaded = st.file_uploader("Файлы с компьютера (до 4 на пост)",
-                                    type=["jpg", "jpeg", "png", "gif", "webp"],
-                                    accept_multiple_files=True, key="compose-images")
-    with c2:
-        image_urls_raw = st.text_area(
-            "Или ссылки — по одной в строке (ImgBB / Imgur / Я.Диск / прямые)",
-            height=110, key="compose-image-urls",
-        )
-        product_photos_raw = st.text_area(
-            "Фото в раздел «Товары» — ссылки или пути, по одной в строке",
-            height=90, key="compose-product-photos",
-            help="Заливаются в карточку после успешной публикации поста. На статус поста не влияют.",
-        )
+    # ─── Текст и картинки – одна карточка, названная типом поста ───
+    text_card = st.container(border=True)
+    with text_card:
+      html(f'<div class="card-title">{type_def["icon"]} {T.esc(type_def["title"])}</div>')
+      body = st.text_area(
+          "Основной текст" + ("" if type_def["isInfo"] else " (без контактов)"),
+          height=200, key="compose-body", placeholder="Текст поста...",
+      )
+
+      c1, c2 = st.columns([3, 1])
+      with c1:
+          image_urls_raw = st.text_area(
+              "Картинки (до 4 для поста)", height=110, key="compose-image-urls",
+              placeholder="Можно: ссылки (по строке) ИЛИ загрузить файлы кнопкой справа\n"
+                          "https://ibb.co/abc/foto1.jpg\nhttps://ibb.co/xyz/foto2.jpg",
+          )
+      with c2:
+          uploaded = st.file_uploader("Выбрать файл", type=["jpg", "jpeg", "png", "gif", "webp"],
+                                      accept_multiple_files=True, key="compose-images",
+                                      label_visibility="collapsed")
+      html('<div class="hint">Можно ссылки (ImgBB / Imgur / Я.Диск) ИЛИ загрузить файлы с компьютера. '
+           'Если есть проблемы с интернетом – лучше загружайте файлы. До 20 МБ.</div>')
+
+      with st.expander("📸 Фото в раздел «Товары» (необязательно)"):
+          product_photos_raw = st.text_area(
+              "Ссылки или пути, по одной в строке", height=90, key="compose-product-photos",
+              help="Заливаются в карточку после успешной публикации поста. На статус поста не влияют.",
+          )
 
     image_urls = [u.strip() for u in (image_urls_raw or "").splitlines() if u.strip()]
     product_photos = [u.strip() for u in (product_photos_raw or "").splitlines() if u.strip()]
@@ -658,13 +693,10 @@ def tab_compose(project_id: str, config: dict) -> None:
 
     all_images: list[str] = saved_paths + image_urls
     if len(all_images) > 4:
-        st.warning(f"Яндекс берёт максимум 4 фото в пост — лишние {len(all_images) - 4} не отправятся.")
+        st.warning(f"Яндекс берёт максимум 4 фото в пост – лишние {len(all_images) - 4} не отправятся.")
 
-    # ─── Шаг 4: страны и города ───
-    html('<div class="card-title">4 · Куда публикуем</div>')
-    selected_countries = country_picker("compose", config)
     if not selected_countries:
-        st.info("Выберите хотя бы одну страну.")
+        st.info("Выберите хотя бы одну страну выше.")
         return
 
     per_country: dict[str, list[str]] = {}
@@ -691,7 +723,7 @@ def tab_compose(project_id: str, config: dict) -> None:
                     continue
                 if any(q["countryId"] == country["id"] and q["text"] ==
                        build_final_text(project_id, country["name"], post_type, body) for q in queue):
-                    st.warning(f"{country['name']}: такой же пост уже в очереди — пропускаю.")
+                    st.warning(f"{country['name']}: такой же пост уже в очереди – пропускаю.")
                     continue
                 queue.append({
                     "countryId": country["id"],
@@ -715,7 +747,7 @@ def tab_compose(project_id: str, config: dict) -> None:
     # ─── Очередь ───
     if queue:
         st.divider()
-        html(f'<div class="card-title">📦 Очередь на публикацию — '
+        html(f'<div class="card-title">📦 Очередь на публикацию – '
              f'{plural(len(queue), "пакет", "пакета", "пакетов")}, '
              f'{cities_word(sum(len(q["cityIds"]) for q in queue))}</div>')
         for i, item in enumerate(queue):
@@ -754,7 +786,7 @@ def tab_actualize(project_id: str, config: dict) -> None:
         return
 
     st.caption("Click зайдёт в раздел «Данные» каждой карточки и нажмёт «Данные актуальны», если кнопка "
-               "там есть. Кнопки нет — значит актуализация не требуется, это не ошибка.")
+               "там есть. Кнопки нет – значит актуализация не требуется, это не ошибка.")
 
     state = runner.read_state(project_id)
     running = state.get("status") == "running"
@@ -814,10 +846,75 @@ def tab_actualize(project_id: str, config: dict) -> None:
 #  РАЗДЕЛ: ГОРОДА
 # ════════════════════════════════════════════════════════════════════
 
+def _cities_source_block(project_id: str, config: dict) -> None:
+    """
+    Источник городов – Google-таблица КП. В облаке файловая система временная,
+    поэтому набитый руками список пропадает при перезапуске; таблица живёт
+    снаружи и подтягивается обратно.
+    """
+    saved_url = (config.get("kpSheetUrl") or "").strip()
+    effective = kp_sheet.sheet_url(project_id, saved_url)
+    has_key = kp_sheet.service_account_info() is not None
+
+    with st.expander("📊 Источник городов – Google-таблица КП",
+                     expanded=not config["countries"]):
+        url = st.text_input("Ссылка на таблицу КП этого проекта", value=saved_url,
+                            key=f"kp-url-{project_id}",
+                            placeholder="https://docs.google.com/spreadsheets/d/…")
+        if url.strip() != saved_url:
+            config["kpSheetUrl"] = url.strip()
+            save_config(project_id)
+            st.rerun()
+
+        if not effective:
+            st.caption("Ссылку можно задать здесь или секретом `kp_sheet_url_"
+                       f"{project_id}` в настройках приложения.")
+        if not has_key:
+            st.warning(
+                "Не найден ключ сервисного аккаунта Google. Добавьте в секреты приложения "
+                "`gcp_service_account_b64` – весь JSON-ключ в base64. Таблица должна быть "
+                "расшарена на этот аккаунт как Читатель.",
+                icon="🔑",
+            )
+
+        c1, c2 = st.columns([2, 3])
+        if c1.button("⬇️ Загрузить города из таблицы", type="primary",
+                     disabled=not (effective and has_key), key=f"kp-pull-{project_id}",
+                     use_container_width=True):
+            try:
+                with st.spinner("Читаю таблицу КП…"):
+                    cities, diag = kp_sheet.load_cities(project_id, saved_url)
+            except Exception as e:  # noqa: BLE001
+                st.error(str(e))
+                return
+            if diag.get("error"):
+                st.error(diag["error"])
+                return
+            if not cities:
+                st.warning("В таблице не нашлось ни одного города со ссылкой на Яндекс.Бизнес.")
+                return
+            config["countries"] = kp_sheet.to_countries(cities, project_id)
+            config["kpSyncedAt"] = datetime.now(timezone.utc).isoformat()
+            save_config(project_id)
+            note = f'Загружено: {cities_word(len(cities))} в {diag.get("countries", 0)} странах.'
+            if diag.get("skippedDeleted"):
+                note += f' Пропущено удалённых карточек: {diag["skippedDeleted"]}.'
+            st.success(note)
+            time.sleep(1.2)
+            st.rerun()
+
+        synced = (config.get("kpSyncedAt") or "")[:19].replace("T", " ")
+        c2.caption(f"Последняя загрузка: {synced} UTC" if synced else
+                   "Города из таблицы ещё не загружались.")
+        st.caption("Загрузка ЗАМЕНЯЕТ список стран и городов данными из таблицы. "
+                   "Карточки со статусом «Удалена» не попадают.")
+
+
 def tab_cities(project_id: str, config: dict) -> None:
+    _cities_source_block(project_id, config)
     html('<div class="card-title">Страны и города проекта</div>')
-    st.caption("Ссылка города — адрес карточки Яндекс.Бизнеса. Подойдёт любой вид "
-               "(/edit/, /edit/photos/, /p/edit/posts/) — Click сам приведёт его к разделу «Посты».")
+    st.caption("Ссылка города – адрес карточки Яндекс.Бизнеса. Подойдёт любой вид "
+               "(/edit/, /edit/photos/, /p/edit/posts/) – Click сам приведёт его к разделу «Посты».")
 
     with st.expander("➕ Добавить страну"):
         c1, c2 = st.columns([3, 1])
@@ -834,7 +931,7 @@ def tab_cities(project_id: str, config: dict) -> None:
                 st.rerun()
 
     for country in list(config["countries"]):
-        with st.expander(f"{flag(country['name'])} {country['name']} — {cities_word(len(country['cities']))}"):
+        with st.expander(f"{flag(country['name'])} {country['name']} – {cities_word(len(country['cities']))}"):
             tab_add, tab_bulk = st.tabs(["Один город", "Списком"])
 
             with tab_add:
@@ -956,15 +1053,15 @@ def tab_report(project_id: str) -> None:
 
             notes = []
             if data.get("stoppedByUser"):
-                notes.append("⏹ Прогон был остановлен вручную — часть городов не обработана.")
+                notes.append("⏹ Прогон был остановлен вручную – часть городов не обработана.")
             if data.get("state") == "crashed":
                 notes.append("💥 Прогон упал: отчёт содержит всё, что успели сделать до падения.")
             if data.get("state") == "in-progress":
-                notes.append("⏳ Прогон ещё идёт — отчёт обновляется после каждого города.")
+                notes.append("⏳ Прогон ещё идёт – отчёт обновляется после каждого города.")
             if totals.get("unknown"):
                 notes.append(f'⚠️ {cities_word(totals["unknown"])} с неподтверждённой публикацией. '
                              "Клик «Создать» был сделан, но Яндекс не подтвердил. "
-                             "Проверьте вручную — повторять автоматически опасно (дубль).")
+                             "Проверьте вручную – повторять автоматически опасно (дубль).")
             if totals.get("skipped"):
                 notes.append(f'⏭ {cities_word(totals["skipped"])} пропущено: этот же текст уже уходил '
                              "в эти карточки недавно (защита от дублей).")
@@ -987,12 +1084,12 @@ def tab_report(project_id: str) -> None:
 
             by_country: dict[str, list[dict]] = {}
             for r in results:
-                by_country.setdefault(r.get("country") or r.get("package") or "—", []).append(r)
+                by_country.setdefault(r.get("country") or r.get("package") or "–", []).append(r)
 
             for country, rows in by_country.items():
                 ok = sum(1 for r in rows if r.get("status") == "ok")
                 bad = sum(1 for r in rows if r.get("status") == "failed")
-                with st.expander(f"{flag(country)} {country} — {ok}/{len(rows)} успешно"
+                with st.expander(f"{flag(country)} {country} – {ok}/{len(rows)} успешно"
                                  + (f" · {plural(bad, 'ошибка', 'ошибки', 'ошибок')}" if bad else ""),
                                  expanded=current != "all" or bad > 0):
                     for r in rows:
@@ -1033,45 +1130,7 @@ def tab_settings(project_id: str, config: dict) -> None:
                "Click сверит его с тем, что реально залогинен, и не даст опубликовать не туда.")
 
     st.divider()
-    _yandex_login_block(project_id)
-
-    st.divider()
-    html('<div class="card-title">⚙️ Параметры прогона</div>')
-    c1, c2 = st.columns(2)
-    with c1:
-        headless = st.toggle("Скрытый браузер (headless)", value=bool(settings["headless"]),
-                             key="set-headless",
-                             help="Выключите, если хотите видеть окно браузера — работает только "
-                                  "при локальном запуске, не в облаке.")
-        delay = st.number_input("Пауза между городами, сек", min_value=0.0, max_value=60.0,
-                                value=float(settings["delayBetweenPosts"]), step=0.5, key="set-delay",
-                                help="Слишком маленькая пауза ловит антифлуд Яндекса.")
-    with c2:
-        strict = st.toggle("Строгая проверка аккаунта", value=bool(settings["strictAccountCheck"]),
-                           key="set-strict",
-                           help="Останавливать прогон, если в Яндексе залогинен другой аккаунт.")
-        dedup = st.number_input("Не повторять тот же пост, часов", min_value=0.0, max_value=168.0,
-                                value=float(settings["dedupWindowHours"]), step=1.0, key="set-dedup",
-                                help="Защита от дубля: тот же текст в тот же город в этом окне "
-                                     "повторно не отправляется.")
-    retry_unknown = st.toggle(
-        "Повторять неопределённые публикации (опасно)", value=bool(settings["retryUnknown"]),
-        key="set-retry-unknown",
-        help="Если Яндекс не подтвердил публикацию, но клик «Создать» был — повторить попытку. "
-             "Может создать дубль. По умолчанию выключено: такие города помечаются «проверьте вручную».",
-    )
-    if retry_unknown:
-        st.warning("Повтор после неподтверждённого клика — самая частая причина двойных постов. "
-                   "Включайте только осознанно.")
-
-    changed = (headless != settings["headless"] or float(delay) != float(settings["delayBetweenPosts"])
-               or strict != settings["strictAccountCheck"] or retry_unknown != settings["retryUnknown"]
-               or float(dedup) != float(settings["dedupWindowHours"]))
-    if changed:
-        settings.update({"headless": headless, "delayBetweenPosts": float(delay),
-                         "strictAccountCheck": strict, "retryUnknown": retry_unknown,
-                         "dedupWindowHours": float(dedup)})
-        save_config(project_id)
+    _yandex_login_block(project_id, config)
 
     st.divider()
     html('<div class="card-title">🧹 Обслуживание</div>')
@@ -1082,7 +1141,7 @@ def tab_settings(project_id: str, config: dict) -> None:
                + (f"**{engine}**" if engine else "ещё не запускался"))
     if st.button("Проверить браузер", key="btn-check-browser"):
         try:
-            with st.spinner("Пробую запустить браузер… Первый запуск может занять 1-3 минуты — Click скачивает браузер."):
+            with st.spinner("Пробую запустить браузер… Первый запуск может занять 1-3 минуты – Click скачивает браузер."):
                 chosen = get_worker().call(yb.resolve_engine, None)
             st.success(f"Браузер работает: {chosen}")
         except Exception as e:  # noqa: BLE001
@@ -1094,7 +1153,7 @@ def tab_settings(project_id: str, config: dict) -> None:
             "у себя через START.bat.",
             icon="⚠️",
         )
-    ledger = runner._read_ledger(project_id)  # noqa: SLF001 — служебный просмотр реестра
+    ledger = runner._read_ledger(project_id)  # noqa: SLF001 – служебный просмотр реестра
     st.caption(f"Реестр отправленных постов: {len(ledger)} записей. "
                "Именно он не даёт опубликовать один и тот же текст в город дважды.")
     c1, c2 = st.columns(2)
@@ -1102,7 +1161,7 @@ def tab_settings(project_id: str, config: dict) -> None:
         with st.container(key="danger-clear-ledger"):
             if st.button("Очистить реестр публикаций", key="btn-clear-ledger"):
                 runner.clear_ledger(project_id)
-                st.toast("Реестр очищен — защита от дублей начнёт отсчёт заново.")
+                st.toast("Реестр очищен – защита от дублей начнёт отсчёт заново.")
                 st.rerun()
     with c2:
         with st.container(key="danger-logout"):
@@ -1125,21 +1184,26 @@ def _browser_error(exc: Exception) -> None:
         if "shared libraries" in text or "libgbm" in text:
             st.info(
                 "Браузеру не хватает системной библиотеки. Click должен был сам перейти на "
-                "запасной движок — если этого не произошло, перезапустите приложение "
+                "запасной движок – если этого не произошло, перезапустите приложение "
                 "(в облаке: Manage app → Reboot) или задайте переменную `CLICK_BROWSER=firefox`."
             )
     with st.expander("Технические подробности"):
         st.code(text[:6000])
 
 
-def _yandex_login_block(project_id: str) -> None:
-    """Пошаговый вход в Яндекс: браузер headless, вместо окна — скриншот."""
+def _yandex_login_block(project_id: str, config: dict) -> None:
+    """
+    Вход в Яндекс. Основной путь – автоматический: логин и пароль уже есть
+    в «Настройках», Click сам читает, что просит страница, и заполняет.
+    Человек нужен только там, где иначе нельзя: код, капча, подтверждение
+    в приложении – тогда показываем снимок экрана и обычные поля.
+    """
     worker = get_worker()
     html('<div class="card-title">🔐 Вход в Яндекс</div>')
     headless_login = bool(get_settings(project_id)["headless"])
 
     if yb.has_saved_session(project_id):
-        st.success("Сессия Яндекса сохранена — публикация пойдёт в фоне без повторного входа.")
+        st.success("Сессия Яндекса сохранена – публикация пойдёт в фоне без повторного входа.")
         with st.container(key="danger-reset-session"):
             if st.button("Войти заново (сбросить сессию)", key="yb-reset"):
                 yb.session_path(project_id).unlink(missing_ok=True)
@@ -1150,38 +1214,73 @@ def _yandex_login_block(project_id: str) -> None:
 
     step = st.session_state.get("yb_step", "idle")
 
+    email = (config.get("email") or "").strip()
+    password = config.get("password") or ""
+
     if step == "idle":
-        st.caption("Откроется скрытый браузер на странице входа Яндекса. Дальше вы вводите логин, "
-                   "пароль и код — по картинке, которую Click показывает после каждого шага.")
+        if email and password:
+            st.caption(f"Click войдёт сам под **{email}** – логин и пароль возьмёт из полей выше. "
+                       "Вмешаться придётся только если Яндекс попросит код или капчу.")
+        else:
+            st.caption("Заполните email и пароль выше – тогда Click сможет войти сам. "
+                       "Без них вход будет пошаговым: по снимку экрана.")
         if yb.current_engine() is None:
             st.caption("⏳ Самый первый вход дольше обычного: Click докачивает браузер (1-3 минуты). "
                        "Дальше он открывается за секунды.")
-        if st.button("Начать вход", type="primary", key="yb-start"):
-            old = st.session_state.get("yb_flow")
-            if old is not None:
-                try:
-                    worker.call(old.close)
-                except Exception:
-                    pass
+
+        c1, c2 = st.columns([2, 1])
+        auto = c1.button("🔐 Войти автоматически", type="primary", key="yb-auto",
+                         disabled=not (email and password), use_container_width=True)
+        manual = c2.button("Ввести вручную", key="yb-start", use_container_width=True)
+        if not (auto or manual):
+            return
+
+        old = st.session_state.get("yb_flow")
+        if old is not None:
             try:
-                with st.spinner("Открываю браузер… Первый запуск может занять 1-3 минуты — Click скачивает браузер."):
-                    flow = yb.YbLoginFlow(project_id, headless=headless_login)
-                    shot = worker.call(flow.start)
-            except Exception as e:  # noqa: BLE001
-                _browser_error(e)
-                return
-            st.session_state.yb_flow = flow
-            st.session_state.yb_screenshot = shot
+                worker.call(old.close)
+            except Exception:
+                pass
+        try:
+            with st.spinner("Открываю браузер… Первый запуск может занять 1-3 минуты – Click скачивает браузер."):
+                flow = yb.YbLoginFlow(project_id, headless=headless_login)
+                shot = worker.call(flow.start)
+        except Exception as e:  # noqa: BLE001
+            _browser_error(e)
+            return
+        st.session_state.yb_flow = flow
+        st.session_state.yb_screenshot = shot
+
+        if manual:
             st.session_state.yb_step = "first"
             st.rerun()
-        return
 
+        # ── Автоматический вход ──
+        try:
+            with st.spinner("Вхожу под сохранёнными логином и паролем…"):
+                res = worker.call(flow.auto_login, email, password)
+        except Exception as e:  # noqa: BLE001
+            _browser_error(e)
+            return
+        if res.get("screenshot"):
+            st.session_state.yb_screenshot = res["screenshot"]
+        if res.get("ok"):
+            _finish_login(project_id, worker, flow)
+            return
+        # Не дошли сами – показываем, на чём встали, и передаём человеку
+        st.session_state.yb_step = "next" if res.get("step") in ("code", "password") else "first"
+        st.session_state.yb_note = res.get("reason") or ""
+        st.rerun()
+
+    note = st.session_state.pop("yb_note", "")
+    if note:
+        st.info(note)
     st.image(st.session_state.yb_screenshot, caption="Что сейчас на экране Яндекса")
     flow: yb.YbLoginFlow = st.session_state.yb_flow
     shot = None
 
     if step == "first":
-        st.caption("Если логин уже подставлен правильно — просто нажмите «Продолжить».")
+        st.caption("Если логин уже подставлен правильно – просто нажмите «Продолжить».")
         if st.button("Продолжить (ничего не менять)", key="yb-just-next"):
             with st.spinner("Жму «Далее»…"):
                 shot = worker.call(flow.click_next)
@@ -1243,19 +1342,29 @@ def _yandex_login_block(project_id: str) -> None:
         return
 
     if logged_in:
-        account = None
+        _finish_login(project_id, worker, flow)
+    else:
+        st.warning("Похоже, вход ещё не завершён – посмотрите на новый снимок выше.")
+    st.rerun()
+
+
+def _finish_login(project_id: str, worker, flow) -> None:
+    """Сессия получена: сохраняем, закрываем браузер, чистим состояние шага."""
+    account = None
+    try:
+        account = worker.call(flow.current_account)
+    except Exception:
+        pass
+    try:
+        worker.call(flow.save_session)
+    finally:
         try:
-            account = worker.call(flow.current_account)
+            worker.call(flow.close)
         except Exception:
             pass
-        worker.call(flow.save_session)
-        worker.call(flow.close)
-        for k in ("yb_flow", "yb_screenshot", "yb_step"):
-            st.session_state.pop(k, None)
-        st.success("Вход выполнен, сессия сохранена!" + (f" Аккаунт: {account}" if account else ""))
-    else:
-        st.warning("Похоже, вход ещё не завершён — посмотрите на новый снимок выше.")
-    st.rerun()
+    for k in ("yb_flow", "yb_screenshot", "yb_step", "yb_note"):
+        st.session_state.pop(k, None)
+    st.success("Вход выполнен, сессия сохранена." + (f" Аккаунт: {account}" if account else ""))
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -1277,9 +1386,16 @@ def show_main(project_id: str) -> None:
             st.session_state["theme"] = "light" if theme() == "dark" else "dark"
             st.rerun()
 
+    # ВАЖНО: активный раздел держим в СВОЁМ ключе, а не только в ключе виджета.
+    # Streamlit удаляет состояние виджетов, которые не успели отрисоваться в прогоне
+    # (а кнопка темы выше делает st.rerun() до радио) – и вкладка сбрасывалась на первую.
+    current = st.session_state.get("section_name", SECTIONS[0])
+    if current not in SECTIONS:
+        current = SECTIONS[0]
     with st.container(key="click-tabs"):
-        section = st.radio("Раздел", SECTIONS, horizontal=True,
+        section = st.radio("Раздел", SECTIONS, index=SECTIONS.index(current), horizontal=True,
                            label_visibility="collapsed", key="main-section")
+    st.session_state["section_name"] = section
 
     if section == SECTIONS[0]:
         tab_run(project_id, config)

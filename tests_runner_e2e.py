@@ -1,5 +1,5 @@
 """
-tests_runner_e2e.py — сквозная проверка прогона БЕЗ реального браузера.
+tests_runner_e2e.py – сквозная проверка прогона БЕЗ реального браузера.
 
 Подменяем yb.YbBrowser и yb.publish_to_city заглушками и проверяем то,
 из-за чего всё и затевалось:
@@ -8,7 +8,7 @@ tests_runner_e2e.py — сквозная проверка прогона БЕЗ 
   2. повторный запуск не публикует заново то, что уже ушло (реестр);
   3. пока идёт прогон, второй запуск не стартует (лок);
   4. после статуса 'unknown' (клик был, подтверждения нет) повтор НЕ делается;
-  5. после падения ДО клика — безопасный повтор делается;
+  5. после падения ДО клика – безопасный повтор делается;
   6. остановка по кнопке действительно останавливает.
 
 Запуск:  python tests_runner_e2e.py
@@ -39,7 +39,7 @@ def check(name: str, cond: bool, detail: str = "") -> None:
         print(f"  ✅ {name}")
     else:
         FAILED.append(name)
-        print(f"  ❌ {name}" + (f" — {detail}" if detail else ""))
+        print(f"  ❌ {name}" + (f" – {detail}" if detail else ""))
 
 
 # ─── Заглушки браузера ──────────────────────────────────────────────
@@ -197,7 +197,7 @@ def scenario_safe_retry(pid: str) -> None:
 
     check("была вторая попытка", CALLS.count("Тверь") == 2, str(CALLS))
     totals = (latest_report(pid).get("totals") or {})
-    check("итог — успех", totals.get("ok") == 1, str(totals))
+    check("итог – успех", totals.get("ok") == 1, str(totals))
 
 
 def scenario_double_start(pid: str) -> None:
@@ -244,7 +244,7 @@ def scenario_stop(pid: str) -> None:
         time.sleep(1.2)
         runner.request_stop(pid)
         state = wait_done(pid, timeout=15)
-        check("статус прогона — «остановлен»", state.get("status") == "stopped", str(state.get("status")))
+        check("статус прогона – «остановлен»", state.get("status") == "stopped", str(state.get("status")))
         check("обработали не все 10 городов", len(CALLS) < 10, str(len(CALLS)))
         check("сделанное сохранено в отчёте",
               (latest_report(pid).get("totals") or {}).get("total") == len(CALLS))
@@ -296,7 +296,7 @@ def main() -> int:
         for n in FAILED:
             print(f"    • {n}")
         return 1
-    print(f"  ВСЁ ХОРОШО — {PASSED} проверок пройдено")
+    print(f"  ВСЁ ХОРОШО – {PASSED} проверок пройдено")
     print("═" * 60)
     return 0
 

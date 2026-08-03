@@ -1,12 +1,12 @@
 """
-ui_theme.py — дизайн оригинального Click, перенесённый на Streamlit.
+ui_theme.py – дизайн оригинального Click, перенесённый на Streamlit.
 
 CSS взят из _ui.js (переменные, палитра, карточки, кнопки, пилюли, степпер,
-лог-бокс, строки отчёта) и адаптирован под DOM Streamlit. Цель — чтобы вкладки,
+лог-бокс, строки отчёта) и адаптирован под DOM Streamlit. Цель – чтобы вкладки,
 кнопки, карточки и отчёт выглядели так же, как в оригинальном приложении,
 а не как дефолтная форма Streamlit.
 
-Здесь же — маленькие HTML-хелперы (топбар, карточка, пилюли, лог), чтобы
+Здесь же – маленькие HTML-хелперы (топбар, карточка, пилюли, лог), чтобы
 streamlit_app.py оставался читаемым.
 """
 
@@ -82,7 +82,7 @@ def css(theme: str = "dark") -> str:
 [data-testid="stAppViewBlockContainer"],
 .block-container {{ padding-top: 1.1rem !important; padding-bottom: 4rem !important; max-width: 1240px; }}
 [data-testid="stSidebar"] {{ background: var(--bg-1); border-right: 1px solid var(--border); }}
-/* ВАЖНО: иконки Streamlit — лигатурный шрифт Material Symbols. Если накрыть их
+/* ВАЖНО: иконки Streamlit – лигатурный шрифт Material Symbols. Если накрыть их
    своим font-family, вместо стрелки экспандера рисуется текст «arrow_right».
    Поэтому иконки исключаем из общего правила и явно возвращаем им их шрифт. */
 .stApp, .stApp p, .stApp label, .stApp li,
@@ -190,12 +190,12 @@ hr {{ border-color: var(--border) !important; }}
   background: var(--bg-3); color: var(--muted); box-shadow: none; border-color: var(--border);
 }}
 
-/* Кнопка темы в шапке — компактная, вровень с топбаром */
+/* Кнопка темы в шапке – компактная, вровень с топбаром */
 .st-key-btn-theme .stButton > button, .st-key-btn-theme button {{
   height: 62px; font-size: 20px; padding: 0; background: var(--bg-1); border-color: var(--border);
 }}
 
-/* Опасные действия — красные (по ключу виджета) */
+/* Опасные действия – красные (по ключу виджета) */
 [class*="st-key-danger-"] .stButton > button,
 [class*="st-key-danger-"] button {{ background: var(--red-bg); color: var(--red); border-color: transparent; }}
 [class*="st-key-danger-"] .stButton > button:hover,
@@ -225,12 +225,12 @@ hr {{ border-color: var(--border) !important; }}
 .stCheckbox p, .stRadio p {{ text-transform: none !important; font-size: 13px !important;
   font-weight: 500 !important; letter-spacing: 0 !important; color: var(--text) !important; }}
 
-/* Мультиселект: теги — как .badge-accent */
+/* Мультиселект: теги – как .badge-accent */
 [data-baseweb="tag"] {{ background: var(--acc-bg) !important; color: var(--acc) !important;
   border-radius: 20px !important; font-weight: 600; }}
 
 /* ─── Вкладки: radio → .tabs-bar оригинала ─────────────────────── */
-/* Streamlit вешает класс st-key-<key> на контейнер с key — это наш якорь.
+/* Streamlit вешает класс st-key-<key> на контейнер с key – это наш якорь.
    .click-tabs оставлен как запасной вариант для старых версий. */
 .click-tabs [role="radiogroup"], .st-key-click-tabs [role="radiogroup"] {{
   display: flex; gap: 2px; flex-wrap: wrap;
@@ -255,11 +255,11 @@ hr {{ border-color: var(--border) !important; }}
 .click-tabs [role="radiogroup"] label:has(input:checked) p,
 .st-key-click-tabs [role="radiogroup"] label:has(input:checked) p {{ color: var(--text) !important; }}
 /* Прячем кружок радио: внутри label[stRadioOption] это первый div строки,
-   второй — stMarkdownContainer с текстом. */
+   второй – stMarkdownContainer с текстом. */
 .click-tabs [data-testid="stRadioOption"] > div > div > div:first-child,
 .st-key-click-tabs [data-testid="stRadioOption"] > div > div > div:first-child {{ display: none !important; }}
 
-/* Тип поста в «Публикации» — радио-плитки вместо кружочков */
+/* Тип поста в «Публикации» – радио-плитки вместо кружочков */
 .st-key-compose-type [role="radiogroup"] {{ display: flex; gap: 8px; flex-wrap: wrap; }}
 .st-key-compose-type [role="radiogroup"] label {{
   padding: 10px 16px !important; margin: 0 !important; border-radius: var(--r-sm);
@@ -437,6 +437,65 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 .empty-title {{ font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 6px; }}
 .empty-desc {{ font-size: 13px; max-width: 420px; margin: 0 auto; }}
 
+/* ─── Плитки типа поста и карточки стран (1:1 с _ui.js) ────────── */
+.post-type-grid {{
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px;
+}}
+.post-type-card {{
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  padding: 16px 10px; background: var(--bg-2); border: 1.5px solid var(--border);
+  border-radius: var(--r-md); color: var(--text); text-align: center;
+  transition: all .15s var(--ease);
+}}
+.post-type-card.active {{
+  border-color: var(--acc); background: var(--acc-bg); color: var(--acc);
+  box-shadow: 0 0 0 3px var(--acc-bg);
+}}
+.post-type-ico {{ font-size: 26px; line-height: 1; filter: grayscale(0.2); }}
+.post-type-card.active .post-type-ico {{ filter: none; }}
+.post-type-title {{ font-size: 12.5px; font-weight: 600; line-height: 1.25; }}
+
+.country-card {{
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 13px; background: var(--bg-2); border: 1.5px solid var(--border);
+  border-radius: var(--r-md); transition: all .15s var(--ease);
+}}
+.country-card.active {{ border-color: var(--acc); background: var(--acc-bg); }}
+.country-card-flag {{ font-size: 20px; line-height: 1; }}
+.country-card-body {{ display: flex; flex-direction: column; min-width: 0; }}
+.country-card-name {{ font-size: 13.5px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+.country-card-count {{ font-size: 11px; color: var(--muted); font-family: var(--mono); }}
+
+/* Кликабельная плитка: HTML-карточка + невидимая кнопка Streamlit поверх неё.
+   Иначе под каждой карточкой болталась бы вторая, настоящая кнопка. */
+[class*="st-key-tile-"] {{ position: relative; }}
+[class*="st-key-tile-"] .stButton {{ position: absolute; inset: 0; margin: 0; z-index: 3; }}
+[class*="st-key-tile-"] .stButton > button {{
+  width: 100%; height: 100%; opacity: 0; padding: 0; border: none; background: transparent;
+}}
+[class*="st-key-tile-"] .stButton > button:hover {{ transform: none; }}
+[class*="st-key-tile-"] [data-testid="stMarkdownContainer"] {{ cursor: pointer; }}
+
+/* Секции-карточки: st.container(border=True) → .card оригинала */
+[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]) {{
+  background: var(--bg-1); border: 1px solid var(--border) !important;
+  border-radius: var(--r-md) !important; box-shadow: var(--shadow-sm);
+}}
+[data-testid="stVerticalBlockBorderWrapper"] > div {{ padding: 4px 2px; }}
+
+/* Загрузка файла: подписи Streamlit английские, подменяем на свои */
+[data-testid="stFileUploaderDropzoneInstructions"] > div > span {{ display: none; }}
+[data-testid="stFileUploaderDropzoneInstructions"] > div::before {{
+  content: "Файлы с компьютера"; font-size: 12.5px; font-weight: 600; color: var(--text);
+}}
+[data-testid="stFileUploaderDropzoneInstructions"] > div > small {{ visibility: hidden; position: relative; }}
+[data-testid="stFileUploaderDropzoneInstructions"] > div > small::after {{
+  content: "JPG, PNG, GIF, WEBP · до 20 МБ"; visibility: visible;
+  position: absolute; left: 0; white-space: nowrap; color: var(--muted);
+}}
+[data-testid="stFileUploaderDropzone"] button {{ font-size: 12px; }}
+
 /* ─── Превью текста поста ──────────────────────────────────────── */
 .preview-box {{
   background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm);
@@ -534,7 +593,7 @@ _LOG_CLASS_RULES = (
 )
 
 
-def log_box(text: str, placeholder: str = "Лог пуст — запустите публикацию") -> str:
+def log_box(text: str, placeholder: str = "Лог пуст – запустите публикацию") -> str:
     if not text.strip():
         return f'<div class="log-box"><div class="log-placeholder">{esc(placeholder)}</div></div>'
     lines = []
@@ -613,7 +672,7 @@ def report_row(item: dict) -> str:
     dur = f'{item.get("durationMs", 0) / 1000:.1f} сек' if item.get("durationMs") else ""
     return (
         f'<div class="report-row {cls}"><span class="report-row-ico">{ico}</span>'
-        f'<span class="report-row-city">{esc(item.get("cityName", "—"))}</span>'
+        f'<span class="report-row-city">{esc(item.get("cityName", "–"))}</span>'
         f'<span class="report-row-reason">{esc(reason)}</span>'
         f'<span class="report-row-dur">{esc(dur)}</span></div>'
     )
@@ -630,6 +689,35 @@ def empty(icon: str, title: str, desc: str = "") -> str:
 def card(title: str, body_html: str = "") -> str:
     head = f'<div class="card-title">{esc(title)}</div>' if title else ""
     return f'<div class="card">{head}{body_html}</div>'
+
+
+def post_type_card(t: dict, active: bool) -> str:
+    return (
+        f'<div class="post-type-card{" active" if active else ""}">'
+        f'<div class="post-type-ico">{esc(t["icon"])}</div>'
+        f'<div class="post-type-title">{esc(t["title"])}</div></div>'
+    )
+
+
+def post_type_grid(types: list[dict], active_id: str) -> str:
+    """Плитки типов поста – .post-type-card из _ui.js."""
+    cells = "".join(
+        f'<div class="post-type-card{" active" if t["id"] == active_id else ""}">'
+        f'<div class="post-type-ico">{esc(t["icon"])}</div>'
+        f'<div class="post-type-title">{esc(t["title"])}</div></div>'
+        for t in types
+    )
+    return f'<div class="post-type-grid">{cells}</div>'
+
+
+def country_card(flag_emoji: str, name: str, cities: int, active: bool = False) -> str:
+    """Карточка страны – флаг, название, «N гор.»."""
+    return (
+        f'<div class="country-card{" active" if active else ""}">'
+        f'<span class="country-card-flag">{esc(flag_emoji)}</span>'
+        f'<span class="country-card-body"><span class="country-card-name">{esc(name)}</span>'
+        f'<span class="country-card-count">{cities} гор.</span></span></div>'
+    )
 
 
 def preview_box(text: str) -> str:

@@ -1,14 +1,14 @@
 """
-tests_click.py — самопроверка логики без запуска браузера.
+tests_click.py – самопроверка логики без запуска браузера.
 
 Запуск:  python tests_click.py
 
 Проверяем именно то, что ломалось в первой версии переноса:
   • нормализация URL карточки (иначе форма поста просто не открывается);
   • сборка текста поста (совпадение с оригинальным buildFinalText);
-  • правила ретрая — после клика «Создать» повтор ЗАПРЕЩЁН;
-  • реестр публикаций — тот же текст в тот же город второй раз не уходит;
-  • лок прогона — второй запуск не стартует;
+  • правила ретрая – после клика «Создать» повтор ЗАПРЕЩЁН;
+  • реестр публикаций – тот же текст в тот же город второй раз не уходит;
+  • лок прогона – второй запуск не стартует;
   • формат файла задач, который читает runner.
 """
 
@@ -33,7 +33,7 @@ def check(name: str, condition: bool, detail: str = "") -> None:
         print(f"  ✅ {name}")
     else:
         FAILED.append(name)
-        print(f"  ❌ {name}" + (f" — {detail}" if detail else ""))
+        print(f"  ❌ {name}" + (f" – {detail}" if detail else ""))
 
 
 def eq(name: str, got, expected) -> None:
@@ -86,8 +86,8 @@ def test_publish_api_filter() -> None:
     import yb_playwright as yb
     print("\n▸ Распознавание API-ответа о создании поста")
     f = yb._is_publish_api_response
-    check("POST к /sprav/api/posts — считаем", f("https://yandex.ru/sprav/api/posts/create", "POST"))
-    check("PUT к /api/post — считаем", f("https://yandex.ru/api/v1/post/42", "PUT"))
+    check("POST к /sprav/api/posts – считаем", f("https://yandex.ru/sprav/api/posts/create", "POST"))
+    check("PUT к /api/post – считаем", f("https://yandex.ru/api/v1/post/42", "PUT"))
     check("GET не считаем", not f("https://yandex.ru/sprav/api/posts/list", "GET"))
     check("метрика не считается", not f("https://mc.yandex.ru/sprav/metric/hit", "POST"))
     check("аналитика не считается", not f("https://yandex.ru/sprav/api/analytics", "POST"))
@@ -113,14 +113,14 @@ def test_text() -> None:
     smu = build("SMU", "Россия", "arrival", "Поступил швеллер")
     check("СМУ: контакты страны подставлены", "stalmetural.ru" in smu and "+7 (499) 130-36-69" in smu)
     check("СМУ: хэштеги на месте", "#Поступление_СМУ #Стальметурал #СМУ #Металлопрокат" in smu)
-    check("СМУ: поздравление — без окончания", build("SMU", "Россия", "greeting", "С Новым годом") ==
+    check("СМУ: поздравление – без окончания", build("SMU", "Россия", "greeting", "С Новым годом") ==
           "С Новым годом")
 
     imp = build("IMP", "Казахстан", "shipment", "Отгрузили трубу")
     check("ИМП: контакты Казахстана", "inmetprom.kz" in imp and "astana@inmetprom.kz" in imp)
     check("ИМП: хэштеги бренда", "#Отгрузка_ИМП" in imp)
 
-    # Армения у ИМП без телефона — строка с телефоном должна ИСЧЕЗНУТЬ целиком
+    # Армения у ИМП без телефона – строка с телефоном должна ИСЧЕЗНУТЬ целиком
     am = build("IMP", "Армения", "shipment", "Текст")
     check("ИМП/Армения: строки с телефоном нет", "📞" not in am)
     check("ИМП/Армения: нет пустой дырки вместо телефона", "\n\n\n" not in am)
@@ -163,9 +163,9 @@ def test_ledger_and_lock(tmp: Path) -> None:
     check("после публикации запись есть", rec is not None and rec["status"] == "ok")
 
     other_text = {**task, "postText": "Совсем другой текст"}
-    check("другой текст в тот же город — не блокируется", runner.recent_publication(pid, other_text) is None)
+    check("другой текст в тот же город – не блокируется", runner.recent_publication(pid, other_text) is None)
     other_city = {**task, "companyId": "222", "companyUrl": "https://yandex.ru/sprav/222/p/edit/posts/"}
-    check("тот же текст в другой город — не блокируется", runner.recent_publication(pid, other_city) is None)
+    check("тот же текст в другой город – не блокируется", runner.recent_publication(pid, other_city) is None)
     check("окно 0 часов отключает блокировку",
           runner.recent_publication(pid, task, window_hours=0) is None)
 
@@ -256,7 +256,7 @@ def test_report_render() -> None:
 
 def test_browser_fallback() -> None:
     """
-    В облаке (Streamlit Cloud) у Chromium часто нет системных библиотек —
+    В облаке (Streamlit Cloud) у Chromium часто нет системных библиотек –
     приложение должно само перейти на Firefox, а не падать простынёй логов.
     Текст ошибки взят из реального падения на Streamlit Cloud.
     """
@@ -323,7 +323,7 @@ def test_engine_order() -> None:
     """
     Корень проблемы с облаком: там Chromium не поднимается (нет системных
     библиотек, мало памяти), и доставить их нельзя. Значит в облаке Firefox
-    должен идти ПЕРВЫМ — иначе мы качаем 150 МБ Chromium впустую и только
+    должен идти ПЕРВЫМ – иначе мы качаем 150 МБ Chromium впустую и только
     потом 90 МБ Firefox. Локально наоборот: селекторы писались под Chrome.
     """
     import os
@@ -367,12 +367,12 @@ def test_packages_txt() -> None:
     вообще («Error installing requirements»).
 
     Проверено на живой Ubuntu 24.04 (тот же образ, что у Streamlit Cloud):
-    `libasound2` там стал ВИРТУАЛЬНЫМ — его предоставляют сразу два пакета
+    `libasound2` там стал ВИРТУАЛЬНЫМ – его предоставляют сразу два пакета
     (libasound2t64 и liboss4-salsa-asound2), apt отказывается выбирать и падает
     с «has no installation candidate». Сама libasound.so.2 при этом в образе есть.
 
     Поэтому здесь запрещены: имена, ставшие виртуальными после перехода Ubuntu
-    на 64-битный time_t (суффикс t64), и сами t64-имена — их нет на старых образах.
+    на 64-битный time_t (суффикс t64), и сами t64-имена – их нет на старых образах.
     """
     print("\n▸ packages.txt")
     listed = [ln.strip() for ln in Path("packages.txt").read_text(encoding="utf-8").splitlines()
@@ -391,6 +391,72 @@ def test_packages_txt() -> None:
           {"libdbus-glib-1-2", "libxt6", "libgtk-3-0"} <= set(listed))
 
 
+def test_kp_sheet() -> None:
+    """
+    Разбор КП-таблицы. Ключевая сложность: шапка объединённая и колонка
+    «Аккаунт» встречается дважды – у Яндекс.Бизнеса и у 2ГИС. Поэтому колонку
+    со ссылками ищем по СОДЕРЖИМОМУ, а не по названию.
+    """
+    import kp_sheet
+    print("\n▸ Google-таблица КП")
+
+    rows = [
+        ["", "", "", "", "", "Мессенджеры", "", "Яндекс Бизнес", "", "", "2ГИС", "", ""],
+        ["Страна", "Город", "Численность", "url", "Telegram", "WhatsApp",
+         "Посты", "Аккаунт", "Карта", "Статус", "Аккаунт", "Карта", "Статус"],
+        ["Россия", "Москва", "13274285", "https://metpromintex.ru", "", "",
+         "", "https://yandex.ru/sprav/365594/p/edit/posts/", "https://yandex.ru/maps/1", "Активная",
+         "https://account.2gis.com/1", "https://2gis.ru/1", "Активная"],
+        ["Россия", "Санкт-Петербург", "5652922", "https://spb.metpromintex.ru", "", "",
+         "", "https://yandex.ru/sprav/234955/p/edit/posts/", "https://yandex.ru/maps/2", "Онлайн",
+         "https://account.2gis.com/2", "https://2gis.ru/2", "Удалена"],
+        ["Казахстан", "Алматы", "2000000", "https://kz.metpromintex.ru", "", "",
+         "", "https://yandex.ru/sprav/777777/edit/posts/", "", "Активная", "", "", "Активная"],
+        ["Россия", "Омск", "1104000", "https://omsk.metpromintex.ru", "", "",
+         "", "https://yandex.ru/sprav/299334/p/edit/posts/", "", "Удалена", "", "", "Удалена"],
+        ["Россия", "БезСсылки", "1000", "https://x.ru", "", "", "", "", "", "Активная", "", "", ""],
+    ]
+    cities, diag = kp_sheet.parse_rows(rows)
+
+    check("шапка найдена, ошибок нет", not diag.get("error"), str(diag.get("error")))
+    eq("колонка со ссылками определена по содержимому (Яндекс, а не 2ГИС)",
+       diag.get("urlHeader"), "Аккаунт")
+    eq("взята именно колонка Яндекса", diag.get("urlColumn"), 7)
+    eq("статус берётся справа от неё (Яндекса, не 2ГИС)", diag.get("statusColumn"), 9)
+    eq("городов после фильтра", len(cities), 3)
+    check("Омск со статусом «Удалена» отброшен", all(c["name"] != "Омск" for c in cities))
+    check("город без ссылки на ЯБ отброшен", all(c["name"] != "БезСсылки" for c in cities))
+    check("Питер оставлен: у него удалён только 2ГИС, а Яндекс «Онлайн»",
+          any(c["name"] == "Санкт-Петербург" for c in cities))
+    eq("ссылка сохранена как есть", cities[0]["url"], "https://yandex.ru/sprav/365594/p/edit/posts/")
+
+    countries = kp_sheet.to_countries(cities, "IMP")
+    eq("стран получилось", len(countries), 2)
+    eq("первая страна", countries[0]["name"], "Россия")
+    ids = [ct["id"] for c in countries for ct in c["cities"]]
+    check("id городов уникальны", len(ids) == len(set(ids)))
+    check("из ссылок извлекается ID компании",
+          all(yb_extract(ct["url"]) for c in countries for ct in c["cities"]))
+
+    # Пустая и битая таблица не должны валить приложение
+    empty, d2 = kp_sheet.parse_rows([])
+    check("пустая таблица – пустой результат без исключения", empty == [])
+    broken, d3 = kp_sheet.parse_rows([["что-то", "не то"], ["1", "2"]])
+    check("таблица без шапки – понятная ошибка, а не падение",
+          broken == [] and "шапк" in (d3.get("error") or "").lower())
+
+    eq("ID таблицы из ссылки",
+       kp_sheet.sheet_id("https://docs.google.com/spreadsheets/d/1AbC_-xyz00000000000/edit#gid=0"),
+       "1AbC_-xyz00000000000")
+    eq("ID из голого ID", kp_sheet.sheet_id("1AbC_-xyz00000000000"), "1AbC_-xyz00000000000")
+    eq("мусор – пусто", kp_sheet.sheet_id("не ссылка"), "")
+
+
+def yb_extract(url: str):
+    import yb_playwright as yb
+    return yb.extract_company_id(url)
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="click-tests-"))
     try:
@@ -405,6 +471,7 @@ def main() -> int:
         test_browser_fallback()
         test_engine_order()
         test_packages_txt()
+        test_kp_sheet()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -414,7 +481,7 @@ def main() -> int:
         for name in FAILED:
             print(f"    • {name}")
         return 1
-    print(f"  ВСЁ ХОРОШО — {PASSED} проверок пройдено")
+    print(f"  ВСЁ ХОРОШО – {PASSED} проверок пройдено")
     print("═" * 60)
     return 0
 

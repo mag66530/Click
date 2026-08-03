@@ -29,6 +29,17 @@ import ui_theme as T
 import yb_playwright as yb
 from playwright_worker import PlaywrightWorker
 
+# Стиль и разметка обязаны быть из одной сборки. Если Streamlit перезапустил
+# скрипт, но оставил в памяти прежний ui_theme (так бывает в облаке при
+# обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
+# и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
+# она не совпала, перезагружаем модуль сами.
+UI_BUILD = "2026-08-03-tiles-as-buttons"
+if getattr(T, "BUILD", "") != UI_BUILD:
+    import importlib
+
+    T = importlib.reload(T)
+
 ROOT = Path(__file__).parent
 USERS_DATA = paths.data_root()
 
@@ -353,8 +364,27 @@ def _css(theme_name: str) -> str:
     return T.css(theme_name)
 
 
+# Страховка живёт здесь, в файле с самой разметкой, и потому не может оказаться
+# «старой» относительно неё. Она отменяет приёмы прежней вёрстки, когда плитка
+# была картинкой, а кнопка – невидимым слоем поверх: именно из-за него клики
+# уходили мимо, а при новой разметке плитки вовсе пропадали.
+_TILE_SAFETY_CSS = """
+<style>
+[class*="st-key-tile-"] { position: static !important; }
+[class*="st-key-tile-"] .stButton { position: static !important; inset: auto !important; }
+[class*="st-key-tile-"] .stButton > button {
+  opacity: 1 !important; height: auto !important; visibility: visible !important;
+}
+</style>
+"""
+
+
 def inject_css() -> None:
     st.markdown(_css(theme()), unsafe_allow_html=True)
+    st.markdown(_TILE_SAFETY_CSS, unsafe_allow_html=True)
+    if getattr(T, "BUILD", "") != UI_BUILD:
+        st.error("Интерфейс загружен частично (стиль от прежней сборки). "
+                 "Нажмите «Reboot app» в меню Streamlit – это лечится перезапуском.")
 
 
 def html(markup: str) -> None:

@@ -1,0 +1,207 @@
+"""
+tests_ui_click.py – проверка, что по кнопкам действительно попадает мышь.
+
+Зачем отдельный файл: обычные тесты жмут кнопку через Playwright по её роли,
+то есть напрямую по элементу. Так проверка проходит, даже если кнопка лежит
+под чужим слоем или её рамка не совпадает с тем, что нарисовано, – а человек
+в этот момент кликает и ничего не происходит (или срабатывает соседняя).
+
+Здесь проверяем ровно то, что видит человек:
+  • у каждой плитки ненулевой размер (иначе интерфейс «пропал»);
+  • в центре плитки под курсором лежит ЕЁ ЖЕ кнопка, а не соседняя и не div;
+  • настоящий клик мышью переключает именно ту плитку, по которой кликнули;
+  • промах мимо плитки ничего не включает.
+
+Запуск:  python3 tests_ui_click.py [порт]
+Поднимает приложение сам, если на порту никого нет.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).parent
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8611
+URL = f"http://localhost:{PORT}/"
+PASSWORD = "1501"
+
+OK = FAIL = 0
+FAILED: list[str] = []
+
+
+def check(name: str, cond: bool, extra: str = "") -> None:
+    global OK, FAIL
+    if cond:
+        OK += 1
+        print(f"  ✅ {name}")
+    else:
+        FAIL += 1
+        FAILED.append(name)
+        print(f"  ❌ {name}{(' – ' + extra) if extra else ''}")
+
+
+def wait_up(timeout: float = 90) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(URL, timeout=3) as r:
+                if r.status == 200:
+                    return True
+        except (urllib.error.URLError, OSError):
+            pass
+        time.sleep(1.5)
+    return False
+
+
+# ── Разметка тестов ────────────────────────────────────────────────
+# Для каждой плитки: в центре её кнопки должна лежать она сама.
+PROBE_JS = """
+(prefix) => {
+  const out = [];
+  document.querySelectorAll('[class*="st-key-' + prefix + '"]').forEach(box => {
+    const btn = box.querySelector('button');
+    const key = (box.className.match(new RegExp('st-key-' + prefix + '[a-z0-9-]*')) || [''])[0];
+    if (!btn) { out.push({key, error: 'кнопки нет'}); return; }
+    const r = btn.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8) {
+      out.push({key, error: `рамка ${Math.round(r.width)}x${Math.round(r.height)}`});
+      return;
+    }
+    const el = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    const owner = el && el.closest('[class*="st-key-' + prefix + '"]');
+    const ownerKey = owner
+      ? (owner.className.match(new RegExp('st-key-' + prefix + '[a-z0-9-]*')) || [''])[0]
+      : '';
+    out.push({key, text: btn.innerText.trim().split('\\n')[0],
+              hit: ownerKey, tag: el ? el.tagName : 'нет'});
+  });
+  return out;
+}
+"""
+
+
+def probe(page, prefix: str, title: str) -> list[dict]:
+    rows = page.evaluate(PROBE_JS, prefix)
+    check(f"{title}: плитки найдены", bool(rows), "ни одной")
+    bad_size = [r for r in rows if r.get("error")]
+    check(f"{title}: у всех плиток живая рамка",
+          not bad_size, "; ".join(f'{r["key"]}: {r["error"]}' for r in bad_size))
+    misses = [r for r in rows if not r.get("error") and r.get("hit") != r.get("key")]
+    check(f"{title}: центр плитки принадлежит ей самой",
+          not misses,
+          "; ".join(f'{r["text"]} → {r["hit"] or r["tag"]}' for r in misses))
+    return rows
+
+
+def main() -> int:
+    from playwright.sync_api import sync_playwright
+
+    proc = None
+    if not wait_up(2):
+        print(f"▸ Поднимаю приложение на порту {PORT}")
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "streamlit", "run", "streamlit_app.py",
+             "--server.headless", "true", "--server.port", str(PORT),
+             "--browser.gatherUsageStats", "false"],
+            cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if not wait_up():
+            print("Приложение не поднялось")
+            return 1
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                executable_path="/opt/pw-browsers/chromium", args=["--no-sandbox"])
+            page = browser.new_context(viewport={"width": 1294, "height": 900}).new_page()
+            page.goto(URL, wait_until="networkidle", timeout=60000)
+            page.wait_for_timeout(2000)
+            page.get_by_role("button", name="Выбрать СМУ").click()
+            page.wait_for_timeout(1500)
+            page.get_by_label("Пароль доступа").fill(PASSWORD)
+            page.get_by_role("button", name="Войти").click()
+            page.wait_for_timeout(6000)
+
+            print("\n▸ Публикация: типы поста и страны")
+            page.get_by_text("📤 Публикация", exact=True).first.click()
+            page.wait_for_timeout(4000)
+            probe(page, "tile-pt-", "Тип поста")
+            countries = probe(page, "tile-cc-", "Страны")
+
+            # Настоящий клик по последней стране – именно там раньше промахивались
+            last = countries[-1]
+            el = page.locator(f'[class*="{last["key"]}"] button').first
+            r = el.bounding_box()
+            page.mouse.click(r["x"] + r["width"] / 2, r["y"] + r["height"] / 2)
+            page.wait_for_timeout(2500)
+            active = page.evaluate(
+                """() => [...document.querySelectorAll('[class*="st-key-tile-cc-"] button')]
+                     .filter(b => b.getAttribute('kind') === 'primary')
+                     .map(b => b.innerText.trim().split('\\n')[0])""")
+            check(f"клик мышью по «{last['text']}» включил именно её",
+                  active == [last["text"]], f"включилось {active}")
+
+            # Промах: точка между карточками не должна ничего включать
+            box = page.evaluate(
+                """() => { const b = document.querySelector('[class*="st-key-tile-pt-"] button');
+                   const r = b.getBoundingClientRect(); return {x: r.x + r.width / 2, y: r.bottom + 26}; }""")
+            before = page.evaluate(
+                """() => document.querySelector('[class*="st-key-tile-pt-"] button[kind=primary]')
+                     ?.innerText.trim().split('\\n')[0] || ''""")
+            page.mouse.click(box["x"], box["y"])
+            page.wait_for_timeout(2000)
+            after = page.evaluate(
+                """() => document.querySelector('[class*="st-key-tile-pt-"] button[kind=primary]')
+                     ?.innerText.trim().split('\\n')[0] || ''""")
+            check("клик мимо плиток ничего не переключает", before == after, f"{before} → {after}")
+
+            print("\n▸ Актуализация: строки стран")
+            page.get_by_text("🔄 Актуализация", exact=True).first.click()
+            page.wait_for_timeout(4000)
+            rows = probe(page, "tile-row-act-", "Строки стран")
+            el = page.locator(f'[class*="{rows[-1]["key"]}"] button').first
+            r = el.bounding_box()
+            page.mouse.click(r["x"] + r["width"] / 2, r["y"] + r["height"] / 2)
+            page.wait_for_function(
+                "() => document.querySelectorAll('.st-key-city-grid .stCheckbox').length > 0",
+                timeout=20000)
+            opened = page.evaluate(
+                """() => [...document.querySelectorAll('[class*="st-key-tile-row-act-"] button')]
+                     .filter(b => b.getAttribute('kind') === 'primary')
+                     .map(b => b.innerText.trim().split('\\n')[0])""")
+            check(f"раскрылась именно «{rows[-1]['text']}»",
+                  opened == [rows[-1]["text"]], f"раскрыто {opened}")
+
+            widths = page.evaluate(
+                """() => [...new Set([...document.querySelectorAll('.st-key-city-grid label')]
+                     .map(l => Math.round(l.getBoundingClientRect().width)))]""")
+            check("рамки городов одной ширины", len(widths) == 1, str(widths))
+
+            print("\n▸ Города: строки стран")
+            page.get_by_text("🏙 Города", exact=True).first.click()
+            page.wait_for_timeout(4000)
+            probe(page, "tile-row-city-", "Строки стран")
+
+            browser.close()
+    finally:
+        if proc is not None:
+            proc.terminate()
+
+    print("\n" + "═" * 60)
+    if FAIL:
+        print(f"  ПРОВАЛЕНО {FAIL} из {OK + FAIL}:")
+        for name in FAILED:
+            print(f"    • {name}")
+        print("═" * 60)
+        return 1
+    print(f"  ВСЁ ХОРОШО – {OK} проверок пройдено")
+    print("═" * 60)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

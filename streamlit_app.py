@@ -1094,10 +1094,28 @@ def tab_settings(project_id: str, config: dict) -> None:
                 st.rerun()
 
 
+def _browser_error(exc: Exception) -> None:
+    """
+    Playwright при неудачном старте отдаёт несколько тысяч строк лога запуска.
+    Показываем только суть плюс подсказку, а полный лог прячем под спойлер.
+    """
+    text = str(exc)
+    if isinstance(exc, RuntimeError) and "Ни один браузер не запустился" in text:
+        st.error(text)                      # это уже наше готовое сообщение с подсказкой
+    else:
+        st.error(f"Не удалось открыть браузер: {yb._short_error(exc)}")  # noqa: SLF001
+        if "libgbm" in text or "shared libraries" in text:
+            st.info("Не хватает системной библиотеки. В облаке добавьте её в `packages.txt` "
+                    "и перезапустите приложение, либо задайте переменную `CLICK_BROWSER=firefox`.")
+    with st.expander("Технические подробности"):
+        st.code(text[:6000])
+
+
 def _yandex_login_block(project_id: str) -> None:
     """Пошаговый вход в Яндекс: браузер headless, вместо окна — скриншот."""
     worker = get_worker()
     html('<div class="card-title">🔐 Вход в Яндекс</div>')
+    headless_login = bool(get_settings(project_id)["headless"])
 
     if yb.has_saved_session(project_id):
         st.success("Сессия Яндекса сохранена — публикация пойдёт в фоне без повторного входа.")
@@ -1123,10 +1141,10 @@ def _yandex_login_block(project_id: str) -> None:
                     pass
             try:
                 with st.spinner("Открываю браузер…"):
-                    flow = yb.YbLoginFlow(project_id)
+                    flow = yb.YbLoginFlow(project_id, headless=headless_login)
                     shot = worker.call(flow.start)
             except Exception as e:  # noqa: BLE001
-                st.error(f"Не удалось открыть браузер: {type(e).__name__}: {e}")
+                _browser_error(e)
                 return
             st.session_state.yb_flow = flow
             st.session_state.yb_screenshot = shot

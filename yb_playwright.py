@@ -252,31 +252,93 @@ def download_image(url: str, temp_dir: Path) -> str:
 #  перезапускался на каждый город — это ×10 времени и рваная сессия)
 # ════════════════════════════════════════════════════════════════════
 
-_browser_checked: set[str] = set()
+# Какой движок реально заработал в этом процессе. Считаем один раз.
+_ENGINE: str | None = None
+
+CHROMIUM_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
 
 
-def _engine_name() -> str:
+def _launch(pw, engine: str, headless: bool = True):
+    args = CHROMIUM_ARGS if engine == "chromium" else []
+    return getattr(pw, engine).launch(headless=headless, args=args)
+
+
+def _short_error(exc: object) -> str:
     """
-    По умолчанию Chromium: селекторы Яндекс.Бизнеса писались и проверялись под Chrome
-    (publish.js — Puppeteer/Chrome). Firefox можно включить переменной окружения
-    CLICK_BROWSER=firefox, если Chromium не влезает по памяти (Streamlit Cloud ~1 ГБ).
+    Playwright вываливает несколько тысяч строк лога запуска. Для человека полезны
+    одна-две: чего именно не хватило. Их и достаём.
     """
-    return (os.environ.get("CLICK_BROWSER") or "chromium").strip().lower()
+    text = str(exc)
+    for pattern in (
+        r"error while loading shared libraries: ([^\s:]+)",
+        r"(Host system is missing dependencies[^\n]*)",
+        r"(Executable doesn't exist[^\n]*)",
+        r"(browserType\.launch: [^\n]*)",
+    ):
+        m = re.search(pattern, text)
+        if m:
+            return m.group(1).strip()
+    return text.split("\n")[0][:200]
+
+
+def _is_not_installed(exc: object) -> bool:
+    text = str(exc)
+    return "Executable doesn't exist" in text or "playwright install" in text
+
+
+def resolve_engine(force: str | None = None) -> str:
+    """
+    Выбирает движок, который РЕАЛЬНО запускается в этом окружении.
+
+    Порядок по умолчанию: Chromium → Firefox.
+      • Chromium первый, потому что все селекторы Яндекс.Бизнеса писались и
+        проверялись под Chrome (оригинал — Puppeteer/Chrome).
+      • Firefox запасной: в облаке (Streamlit Cloud) у Chromium часто нет
+        системных библиотек (libgbm.so.1 и т.п.) и меньше запас памяти,
+        а Firefox поднимается и там.
+
+    Жёстко задать: CLICK_BROWSER=chromium | firefox.
+    Если браузер просто не скачан — скачиваем и пробуем снова.
+    """
+    global _ENGINE
+    if _ENGINE and not force:
+        return _ENGINE
+
+    pref = (force or os.environ.get("CLICK_BROWSER") or "").strip().lower()
+    order = [pref] if pref in ("chromium", "firefox", "webkit") else ["chromium", "firefox"]
+
+    problems: list[str] = []
+    for engine in order:
+        for attempt in (1, 2):
+            try:
+                with sync_playwright() as p:
+                    _launch(p, engine).close()
+                if engine != order[0] or attempt > 1:
+                    info(f"🌐 Браузер: {engine}")
+                _ENGINE = engine
+                return engine
+            except Exception as e:  # noqa: BLE001
+                if attempt == 1 and _is_not_installed(e):
+                    info(f"⬇️  Скачиваю браузер {engine} (разово, 1-3 минуты)…")
+                    subprocess.run([sys.executable, "-m", "playwright", "install", engine], check=False)
+                    subprocess.run([sys.executable, "-m", "playwright", "install-deps", engine], check=False)
+                    continue
+                problems.append(f"{engine} — {_short_error(e)}")
+                break
+
+    hint = (
+        "Ни один браузер не запустился.\n\n" + "\n".join(f"• {p}" for p in problems) + "\n\n"
+        "Что делать:\n"
+        "• Локально: выполните `python -m playwright install chromium`.\n"
+        "• Streamlit Cloud: не хватает системных библиотек — добавьте их в packages.txt "
+        "(для Chromium нужен libgbm1) и перезапустите приложение, либо задайте "
+        "переменную CLICK_BROWSER=firefox."
+    )
+    raise RuntimeError(hint)
 
 
 def ensure_browser_installed(engine: str | None = None) -> None:
-    engine = engine or _engine_name()
-    if engine in _browser_checked:
-        return
-    try:
-        with sync_playwright() as p:
-            b = getattr(p, engine).launch(headless=True)
-            b.close()
-    except Exception:
-        info(f"⬇️  Ставлю браузер Playwright ({engine})… это разовая процедура, 1-3 минуты.")
-        subprocess.run([sys.executable, "-m", "playwright", "install", engine], check=False)
-        subprocess.run([sys.executable, "-m", "playwright", "install-deps", engine], check=False)
-    _browser_checked.add(engine)
+    resolve_engine(engine)
 
 
 def session_path(project_id: str) -> Path:
@@ -312,11 +374,9 @@ class YbBrowser:
         self.page: Page | None = None
 
     def start(self) -> None:
-        ensure_browser_installed()
+        engine = resolve_engine()
         self._pw = sync_playwright().start()
-        engine = _engine_name()
-        args = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"] if engine == "chromium" else []
-        self.browser = getattr(self._pw, engine).launch(headless=self.headless, args=args)
+        self.browser = _launch(self._pw, engine, headless=self.headless)
         state = session_path(self.project_id)
         self.context = self.browser.new_context(
             storage_state=str(state) if state.exists() else None,
@@ -1370,20 +1430,20 @@ def _click_exact_button(page: Page, texts: list[str]) -> bool:
 class YbLoginFlow:
     """Пошаговый вход: на каждом шаге отдаём скриншот, человек вводит логин/пароль/код."""
 
-    def __init__(self, project_id: str):
+    def __init__(self, project_id: str, headless: bool = True):
         self.project_id = project_id
+        # headless=False имеет смысл только при локальном запуске: в облаке экрана нет.
+        self.headless = headless
         self._pw = None
         self.browser: Browser | None = None
         self.context: BrowserContext | None = None
         self.page: Page | None = None
 
     def start(self) -> bytes:
-        ensure_browser_installed()
+        engine = resolve_engine()
         try:
             self._pw = sync_playwright().start()
-            engine = _engine_name()
-            args = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"] if engine == "chromium" else []
-            self.browser = getattr(self._pw, engine).launch(headless=True, args=args)
+            self.browser = _launch(self._pw, engine, headless=self.headless)
             self.context = self.browser.new_context(viewport={"width": 1000, "height": 700}, user_agent=UA)
             self.page = self.context.new_page()
             self.page.goto("about:blank", timeout=10_000)

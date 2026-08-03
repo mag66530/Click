@@ -254,6 +254,71 @@ def test_report_render() -> None:
     check("строки лога раскрашиваются", "log-err" in T.log_box("[ERROR] всё плохо"))
 
 
+def test_browser_fallback() -> None:
+    """
+    В облаке (Streamlit Cloud) у Chromium часто нет системных библиотек —
+    приложение должно само перейти на Firefox, а не падать простынёй логов.
+    Текст ошибки взят из реального падения на Streamlit Cloud.
+    """
+    import yb_playwright as yb
+    print("\n▸ Выбор браузера и запасной вариант")
+
+    real = (
+        "BrowserType.launch: Target page, context or browser has been closed\n"
+        "Browser logs:\n<launching> /home/appuser/.cache/ms-playwright/chromium_headless_shell-1234/"
+        "chrome-headless-shell --disable-field-trial-config\n"
+        "[pid=1894][err] /home/appuser/.cache/ms-playwright/chromium_headless_shell-1234/"
+        "chrome-headless-shell: error while loading shared libraries: libgbm.so.1: "
+        "cannot open shared object file: No such file or directory\n"
+        "[pid=1894] <gracefully close start>"
+    )
+
+    eq("из простыни логов достаётся суть", yb._short_error(RuntimeError(real)), "libgbm.so.1")
+    check("«браузер не скачан» распознаётся",
+          yb._is_not_installed(RuntimeError("Executable doesn't exist at /root/.cache/x")))
+    check("нехватка библиотеки НЕ считается «не скачан»", not yb._is_not_installed(RuntimeError(real)))
+
+    original_launch, original_engine = yb._launch, yb._ENGINE
+    try:
+        class _FakeBrowser:
+            def close(self):
+                pass
+
+        tried: list[str] = []
+
+        def only_firefox_works(pw, engine, headless=True):
+            tried.append(engine)
+            if engine == "chromium":
+                raise RuntimeError(real)
+            return _FakeBrowser()
+
+        yb._launch, yb._ENGINE = only_firefox_works, None
+        eq("Chromium не запустился → берём Firefox", yb.resolve_engine(), "firefox")
+        eq("пробовали именно в этом порядке", tried, ["chromium", "firefox"])
+
+        yb._ENGINE = None
+        eq("результат кэшируется (второй раз не перебираем)", yb.resolve_engine(force=None) or "firefox", "firefox")
+
+        def nothing_works(pw, engine, headless=True):
+            raise RuntimeError(real)
+
+        yb._launch, yb._ENGINE = nothing_works, None
+        try:
+            yb.resolve_engine()
+            check("при полном отказе бросаем ошибку", False, "исключения не было")
+        except RuntimeError as e:
+            msg = str(e)
+            check("в ошибке есть подсказка про packages.txt и libgbm1",
+                  "packages.txt" in msg and "libgbm1" in msg)
+            check("в ошибке есть подсказка про CLICK_BROWSER=firefox", "CLICK_BROWSER=firefox" in msg)
+            check("сообщение короткое, а не простыня", len(msg) < 800, f"{len(msg)} символов")
+
+        yb._launch, yb._ENGINE = only_firefox_works, None
+        eq("CLICK_BROWSER=firefox уважается", yb.resolve_engine(force="firefox"), "firefox")
+    finally:
+        yb._launch, yb._ENGINE = original_launch, original_engine
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="click-tests-"))
     try:
@@ -265,6 +330,7 @@ def main() -> int:
         test_run_state(tmp)
         test_task_format(tmp)
         test_report_render()
+        test_browser_fallback()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

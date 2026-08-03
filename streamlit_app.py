@@ -734,10 +734,6 @@ def tab_run(project_id: str, config: dict) -> None:
 #  РЕДАКТОР ОКОНЧАНИЙ (шестерёнка в «Типе поста»)
 # ════════════════════════════════════════════════════════════════════
 
-def _open_endings() -> None:
-    st.session_state["endings-open"] = True
-
-
 def _show_endings_dialog(project_id: str, config: dict) -> None:
     """Окно поверх страницы: список городов и текст поста остаются на месте."""
     dialog = getattr(st, "dialog", None)
@@ -819,7 +815,6 @@ def _endings_editor(project_id: str, config: dict) -> None:
         except Exception as e:  # noqa: BLE001
             st.error(str(e))
             return
-        st.session_state["endings-open"] = False
         st.success(f"Окончания {note}.")
         time.sleep(1.0)
         st.rerun()
@@ -833,8 +828,7 @@ def _endings_editor(project_id: str, config: dict) -> None:
             return
         st.rerun()
     if c3.button("Закрыть", use_container_width=True, key="end-close"):
-        st.session_state["endings-open"] = False
-        st.rerun()
+        st.rerun()                       # перерисовка закрывает окно Streamlit
 
 
 def _endings_from_form(project_id: str, config: dict, data: dict) -> dict:
@@ -894,12 +888,12 @@ def tab_compose(project_id: str, config: dict) -> None:
         with title_col:
             html('<div class="card-title">📄 Тип поста</div>')
         with gear_col, st.container(key="endings-gear"):
-            st.button("⚙", key="btn-endings", help="Окончания постов: контакты и хэштеги",
-                      use_container_width=True, on_click=_open_endings)
+            open_endings = st.button("⚙", key="btn-endings", use_container_width=True,
+                                     help="Окончания постов: контакты и хэштеги")
         # Иконку рисуем через CSS ::before у самой кнопки – так плитка остаётся
         # настоящей кнопкой и клик по ней срабатывает всегда.
         html(T.tile_css([(f"tile-pt-{t['id']}", {"--ico": T.css_text(t["icon"])}) for t in types]))
-        if st.session_state.get("endings-open"):
+        if open_endings:
             _show_endings_dialog(project_id, config)
         cols = st.columns(len(types))
         for col, t in zip(cols, types):

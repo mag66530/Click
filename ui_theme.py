@@ -289,6 +289,18 @@ hr {{ border-color: var(--border) !important; }}
   border: 1px solid var(--border) !important; background: var(--bg-2) !important;
 }}
 [data-baseweb="input"]:focus-within, [data-baseweb="textarea"]:focus-within {{ border-color: var(--acc) !important; }}
+/* Разметка полей в свежем Streamlit – не baseweb, а свои root-элементы, и цвет
+   рамки он берёт из своей темы: на светлой выходила толстая чёрная рамка. */
+[data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"],
+[data-testid="stNumberInputContainer"] {{
+  background: var(--bg-2) !important; border: 1px solid var(--border) !important;
+  border-radius: var(--r-sm) !important; box-shadow: none !important;
+}}
+[data-testid="stTextInputRootElement"]:focus-within,
+[data-testid="stTextAreaRootElement"]:focus-within,
+[data-testid="stNumberInputContainer"]:focus-within {{
+  border-color: var(--acc) !important;
+}}
 .stTextInput label, .stTextArea label, .stSelectbox label, .stMultiSelect label,
 .stNumberInput label, .stFileUploader label, .stCheckbox label, .stRadio label {{
   font-size: 11px !important; font-weight: 700 !important; text-transform: uppercase;

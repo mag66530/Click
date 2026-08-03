@@ -534,6 +534,44 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 .st-key-act-rows .stCheckbox {{ margin-bottom: 2px; }}
 .st-key-act-rows .stCheckbox p {{ font-size: 12px !important; }}
 
+.country-flag-svg {{ display: inline-flex; align-items: center; vertical-align: -2px;
+  border-radius: 2px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }}
+
+/* Строка страны: флаг, название слева – счётчик и «изменить» справа */
+.country-row {{
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 15px; background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--r-sm); transition: border-color .12s var(--ease);
+}}
+.country-row.open {{ border-color: var(--border-hi); }}
+.country-row-name {{ font-size: 13.5px; font-weight: 700; color: var(--text); flex: 1; }}
+.country-row-mark {{ font-size: 12px; font-weight: 700; color: var(--grn); }}
+.country-row-mark.part {{ color: var(--yel); }}
+.country-row-mark.none {{ color: var(--dim); }}
+.country-row-act {{ font-size: 11.5px; color: var(--muted); }}
+
+/* Чекбоксы городов – в рамочках, как .city-check в оригинале */
+.st-key-city-grid .stCheckbox {{ margin-bottom: 0; }}
+.st-key-city-grid .stCheckbox > label {{
+  width: 100%; padding: 8px 11px; background: var(--bg-2);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  transition: all .1s var(--ease);
+}}
+.st-key-city-grid .stCheckbox > label:hover {{ border-color: var(--border-hi); background: var(--bg-3); }}
+.st-key-city-grid .stCheckbox > label:has(input:checked) {{
+  background: var(--acc-bg); border-color: var(--acc);
+}}
+.st-key-city-grid .stCheckbox p {{ font-size: 12px !important; font-weight: 600 !important;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+
+/* Загрузчик файлов ровно по высоте соседнего поля со ссылками */
+.st-key-img-row [data-testid="stFileUploaderDropzone"],
+.st-key-goods-row [data-testid="stFileUploaderDropzone"] {{
+  min-height: 118px; align-items: center; justify-content: center; flex-direction: column; gap: 6px;
+}}
+.st-key-img-row [data-testid="stFileUploader"],
+.st-key-goods-row [data-testid="stFileUploader"] {{ margin-top: 26px; }}
+
 /* ─── Превью текста поста ──────────────────────────────────────── */
 .preview-box {{
   background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm);
@@ -563,6 +601,45 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 # ════════════════════════════════════════════════════════════════════
 #  HTML-хелперы
 # ════════════════════════════════════════════════════════════════════
+
+
+# ─── Флаги ──────────────────────────────────────────────────────────
+# Именно inline-SVG, а не эмодзи: на Windows эмодзи-флаги не отрисовываются –
+# вместо флага видно буквы «RU», «KZ». Так же сделано в оригинальном _ui.js.
+_FLAG_SVG = {
+    "Россия": '<rect width="9" height="2" fill="#fff"/><rect y="2" width="9" height="2" fill="#0039A6"/>'
+              '<rect y="4" width="9" height="2" fill="#D52B1E"/>',
+    "Казахстан": '<rect width="9" height="6" fill="#00AFCA"/><circle cx="4.5" cy="3" r="1.2" fill="#FEC50C"/>',
+    "Беларусь": '<rect width="9" height="4" fill="#D22730"/><rect y="4" width="9" height="2" fill="#007C30"/>'
+                '<rect width="0.9" height="6" fill="#fff"/>',
+    "Кыргызстан": '<rect width="9" height="6" fill="#E8112D"/><circle cx="4.5" cy="3" r="1.4" fill="#FFCD00"/>',
+    "Киргизия": '<rect width="9" height="6" fill="#E8112D"/><circle cx="4.5" cy="3" r="1.4" fill="#FFCD00"/>',
+    "Узбекистан": '<rect width="9" height="2" fill="#1EB53A"/><rect y="2" width="9" height="2" fill="#fff"/>'
+                  '<rect y="4" width="9" height="2" fill="#0099B5"/>',
+    "Азербайджан": '<rect width="9" height="2" fill="#00B5E2"/><rect y="2" width="9" height="2" fill="#EF3340"/>'
+                   '<rect y="4" width="9" height="2" fill="#509E2F"/>',
+    "Армения": '<rect width="9" height="2" fill="#D90012"/><rect y="2" width="9" height="2" fill="#0033A0"/>'
+               '<rect y="4" width="9" height="2" fill="#F2A800"/>',
+    "Украина": '<rect width="9" height="3" fill="#005BBB"/><rect y="3" width="9" height="3" fill="#FFD500"/>',
+    "Грузия": '<rect width="9" height="6" fill="#fff"/><rect x="4" width="1" height="6" fill="#FF0000"/>'
+              '<rect y="2.5" width="9" height="1" fill="#FF0000"/>',
+    "Молдова": '<rect width="3" height="6" fill="#003DA5"/><rect x="3" width="3" height="6" fill="#FFD200"/>'
+               '<rect x="6" width="3" height="6" fill="#CE1126"/>',
+    "Турция": '<rect width="9" height="6" fill="#E30A17"/><circle cx="3.5" cy="3" r="1.3" fill="#fff"/>'
+              '<circle cx="3.8" cy="3" r="1.05" fill="#E30A17"/>',
+    "Таджикистан": '<rect width="9" height="2" fill="#CC0000"/><rect y="2" width="9" height="2" fill="#fff"/>'
+                   '<rect y="4" width="9" height="2" fill="#006600"/>',
+}
+
+
+def flag_svg(name: str, height: int = 14) -> str:
+    import re as _re
+    clean = _re.sub(r"\s*\([^)]*\)\s*", " ", name or "").strip()
+    body = _FLAG_SVG.get(clean, '<rect width="9" height="6" fill="#888"/>')
+    w = round(height * 1.5)
+    return (f'<span class="country-flag-svg"><svg viewBox="0 0 9 6" width="{w}" height="{height}" '
+            f'xmlns="http://www.w3.org/2000/svg">{body}</svg></span>')
+
 
 def esc(s: object) -> str:
     return _html.escape(str(s if s is not None else ""))
@@ -755,6 +832,17 @@ def country_card(flag_emoji: str, name: str, cities: int, active: bool = False) 
         f'<span class="country-card-flag">{esc(flag_emoji)}</span>'
         f'<span class="country-card-body"><span class="country-card-name">{esc(name)}</span>'
         f'<span class="country-card-count">{cities} гор.</span></span></div>'
+    )
+
+
+def country_row(flag_html: str, name: str, mark: str, action: str, is_open: bool = False) -> str:
+    """Строка страны: флаг и название слева, счётчик и «изменить» справа."""
+    cls = "none" if mark == "не выбрано" else ("part" if "из" in mark else "")
+    return (
+        f'<div class="country-row{" open" if is_open else ""}">{flag_html}'
+        f'<span class="country-row-name">{esc(name)}</span>'
+        f'<span class="country-row-mark {cls}">{esc(mark)}</span>'
+        f'<span class="country-row-act">{esc(action)} {"▾" if is_open else "▸"}</span></div>'
     )
 
 

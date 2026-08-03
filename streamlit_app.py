@@ -54,14 +54,9 @@ PROJECTS: dict[str, dict] = {
             "presetCities": pdata.MPE_CITIES, "endings": pdata.MPE_ENDINGS},
 }
 
-COUNTRY_FLAGS = {
-    "Россия": "🇷🇺", "Казахстан": "🇰🇿", "Беларусь": "🇧🇾", "Киргизия": "🇰🇬", "Кыргызстан": "🇰🇬",
-    "Узбекистан": "🇺🇿", "Азербайджан": "🇦🇿", "Армения": "🇦🇲", "Грузия": "🇬🇪", "Таджикистан": "🇹🇯",
-}
-
-
-def flag(name: str) -> str:
-    return COUNTRY_FLAGS.get(name, "🏳️")
+def flag(name: str, height: int = 14) -> str:
+    """SVG-флажок. Эмодзи не годятся: на Windows вместо флага видно «RU», «KZ»."""
+    return T.flag_svg(name, height)
 
 
 def plural(n: int, one: str, few: str, many: str) -> str:
@@ -402,6 +397,10 @@ def city_selector(key_prefix: str, country: dict, default_all: bool = False) -> 
                           key=state_key, label_visibility="collapsed")
 
 
+def _toggle_open(open_key: str, value: str) -> None:
+    st.session_state[open_key] = None if st.session_state.get(open_key) == value else value
+
+
 def _set_cities(state_key: str, value: list[str]) -> None:
     st.session_state[state_key] = value
 
@@ -673,25 +672,29 @@ def tab_compose(project_id: str, config: dict) -> None:
           height=200, key="compose-body", placeholder="Текст поста...",
       )
 
-      c1, c2 = st.columns([3, 1])
-      with c1:
-          image_urls_raw = st.text_area(
-              "Картинки (до 4 для поста)", height=110, key="compose-image-urls",
+      with st.container(key="img-row"):
+          c1, c2 = st.columns([3, 1])
+          image_urls_raw = c1.text_area(
+              "Картинки (до 4 для поста)", height=118, key="compose-image-urls",
               placeholder="Можно: ссылки (по строке) ИЛИ загрузить файлы кнопкой справа\n"
                           "https://ibb.co/abc/foto1.jpg\nhttps://ibb.co/xyz/foto2.jpg",
           )
-      with c2:
-          uploaded = st.file_uploader("Выбрать файл", type=["jpg", "jpeg", "png", "gif", "webp"],
+          uploaded = c2.file_uploader("Выбрать файл", type=["jpg", "jpeg", "png", "gif", "webp"],
                                       accept_multiple_files=True, key="compose-images",
                                       label_visibility="collapsed")
       html('<div class="hint">Можно ссылки (ImgBB / Imgur / Я.Диск) ИЛИ загрузить файлы с компьютера. '
            'Если есть проблемы с интернетом – лучше загружайте файлы. До 20 МБ.</div>')
 
-      with st.expander("📸 Фото в раздел «Товары» (необязательно)"):
-          product_photos_raw = st.text_area(
-              "Ссылки или пути, по одной в строке", height=90, key="compose-product-photos",
-              help="Заливаются в карточку после успешной публикации поста. На статус поста не влияют.",
+      with st.container(key="goods-row"):
+          g1, g2 = st.columns([3, 1])
+          product_photos_raw = g1.text_area(
+              "Фото в раздел «Товары» (необязательно)", height=118, key="compose-product-photos",
+              placeholder="Ссылки или пути, по одной в строке\n"
+                          "Заливаются в карточку после успешной публикации поста",
           )
+          goods_files = g2.file_uploader("Фото товаров", type=["jpg", "jpeg", "png", "gif", "webp"],
+                                         accept_multiple_files=True, key="compose-goods-files",
+                                         label_visibility="collapsed")
 
     image_urls = [u.strip() for u in (image_urls_raw or "").splitlines() if u.strip()]
     product_photos = [u.strip() for u in (product_photos_raw or "").splitlines() if u.strip()]
@@ -708,6 +711,16 @@ def tab_compose(project_id: str, config: dict) -> None:
             saved_paths.append(str(path))
         st.image([f.getvalue() for f in uploaded[:4]], width=120)
 
+    if goods_files:
+        uploads = project_base(project_id) / "uploads"
+        uploads.mkdir(parents=True, exist_ok=True)
+        for f in goods_files:
+            digest = hashlib.md5(f.getvalue()).hexdigest()[:10]
+            path = uploads / f"{digest}-{safe_filename(f.name)}"
+            if not path.exists():
+                path.write_bytes(f.getvalue())
+            product_photos.append(str(path))
+
     all_images: list[str] = saved_paths + image_urls
     if len(all_images) > 4:
         st.warning(f"Яндекс берёт максимум 4 фото в пост – лишние {len(all_images) - 4} не отправятся.")
@@ -718,7 +731,7 @@ def tab_compose(project_id: str, config: dict) -> None:
 
     per_country: dict[str, list[str]] = {}
     for country in selected_countries:
-        with st.expander(f"{flag(country['name'])} {country['name']}", expanded=len(selected_countries) <= 2):
+        with st.expander(country["name"], expanded=len(selected_countries) <= 2):
             per_country[country["id"]] = city_selector(f"compose-{country['id']}", country)
             if (body or "").strip():
                 st.caption("Так пост уйдёт в Яндекс:")
@@ -797,13 +810,28 @@ def tab_compose(project_id: str, config: dict) -> None:
 #  РАЗДЕЛ: АКТУАЛИЗАЦИЯ
 # ════════════════════════════════════════════════════════════════════
 
-def _act_key(city_id: str) -> str:
-    return f"act-city-{city_id}"
+# Выбор городов для актуализации держим в СВОЁМ наборе, а не в ключах чекбоксов:
+# Streamlit удаляет состояние виджетов, которые не отрисовались в прогоне (а свёрнутые
+# страны мы намеренно не рисуем), и галочки бы слетали.
+def _act_selected(all_ids: list[str]) -> set[str]:
+    sel = st.session_state.get("act-selected")
+    if sel is None:
+        sel = set(all_ids)                     # по умолчанию выбраны все, как в оригинале
+        st.session_state["act-selected"] = sel
+    return sel
 
 
 def _act_set(city_ids: list[str], value: bool) -> None:
-    for cid in city_ids:
-        st.session_state[_act_key(cid)] = value
+    sel = st.session_state.setdefault("act-selected", set())
+    sel.update(city_ids) if value else sel.difference_update(city_ids)
+
+
+def _act_toggle(city_id: str, widget_key: str) -> None:
+    sel = st.session_state.setdefault("act-selected", set())
+    if st.session_state.get(widget_key):
+        sel.add(city_id)
+    else:
+        sel.discard(city_id)
 
 
 def tab_actualize(project_id: str, config: dict) -> None:
@@ -813,9 +841,8 @@ def tab_actualize(project_id: str, config: dict) -> None:
         return
 
     all_ids = [ct["id"] for c in countries for ct in c["cities"]]
-    for cid in all_ids:                       # по умолчанию выбраны все, как в оригинале
-        st.session_state.setdefault(_act_key(cid), True)
-    selected = [cid for cid in all_ids if st.session_state.get(_act_key(cid))]
+    chosen = _act_selected(all_ids)
+    selected = [cid for cid in all_ids if cid in chosen]
 
     state = runner.read_state(project_id)
     running = state.get("status") == "running"
@@ -836,20 +863,31 @@ def tab_actualize(project_id: str, config: dict) -> None:
         act.button("Снять все" if all_on else "Выбрать все", key="act-toggle-all",
                    use_container_width=True, on_click=_act_set, args=(all_ids, not all_on))
 
-        with st.container(key="act-rows"):
-            for c in countries:
-                ids = [ct["id"] for ct in c["cities"]]
-                n = sum(1 for cid in ids if st.session_state.get(_act_key(cid)))
-                mark = f"✓ все {len(ids)}" if n == len(ids) else (f"{n} из {len(ids)}" if n else "не выбрано")
-                with st.expander(f"{flag(c['name'])}  {c['name']}          {mark}"):
-                    st.button("Снять все" if n == len(ids) else "Выбрать все",
-                              key=f"act-toggle-{c['id']}",
-                              on_click=_act_set, args=(ids, n != len(ids)))
-                    per_row = 7
+        for c in countries:
+            ids = [ct["id"] for ct in c["cities"]]
+            n = sum(1 for cid in ids if cid in chosen)
+            mark = f"✓ все {len(ids)}" if n == len(ids) else (f"{n} из {len(ids)}" if n else "не выбрано")
+            is_open = st.session_state.get("act-open") == c["id"]
+            with st.container(key=f"tile-actrow-{c['id']}"):
+                html(T.country_row(flag(c["name"]), c["name"], mark,
+                                   "свернуть" if is_open else "изменить", is_open))
+                st.button(c["name"], key=f"act-row-{c['id']}", use_container_width=True,
+                          on_click=_toggle_open, args=("act-open", c["id"]))
+            # Города рисуем только для раскрытой страны – иначе 117 чекбоксов
+            # строились бы при каждом клике по чему угодно.
+            if not is_open:
+                continue
+            with st.container(border=True):
+                st.button("Снять все" if n == len(ids) else "Выбрать все",
+                          key=f"act-toggle-{c['id']}", on_click=_act_set, args=(ids, n != len(ids)))
+                with st.container(key="city-grid"):
+                    per_row = 6
                     for start_i in range(0, len(c["cities"]), per_row):
                         cols = st.columns(per_row)
                         for col, ct in zip(cols, c["cities"][start_i:start_i + per_row]):
-                            col.checkbox(ct["name"], key=_act_key(ct["id"]))
+                            wkey = f"act-cb-{ct['id']}"
+                            col.checkbox(ct["name"], value=ct["id"] in chosen, key=wkey,
+                                         on_change=_act_toggle, args=(ct["id"], wkey))
 
     if not yb.has_saved_session(project_id):
         st.warning("Сначала войдите в Яндекс в разделе «⚙️ Настройки».")
@@ -860,7 +898,7 @@ def tab_actualize(project_id: str, config: dict) -> None:
 
     if st.button(f"🔄 Запустить актуализацию ({cities_word(len(selected))})", type="primary",
                  use_container_width=True, disabled=running or not selected, key="btn-actualize"):
-        selection = {c["id"]: [ct["id"] for ct in c["cities"] if st.session_state.get(_act_key(ct["id"]))]
+        selection = {c["id"]: [ct["id"] for ct in c["cities"] if ct["id"] in chosen]
                      for c in countries}
         save_actualize_tasks(project_id, config, selection)
         ok, msg = runner.start_actualize(project_id, headless=bool(get_settings(project_id)["headless"]))
@@ -978,7 +1016,20 @@ def tab_cities(project_id: str, config: dict) -> None:
                 st.rerun()
 
     for country in list(config["countries"]):
-        with st.expander(f"{flag(country['name'])} {country['name']} – {cities_word(len(country['cities']))}"):
+        # ВАЖНО: st.expander рисует содержимое ВСЕГДА, даже свёрнутый – он лишь прячет
+        # его стилями. С 117 городами это сотни виджетов на каждый клик, отсюда тормоза.
+        # Поэтому раскрытие своё: содержимое строится только для открытой страны.
+        open_key = f"cities-open-{country['id']}"
+        is_open = st.session_state.get(open_key) == country["id"]
+        with st.container(key=f"tile-cityrow-{country['id']}"):
+            html(T.country_row(flag(country["name"]), country["name"],
+                               cities_word(len(country["cities"])), "свернуть" if is_open else "изменить",
+                               is_open))
+            st.button(country["name"], key=f"cities-toggle-{country['id']}", use_container_width=True,
+                      on_click=_toggle_open, args=(open_key, country["id"]))
+        if not is_open:
+            continue
+        with st.container(border=True):
             tab_add, tab_bulk = st.tabs(["Один город", "Списком"])
 
             with tab_add:
@@ -1136,7 +1187,7 @@ def tab_report(project_id: str) -> None:
             for country, rows in by_country.items():
                 ok = sum(1 for r in rows if r.get("status") == "ok")
                 bad = sum(1 for r in rows if r.get("status") == "failed")
-                with st.expander(f"{flag(country)} {country} – {ok}/{len(rows)} успешно"
+                with st.expander(f"{country} – {ok}/{len(rows)} успешно"
                                  + (f" · {plural(bad, 'ошибка', 'ошибки', 'ошибок')}" if bad else ""),
                                  expanded=current != "all" or bad > 0):
                     for r in rows:

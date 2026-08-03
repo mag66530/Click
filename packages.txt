@@ -15,3 +15,10 @@ libx11-xcb1
 libpangocairo-1.0-0
 libpango-1.0-0
 libcairo2
+libgbm1
+libasound2t64
+libcups2t64
+libatk1.0-0t64
+libatk-bridge2.0-0t64
+libatspi2.0-0t64
+libxshmfence1

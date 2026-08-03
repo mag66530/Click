@@ -1094,4 +1094,11 @@ def card(title: str, body_html: str = "") -> str:
 
 
 def preview_box(text: str) -> str:
-    return f'<div class="preview-box">{esc(text)}</div>'
+    """
+    Переносы строк – числовой ссылкой &#10;. В разметке тогда нет ни одного
+    настоящего перевода строки, и markdown Streamlit не может слепить из текста
+    абзацы со своими отступами (из-за них в предпросмотре зияли дыры) и списки.
+    Браузер разворачивает ссылку обратно, а white-space: pre-wrap её рисует.
+    """
+    body = esc(text).replace("\r\n", "\n").replace("\n", "&#10;")
+    return f'<div class="preview-box">{body}</div>'

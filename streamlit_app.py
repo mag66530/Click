@@ -769,11 +769,12 @@ def _endings_editor(project_id: str, config: dict) -> None:
     countries = [c["name"] for c in config["countries"]] or list((data.get("contacts") or {}).keys())
     types = pdata.POST_TYPES
 
-    st.caption(f"Правки хранятся снаружи приложения: {repo_store.where()}. "
-               "Так они переживают перезапуск в облаке.")
-    if not repo_store.is_configured():
-        st.warning("Секрет `github_token` не задан – правки сохранятся только на этом "
-                   "компьютере. В облаке они пропадут при перезапуске.", icon="💾")
+    ok, note = repo_store.check()
+    if ok:
+        st.caption(f"✅ Правки сохраняются в {repo_store.where()} – переживают перезапуск в облаке.")
+    else:
+        st.warning(f"Правки сохранятся только внутри приложения и пропадут при перезапуске: {note}.",
+                   icon="💾")
 
     tab_tpl, tab_contacts = st.tabs(["Шаблоны по типам постов", "Контакты по странам"])
 
@@ -952,7 +953,6 @@ def tab_compose(project_id: str, config: dict) -> None:
             if not path.exists():
                 path.write_bytes(f.getvalue())
             saved_paths.append(str(path))
-        st.image([f.getvalue() for f in uploaded[:4]], width=120)
 
     if goods_files:
         uploads = project_base(project_id) / "uploads"

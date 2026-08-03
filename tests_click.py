@@ -385,17 +385,22 @@ def test_packages_txt() -> None:
     listed = [ln.strip() for ln in Path("packages.txt").read_text(encoding="utf-8").splitlines()
               if ln.strip() and not ln.strip().startswith("#")]
 
-    # Имена, которые на Ubuntu 24.04 предоставляют НЕСКОЛЬКО пакетов → apt падает.
-    ambiguous = {"libasound2"}
-    # t64-имена не существуют на Debian 12 / Ubuntu 22.04 → apt падает там.
-    t64 = {n for n in listed if n.endswith("t64")}
-
-    bad = (set(listed) & ambiguous) | t64
-    check("нет имён, ломающих установку на каком-либо образе", not bad, f"опасные: {sorted(bad)}")
+    # Образ Streamlit Cloud – Ubuntu 24.04. Доказано ошибкой apt на libasound2:
+    # там это имя стало виртуальным и его дают сразу два пакета, поэтому установка
+    # падала целиком. Значит t64-имена не только допустимы, но и обязательны.
+    virtual_on_noble = {"libasound2", "libcups2", "libatk1.0-0",
+                        "libatk-bridge2.0-0", "libatspi2.0-0"}
+    bad = set(listed) & virtual_on_noble
+    check("нет виртуальных имён – от них apt падает целиком", not bad, f"опасные: {sorted(bad)}")
     check("список не пустой", len(listed) >= 10, f"всего {len(listed)}")
     check("нет дублей", len(listed) == len(set(listed)))
-    check("библиотеки Firefox на месте (в облаке работает он)",
-          {"libdbus-glib-1-2", "libxt6", "libgtk-3-0"} <= set(listed))
+    check("библиотеки Firefox на месте",
+          {"libdbus-glib-1-2", "libxt6", "libgtk-3-0", "libasound2t64"} <= set(listed))
+    # Ровно то, чего не хватало браузерам в облаке: libgbm.so.1 у Chromium и звук
+    # у обоих. Без них Playwright падает «Host system is missing dependencies».
+    check("библиотеки Chromium на месте",
+          {"libgbm1", "libnss3", "libnspr4", "libdrm2", "libxkbcommon0",
+           "libcups2t64", "libatk1.0-0t64", "libatk-bridge2.0-0t64"} <= set(listed))
 
 
 def test_kp_sheet() -> None:

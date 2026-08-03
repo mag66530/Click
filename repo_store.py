@@ -85,6 +85,34 @@ def where() -> str:
     return f"репозиторий {repo()}, ветка {BRANCH}" if is_configured() else "локальный файл"
 
 
+_checked: tuple[bool, str] | None = None
+
+
+def check() -> tuple[bool, str]:
+    """
+    Настоящая проверка доступа, а не «токен вписан». Один запрос к GitHub,
+    результат запоминаем на время жизни процесса.
+    """
+    global _checked
+    if _checked is not None:
+        return _checked
+    if not is_configured():
+        _checked = (False, "секрет github_token не задан")
+        return _checked
+    try:
+        r = _api("GET", f"/repos/{repo()}")
+        if r.status_code != 200:
+            _checked = (False, _explain(r.status_code))
+        elif not ((r.json() or {}).get("permissions") or {}).get("push"):
+            _checked = (False, "токен видит репозиторий, но не может писать – "
+                               "нужно право Contents: Read and write")
+        else:
+            _checked = (True, f"есть доступ на запись в {repo()}")
+    except Exception as e:  # noqa: BLE001
+        _checked = (False, f"не удалось связаться с GitHub: {e}")
+    return _checked
+
+
 # ─── Локальный запасной путь ────────────────────────────────────────
 def _local_path(name: str) -> Path:
     fp = paths.data_root() / "store" / f"{name}.json"

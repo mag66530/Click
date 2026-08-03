@@ -900,13 +900,15 @@ def _act_selected(all_ids: list[str]) -> set[str]:
 
 
 def _act_set(city_ids: list[str], value: bool) -> None:
+    """
+    Вызывается ТОЛЬКО из on_click кнопки: в этот момент виджеты ещё не созданы,
+    поэтому их состояние можно переписать. Держим в согласии свой набор и сами
+    галочки – иначе «Выбрать все» меняло бы счётчик, а галочки нет.
+    """
     sel = st.session_state.setdefault("act-selected", set())
     sel.update(city_ids) if value else sel.difference_update(city_ids)
-    # Галочки живут внутри формы и помнят своё состояние по ключу виджета.
-    # Переписать это состояние напрямую нельзя – Streamlit запрещает менять
-    # session_state уже созданного виджета. Поэтому меняем «поколение»: ключи
-    # становятся другими, виджеты создаются заново и берут новое значение.
-    st.session_state["act-gen"] = st.session_state.get("act-gen", 0) + 1
+    for cid in city_ids:
+        st.session_state[f"act-cb-{cid}"] = value
 
 
 def _act_toggle(city_id: str, widget_key: str) -> None:
@@ -965,34 +967,19 @@ def tab_actualize(project_id: str, config: dict) -> None:
             if not is_open:
                 continue
             with st.container(border=True):
-                # Форма: галочки внутри неё НЕ дёргают сервер. Без формы каждый
-                # из 76 чекбоксов запускал полный прогон скрипта – отсюда тормоза.
-                gen = st.session_state.get("act-gen", 0)
-                with st.form(key=f"act-form-{c['id']}-{gen}", border=False):
-                    with st.container(key="city-grid"):
-                        per_row = 7
-                        marks = {}
-                        for start_i in range(0, len(c["cities"]), per_row):
-                            cols = st.columns(per_row)
-                            for col, ct in zip(cols, c["cities"][start_i:start_i + per_row]):
-                                marks[ct["id"]] = col.checkbox(
-                                    ct["name"], value=ct["id"] in chosen,
-                                    key=f"act-cb-{gen}-{ct['id']}")
-                    apply_col, all_col, _rest = st.columns([1, 1, 2])
-                    with apply_col:
-                        applied = st.form_submit_button("Применить выбор", type="primary",
-                                                        use_container_width=True)
-                    with all_col:
-                        flipped = st.form_submit_button(
-                            "Снять все в стране" if picked == len(ids) else "Выбрать все в стране",
-                            use_container_width=True)
-                if flipped:
-                    _act_set(ids, picked != len(ids))
-                    st.rerun()
-                if applied:
-                    _act_set([cid for cid, on in marks.items() if on], True)
-                    _act_set([cid for cid, on in marks.items() if not on], False)
-                    st.rerun()
+                st.button("Снять все в стране" if picked == len(ids) else "Выбрать все в стране",
+                          key=f"act-toggle-{c['id']}",
+                          on_click=_act_set, args=(ids, picked != len(ids)))
+                # Галочка переключается сразу, без кнопки «применить»: on_change
+                # правит только набор выбранных, а не пересобирает состояние.
+                with st.container(key="city-grid"):
+                    per_row = 7
+                    for start_i in range(0, len(c["cities"]), per_row):
+                        cols = st.columns(per_row)
+                        for col, ct in zip(cols, c["cities"][start_i:start_i + per_row]):
+                            wkey = f"act-cb-{ct['id']}"
+                            col.checkbox(ct["name"], value=ct["id"] in chosen, key=wkey,
+                                         on_change=_act_toggle, args=(ct["id"], wkey))
 
     if not yb.has_saved_session(project_id):
         st.warning("Сначала войдите в Яндекс в разделе «⚙️ Настройки».")

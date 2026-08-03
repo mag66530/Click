@@ -660,6 +660,27 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
   line-height: 1.2 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
 .st-key-city-grid [data-baseweb="checkbox"] > span:first-child {{ transform: scale(.85); }}
 
+/* Сам квадратик галочки. Красим оба состояния явно: у Streamlit невыбранный
+   квадрат берёт цвет из своей темы, и на светлой он получался чёрным. */
+.stCheckbox label > div:first-of-type {{
+  background: var(--bg-1) !important;
+  border: 1.5px solid var(--border-2) !important;
+  border-radius: 4px !important;
+  width: 16px !important; height: 16px !important; flex: 0 0 16px !important;
+  display: flex !important; align-items: center; justify-content: center;
+  transition: all .12s var(--ease);
+}}
+.stCheckbox label:hover > div:first-of-type {{ border-color: var(--acc) !important; }}
+.stCheckbox label > div:first-of-type svg {{
+  width: 10px; height: 8px; stroke: #fff; stroke-width: 2;
+  fill: none; stroke-linecap: round; stroke-linejoin: round;
+}}
+/* Выбрано – фиолетово-синий градиент акцента и белая птичка */
+.stCheckbox label[data-selected="true"] > div:first-of-type,
+.stCheckbox label:has(input:checked) > div:first-of-type {{
+  background: var(--gradient) !important; border-color: transparent !important;
+}}
+
 /* Загрузчик файлов ровно по высоте соседнего поля со ссылками */
 .st-key-img-row [data-testid="stFileUploaderDropzone"],
 .st-key-goods-row [data-testid="stFileUploaderDropzone"] {{

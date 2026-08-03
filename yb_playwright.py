@@ -286,26 +286,54 @@ def _is_not_installed(exc: object) -> bool:
     return "Executable doesn't exist" in text or "playwright install" in text
 
 
+def in_cloud() -> bool:
+    """
+    Мы в Streamlit Cloud? Там приложение лежит в /mount/src/<репозиторий>
+    и работает под пользователем appuser.
+
+    Это важно не для красоты: в облаке нельзя доставить системные библиотеки
+    (root'а нет, есть только packages.txt, который собирается при деплое),
+    и памяти там около 1 ГБ.
+    """
+    if (os.environ.get("CLICK_ENV") or "").strip().lower() == "cloud":
+        return True
+    return str(ROOT).startswith("/mount/src") or os.environ.get("HOME") == "/home/appuser"
+
+
+def _default_order() -> list[str]:
+    """
+    Какой движок пробовать первым.
+
+    ЛОКАЛЬНО — Chromium: все селекторы Яндекс.Бизнеса писались и проверялись
+    под Chrome (оригинал — Puppeteer/Chrome), это максимальная точность.
+
+    В ОБЛАКЕ — Firefox: там Chromium не поднимается. Причины выяснены на живом
+    Streamlit Cloud ещё при первом переносе и подтвердились сейчас:
+      • нет системных библиотек (libgbm.so.1) — доставить их нельзя, packages.txt
+        собирается из имён пакетов, которых в этом образе может просто не быть;
+      • на бесплатном тарифе (~1 ГБ RAM) headless Chromium падал на тяжёлой
+        SPA-странице Яндекс.Паспорта.
+    Firefox требует заметно меньше и того, и другого — и в облаке работает.
+
+    Порядок именно такой ещё и ради экономии: в облаке браузер скачивается при
+    первом запуске. Начав с Chromium, мы бы выкачали 150 МБ, выяснили что он не
+    стартует, и выкачали ещё 90 МБ Firefox.
+    """
+    return ["firefox", "chromium"] if in_cloud() else ["chromium", "firefox"]
+
+
 def resolve_engine(force: str | None = None) -> str:
     """
-    Выбирает движок, который РЕАЛЬНО запускается в этом окружении.
-
-    Порядок по умолчанию: Chromium → Firefox.
-      • Chromium первый, потому что все селекторы Яндекс.Бизнеса писались и
-        проверялись под Chrome (оригинал — Puppeteer/Chrome).
-      • Firefox запасной: в облаке (Streamlit Cloud) у Chromium часто нет
-        системных библиотек (libgbm.so.1 и т.п.) и меньше запас памяти,
-        а Firefox поднимается и там.
-
-    Жёстко задать: CLICK_BROWSER=chromium | firefox.
-    Если браузер просто не скачан — скачиваем и пробуем снова.
+    Выбирает движок, который РЕАЛЬНО запускается здесь. Результат кэшируется
+    на процесс. Жёстко задать: CLICK_BROWSER=chromium | firefox.
+    Если браузер не скачан — скачиваем и пробуем снова.
     """
     global _ENGINE
     if _ENGINE and not force:
         return _ENGINE
 
     pref = (force or os.environ.get("CLICK_BROWSER") or "").strip().lower()
-    order = [pref] if pref in ("chromium", "firefox", "webkit") else ["chromium", "firefox"]
+    order = [pref] if pref in ("chromium", "firefox", "webkit") else _default_order()
 
     problems: list[str] = []
     for engine in order:
@@ -313,28 +341,36 @@ def resolve_engine(force: str | None = None) -> str:
             try:
                 with sync_playwright() as p:
                     _launch(p, engine).close()
-                if engine != order[0] or attempt > 1:
-                    info(f"🌐 Браузер: {engine}")
+                info(f"🌐 Браузер: {engine}" + (" (облако)" if in_cloud() else ""))
                 _ENGINE = engine
                 return engine
             except Exception as e:  # noqa: BLE001
                 if attempt == 1 and _is_not_installed(e):
                     info(f"⬇️  Скачиваю браузер {engine} (разово, 1-3 минуты)…")
                     subprocess.run([sys.executable, "-m", "playwright", "install", engine], check=False)
-                    subprocess.run([sys.executable, "-m", "playwright", "install-deps", engine], check=False)
+                    # install-deps ставит системные пакеты через apt и требует root.
+                    # В облаке root'а нет — вызывать бессмысленно, только шум в логах.
+                    if hasattr(os, "geteuid") and os.geteuid() == 0:
+                        subprocess.run([sys.executable, "-m", "playwright", "install-deps", engine],
+                                       check=False)
                     continue
                 problems.append(f"{engine} — {_short_error(e)}")
                 break
 
-    hint = (
-        "Ни один браузер не запустился.\n\n" + "\n".join(f"• {p}" for p in problems) + "\n\n"
-        "Что делать:\n"
-        "• Локально: выполните `python -m playwright install chromium`.\n"
-        "• Streamlit Cloud: не хватает системных библиотек — добавьте их в packages.txt "
-        "(для Chromium нужен libgbm1) и перезапустите приложение, либо задайте "
-        "переменную CLICK_BROWSER=firefox."
+    where = ("Streamlit Cloud" if in_cloud() else "этой машине")
+    raise RuntimeError(
+        f"Ни один браузер не запустился на {where}.\n\n"
+        + "\n".join(f"• {p}" for p in problems)
+        + "\n\nЧто делать:\n"
+        "• Локально: `python -m playwright install chromium` (или firefox).\n"
+        "• В облаке: перезапустите приложение (Manage app → Reboot). Если не помогло — "
+        "задайте переменную CLICK_BROWSER=firefox в настройках приложения."
     )
-    raise RuntimeError(hint)
+
+
+def current_engine() -> str | None:
+    """Какой движок выбран сейчас (None — ещё не запускали браузер). Для интерфейса."""
+    return _ENGINE
 
 
 def ensure_browser_installed(engine: str | None = None) -> None:

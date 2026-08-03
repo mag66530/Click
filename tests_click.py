@@ -308,15 +308,87 @@ def test_browser_fallback() -> None:
             check("при полном отказе бросаем ошибку", False, "исключения не было")
         except RuntimeError as e:
             msg = str(e)
-            check("в ошибке есть подсказка про packages.txt и libgbm1",
-                  "packages.txt" in msg and "libgbm1" in msg)
-            check("в ошибке есть подсказка про CLICK_BROWSER=firefox", "CLICK_BROWSER=firefox" in msg)
+            check("в ошибке сказано, что делать локально", "playwright install" in msg)
+            check("в ошибке сказано, что делать в облаке",
+                  "Reboot" in msg and "CLICK_BROWSER=firefox" in msg)
             check("сообщение короткое, а не простыня", len(msg) < 800, f"{len(msg)} символов")
 
         yb._launch, yb._ENGINE = only_firefox_works, None
         eq("CLICK_BROWSER=firefox уважается", yb.resolve_engine(force="firefox"), "firefox")
     finally:
         yb._launch, yb._ENGINE = original_launch, original_engine
+
+
+def test_engine_order() -> None:
+    """
+    Корень проблемы с облаком: там Chromium не поднимается (нет системных
+    библиотек, мало памяти), и доставить их нельзя. Значит в облаке Firefox
+    должен идти ПЕРВЫМ — иначе мы качаем 150 МБ Chromium впустую и только
+    потом 90 МБ Firefox. Локально наоборот: селекторы писались под Chrome.
+    """
+    import os
+    import yb_playwright as yb
+    print("\n▸ Порядок движков по окружению")
+
+    saved_home = os.environ.get("HOME")
+    saved_env = os.environ.get("CLICK_ENV")
+    saved_root = yb.ROOT
+    try:
+        os.environ.pop("CLICK_ENV", None)
+        os.environ["HOME"] = "/home/someuser"
+        yb.ROOT = Path("/home/user/Click")
+        check("локально мы НЕ в облаке", not yb.in_cloud())
+        eq("локально первым пробуем Chromium", yb._default_order(), ["chromium", "firefox"])
+
+        os.environ["HOME"] = "/home/appuser"
+        check("Streamlit Cloud определяется по домашней папке appuser", yb.in_cloud())
+        eq("в облаке первым пробуем Firefox", yb._default_order(), ["firefox", "chromium"])
+
+        os.environ["HOME"] = "/home/someuser"
+        yb.ROOT = Path("/mount/src/click")
+        check("Streamlit Cloud определяется по пути /mount/src", yb.in_cloud())
+
+        yb.ROOT = Path("/home/user/Click")
+        os.environ["CLICK_ENV"] = "cloud"
+        check("CLICK_ENV=cloud принудительно включает облачный режим", yb.in_cloud())
+    finally:
+        yb.ROOT = saved_root
+        os.environ.pop("CLICK_ENV", None)
+        if saved_env is not None:
+            os.environ["CLICK_ENV"] = saved_env
+        if saved_home is not None:
+            os.environ["HOME"] = saved_home
+
+
+def test_packages_txt() -> None:
+    """
+    packages.txt на Streamlit Cloud ставится одной командой apt-get: ЛЮБОЕ имя,
+    которое не резолвится, обрывает установку целиком, и приложение не поднимается
+    вообще («Error installing requirements»).
+
+    Проверено на живой Ubuntu 24.04 (тот же образ, что у Streamlit Cloud):
+    `libasound2` там стал ВИРТУАЛЬНЫМ — его предоставляют сразу два пакета
+    (libasound2t64 и liboss4-salsa-asound2), apt отказывается выбирать и падает
+    с «has no installation candidate». Сама libasound.so.2 при этом в образе есть.
+
+    Поэтому здесь запрещены: имена, ставшие виртуальными после перехода Ubuntu
+    на 64-битный time_t (суффикс t64), и сами t64-имена — их нет на старых образах.
+    """
+    print("\n▸ packages.txt")
+    listed = [ln.strip() for ln in Path("packages.txt").read_text(encoding="utf-8").splitlines()
+              if ln.strip() and not ln.strip().startswith("#")]
+
+    # Имена, которые на Ubuntu 24.04 предоставляют НЕСКОЛЬКО пакетов → apt падает.
+    ambiguous = {"libasound2"}
+    # t64-имена не существуют на Debian 12 / Ubuntu 22.04 → apt падает там.
+    t64 = {n for n in listed if n.endswith("t64")}
+
+    bad = (set(listed) & ambiguous) | t64
+    check("нет имён, ломающих установку на каком-либо образе", not bad, f"опасные: {sorted(bad)}")
+    check("список не пустой", len(listed) >= 10, f"всего {len(listed)}")
+    check("нет дублей", len(listed) == len(set(listed)))
+    check("библиотеки Firefox на месте (в облаке работает он)",
+          {"libdbus-glib-1-2", "libxt6", "libgtk-3-0"} <= set(listed))
 
 
 def main() -> int:
@@ -331,6 +403,8 @@ def main() -> int:
         test_task_format(tmp)
         test_report_render()
         test_browser_fallback()
+        test_engine_order()
+        test_packages_txt()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

@@ -1075,7 +1075,25 @@ def tab_settings(project_id: str, config: dict) -> None:
 
     st.divider()
     html('<div class="card-title">🧹 Обслуживание</div>')
+    where = "Streamlit Cloud" if yb.in_cloud() else "этот компьютер"
+    engine = yb.current_engine()
     st.caption(f"📁 Данные проекта: `{paths.describe()}`")
+    st.caption(f"🖥 Окружение: **{where}** · браузер: "
+               + (f"**{engine}**" if engine else "ещё не запускался"))
+    if st.button("Проверить браузер", key="btn-check-browser"):
+        try:
+            with st.spinner("Пробую запустить браузер… Первый запуск может занять 1-3 минуты — Click скачивает браузер."):
+                chosen = get_worker().call(yb.resolve_engine, None)
+            st.success(f"Браузер работает: {chosen}")
+        except Exception as e:  # noqa: BLE001
+            _browser_error(e)
+    if yb.in_cloud():
+        st.warning(
+            "В облаке файловая система временная: при перезапуске приложения пропадут "
+            "сессия Яндекса, города и отчёты. Для постоянной работы запускайте Click "
+            "у себя через START.bat.",
+            icon="⚠️",
+        )
     ledger = runner._read_ledger(project_id)  # noqa: SLF001 — служебный просмотр реестра
     st.caption(f"Реестр отправленных постов: {len(ledger)} записей. "
                "Именно он не даёт опубликовать один и тот же текст в город дважды.")
@@ -1104,9 +1122,12 @@ def _browser_error(exc: Exception) -> None:
         st.error(text)                      # это уже наше готовое сообщение с подсказкой
     else:
         st.error(f"Не удалось открыть браузер: {yb._short_error(exc)}")  # noqa: SLF001
-        if "libgbm" in text or "shared libraries" in text:
-            st.info("Не хватает системной библиотеки. В облаке добавьте её в `packages.txt` "
-                    "и перезапустите приложение, либо задайте переменную `CLICK_BROWSER=firefox`.")
+        if "shared libraries" in text or "libgbm" in text:
+            st.info(
+                "Браузеру не хватает системной библиотеки. Click должен был сам перейти на "
+                "запасной движок — если этого не произошло, перезапустите приложение "
+                "(в облаке: Manage app → Reboot) или задайте переменную `CLICK_BROWSER=firefox`."
+            )
     with st.expander("Технические подробности"):
         st.code(text[:6000])
 
@@ -1132,6 +1153,9 @@ def _yandex_login_block(project_id: str) -> None:
     if step == "idle":
         st.caption("Откроется скрытый браузер на странице входа Яндекса. Дальше вы вводите логин, "
                    "пароль и код — по картинке, которую Click показывает после каждого шага.")
+        if yb.current_engine() is None:
+            st.caption("⏳ Самый первый вход дольше обычного: Click докачивает браузер (1-3 минуты). "
+                       "Дальше он открывается за секунды.")
         if st.button("Начать вход", type="primary", key="yb-start"):
             old = st.session_state.get("yb_flow")
             if old is not None:
@@ -1140,7 +1164,7 @@ def _yandex_login_block(project_id: str) -> None:
                 except Exception:
                     pass
             try:
-                with st.spinner("Открываю браузер…"):
+                with st.spinner("Открываю браузер… Первый запуск может занять 1-3 минуты — Click скачивает браузер."):
                     flow = yb.YbLoginFlow(project_id, headless=headless_login)
                     shot = worker.call(flow.start)
             except Exception as e:  # noqa: BLE001

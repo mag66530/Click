@@ -30,6 +30,7 @@ DARK = {
     "shadowSm": "0 2px 8px rgba(0,0,0,0.25)", "shadowMd": "0 8px 24px rgba(0,0,0,0.35)",
     "shadowLg": "0 16px 48px rgba(0,0,0,0.5)",
     "logBg": "#06080e", "logFg": "#c5cce0",
+    "cbBg": "#10131d", "cbBorder": "#3d4763",   # пустой квадратик галочки
     "scheme": "dark",
 }
 
@@ -43,6 +44,7 @@ LIGHT = {
     "shadowSm": "0 1px 3px rgba(20,24,36,0.08)", "shadowMd": "0 6px 20px rgba(20,24,36,0.08)",
     "shadowLg": "0 12px 40px rgba(20,24,36,0.14)",
     "logBg": "#0d1018", "logFg": "#e4e7f1",
+    "cbBg": "#ffffff", "cbBorder": "#8b91a6",   # белый квадратик с тёмной рамкой
     "scheme": "light",
 }
 
@@ -88,10 +90,16 @@ def css(theme: str = "dark") -> str:
 /* Панель Streamlit («Deploy», «⋮») – прозрачный блок во всю ширину: он
    перехватывал клики по нашей кнопке темы. Пропускаем клики сквозь пустое
    место, оставляя кликабельными сами кнопки Streamlit. */
-[data-testid="stHeader"], [data-testid="stToolbar"] {{ pointer-events: none; }}
-[data-testid="stToolbar"] > * {{ pointer-events: auto; }}
+[data-testid="stHeader"], [data-testid="stHeader"] * {{ pointer-events: none; }}
+[data-testid="stToolbar"] button, [data-testid="stToolbar"] a,
+[data-testid="stToolbar"] [role="button"], [data-testid="stStatusWidget"],
+[data-testid="stStatusWidget"] * {{ pointer-events: auto; }}
 [data-testid="stToolbar"] {{ right: 8px; }}
 [data-testid="stDecoration"] {{ display: none; }}
+/* Блоки с <style> Streamlit кладёт в обычный элемент страницы. Сами они нулевой
+   высоты, но между элементами стоит отступ 16px – два таких блока и давали
+   пустую полосу над шапкой. Убираем их из потока; на сами стили это не влияет. */
+[data-testid="stElementContainer"]:has(style) {{ display: none !important; }}
 [data-testid="stAppViewBlockContainer"],
 .block-container {{ padding-top: 0 !important; padding-bottom: 4rem !important; max-width: 1240px; }}
 [data-testid="stSidebar"] {{ background: var(--bg-1); border-right: 1px solid var(--border); }}
@@ -663,8 +671,8 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 /* Сам квадратик галочки. Красим оба состояния явно: у Streamlit невыбранный
    квадрат берёт цвет из своей темы, и на светлой он получался чёрным. */
 .stCheckbox label > div:first-of-type {{
-  background: var(--bg-1) !important;
-  border: 1.5px solid var(--border-2) !important;
+  background: {c['cbBg']} !important;
+  border: 1.5px solid {c['cbBorder']} !important;
   border-radius: 4px !important;
   width: 16px !important; height: 16px !important; flex: 0 0 16px !important;
   display: flex !important; align-items: center; justify-content: center;

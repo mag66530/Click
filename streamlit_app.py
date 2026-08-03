@@ -465,14 +465,22 @@ def country_picker(key_prefix: str, config: dict, title: str = "Страны") -
                    key=f"{key_prefix}-toggle-countries", use_container_width=True,
                    on_click=_toggle_all_countries, args=(key_prefix, [c["id"] for c in countries], not all_on))
 
+        # Ключи плиток – только латиница и цифры (см. T.tile_css).
+        html(T.tile_css([
+            (f"tile-cc-{key_prefix}-{n}", {
+                "--flag": T.flag_data_uri(c["name"]),
+                "--meta": T.css_text(f'{len(c["cities"])} гор.'),
+            }) for n, c in enumerate(countries)
+        ]))
         per_row = 4
         for start in range(0, len(countries), per_row):
             cols = st.columns(per_row)
-            for col, c in zip(cols, countries[start:start + per_row]):
+            for col, (n, c) in zip(cols, list(enumerate(countries))[start:start + per_row]):
                 active = bool(st.session_state.get(cb_key(c["id"])))
-                with col, st.container(key=f"tile-{key_prefix}-{c['id']}"):
-                    html(T.country_card(flag(c["name"]), c["name"], len(c["cities"]), active))
-                    st.button(c["name"], key=f"{key_prefix}-pick-{c['id']}", use_container_width=True,
+                with col, st.container(key=f"tile-cc-{key_prefix}-{n}"):
+                    st.button(c["name"], key=f"{key_prefix}-pick-{c['id']}",
+                              use_container_width=True,
+                              type="primary" if active else "secondary",
                               on_click=_toggle_country, args=(key_prefix, c["id"]))
 
     return [c for c in countries if st.session_state.get(cb_key(c["id"]))]
@@ -668,11 +676,14 @@ def tab_compose(project_id: str, config: dict) -> None:
     post_type = st.session_state.get("compose-type") or types[0]["id"]
     with st.container(border=True):
         html('<div class="card-title">📄 Тип поста</div>')
+        # Иконку рисуем через CSS ::before у самой кнопки – так плитка остаётся
+        # настоящей кнопкой и клик по ней срабатывает всегда.
+        html(T.tile_css([(f"tile-pt-{t['id']}", {"--ico": T.css_text(t["icon"])}) for t in types]))
         cols = st.columns(len(types))
         for col, t in zip(cols, types):
             with col, st.container(key=f"tile-pt-{t['id']}"):
-                html(T.post_type_card(t, t["id"] == post_type))
                 st.button(t["title"], key=f"pt-{t['id']}", use_container_width=True,
+                          type="primary" if t["id"] == post_type else "secondary",
                           on_click=_set_post_type, args=(t["id"],))
     type_def = next(t for t in types if t["id"] == post_type)
 
@@ -829,6 +840,27 @@ def tab_compose(project_id: str, config: dict) -> None:
 # Выбор городов для актуализации держим в СВОЁМ наборе, а не в ключах чекбоксов:
 # Streamlit удаляет состояние виджетов, которые не отрисовались в прогоне (а свёрнутые
 # страны мы намеренно не рисуем), и галочки бы слетали.
+def row_vars(country: dict, chosen: set[str] | None, action: str) -> dict[str, str]:
+    """
+    Переменные CSS для строки страны: флаг слева, отметка и действие справа.
+    Так строка остаётся настоящей кнопкой, а выглядит как .country-row оригинала.
+    """
+    ids = [ct["id"] for ct in country["cities"]]
+    if chosen is None:                                   # вкладка «Города»
+        mark, color = cities_word(len(ids)), "var(--muted)"
+    else:
+        n = sum(1 for cid in ids if cid in chosen)
+        if n == len(ids):
+            mark, color = f"✓ все {len(ids)}", "var(--grn)"
+        elif n:
+            mark, color = f"{n} из {len(ids)}", "var(--yel)"
+        else:
+            mark, color = "не выбрано", "var(--dim)"
+    return {"--flag": T.flag_data_uri(country["name"]),
+            "--mark": T.css_text(mark), "--mark-c": color,
+            "--act": T.css_text(action)}
+
+
 def _act_selected(all_ids: list[str]) -> set[str]:
     sel = st.session_state.get("act-selected")
     if sel is None:
@@ -840,6 +872,11 @@ def _act_selected(all_ids: list[str]) -> set[str]:
 def _act_set(city_ids: list[str], value: bool) -> None:
     sel = st.session_state.setdefault("act-selected", set())
     sel.update(city_ids) if value else sel.difference_update(city_ids)
+    # Галочки живут внутри формы и помнят своё состояние по ключу виджета.
+    # Переписать это состояние напрямую нельзя – Streamlit запрещает менять
+    # session_state уже созданного виджета. Поэтому меняем «поколение»: ключи
+    # становятся другими, виджеты создаются заново и берут новое значение.
+    st.session_state["act-gen"] = st.session_state.get("act-gen", 0) + 1
 
 
 def _act_toggle(city_id: str, widget_key: str) -> None:
@@ -879,31 +916,53 @@ def tab_actualize(project_id: str, config: dict) -> None:
         act.button("Снять все" if all_on else "Выбрать все", key="act-toggle-all",
                    use_container_width=True, on_click=_act_set, args=(all_ids, not all_on))
 
-        for c in countries:
+        html(T.tile_css([
+            (f"tile-row-act-{n}", row_vars(c, chosen,
+                                           "свернуть ▾" if st.session_state.get("act-open") == c["id"]
+                                           else "изменить ▸"))
+            for n, c in enumerate(countries)
+        ]))
+        for n, c in enumerate(countries):
             ids = [ct["id"] for ct in c["cities"]]
-            n = sum(1 for cid in ids if cid in chosen)
-            mark = f"✓ все {len(ids)}" if n == len(ids) else (f"{n} из {len(ids)}" if n else "не выбрано")
+            picked = sum(1 for cid in ids if cid in chosen)
             is_open = st.session_state.get("act-open") == c["id"]
-            with st.container(key=f"tile-actrow-{c['id']}"):
-                html(T.country_row(flag(c["name"]), c["name"], mark,
-                                   "свернуть" if is_open else "изменить", is_open))
+            with st.container(key=f"tile-row-act-{n}"):
                 st.button(c["name"], key=f"act-row-{c['id']}", use_container_width=True,
+                          type="primary" if is_open else "secondary",
                           on_click=_toggle_open, args=("act-open", c["id"]))
             # Города рисуем только для раскрытой страны – иначе 117 чекбоксов
             # строились бы при каждом клике по чему угодно.
             if not is_open:
                 continue
             with st.container(border=True):
-                st.button("Снять все" if n == len(ids) else "Выбрать все",
-                          key=f"act-toggle-{c['id']}", on_click=_act_set, args=(ids, n != len(ids)))
-                with st.container(key="city-grid"):
-                    per_row = 7
-                    for start_i in range(0, len(c["cities"]), per_row):
-                        cols = st.columns(per_row)
-                        for col, ct in zip(cols, c["cities"][start_i:start_i + per_row]):
-                            wkey = f"act-cb-{ct['id']}"
-                            col.checkbox(ct["name"], value=ct["id"] in chosen, key=wkey,
-                                         on_change=_act_toggle, args=(ct["id"], wkey))
+                # Форма: галочки внутри неё НЕ дёргают сервер. Без формы каждый
+                # из 76 чекбоксов запускал полный прогон скрипта – отсюда тормоза.
+                gen = st.session_state.get("act-gen", 0)
+                with st.form(key=f"act-form-{c['id']}-{gen}", border=False):
+                    with st.container(key="city-grid"):
+                        per_row = 7
+                        marks = {}
+                        for start_i in range(0, len(c["cities"]), per_row):
+                            cols = st.columns(per_row)
+                            for col, ct in zip(cols, c["cities"][start_i:start_i + per_row]):
+                                marks[ct["id"]] = col.checkbox(
+                                    ct["name"], value=ct["id"] in chosen,
+                                    key=f"act-cb-{gen}-{ct['id']}")
+                    apply_col, all_col, _rest = st.columns([1, 1, 2])
+                    with apply_col:
+                        applied = st.form_submit_button("Применить выбор", type="primary",
+                                                        use_container_width=True)
+                    with all_col:
+                        flipped = st.form_submit_button(
+                            "Снять все в стране" if picked == len(ids) else "Выбрать все в стране",
+                            use_container_width=True)
+                if flipped:
+                    _act_set(ids, picked != len(ids))
+                    st.rerun()
+                if applied:
+                    _act_set([cid for cid, on in marks.items() if on], True)
+                    _act_set([cid for cid, on in marks.items() if not on], False)
+                    st.rerun()
 
     if not yb.has_saved_session(project_id):
         st.warning("Сначала войдите в Яндекс в разделе «⚙️ Настройки».")
@@ -1031,17 +1090,23 @@ def tab_cities(project_id: str, config: dict) -> None:
                 save_config(project_id)
                 st.rerun()
 
-    for country in list(config["countries"]):
+    html(T.tile_css([
+        (f"tile-row-city-{n}", row_vars(
+            country, None,
+            "свернуть ▾" if st.session_state.get(f"cities-open-{country['id']}") == country["id"]
+            else "изменить ▸"))
+        for n, country in enumerate(config["countries"])
+    ]))
+    for n, country in enumerate(list(config["countries"])):
         # ВАЖНО: st.expander рисует содержимое ВСЕГДА, даже свёрнутый – он лишь прячет
         # его стилями. С 117 городами это сотни виджетов на каждый клик, отсюда тормоза.
         # Поэтому раскрытие своё: содержимое строится только для открытой страны.
         open_key = f"cities-open-{country['id']}"
         is_open = st.session_state.get(open_key) == country["id"]
-        with st.container(key=f"tile-cityrow-{country['id']}"):
-            html(T.country_row(flag(country["name"]), country["name"],
-                               cities_word(len(country["cities"])), "свернуть" if is_open else "изменить",
-                               is_open))
-            st.button(country["name"], key=f"cities-toggle-{country['id']}", use_container_width=True,
+        with st.container(key=f"tile-row-city-{n}"):
+            st.button(country["name"], key=f"cities-toggle-{country['id']}",
+                      use_container_width=True,
+                      type="primary" if is_open else "secondary",
                       on_click=_toggle_open, args=(open_key, country["id"]))
         if not is_open:
             continue

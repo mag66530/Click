@@ -80,6 +80,11 @@ def css(theme: str = "dark") -> str:
 /* ─── Каркас Streamlit ─────────────────────────────────────────── */
 .stApp {{ background: var(--bg); color: var(--text); font-family: var(--font); }}
 [data-testid="stHeader"] {{ background: transparent; height: 0; }}
+/* Панель Streamlit («Deploy», «⋮») – прозрачный блок во всю ширину: он
+   перехватывал клики по нашей кнопке темы. Пропускаем клики сквозь пустое
+   место, оставляя кликабельными сами кнопки Streamlit. */
+[data-testid="stHeader"], [data-testid="stToolbar"] {{ pointer-events: none; }}
+[data-testid="stToolbar"] > * {{ pointer-events: auto; }}
 [data-testid="stToolbar"] {{ right: 8px; }}
 [data-testid="stDecoration"] {{ display: none; }}
 [data-testid="stAppViewBlockContainer"],
@@ -481,44 +486,95 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 .empty-desc {{ font-size: 13px; max-width: 420px; margin: 0 auto; }}
 
 /* ─── Плитки типа поста и карточки стран (1:1 с _ui.js) ────────── */
-.post-type-grid {{
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px;
-}}
-.post-type-card {{
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-  padding: 16px 10px; background: var(--bg-2); border: 1.5px solid var(--border);
-  border-radius: var(--r-md); color: var(--text); text-align: center;
+/* Плитка – это САМА кнопка Streamlit, а не картинка с невидимой кнопкой поверх.
+   Наложение не работало: в центре карточки оказывался её собственный div, и клик
+   мышью просто не доходил до кнопки – с виду «тормоза», на деле клик в пустоту.
+
+   Флаг рисуем фоном самой кнопки, а ::before / ::after оставляем под подписи
+   («76 гор.», «✓ все 76», «изменить ▸») – ровно как в .country-tile оригинала.
+   Значения подставляются переменными --flag / --meta / --mark / --act. */
+[class*="st-key-tile-"] .stButton {{ width: 100%; }}
+[class*="st-key-tile-"] .stButton > button {{
+  width: 100%; display: flex; align-items: center; justify-content: center;
+  background-color: var(--bg-2); border: 1.5px solid var(--border);
+  border-radius: var(--r-md); color: var(--text) !important;
   transition: all .15s var(--ease);
 }}
-.post-type-card.active {{
-  border-color: var(--acc); background: var(--acc-bg); color: var(--acc);
-  box-shadow: 0 0 0 3px var(--acc-bg);
+[class*="st-key-tile-"] .stButton > button:hover {{
+  border-color: var(--border-hi); background-color: var(--bg-3); transform: translateY(-1px);
 }}
-.post-type-ico {{ font-size: 26px; line-height: 1; filter: grayscale(0.2); }}
-.post-type-card.active .post-type-ico {{ filter: none; }}
-.post-type-title {{ font-size: 12.5px; font-weight: 600; line-height: 1.25; }}
+[class*="st-key-tile-"] .stButton > button[kind="primary"] {{
+  border-color: var(--acc); background-color: var(--acc-bg);
+  color: var(--acc) !important; box-shadow: 0 0 0 2px var(--acc-bg);
+}}
+[class*="st-key-tile-"] .stButton > button[kind="primary"] p {{ color: var(--acc) !important; }}
+[class*="st-key-tile-"] .stButton > button [data-testid="stMarkdownContainer"] {{ min-width: 0; }}
+/* Подпись Streamlit кладёт в два своих div/span – без этого текст встаёт по центру. */
+[class*="st-key-tile-cc-"] .stButton > button > div,
+[class*="st-key-tile-row-"] .stButton > button > div {{
+  min-width: 0; max-width: 100%; display: flex; justify-content: flex-start;
+}}
+[class*="st-key-tile-cc-"] .stButton > button > div > span,
+[class*="st-key-tile-row-"] .stButton > button > div > span {{
+  min-width: 0; max-width: 100%; display: flex; justify-content: flex-start;
+}}
 
-.country-card {{
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 13px; background: var(--bg-2); border: 1.5px solid var(--border);
-  border-radius: var(--r-md); transition: all .15s var(--ease);
+/* Тип поста: иконка над названием (.post-type-card) */
+[class*="st-key-tile-pt-"] .stButton > button {{
+  flex-direction: column; gap: 8px; padding: 16px 10px; min-height: 92px; text-align: center;
+  background-image: none !important;
 }}
-.country-card.active {{ border-color: var(--acc); background: var(--acc-bg); }}
-.country-card-flag {{ font-size: 20px; line-height: 1; }}
-.country-card-body {{ display: flex; flex-direction: column; min-width: 0; }}
-.country-card-name {{ font-size: 13.5px; font-weight: 700; color: var(--text);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-.country-card-count {{ font-size: 11px; color: var(--muted); font-family: var(--mono); }}
+[class*="st-key-tile-pt-"] .stButton > button::before {{
+  content: var(--ico, ""); font-size: 26px; line-height: 1; filter: grayscale(.2);
+}}
+[class*="st-key-tile-pt-"] .stButton > button[kind="primary"]::before {{ filter: none; }}
+[class*="st-key-tile-pt-"] .stButton > button p {{
+  font-size: 12.5px !important; font-weight: 600 !important; line-height: 1.25 !important;
+}}
 
-/* Кликабельная плитка: HTML-карточка + невидимая кнопка Streamlit поверх неё.
-   Иначе под каждой карточкой болталась бы вторая, настоящая кнопка. */
-[class*="st-key-tile-"] {{ position: relative; }}
-[class*="st-key-tile-"] .stButton {{ position: absolute; inset: 0; margin: 0; z-index: 3; }}
-[class*="st-key-tile-"] .stButton > button {{
-  width: 100%; height: 100%; opacity: 0; padding: 0; border: none; background: transparent;
+/* Страна карточкой (.country-tile): флаг слева, под названием – «N гор.» */
+[class*="st-key-tile-cc-"] .stButton > button {{
+  flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px;
+  padding: 11px 13px 11px 44px; min-height: 56px; text-align: left;
+  background-image: var(--flag) !important; background-repeat: no-repeat;
+  background-position: 13px center; background-size: 24px 16px;
 }}
-[class*="st-key-tile-"] .stButton > button:hover {{ transform: none; }}
-[class*="st-key-tile-"] [data-testid="stMarkdownContainer"] {{ cursor: pointer; }}
+[class*="st-key-tile-cc-"] .stButton > button p {{
+  font-size: 13px !important; font-weight: 700 !important; line-height: 1.3 !important;
+  letter-spacing: -.01em; text-align: left;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}}
+[class*="st-key-tile-cc-"] .stButton > button::after {{
+  content: var(--meta, ""); font-size: 11px; font-weight: 500; color: var(--muted);
+}}
+[class*="st-key-tile-cc-"] .stButton > button[kind="primary"]::after {{
+  color: var(--acc); font-weight: 700;
+}}
+
+/* Страна строкой (.country-row): флаг · название · отметка · действие.
+   Порядок во flex задаём order, потому что ::before по умолчанию идёт первым. */
+[class*="st-key-tile-row-"] .stButton > button {{
+  justify-content: flex-start; gap: 10px; padding: 9px 14px 9px 44px; min-height: 40px;
+  border-radius: var(--r-sm); border-width: 1px;
+  background-image: var(--flag) !important; background-repeat: no-repeat;
+  background-position: 14px center; background-size: 24px 16px;
+}}
+[class*="st-key-tile-row-"] .stButton > button > div {{ order: 1; flex: 1 1 auto; }}
+[class*="st-key-tile-row-"] .stButton > button p {{
+  font-size: 13.5px !important; font-weight: 700 !important; text-align: left;
+}}
+[class*="st-key-tile-row-"] .stButton > button::before {{
+  content: var(--mark, ""); order: 2; font-size: 12px; font-weight: 700;
+  color: var(--mark-c, var(--muted)); white-space: nowrap;
+}}
+[class*="st-key-tile-row-"] .stButton > button::after {{
+  content: var(--act, ""); order: 3; font-size: 11.5px; font-weight: 500;
+  color: var(--muted); white-space: nowrap;
+}}
+[class*="st-key-tile-row-"] .stButton > button[kind="primary"] {{
+  border-color: var(--border-hi); background-color: var(--bg-3); box-shadow: none;
+}}
+[class*="st-key-tile-row-"] .stButton > button[kind="primary"] p {{ color: var(--text) !important; }}
 
 /* Секции-карточки: st.container(border=True) → .card оригинала */
 [data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]) {{
@@ -537,7 +593,21 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
   content: "JPG, PNG, GIF, WEBP · до 20 МБ"; visibility: visible;
   position: absolute; left: 0; white-space: nowrap; color: var(--muted);
 }}
-[data-testid="stFileUploaderDropzone"] button {{ font-size: 12px; }}
+/* Кнопка внутри зоны загрузки: у Streamlit она тёмная и подписана «Upload» –
+   на светлой теме это чёрный прямоугольник с нечитаемым текстом. */
+[data-testid="stFileUploaderDropzone"] button {{
+  background: var(--bg-3) !important; color: var(--text) !important;
+  border: 1px solid var(--border) !important; padding: 7px 14px !important;
+  min-height: 0 !important; height: auto !important; box-shadow: none !important;
+}}
+[data-testid="stFileUploaderDropzone"] button p {{ font-size: 0 !important; }}
+[data-testid="stFileUploaderDropzone"] button p::after {{
+  content: "Выбрать файлы"; font-size: 12px; font-weight: 600;
+}}
+[data-testid="stFileUploaderDropzone"] button:hover {{
+  border-color: var(--acc) !important; color: var(--acc) !important;
+}}
+[data-testid="stFileUploaderDropzone"] button:hover::after {{ color: var(--acc); }}
 
 /* Строка страны в «Актуализации»: заголовок экспандера – одна строка,
    как ряд в оригинале, а не толстый блок. */
@@ -552,19 +622,6 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 .country-flag-svg {{ display: inline-flex; align-items: center; vertical-align: -2px;
   border-radius: 2px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }}
 
-/* Строка страны: флаг, название слева – счётчик и «изменить» справа */
-.country-row {{
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 15px; background: var(--bg-2); border: 1px solid var(--border);
-  border-radius: var(--r-sm); transition: border-color .12s var(--ease);
-}}
-.country-row.open {{ border-color: var(--border-hi); }}
-.country-row-name {{ font-size: 13.5px; font-weight: 700; color: var(--text); flex: 1; }}
-.country-row-mark {{ font-size: 12px; font-weight: 700; color: var(--grn); }}
-.country-row-mark.part {{ color: var(--yel); }}
-.country-row-mark.none {{ color: var(--dim); }}
-.country-row-act {{ font-size: 11.5px; color: var(--muted); }}
-
 /* Чекбоксы городов – в рамочках и плотно, как .city-check в оригинале:
    между рядами и колонками почти нет воздуха. */
 .st-key-city-grid, .st-key-city-grid > div,
@@ -576,7 +633,12 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
   gap: 5px !important; row-gap: 5px !important; column-gap: 5px !important;
 }}
 .st-key-city-grid [data-testid="stElementContainer"] {{ margin: 0 !important; }}
-.st-key-city-grid .stCheckbox {{ margin-bottom: 0; width: 100%; }}
+.st-key-city-grid .stCheckbox, .st-key-city-grid [data-testid="stElementContainer"] {{
+  margin-bottom: 0; width: 100% !important;
+}}
+.st-key-city-grid label[data-baseweb="checkbox"] {{
+  width: 100% !important; box-sizing: border-box; display: flex !important;
+}}
 .st-key-city-grid [data-testid="stColumn"] {{ min-width: 0; }}
 .st-key-city-grid .stCheckbox > label {{
   width: 100%; padding: 5px 9px; background: var(--bg-2);
@@ -596,10 +658,15 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 /* Загрузчик файлов ровно по высоте соседнего поля со ссылками */
 .st-key-img-row [data-testid="stFileUploaderDropzone"],
 .st-key-goods-row [data-testid="stFileUploaderDropzone"] {{
-  min-height: 118px; align-items: center; justify-content: center; flex-direction: column; gap: 6px;
+  height: 118px; min-height: 118px; padding: 8px 12px;
+  align-items: center; justify-content: center; flex-direction: column; gap: 6px;
 }}
+/* Подпись поля слева занимает место – у загрузчика подписи нет, компенсируем,
+   чтобы обе рамки начинались и заканчивались на одной высоте. */
 .st-key-img-row [data-testid="stFileUploader"],
-.st-key-goods-row [data-testid="stFileUploader"] {{ margin-top: 26px; }}
+.st-key-goods-row [data-testid="stFileUploader"] {{ margin-top: 30px; }}
+.st-key-img-row .stTextArea textarea,
+.st-key-goods-row .stTextArea textarea {{ height: 118px !important; }}
 
 /* ─── Превью текста поста ──────────────────────────────────────── */
 .preview-box {{
@@ -662,12 +729,45 @@ _FLAG_SVG = {
 
 
 def flag_svg(name: str, height: int = 14) -> str:
-    import re as _re
-    clean = _re.sub(r"\s*\([^)]*\)\s*", " ", name or "").strip()
-    body = _FLAG_SVG.get(clean, '<rect width="9" height="6" fill="#888"/>')
+    body = _FLAG_SVG.get(_norm_country(name), '<rect width="9" height="6" fill="#888"/>')
     w = round(height * 1.5)
     return (f'<span class="country-flag-svg"><svg viewBox="0 0 9 6" width="{w}" height="{height}" '
             f'xmlns="http://www.w3.org/2000/svg">{body}</svg></span>')
+
+
+def flag_data_uri(name: str) -> str:
+    """Тот же флаг, но как data-URI – чтобы поставить фоном настоящей кнопке."""
+    import urllib.parse as _u
+    body = _FLAG_SVG.get(_norm_country(name), '<rect width="9" height="6" fill="#888"/>')
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 6">{body}</svg>'
+    return "url(\"data:image/svg+xml," + _u.quote(svg, safe="") + "\")"
+
+
+def _norm_country(name: str) -> str:
+    import re as _re
+    return _re.sub(r"\s*\([^)]*\)\s*", " ", name or "").strip()
+
+
+def css_text(value: str) -> str:
+    """Строка для CSS-свойства content: в кавычках и с экранированием."""
+    return '"' + str(value or "").replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def tile_css(rules: list[tuple[str, dict[str, str]]]) -> str:
+    """
+    Один <style> на весь список плиток: подписи и флаги идут переменными.
+
+    ВАЖНО: ключ контейнера должен быть чисто латинским. Streamlit заменяет в
+    классе `st-key-…` любой символ вне [A-Za-z0-9_-] на дефис, поэтому ключ с
+    кириллицей («…-россия») превращается в «…-------» и селектор не совпадает.
+    Отсюда – нумерация вместо названий.
+    """
+    out = []
+    for key, vars_ in rules:
+        body = ";".join(f"{k}:{v}" for k, v in vars_.items() if v)
+        if body:
+            out.append(f'.st-key-{key} .stButton > button{{{body}}}')
+    return "<style>" + "".join(out) + "</style>" if out else ""
 
 
 def esc(s: object) -> str:
@@ -836,44 +936,9 @@ def card(title: str, body_html: str = "") -> str:
     return f'<div class="card">{head}{body_html}</div>'
 
 
-def post_type_card(t: dict, active: bool) -> str:
-    return (
-        f'<div class="post-type-card{" active" if active else ""}">'
-        f'<div class="post-type-ico">{esc(t["icon"])}</div>'
-        f'<div class="post-type-title">{esc(t["title"])}</div></div>'
-    )
-
-
-def post_type_grid(types: list[dict], active_id: str) -> str:
-    """Плитки типов поста – .post-type-card из _ui.js."""
-    cells = "".join(
-        f'<div class="post-type-card{" active" if t["id"] == active_id else ""}">'
-        f'<div class="post-type-ico">{esc(t["icon"])}</div>'
-        f'<div class="post-type-title">{esc(t["title"])}</div></div>'
-        for t in types
-    )
-    return f'<div class="post-type-grid">{cells}</div>'
-
-
-def country_card(flag_emoji: str, name: str, cities: int, active: bool = False) -> str:
-    """Карточка страны – флаг, название, «N гор.»."""
-    return (
-        f'<div class="country-card{" active" if active else ""}">'
-        f'<span class="country-card-flag">{flag_emoji}</span>'
-        f'<span class="country-card-body"><span class="country-card-name">{esc(name)}</span>'
-        f'<span class="country-card-count">{cities} гор.</span></span></div>'
-    )
-
-
-def country_row(flag_html: str, name: str, mark: str, action: str, is_open: bool = False) -> str:
-    """Строка страны: флаг и название слева, счётчик и «изменить» справа."""
-    cls = "none" if mark == "не выбрано" else ("part" if "из" in mark else "")
-    return (
-        f'<div class="country-row{" open" if is_open else ""}">{flag_html}'
-        f'<span class="country-row-name">{esc(name)}</span>'
-        f'<span class="country-row-mark {cls}">{esc(mark)}</span>'
-        f'<span class="country-row-act">{esc(action)} {"▾" if is_open else "▸"}</span></div>'
-    )
+# Карточки типа поста и стран больше не рисуются отдельным HTML: плитка – это
+# сама кнопка Streamlit (см. tile_css). Прежние post_type_card / country_card /
+# country_row удалены, чтобы не осталось двух источников правды для вёрстки.
 
 
 def preview_box(text: str) -> str:

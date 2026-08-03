@@ -54,11 +54,14 @@ def css(theme: str = "dark") -> str:
     c = DARK if theme != "light" else LIGHT
     return f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
+/* ВАЖНО: здесь НЕТ @import шрифтов Google.
+   CSS вставляется заново при каждой перерисовке Streamlit, а @import блокирует
+   отрисовку до ответа сервера. Из России fonts.googleapis.com часто отвечает
+   долго или не отвечает вовсе – и каждый клик подвисал на секунды.
+   Берём системные шрифты: на Windows это Segoe UI, визуально почти то же самое. */
 :root {{
-  --font: 'Inter', -apple-system, 'Segoe UI', Roboto, system-ui, sans-serif;
-  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+  --font: 'Inter', 'Segoe UI', -apple-system, Roboto, system-ui, sans-serif;
+  --mono: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', Consolas, monospace;
   --r-xs: 4px; --r-sm: 8px; --r-md: 12px; --r-lg: 16px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --acc: {ACC}; --acc-2: {ACC2}; --grn: {GRN}; --red: {RED}; --yel: {YEL};
@@ -114,7 +117,14 @@ hr {{ border-color: var(--border) !important; }}
 }}
 /* Справа сверху висит панель Streamlit (Share, звёздочка, меню) – оставляем ей место,
    иначе плашка проекта и переключатель темы уезжают под неё. */
-.st-key-click-topbar {{ padding-right: 210px; padding-top: 0; }}
+.st-key-click-topbar {{
+  padding: 8px 210px 8px 18px;          /* справа – место под панель Streamlit */
+  background: var(--bg-1); border-bottom: 1px solid var(--border);
+}}
+.st-key-click-topbar .click-topbar {{
+  background: transparent; border: none; box-shadow: none; padding: 0; margin: 0;
+}}
+.st-key-click-topbar [data-testid="stColumn"] {{ display: flex; align-items: center; }}
 .st-key-click-topbar [data-testid="stHorizontalBlock"] {{ gap: 8px; }}
 .st-key-click-topbar .click-topbar {{ border-radius: 0; border-left: none; border-right: none;
   margin-bottom: 0; padding: 12px 22px; }}
@@ -566,7 +576,8 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
   gap: 5px !important; row-gap: 5px !important; column-gap: 5px !important;
 }}
 .st-key-city-grid [data-testid="stElementContainer"] {{ margin: 0 !important; }}
-.st-key-city-grid .stCheckbox {{ margin-bottom: 0; }}
+.st-key-city-grid .stCheckbox {{ margin-bottom: 0; width: 100%; }}
+.st-key-city-grid [data-testid="stColumn"] {{ min-width: 0; }}
 .st-key-city-grid .stCheckbox > label {{
   width: 100%; padding: 5px 9px; background: var(--bg-2);
   border: 1px solid var(--border); border-radius: var(--r-xs);
@@ -848,7 +859,7 @@ def country_card(flag_emoji: str, name: str, cities: int, active: bool = False) 
     """Карточка страны – флаг, название, «N гор.»."""
     return (
         f'<div class="country-card{" active" if active else ""}">'
-        f'<span class="country-card-flag">{esc(flag_emoji)}</span>'
+        f'<span class="country-card-flag">{flag_emoji}</span>'
         f'<span class="country-card-body"><span class="country-card-name">{esc(name)}</span>'
         f'<span class="country-card-count">{cities} гор.</span></span></div>'
     )

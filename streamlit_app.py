@@ -347,21 +347,37 @@ def _toggle_theme() -> None:
     st.session_state["theme"] = "light" if theme() == "dark" else "dark"
 
 
+@st.cache_data(show_spinner=False)
+def _css(theme_name: str) -> str:
+    """31 КБ строки незачем собирать заново на каждой перерисовке."""
+    return T.css(theme_name)
+
+
 def inject_css() -> None:
-    st.markdown(T.css(theme()), unsafe_allow_html=True)
+    st.markdown(_css(theme()), unsafe_allow_html=True)
 
 
 def html(markup: str) -> None:
     st.markdown(markup, unsafe_allow_html=True)
 
 
+@st.cache_data(ttl=2, show_spinner=False)
+def _pending_cached(project_id: str) -> tuple[int, int]:
+    return runner.count_pending(project_id)
+
+
+@st.cache_data(ttl=2, show_spinner=False)
+def _session_cached(project_id: str) -> bool:
+    return yb.has_saved_session(project_id)
+
+
 def status_pills(project_id: str) -> list[tuple[str, str]]:
     """Те же три пилюли, что в оригинале: установка, авторизация, очередь."""
-    files, cities = runner.count_pending(project_id)
+    files, cities = _pending_cached(project_id)
     state = runner.read_state(project_id)
     pills = [
         ("ok", "Программа установлена"),
-        ("ok", "Авторизован") if yb.has_saved_session(project_id) else ("warn", "Требуется вход"),
+        ("ok", "Авторизован") if _session_cached(project_id) else ("warn", "Требуется вход"),
         ("info", f"{cities_word(cities)} в очереди") if cities else ("warn", "Очередь пуста"),
     ]
     if state.get("status") == "running":

@@ -1669,6 +1669,19 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
 
     if yb.has_saved_session(project_id):
         st.success("Сессия Яндекса сохранена – публикация пойдёт в фоне без повторного входа.")
+        if st.button("Проверить сессию", key="btn-check-session"):
+            with st.spinner("Открываю профиль Яндекса…"):
+                who = _check_session(project_id, config.get("email") or project["yandexEmail"])
+            if who["state"] == "ok":
+                st.success(f"В Яндексе залогинен {who['account']} – всё верно.")
+            elif who["state"] == "other":
+                st.error(f"В Яндексе залогинен другой аккаунт: {who['account']}. "
+                         "Сбросьте сессию и войдите заново.")
+            elif who["state"] == "anonymous":
+                st.error("Сессия недействительна: Яндекс показывает форму входа. Войдите заново.")
+            else:
+                st.warning("Определить аккаунт не удалось – "
+                           + (who.get("error") or "страница профиля ничего не отдала"))
         with st.container(key="danger-reset-session"):
             if st.button("Войти заново (сбросить сессию)", key="yb-reset"):
                 yb.session_path(project_id).unlink(missing_ok=True)
@@ -1813,8 +1826,33 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
     st.rerun()
 
 
+def _check_session(project_id: str, expected_email: str) -> dict:
+    """Открыть профиль Яндекса сохранённой сессией и честно сказать, кто залогинен."""
+    worker = PlaywrightWorker()
+    try:
+        browser = yb.YbBrowser(project_id, headless=True)
+        worker.call(browser.start)
+        try:
+            res = worker.call(yb.verify_account, browser.page, expected_email)
+        finally:
+            worker.call(browser.close)
+        emails = res.get("emails") or []
+        return {"state": res.get("state", "unknown"),
+                "account": (expected_email if res.get("state") == "ok" else ", ".join(emails)) or "не определено"}
+    except Exception as e:  # noqa: BLE001
+        return {"state": "unknown", "account": "", "error": f"{type(e).__name__}: {e}"}
+    finally:
+        worker.stop()
+
+
 def _finish_login(project_id: str, worker, flow) -> None:
-    """Сессия получена: сохраняем, закрываем браузер, чистим состояние шага."""
+    """
+    Сессия получена: сохраняем, закрываем браузер, чистим состояние шага.
+
+    Сохранение проверяем по факту: раньше приложение писало «Вход выполнен»
+    просто потому, что дошло сюда – и после неудачного входа сохраняло
+    анонимные куки, а на публикации выяснялось, что в Яндексе никого нет.
+    """
     account = None
     try:
         account = worker.call(flow.current_account)
@@ -1829,6 +1867,12 @@ def _finish_login(project_id: str, worker, flow) -> None:
             pass
     for k in ("yb_flow", "yb_screenshot", "yb_step", "yb_note"):
         st.session_state.pop(k, None)
+
+    if not yb.has_saved_session(project_id):
+        st.error("Вход не завершён: Яндекс не выдал куки авторизации. "
+                 "Попробуйте ещё раз – скорее всего осталась непройденная проверка "
+                 "(код из письма, капча или подтверждение в приложении).")
+        return
     st.success("Вход выполнен, сессия сохранена." + (f" Аккаунт: {account}" if account else ""))
 
 

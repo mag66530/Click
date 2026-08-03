@@ -383,15 +383,28 @@ def session_path(project_id: str) -> Path:
     return d / "yb_storage_state.json"
 
 
+# Куки, по которым Яндекс узнаёт залогиненного человека. Всё остальное
+# (yandexuid, spravka и прочее) выдаётся и анонимному посетителю.
+AUTH_COOKIES = {"session_id", "sessionid2", "yandex_login"}
+
+
 def has_saved_session(project_id: str) -> bool:
+    """
+    Есть ли НАСТОЯЩАЯ сессия. Раньше сюда годился любой файл с куками, и
+    приложение бодро писало «Сессия сохранена» после неудачного входа –
+    с анонимными куками, которые в кабинет не пускают.
+    """
     path = session_path(project_id)
     if not path.exists():
         return False
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return bool(data.get("cookies"))
     except (json.JSONDecodeError, OSError):
         return False
+    return any(
+        (c.get("name") or "").lower() in AUTH_COOKIES and "yandex" in (c.get("domain") or "").lower()
+        for c in data.get("cookies") or []
+    )
 
 
 class YbBrowser:
@@ -555,13 +568,24 @@ _LOGIN_MARKERS = (
 )
 
 
+def host_path(page: Page) -> str:
+    """
+    Адрес без строки запроса. Это важно: паспорт уводит на
+    …/auth?retpath=…%2Fprofile – в ПОЛНОМ адресе слово profile есть, и проверка
+    «мы уже в кабинете» отвечала «да» прямо на форме входа.
+    """
+    from urllib.parse import urlsplit
+    u = urlsplit(page.url or "")
+    return f"{u.netloc}{u.path}".lower()
+
+
 def looks_like_login_page(page: Page) -> bool:
     """
     Мы на странице входа, а не в кабинете? Проверяем по адресу и по содержимому:
     Яндекс уводит на паспорт с разных доменов и не всегда меняет путь.
     """
-    url = (page.url or "").lower()
-    if re.search(r"passport\.yandex\.[a-z.]+", url) and "/profile" not in url:
+    hp = host_path(page)
+    if re.search(r"passport\.yandex\.[a-z.]+", hp) and "/profile" not in hp:
         return True
     try:
         return bool(page.evaluate(
@@ -1726,9 +1750,11 @@ class YbLoginFlow:
         if self.page.locator(GENERIC_TEXT_FIELD).count() > 0:
             return False
         self.page.goto(PROFILE_URL, wait_until="domcontentloaded")
-        self.page.wait_for_timeout(1000)
-        url = self.page.url
-        return "passport" not in url or "profile" in url
+        try:
+            self.page.wait_for_load_state("networkidle", timeout=8_000)
+        except Exception:  # noqa: BLE001
+            self.page.wait_for_timeout(1_500)
+        return not looks_like_login_page(self.page)
 
     def current_account(self) -> str | None:
         """Какой аккаунт реально залогинен – показываем в UI после входа."""

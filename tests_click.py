@@ -403,6 +403,56 @@ def test_packages_txt() -> None:
            "libcups2t64", "libatk1.0-0t64", "libatk-bridge2.0-0t64"} <= set(listed))
 
 
+def test_session_validity(tmp: Path) -> None:
+    """
+    «Сессия сохранена» должна означать НАСТОЯЩУЮ сессию. Файл с анонимными
+    куками раньше считался входом, приложение писало «сохранена», а публикация
+    упиралась в форму входа.
+    """
+    import yb_playwright as yb
+    print("\n▸ Что считается сохранённой сессией")
+    yb.USERS_DATA = tmp
+    fp = yb.session_path("SES")
+
+    fp.write_text(json.dumps({"cookies": []}), encoding="utf-8")
+    check("пустой список кук – не сессия", not yb.has_saved_session("SES"))
+
+    fp.write_text(json.dumps({"cookies": [
+        {"name": "yandexuid", "domain": ".yandex.ru"},
+        {"name": "spravka", "domain": ".yandex.ru"},
+    ]}), encoding="utf-8")
+    check("анонимные куки – не сессия", not yb.has_saved_session("SES"))
+
+    fp.write_text(json.dumps({"cookies": [
+        {"name": "yandexuid", "domain": ".yandex.ru"},
+        {"name": "Session_id", "domain": ".yandex.ru"},
+    ]}), encoding="utf-8")
+    check("кука авторизации – сессия есть", yb.has_saved_session("SES"))
+
+    fp.write_text(json.dumps({"cookies": [
+        {"name": "Session_id", "domain": ".example.com"},
+    ]}), encoding="utf-8")
+    check("та же кука на чужом домене – не сессия", not yb.has_saved_session("SES"))
+
+    fp.write_text("{не json", encoding="utf-8")
+    check("битый файл – не сессия и не падение", not yb.has_saved_session("SES"))
+
+    # Адрес формы входа содержит retpath со словом profile – именно из-за этого
+    # приложение считало «мы уже в кабинете» прямо на форме входа.
+    pages_url = {
+        "форма входа с retpath на профиль":
+            ("https://passport.yandex.ru/auth?retpath=https%3A%2F%2Fpassport.yandex.ru%2Fprofile", True),
+        "настоящий профиль": ("https://passport.yandex.ru/profile", False),
+        "кабинет Бизнеса": ("https://yandex.ru/sprav/123/p/edit/posts/", False),
+    }
+    class _FakePage:
+        def __init__(self, url): self.url = url
+        def evaluate(self, *a, **k): return False
+    for name, (url, expect) in pages_url.items():
+        eq(f"{name} → страница входа: {expect}", yb.looks_like_login_page(_FakePage(url)), expect)
+
+
+
 def test_account_check_on_real_page() -> None:
     """
     Проверка аккаунта на НАСТОЯЩЕЙ странице в браузере.
@@ -573,6 +623,7 @@ def main() -> int:
         test_browser_fallback()
         test_engine_order()
         test_packages_txt()
+        test_session_validity(tmp)
         test_account_check_on_real_page()
         test_kp_sheet()
     finally:

@@ -17,7 +17,7 @@ import html as _html
 # Метка сборки. streamlit_app.py сверяет её со своей: разметка и стиль должны
 # быть из одной версии, иначе кнопки смещаются или пропадают. Менять вместе
 # с UI_BUILD в streamlit_app.py при любой правке разметки плиток.
-BUILD = "2026-08-03-cities-on-top"
+BUILD = "2026-08-03-publish-hardening"
 
 # ─── Палитра 1:1 из :root в _ui.js ──────────────────────────────────
 DARK = {
@@ -479,9 +479,13 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 .log-box {{
   background: var(--log-bg); border: 1px solid var(--border); border-radius: var(--r-sm);
   padding: 14px; font-family: var(--mono); font-size: 12px; line-height: 1.7;
-  color: var(--log-fg); white-space: pre-wrap; word-break: break-word;
-  max-height: 460px; overflow-y: auto;
+  color: var(--log-fg); max-height: 460px; overflow-y: auto;
+  /* column-reverse у контейнера с ОДНИМ ребёнком не меняет порядок текста,
+     зато прокрутка стартует С НИЗА – свежие строки видны без скролла руками.
+     Скриптом это не сделать: st.markdown вырезает <script>. */
+  display: flex; flex-direction: column-reverse;
 }}
+.log-box .log-lines {{ white-space: pre-wrap; word-break: break-word; }}
 .log-ok {{ color: #33d298; }} .log-err {{ color: #ff7c7c; }}
 .log-warn {{ color: #fabe23; }} .log-info {{ color: #8fa8ff; }}
 .log-dim {{ color: #5b6485; }}
@@ -1012,7 +1016,7 @@ def log_box(text: str, placeholder: str = "Лог пуст – запустит�
             if raw.strip():
                 cls = ""
         lines.append(f'<span class="{cls}">{esc(raw)}</span>' if cls else esc(raw))
-    return '<div class="log-box">' + "\n".join(lines) + "</div>"
+    return '<div class="log-box"><div class="log-lines">' + "\n".join(lines) + "</div></div>"
 
 
 _STAT_META = {

@@ -82,6 +82,15 @@ def test_urls() -> None:
        yb.build_photos_url("https://yandex.ru/sprav/188702920373/p/edit/posts/"),
        "https://yandex.ru/sprav/188702920373/p/edit/photos/")
 
+    # 404 на одном формате не хоронит город: есть второй формат (PLAN 1.5)
+    eq("второй формат: /p/edit/ → /edit/",
+       yb.alt_posts_url("https://yandex.ru/sprav/1/p/edit/posts/"),
+       "https://yandex.ru/sprav/1/edit/posts/")
+    eq("второй формат: /edit/ → /p/edit/",
+       yb.alt_posts_url("https://yandex.ru/sprav/1/edit/posts/"),
+       "https://yandex.ru/sprav/1/p/edit/posts/")
+    eq("второго формата нет – None", yb.alt_posts_url("https://example.com/x"), None)
+
 
 def test_publish_api_filter() -> None:
     import yb_playwright as yb
@@ -94,6 +103,15 @@ def test_publish_api_filter() -> None:
     check("аналитика не считается", not f("https://yandex.ru/sprav/api/analytics", "POST"))
     check("посторонний домен без /sprav/ и /posts/ не считается",
           not f("https://example.com/upload", "POST"))
+    # Живой случай из лога заказчика: Метрика передаёт адрес страницы в строке
+    # запроса, и «sprav»/«posts» находились в ЧУЖОМ запросе – ложное «опубликовано».
+    check("Метрика mc.yandex.ru/watch со sprav в параметрах НЕ считается",
+          not f("https://mc.yandex.ru/watch/52122583?browser-info=x&page-url="
+                "https%3A%2F%2Fyandex.ru%2Fsprav%2F123%2Fp%2Fedit%2Fposts%2F", "POST"))
+    check("настоящий API постов с параметрами – считается",
+          f("https://yandex.ru/sprav/api/companies/1/posts?lang=ru", "POST"))
+    check("ключевые слова только в параметрах, путь чужой – не считается",
+          not f("https://yandex.ru/collections/save?from=%2Fsprav%2Fposts%2F", "POST"))
 
 
 def test_text() -> None:
@@ -154,6 +172,14 @@ def test_retry_rules() -> None:
     check("кнопка публикации не найдена → повтор разрешён", not click({"steps": {"publish": "missing"}}))
     check("упали на поле текста → повтор разрешён", not click({"steps": {"text": "missing"}}))
     check("упали на кнопке «Добавить пост» → повтор разрешён", not click({"steps": {"addButton": "missing"}}))
+
+    ledger = runner._should_ledger
+    check("реестр: ok пишем", ledger({"status": "ok"}))
+    check("реестр: no-image пишем", ledger({"status": "no-image"}))
+    check("реестр: unknown пишем – повтор опасен", ledger({"status": "unknown"}))
+    check("реестр: failed НЕ пишем", not ledger({"status": "failed"}))
+    check("реестр: api-rejected НЕ пишем – иначе город блокируется зря",
+          not ledger({"status": "failed", "steps": {"publish": "api-rejected"}}))
 
 
 def test_ledger_and_lock(tmp: Path) -> None:
@@ -402,6 +428,36 @@ def test_packages_txt() -> None:
     check("библиотеки Chromium на месте",
           {"libgbm1", "libnss3", "libnspr4", "libdrm2", "libxkbcommon0",
            "libcups2t64", "libatk1.0-0t64", "libatk-bridge2.0-0t64"} <= set(listed))
+
+
+def test_city_duplicates() -> None:
+    """Один и тот же город (та же карточка или то же имя) нельзя добавить дважды."""
+    import re
+    import yb_playwright as yb
+    print("\n▸ Защита от дублей городов")
+    src = Path("streamlit_app.py").read_text(encoding="utf-8")
+    start = src.index("def _city_duplicate(")
+    end = src.index("def country_picker(", start)
+    ns = {"yb": yb, "re": re}
+    exec(compile(src[start:end], "dup", "exec"), ns)  # noqa: S102
+    dup = ns["_city_duplicate"]
+
+    config = {"countries": [
+        {"id": "c-ru", "name": "Россия", "cities": [
+            {"id": "1", "name": "Москва", "url": "https://yandex.ru/sprav/111/edit/posts/"},
+        ]},
+        {"id": "c-kz", "name": "Казахстан", "cities": []},
+    ]}
+    check("та же карточка в той же стране – дубль",
+          dup(config, "https://yandex.ru/sprav/111/p/edit/", "Другое имя", "c-ru") is not None)
+    check("та же карточка в ДРУГОЙ стране – тоже дубль",
+          dup(config, "https://yandex.ru/sprav/111/edit/main", "Алматы", "c-kz") is not None)
+    check("то же имя в той же стране – дубль",
+          dup(config, "https://yandex.ru/sprav/222/edit/posts/", "  москва ", "c-ru") is not None)
+    check("то же имя в другой стране – НЕ дубль (Москва и в Казахстане бывает)",
+          dup(config, "https://yandex.ru/sprav/333/edit/posts/", "Москва", "c-kz") is None)
+    check("новый город – не дубль",
+          dup(config, "https://yandex.ru/sprav/444/edit/posts/", "Тверь", "c-ru") is None)
 
 
 def test_worker_thread() -> None:
@@ -665,6 +721,7 @@ def main() -> int:
         test_browser_fallback()
         test_engine_order()
         test_packages_txt()
+        test_city_duplicates()
         test_worker_thread()
         test_session_validity(tmp)
         test_account_check_on_real_page()

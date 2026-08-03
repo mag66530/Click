@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import os
 import threading
 import time
@@ -514,6 +515,22 @@ def _publish_worker(
                 save_report("in-progress")
                 push_state("running", processed, city)
 
+                # Скриншот в момент сбоя – в оригинале это был главный способ
+                # понять, ПОЧЕМУ город не опубликовался (25 точек takeScreenshot).
+                if res["status"] in ("failed", "unknown", "no-session"):
+                    shot = _save_failure_screenshot(project_id, browser, city)
+                    if shot:
+                        res["screenshot"] = shot.name
+                        _append_log(project_id, "INFO", f"  📸 Скриншот сбоя: {shot.name}")
+
+                # Страховка длинного прогона: Яндекс продлевает куки по ходу
+                # работы, сохраняем их периодически, а не только в самом конце.
+                if processed % 10 == 0:
+                    try:
+                        browser.save_session()
+                    except Exception:  # noqa: BLE001
+                        pass
+
                 # Сессия слетела – дальше идти незачем: остальные города упрутся
                 # в ту же страницу входа. Останавливаемся сразу и говорим почему.
                 if res["status"] == "no-session":
@@ -564,6 +581,9 @@ def _publish_worker(
             processed_files.append(fp)
             if stopped:
                 break
+            if fp is not files[-1][0]:
+                _append_log(project_id, "INFO", "⏱️  Пауза 3 сек между странами...")
+                _sleep_interruptible(3, should_stop)
 
         # ── ВТОРОЙ ПРОХОД: только те, где клика «Создать» ТОЧНО не было ──
         if not stopped:
@@ -600,6 +620,28 @@ def _publish_worker(
         yb.set_logger(None)
 
 
+def p_screenshots(project_id: str) -> Path:
+    d = USERS_DATA / project_id / "screenshots"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _save_failure_screenshot(project_id: str, browser, city: str) -> Path | None:
+    try:
+        safe = re.sub(r"[^\w\-]+", "-", city or "город")[:30]
+        fp = p_screenshots(project_id) / f"{datetime.now().strftime('%H-%M-%S')}-{safe}.png"
+        browser.page.screenshot(path=str(fp))
+        return fp
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _should_ledger(res: dict) -> bool:
+    """Что писать в реестр публикаций: ok и no-image – пост есть; unknown –
+    возможно есть, повтор опасен. failed и api-rejected – поста нет."""
+    return res.get("status") in ("ok", "no-image", "unknown")
+
+
 def _publish_one_city(
     browser: yb.YbBrowser,
     project_id: str,
@@ -627,9 +669,10 @@ def _publish_one_city(
                "cityName": task.get("cityName"), "companyUrl": task.get("companyUrl"),
                "steps": {}, "durationMs": 0}
 
-    # Любой исход, где клик уже был – фиксируем в реестре, чтобы никакой
-    # повторный запуск не отправил этот же текст в этот же город второй раз.
-    if _click_happened(res) or res["status"] in ("ok", "no-image", "unknown"):
+    # В реестр – только исходы, где пост МОГ появиться. api-rejected сюда не
+    # входит: Яндекс отказал, поста нет, а запись блокировала бы город на всё
+    # окно дедупликации – после починки причины город «пропускался» бы зря.
+    if _should_ledger(res):
         _ledger_add(project_id, _text_key(task.get("companyId"), task.get("companyUrl"), task.get("postText", "")),
                     task, res["status"], run_id)
 

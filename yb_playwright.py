@@ -145,6 +145,21 @@ def build_edit_url(company_url: str | None) -> str | None:
     return f"https://yandex.ru/sprav/{company_id}/p/edit/" if has_p else f"https://yandex.ru/sprav/{company_id}/edit/"
 
 
+def alt_posts_url(url: str | None) -> str | None:
+    """
+    Второй формат раздела «Посты»: /edit/posts/ ↔ /p/edit/posts/. Яндекс держит
+    старые и новые карточки на разных форматах; когда угадали не тот – 404,
+    хотя карточка живая. Раньше город на этом терялся (PLAN 1.5).
+    """
+    if not url:
+        return None
+    if "/p/edit/" in url:
+        return url.replace("/p/edit/", "/edit/")
+    if "/edit/" in url:
+        return url.replace("/edit/", "/p/edit/")
+    return None
+
+
 def build_photos_url(company_url: str | None, company_id: str | None = None) -> str | None:
     cid = company_id or extract_company_id(company_url)
     if not cid:
@@ -788,7 +803,23 @@ def _attach_images(page: Page, image_paths: list[str]) -> tuple[bool, str]:
 
 _FIND_PUBLISH_BTN_JS = r"""
 () => {
-  const allBtns = document.querySelectorAll('button, [role="button"], [type="submit"]');
+  // Сначала кнопки ВНУТРИ формы поста, потом остальной документ: «Создать»
+  // где-нибудь в шапке не должна перехватить публикацию (PLAN 1.4).
+  document.querySelectorAll('[data-click-target]').forEach(e => e.removeAttribute('data-click-target'));
+  const roots = [];
+  for (const f of document.querySelectorAll('[class*="PostForm"], [class*="PostAddForm"], [role="dialog"], [class*="odal"]')) {
+    const r = f.getBoundingClientRect();
+    if (r.width > 150 && r.height > 150) roots.push(f);
+  }
+  roots.push(document);
+  const seen = new Set();
+  const allBtns = [];
+  for (const root of roots)
+    for (const b of root.querySelectorAll('button, [role="button"], [type="submit"]')) {
+      if (seen.has(b)) continue;
+      seen.add(b);
+      allBtns.push(b);
+    }
   const candidates = [];
   for (const b of allBtns) {
     const text = (b.textContent || '').trim();
@@ -803,9 +834,10 @@ _FIND_PUBLISH_BTN_JS = r"""
     if (st.display === 'none' || st.visibility === 'hidden') continue;
     candidates.push({ el: b, text: low, r });
   }
-  const pick = (c) => ({ x: c.r.x + c.r.width / 2, y: c.r.y + c.r.height / 2,
-                         text: (c.el.textContent || '').trim().slice(0, 60),
-                         w: Math.round(c.r.width), h: Math.round(c.r.height) });
+  const pick = (c) => { c.el.setAttribute('data-click-target', '1');
+                        return { x: c.r.x + c.r.width / 2, y: c.r.y + c.r.height / 2,
+                                 text: (c.el.textContent || '').trim().slice(0, 60),
+                                 w: Math.round(c.r.width), h: Math.round(c.r.height) }; };
   for (const name of ['создать', 'опубликовать', 'отправить', 'publish', 'submit']) {
     for (const c of candidates) if (c.text === name) return pick(c);
   }
@@ -839,14 +871,28 @@ _DOM_FALLBACK_JS = r"""
 
 
 def _is_publish_api_response(url: str, method: str) -> bool:
-    """Фильтр «интересных» ответов – тот же, что в publish.js."""
+    """
+    Ответ ли это API создания поста. Смотрим ТОЛЬКО на хост и путь.
+
+    Строка запроса – ловушка: Метрика передаёт в параметрах адрес текущей
+    страницы (…/edit/posts/…), и «sprav» с «posts» находились В ЧУЖОМ запросе.
+    mc.yandex.ru/watch получал HTTP 200 – и несуществующая публикация
+    рапортовалась как «API подтвердил».
+    """
     if method not in ("POST", "PUT"):
         return False
-    if not re.search(r"sprav|/api/|/posts?\b", url, re.I):
+    from urllib.parse import urlsplit
+    u = urlsplit(url)
+    host = (u.netloc or "").lower().split(":")[0]
+    path = (u.path or "").lower()
+    if not re.search(r"(^|\.)yandex\.(ru|com|net|by|kz|ua)$", host):
         return False
-    if re.search(r"/(metric|counter|track|stat|analytics|csp-report|ping|heartbeat)\b", url, re.I):
+    # Счётчики и аналитика живут на своих поддоменах и путях
+    if re.match(r"^(mc|an|mtr|log|clck|informer|matchid|adstat|strm|metri)", host):
         return False
-    return True
+    if re.search(r"/(watch|metric|counter|track|stat|analytics|csp-report|ping|heartbeat|clck|informer)\b", path):
+        return False
+    return bool(re.search(r"sprav|/api/|/posts?\b", path))
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -905,12 +951,20 @@ def publish_to_city(
         page.goto(posts_url, wait_until="domcontentloaded", timeout=30_000)
         page.wait_for_selector("body", timeout=10_000)
         page.wait_for_timeout(400)
-        actual_url = page.url
 
         if is_404(page):
-            result["steps"]["navigate"] = "404"
-            error(f"  ❌ Страница не найдена (404): {posts_url}")
-            return finish("failed", f"Страница не найдена (404): {posts_url}. Проверьте URL карточки в «Городах».")
+            alt = alt_posts_url(posts_url)
+            if alt:
+                info(f"  🔁 404 – пробую другой формат адреса: {alt}")
+                page.goto(alt, wait_until="domcontentloaded", timeout=30_000)
+                page.wait_for_timeout(500)
+            if not alt or is_404(page):
+                result["steps"]["navigate"] = "404"
+                error(f"  ❌ Страница не найдена (404): {posts_url}")
+                return finish("failed", f"Страница не найдена (404): {posts_url}. "
+                                        "Проверьте URL карточки в «Городах».")
+            posts_url = alt
+        actual_url = page.url
 
         # Яндекс мог редиректнуть старый ID на новый – пересобираем URL под новый формат
         effective_id = company_id
@@ -1111,8 +1165,29 @@ def publish_to_city(
             warn(f"  ⚠️ {upload_error} – публикуем без картинки")
 
     # ─── 5. Кнопка публикации ───
-    pub = page.evaluate(_FIND_PUBLISH_BTN_JS)
+    # С опросом до 12 сек: пока Яндекс крутит загрузку картинки, «Создать»
+    # отключена и однократный поиск её «не находил» – хотя через пару секунд
+    # она появлялась (это видно по тому, что ретрай кнопку находил).
+    pub = None
+    deadline_btn = time.time() + 12
+    while True:
+        pub = page.evaluate(_FIND_PUBLISH_BTN_JS)
+        if pub or time.time() >= deadline_btn:
+            break
+        page.wait_for_timeout(700)
     if not pub:
+        try:
+            btns = page.evaluate(
+                """() => Array.from(document.querySelectorAll('button, [role="button"]'))
+                        .map(b => { const r = b.getBoundingClientRect();
+                                    if (r.width < 5 || r.height < 5) return null;
+                                    const t = (b.textContent || '').trim().slice(0, 40);
+                                    return (b.disabled ? '[выкл] ' : '') + (t || '(без текста)'); })
+                        .filter(Boolean).slice(0, 15)"""
+            )
+            info(f"  🔬 Кнопки на странице: {json.dumps(btns, ensure_ascii=False)}")
+        except Exception:
+            pass
         result["steps"]["publish"] = "missing"
         error("  ❌ Кнопка «Создать»/«Опубликовать» не найдена")
         _cleanup(temp_files)
@@ -1138,7 +1213,13 @@ def publish_to_city(
 
     click_error = None
     try:
-        click_at(page, pub)
+        # locator.click сам прокручивает к кнопке и ждёт кликабельности – как
+        # elementHandle.click() в оригинале. Координаты остаются запасным путём:
+        # кнопка ниже сгиба по координатам не нажимается вовсе (PLAN 1.1).
+        try:
+            page.locator('[data-click-target="1"]').first.click(timeout=5_000)
+        except Exception:
+            click_at(page, pub)
         info(f"  🔘 Клик «{pub['text']}» сделан")
         result["steps"]["publish"] = "clicked"
     except Exception as e:  # noqa: BLE001
@@ -1647,6 +1728,12 @@ class YbLoginFlow:
         return self.page.screenshot(full_page=True)
 
     def submit_code(self, code: str) -> bytes:
+        # Пока человек ждал код, паспорт мог откатиться на первый экран – тогда
+        # код улетел бы в поле логина. Проверяем, что на экране действительно код.
+        if self.detect_step() == "login":
+            raise RuntimeError(
+                "Яндекс вернулся на экран логина – коду сейчас некуда. Введите логин "
+                "(или нажмите «Продолжить»), дождитесь НОВОГО кода и введите его.")
         self._submit_generic_field(code, EMAIL_CODE_NEXT_BUTTON)
         self._skip_post_login_prompts()
         return self.page.screenshot(full_page=True)
@@ -1765,18 +1852,12 @@ class YbLoginFlow:
             return False
 
     def is_logged_in(self) -> bool:
-        # Не уходим на /profile, пока виден незавершённый шаг проверки –
-        # переход обнуляет непройденную проверку кода и откатывает вход на первый экран.
-        if self.page.locator(EMAIL_CODE_NEXT_BUTTON).count() > 0:
-            return False
-        if self.page.locator(GENERIC_TEXT_FIELD).count() > 0:
-            return False
-        self.page.goto(PROFILE_URL, wait_until="domcontentloaded")
-        try:
-            self.page.wait_for_load_state("networkidle", timeout=8_000)
-        except Exception:  # noqa: BLE001
-            self.page.wait_for_timeout(1_500)
-        return self.has_auth_cookie() and not looks_like_login_page(self.page)
+        # Кука авторизации появляется сразу после успешного входа, и проверить
+        # её можно БЕЗ переходов. Ходить на /profile ради проверки нельзя:
+        # переход сбрасывает непройденную проверку кода, паспорт откатывается
+        # на первый экран – и код потом печатался в поле ЛОГИНА (у заказчика:
+        # «Username can't begin with a number»).
+        return self.has_auth_cookie()
 
     def current_account(self) -> str | None:
         """Какой аккаунт реально залогинен – показываем в UI после входа."""

@@ -36,7 +36,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-03-cities-on-top"
+UI_BUILD = "2026-08-03-publish-hardening"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -53,6 +53,27 @@ SECTIONS = ["🚀 Запуск", "📤 Публикация", "🔄 Актуал
 
 def _hash(password: str) -> str:
     return hashlib.pbkdf2_hmac("sha512", password.encode(), SALT.encode(), 100_000, dklen=64).hex()
+
+
+def _url_token(pid: str) -> str:
+    """
+    Подпись проекта для адресной строки. session_state живёт до первого F5,
+    поэтому вход держим в query-параметрах: ?p=SMU&k=<подпись>. Подпись
+    выводится из хэша пароля – сам пароль в адрес не попадает, а поменяли
+    пароль → старые ссылки перестают пускать.
+    """
+    return hashlib.sha256(f"{pid}:{PROJECTS[pid]['passwordHash']}:{SALT}".encode()).hexdigest()[:24]
+
+
+def _project_from_url() -> str | None:
+    try:
+        pid = st.query_params.get("p")
+        key = st.query_params.get("k")
+    except Exception:  # noqa: BLE001
+        return None
+    if pid in PROJECTS and key == _url_token(pid):
+        return pid
+    return None
 
 
 PROJECTS: dict[str, dict] = {
@@ -597,6 +618,19 @@ def _toggle_all_countries(key_prefix: str, country_ids: list[str], turn_on: bool
             st.session_state[f"{key_prefix}-{cid}-cities-{cid}"] = []
 
 
+def _city_duplicate(config: dict, url: str, name: str, country_id: str) -> str | None:
+    """Куда этот город уже добавлен. None – дубля нет, можно добавлять."""
+    cid = yb.extract_company_id(url)
+    norm = lambda t: re.sub(r"\s+", " ", (t or "")).strip().lower()  # noqa: E731
+    for c in config["countries"]:
+        for ct in c["cities"]:
+            if cid and yb.extract_company_id(ct.get("url")) == cid:
+                return f"эта карточка уже есть: {c['name']} / {ct['name']}"
+            if c["id"] == country_id and norm(ct.get("name")) == norm(name):
+                return f"город «{ct['name']}» уже есть в стране {c['name']}"
+    return None
+
+
 def country_picker(key_prefix: str, config: dict, title: str = "Страны",
                    with_cities: bool = False, cities: dict | None = None) -> list[dict]:
     """
@@ -687,6 +721,7 @@ def show_login() -> None:
             if _hash(password) == PROJECTS[selected]["passwordHash"]:
                 ensure_dirs(selected)
                 st.session_state.current_project_id = selected
+                st.query_params.update({"p": selected, "k": _url_token(selected)})
                 st.rerun()
             else:
                 st.error("Неверный пароль")
@@ -1027,7 +1062,7 @@ def tab_compose(project_id: str, config: dict) -> None:
                           "https://ibb.co/abc/foto1.jpg\nhttps://ibb.co/xyz/foto2.jpg",
           )
           uploaded = c2.file_uploader("Выбрать файл", type=["jpg", "jpeg", "png", "gif", "webp"],
-                                      accept_multiple_files=True, key="compose-images",
+                                      accept_multiple_files=True, key=f"compose-images-{st.session_state.get('upl-gen', 0)}",
                                       label_visibility="collapsed")
       html('<div class="hint">Можно ссылки (ImgBB / Imgur / Я.Диск) ИЛИ загрузить файлы с компьютера. '
            'Если есть проблемы с интернетом – лучше загружайте файлы. До 20 МБ.</div>')
@@ -1040,7 +1075,7 @@ def tab_compose(project_id: str, config: dict) -> None:
                           "Заливаются в карточку после успешной публикации поста",
           )
           goods_files = g2.file_uploader("Фото товаров", type=["jpg", "jpeg", "png", "gif", "webp"],
-                                         accept_multiple_files=True, key="compose-goods-files",
+                                         accept_multiple_files=True, key=f"compose-goods-files-{st.session_state.get('upl-gen', 0)}",
                                          label_visibility="collapsed")
 
     image_urls = [u.strip() for u in (image_urls_raw or "").splitlines() if u.strip()]
@@ -1143,6 +1178,10 @@ def tab_compose(project_id: str, config: dict) -> None:
                 saved = save_queue_to_tasks(project_id, config, queue)
                 st.session_state["queue"] = []
                 goto_section(SECTIONS[0])       # дальше человеку всё равно на «Запуск»
+                # Новое поколение ключей очищает загрузчики файлов: их состояние
+                # переживает перерисовки, и старые картинки тихо прицеплялись к
+                # СЛЕДУЮЩЕМУ посту («я вообще ничего не прикрепляла»).
+                st.session_state["upl-gen"] = st.session_state.get("upl-gen", 0) + 1
                 st.toast(f"Сохранено файлов задач: {saved}. Открываю «Запуск».")
                 time.sleep(0.6)
                 st.rerun()
@@ -1428,15 +1467,18 @@ def tab_cities(project_id: str, config: dict) -> None:
                 url = c2.text_input("Ссылка на карточку", key=f"add-city-url-{country['id']}")
                 c3.write("")
                 if c3.button("＋", key=f"add-city-btn-{country['id']}", use_container_width=True):
-                    if name.strip() and url.strip():
+                    dup = _city_duplicate(config, url, name, country["id"])
+                    if not (name.strip() and url.strip()):
+                        st.warning("Нужны и название, и ссылка")
+                    elif dup:
+                        st.error(f"Не добавлено – {dup}.")
+                    else:
                         country["cities"].append({
                             "id": f"ct-{_slug(name)}-{int(time.time() * 1000)}",
                             "name": name.strip(), "url": url.strip(),
                         })
                         save_config(project_id)
                         st.rerun()
-                    else:
-                        st.warning("Нужны и название, и ссылка")
 
             with tab_bulk:
                 st.caption("По строке на город: `Название | ссылка` или `ссылка | Название`.")
@@ -1637,6 +1679,7 @@ def tab_settings(project_id: str, config: dict) -> None:
 
     with st.container(key="danger-logout"):
         if st.button("Выйти из проекта", key="btn-logout"):
+            st.query_params.clear()
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
             st.rerun()
@@ -1914,6 +1957,7 @@ def show_main(project_id: str) -> None:
         with st.popover(f'{project["name"]} – {project["fullName"]}', use_container_width=True):
             st.caption(f'Аккаунт Яндекса: {config.get("email") or "не задан"}')
             if st.button("↻ Сменить проект", key="btn-switch", use_container_width=True):
+                st.query_params.clear()
                 for k in list(st.session_state.keys()):
                     del st.session_state[k]
                 st.rerun()
@@ -1949,6 +1993,11 @@ def show_main(project_id: str) -> None:
 
 def main() -> None:
     project_id = st.session_state.get("current_project_id")
+    if not project_id:
+        project_id = _project_from_url()          # переживает F5, в отличие от session_state
+        if project_id:
+            ensure_dirs(project_id)
+            st.session_state.current_project_id = project_id
     if project_id:
         show_main(project_id)
     else:

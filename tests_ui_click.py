@@ -186,6 +186,30 @@ def main() -> int:
             page.wait_for_timeout(4000)
             probe(page, "tile-row-city-", "Строки стран")
 
+            # ── Сохранение очереди уводит на «Запуск» ──
+            # Именно здесь приложение падало: раздел переключали записью в ключ
+            # уже отрисованного виджета, а Streamlit это запрещает.
+            print("\n▸ Очередь → переход на «Запуск»")
+            page.get_by_text("📤 Публикация", exact=True).first.click()
+            page.wait_for_timeout(4000)
+            page.locator('[class*="st-key-tile-cc-compose-2"] button').first.click()
+            page.wait_for_timeout(2500)
+            ta = page.locator(".stTextArea textarea").first
+            ta.fill("Проверочный текст поста")
+            ta.press("Tab")
+            page.wait_for_timeout(3000)
+            page.get_by_role("button", name="Добавить в очередь", exact=False).first.click()
+            page.wait_for_timeout(3000)
+            page.get_by_role("button", name="Сохранить очередь в задачи").click()
+            page.wait_for_timeout(5000)
+            check("приложение не упало", page.get_by_text("StreamlitAPIException").count() == 0,
+                  "на странице исключение Streamlit")
+            active = page.evaluate(
+                """() => { const e = document.querySelector(
+                     '.st-key-click-tabs [aria-checked=true], .st-key-click-tabs [data-selected=true]');
+                   return e ? e.innerText.trim() : ''; }""")
+            check("открылся раздел «Запуск»", "Запуск" in active, f"активно: {active!r}")
+
             browser.close()
     finally:
         if proc is not None:

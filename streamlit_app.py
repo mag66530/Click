@@ -418,6 +418,16 @@ def theme() -> str:
     return st.session_state.get("theme", "dark")
 
 
+def goto_section(name: str) -> None:
+    """
+    Перейти в раздел из кода. Ключ уже отрисованного виджета Streamlit менять
+    запрещает, поэтому переключаем «поколение»: радио получает новый ключ и
+    создаётся заново, взяв нужный раздел из index.
+    """
+    st.session_state["section_name"] = name
+    st.session_state["nav-gen"] = st.session_state.get("nav-gen", 0) + 1
+
+
 def _toggle_theme() -> None:
     st.session_state["theme"] = "light" if theme() == "dark" else "dark"
 
@@ -705,7 +715,11 @@ def _render_live_panel(project_id: str, was_running: bool = False) -> None:
         ))
         st.progress(min(1.0, current / total))
     elif status == "done":
-        st.success(f"{action_ru} завершена. Отчёт – во вкладке «Отчёт».")
+        st.success(f"{action_ru} завершена.")
+        with st.container(key="go-report"):
+            if st.button("📊 Посмотреть отчёт", key=f"btn-report-{state.get('runId', '')}"):
+                goto_section(SECTIONS[4])
+                st.rerun()
     elif status == "stopped":
         st.warning(f"{action_ru} остановлена пользователем. Сделанное сохранено в отчёте.")
     elif status == "error":
@@ -1122,11 +1136,7 @@ def tab_compose(project_id: str, config: dict) -> None:
                          use_container_width=True, key="btn-save-queue"):
                 saved = save_queue_to_tasks(project_id, config, queue)
                 st.session_state["queue"] = []
-                # Сразу переносим на «Запуск»: дальше человеку всё равно туда.
-                # Раздел держим и в своём ключе, и в ключе виджета – иначе радио
-                # восстановит прежнюю вкладку из собственного состояния.
-                st.session_state["section_name"] = SECTIONS[0]
-                st.session_state["main-section"] = SECTIONS[0]
+                goto_section(SECTIONS[0])       # дальше человеку всё равно на «Запуск»
                 st.toast(f"Сохранено файлов задач: {saved}. Открываю «Запуск».")
                 time.sleep(0.6)
                 st.rerun()
@@ -1857,7 +1867,8 @@ def show_main(project_id: str) -> None:
         current = SECTIONS[0]
     with st.container(key="click-tabs"):
         section = st.radio("Раздел", SECTIONS, index=SECTIONS.index(current), horizontal=True,
-                           label_visibility="collapsed", key="main-section")
+                           label_visibility="collapsed",
+                           key=f"main-section-{st.session_state.get('nav-gen', 0)}")
     st.session_state["section_name"] = section
 
     if section == SECTIONS[0]:

@@ -633,6 +633,14 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
   color: var(--acc) !important;
 }}
 
+/* Кнопка «Посмотреть отчёт» под сообщением об окончании прогона */
+.st-key-go-report .stButton > button {{
+  background: var(--grn-bg) !important; border: 1px solid transparent !important;
+  color: var(--grn) !important; font-weight: 700 !important; box-shadow: none !important;
+}}
+.st-key-go-report .stButton > button:hover {{ border-color: var(--grn) !important; }}
+.st-key-go-report .stButton > button p {{ color: var(--grn) !important; }}
+
 /* Плашка проекта в шапке – кнопка, открывающая «Сменить проект» */
 .st-key-projbadge {{ display: flex; align-items: flex-end; }}
 .st-key-projbadge [data-testid="stElementContainer"], .st-key-projbadge .stPopover {{

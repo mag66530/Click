@@ -80,7 +80,7 @@ def css(theme: str = "dark") -> str:
 [data-testid="stToolbar"] {{ right: 8px; }}
 [data-testid="stDecoration"] {{ display: none; }}
 [data-testid="stAppViewBlockContainer"],
-.block-container {{ padding-top: 1.1rem !important; padding-bottom: 4rem !important; max-width: 1240px; }}
+.block-container {{ padding-top: 0 !important; padding-bottom: 4rem !important; max-width: 1240px; }}
 [data-testid="stSidebar"] {{ background: var(--bg-1); border-right: 1px solid var(--border); }}
 /* ВАЖНО: иконки Streamlit – лигатурный шрифт Material Symbols. Если накрыть их
    своим font-family, вместо стрелки экспандера рисуется текст «arrow_right».
@@ -110,8 +110,12 @@ hr {{ border-color: var(--border) !important; }}
    обратно до ширины колонки, и 100vw не срабатывает. */
 .st-key-click-topbar, .st-key-click-tabs {{
   width: 100vw !important; min-width: 100vw; flex: 0 0 auto;
-  margin-left: calc(-50vw + 50%); padding: 0 22px;
+  margin-left: calc(-50vw + 50%); padding: 0 18px;
 }}
+/* Справа сверху висит панель Streamlit (Share, звёздочка, меню) – оставляем ей место,
+   иначе плашка проекта и переключатель темы уезжают под неё. */
+.st-key-click-topbar {{ padding-right: 210px; padding-top: 0; }}
+.st-key-click-topbar [data-testid="stHorizontalBlock"] {{ gap: 8px; }}
 .st-key-click-topbar .click-topbar {{ border-radius: 0; border-left: none; border-right: none;
   margin-bottom: 0; padding: 12px 22px; }}
 .st-key-click-tabs {{ background: var(--bg-1); border-bottom: 1px solid var(--border);
@@ -206,7 +210,8 @@ hr {{ border-color: var(--border) !important; }}
 
 /* Кнопка темы в шапке – компактная, вровень с топбаром */
 .st-key-btn-theme .stButton > button, .st-key-btn-theme button {{
-  height: 62px; font-size: 20px; padding: 0; background: var(--bg-1); border-color: var(--border);
+  height: 46px; width: 46px; min-width: 46px; font-size: 18px; padding: 0;
+  background: var(--bg-2); border-color: var(--border); border-radius: 10px;
 }}
 
 /* Опасные действия – красные (по ключу виджета) */
@@ -550,19 +555,32 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 .country-row-mark.none {{ color: var(--dim); }}
 .country-row-act {{ font-size: 11.5px; color: var(--muted); }}
 
-/* Чекбоксы городов – в рамочках, как .city-check в оригинале */
+/* Чекбоксы городов – в рамочках и плотно, как .city-check в оригинале:
+   между рядами и колонками почти нет воздуха. */
+.st-key-city-grid, .st-key-city-grid > div,
+.st-key-city-grid [data-testid="stVerticalBlock"],
+.st-key-city-grid [data-testid="stHorizontalBlock"],
+.st-key-city-grid [data-testid="stColumn"],
+.st-key-city-grid [data-testid="stColumn"] > div,
+.st-key-city-grid [data-testid="stElementContainer"] {{
+  gap: 5px !important; row-gap: 5px !important; column-gap: 5px !important;
+}}
+.st-key-city-grid [data-testid="stElementContainer"] {{ margin: 0 !important; }}
 .st-key-city-grid .stCheckbox {{ margin-bottom: 0; }}
 .st-key-city-grid .stCheckbox > label {{
-  width: 100%; padding: 8px 11px; background: var(--bg-2);
-  border: 1px solid var(--border); border-radius: var(--r-sm);
-  transition: all .1s var(--ease);
+  width: 100%; padding: 5px 9px; background: var(--bg-2);
+  border: 1px solid var(--border); border-radius: var(--r-xs);
+  transition: all .1s var(--ease); min-height: 30px; align-items: center;
+  overflow: hidden;                      /* длинные названия не должны вылезать за рамку */
 }}
+.st-key-city-grid .stCheckbox > label > div:last-child {{ min-width: 0; overflow: hidden; }}
 .st-key-city-grid .stCheckbox > label:hover {{ border-color: var(--border-hi); background: var(--bg-3); }}
 .st-key-city-grid .stCheckbox > label:has(input:checked) {{
   background: var(--acc-bg); border-color: var(--acc);
 }}
-.st-key-city-grid .stCheckbox p {{ font-size: 12px !important; font-weight: 600 !important;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+.st-key-city-grid .stCheckbox p {{ font-size: 11.5px !important; font-weight: 600 !important;
+  line-height: 1.2 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+.st-key-city-grid [data-baseweb="checkbox"] > span:first-child {{ transform: scale(.85); }}
 
 /* Загрузчик файлов ровно по высоте соседнего поля со ссылками */
 .st-key-img-row [data-testid="stFileUploaderDropzone"],
@@ -652,11 +670,12 @@ def topbar(project: dict | None, pills: list[tuple[str, str]] | None = None) -> 
     )
     badge = ""
     if project:
+        # Без эмодзи: на Windows иконка проекта рисуется квадратиком.
         badge = (
             f'<span class="click-projbadge">'
             f'<span class="click-projbadge-dot" style="background:{esc(project["color"])}"></span>'
-            f'{esc(project["icon"])} {esc(project["name"])}'
-            f'<span class="click-projbadge-sub">{esc(project["fullName"])}</span></span>'
+            f'{esc(project["name"])} – <span class="click-projbadge-sub">'
+            f'{esc(project["fullName"])}</span></span>'
         )
     return (
         '<div class="click-topbar">'

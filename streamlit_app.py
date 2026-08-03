@@ -43,7 +43,7 @@ def _hash(password: str) -> str:
 
 
 PROJECTS: dict[str, dict] = {
-    "SMU": {"id": "SMU", "name": "СМУ", "fullName": "Стальметгрупп", "color": "#3b82f6", "icon": "🏗",
+    "SMU": {"id": "SMU", "name": "СМУ", "fullName": "Стальметурал", "color": "#3b82f6", "icon": "🏗",
             "yandexEmail": "stalmetural19@yandex.ru", "passwordHash": _hash("1501"),
             "presetCities": pdata.SMU_CITIES, "endings": None},
     "IMP": {"id": "IMP", "name": "ИМП", "fullName": "Инметпром", "color": "#10b981", "icon": "🔩",
@@ -881,7 +881,7 @@ def tab_actualize(project_id: str, config: dict) -> None:
                 st.button("Снять все" if n == len(ids) else "Выбрать все",
                           key=f"act-toggle-{c['id']}", on_click=_act_set, args=(ids, n != len(ids)))
                 with st.container(key="city-grid"):
-                    per_row = 6
+                    per_row = 7
                     for start_i in range(0, len(c["cities"]), per_row):
                         cols = st.columns(per_row)
                         for col, ct in zip(cols, c["cities"][start_i:start_i + per_row]):

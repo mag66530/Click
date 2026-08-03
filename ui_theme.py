@@ -17,7 +17,7 @@ import html as _html
 # Метка сборки. streamlit_app.py сверяет её со своей: разметка и стиль должны
 # быть из одной версии, иначе кнопки смещаются или пропадают. Менять вместе
 # с UI_BUILD в streamlit_app.py при любой правке разметки плиток.
-BUILD = "2026-08-03-endings-editor"
+BUILD = "2026-08-03-projbadge"
 
 # ─── Палитра 1:1 из :root в _ui.js ──────────────────────────────────
 DARK = {
@@ -254,6 +254,10 @@ hr {{ border-color: var(--border) !important; }}
   height: 46px; width: 46px; min-width: 46px; font-size: 18px; padding: 0;
   background: var(--bg-2); border-color: var(--border); border-radius: 10px;
 }}
+/* Ключ стоит на самом виджете, поэтому класс висит на элементе, а не на
+   родителе. Прижимаем влево – иначе между плашкой проекта и кнопкой темы
+   остаётся пустая полоса в полсотни пикселей. */
+.st-key-btn-theme {{ width: fit-content !important; margin-right: auto !important; }}
 
 /* Опасные действия – красные (по ключу виджета) */
 [class*="st-key-danger-"] .stButton > button,
@@ -603,13 +607,41 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 [class*="st-key-tile-row-"] .stButton > button[kind="primary"] p {{ color: var(--text) !important; }}
 
 /* Шестерёнка правки окончаний – ровно по строке заголовка карточки */
-.st-key-endings-gear .stButton > button {{
-  padding: 2px 0; min-height: 28px; font-size: 15px; line-height: 1;
-  background: transparent; border: 1px solid transparent; color: var(--muted) !important;
+/* Кнопка с подсказкой обёрнута Streamlit в хост подсказки, поэтому «> button»
+   до неё не достаёт. И !important обязателен: у Streamlit своя тема, всегда
+   тёмная, иначе на светлой шестерёнка выходит чёрным квадратом. */
+.st-key-endings-gear button {{
+  padding: 2px 0 !important; min-height: 30px !important; height: 30px !important;
+  font-size: 15px; line-height: 1; box-shadow: none !important;
+  background: var(--bg-2) !important; border: 1px solid var(--border) !important;
+  color: var(--muted) !important;
 }}
-.st-key-endings-gear .stButton > button:hover {{
-  background: var(--bg-3); border-color: var(--border); color: var(--acc) !important;
+.st-key-endings-gear button:hover {{
+  background: var(--bg-3) !important; border-color: var(--acc) !important;
+  color: var(--acc) !important;
 }}
+
+/* Плашка проекта в шапке – кнопка, открывающая «Сменить проект» */
+.st-key-projbadge {{ display: flex; align-items: flex-end; }}
+.st-key-projbadge [data-testid="stElementContainer"], .st-key-projbadge .stPopover {{
+  width: fit-content !important; margin-left: auto !important;
+}}
+.st-key-projbadge button {{
+  display: inline-flex !important; align-items: center; gap: 9px; width: auto !important;
+  padding: 7px 14px !important; border-radius: 999px !important;
+  background: var(--bg-2) !important; border: 1px solid var(--border) !important;
+  color: var(--text) !important; min-height: 36px !important; box-shadow: none !important;
+}}
+.st-key-projbadge button:hover {{ border-color: var(--border-hi) !important; }}
+.st-key-projbadge button::before {{
+  content: ""; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--dot, var(--acc)); flex: 0 0 10px;
+}}
+.st-key-projbadge button p {{
+  font-size: 13px !important; font-weight: 600 !important; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; color: var(--text) !important;
+}}
+.st-key-projbadge [data-testid="stIconMaterial"] {{ display: none !important; }}
 
 /* Список подстановок под полем шаблона – в две колонки, а не строкой в кашу */
 .ph-list {{
@@ -623,11 +655,29 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 }}
 .ph-list span {{ color: var(--muted); }}
 
-/* Окно правки окончаний */
-[data-testid="stDialog"] div[role="dialog"] {{
-  background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--r-md);
+/* Окно правки окончаний рисуется ВНЕ .stApp, и цвета Streamlit берёт из своей
+   темы – а она у него всегда тёмная. На светлой выходил тёмный блок с тёмным
+   текстом, поэтому здесь всё задано явно. */
+[data-testid="stDialog"] > div {{
+  background: var(--bg-1) !important; border: 1px solid var(--border) !important;
+  border-radius: var(--r-md) !important; box-shadow: var(--shadow-lg);
 }}
-[data-testid="stDialog"] h2 {{ font-size: 16px !important; }}
+[data-testid="stDialog"] h2, [data-testid="stDialog"] h3 {{
+  font-size: 16px !important; color: var(--text) !important;
+}}
+[data-testid="stDialog"] p, [data-testid="stDialog"] label,
+[data-testid="stDialog"] li, [data-testid="stDialog"] small {{ color: var(--text-2) !important; }}
+[data-testid="stDialog"] [data-testid="stCaptionContainer"] p,
+[data-testid="stDialog"] .hint, [data-testid="stDialog"] .ph-list span {{
+  color: var(--muted) !important;
+}}
+[data-testid="stDialog"] [data-testid="stWidgetLabel"] p {{ color: var(--muted) !important; }}
+[data-testid="stDialog"] .card-title {{ color: var(--text) !important; }}
+[data-testid="stDialog"] > div > button {{
+  background: transparent !important; border: none !important; color: var(--muted) !important;
+  box-shadow: none !important;
+}}
+[data-testid="stDialog"] > div > button:hover {{ color: var(--text) !important; }}
 
 /* Секции-карточки: st.container(border=True) → .card оригинала */
 [data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]) {{
@@ -707,6 +757,22 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 .st-key-city-grid .stCheckbox p {{ font-size: 11.5px !important; font-weight: 600 !important;
   line-height: 1.2 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
 .st-key-city-grid [data-baseweb="checkbox"] > span:first-child {{ transform: scale(.85); }}
+
+/* Поле выбора Streamlit рисует по своей теме – на светлой оно выходило чёрным.
+   Разметка у него react-aria, поэтому целимся в группу и её поле ввода. */
+[data-testid="stSelectbox"] [role="group"], [data-baseweb="select"] > div {{
+  background: var(--bg-2) !important; border-color: var(--border) !important;
+  color: var(--text) !important;
+}}
+[data-testid="stSelectbox"] input {{ background: transparent !important; color: var(--text) !important; }}
+[data-testid="stSelectbox"] svg, [data-baseweb="select"] svg {{
+  fill: var(--muted) !important; color: var(--muted) !important;
+}}
+[role="listbox"], [data-baseweb="menu"], .react-aria-Popover {{
+  background: var(--bg-1) !important; border: 1px solid var(--border) !important;
+}}
+[role="option"], [data-baseweb="menu"] li {{ color: var(--text) !important; }}
+[role="option"]:hover, [data-baseweb="menu"] li:hover {{ background: var(--bg-3) !important; }}
 
 /* Сам квадратик галочки. Красим оба состояния явно: у Streamlit невыбранный
    квадрат берёт цвет из своей темы, и на светлой он получался чёрным. */
@@ -859,7 +925,7 @@ def topbar(project: dict | None, pills: list[tuple[str, str]] | None = None) -> 
         badge = (
             f'<span class="click-projbadge">'
             f'<span class="click-projbadge-dot" style="background:{esc(project["color"])}"></span>'
-            f'{esc(project["name"])} – <span class="click-projbadge-sub">'
+            f'{esc(project["name"])} –<span class="click-projbadge-sub">'
             f'{esc(project["fullName"])}</span></span>'
         )
     return (

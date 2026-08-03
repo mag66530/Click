@@ -36,7 +36,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-03-endings-editor"
+UI_BUILD = "2026-08-03-projbadge"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -784,8 +784,7 @@ def _endings_editor(project_id: str, config: dict) -> None:
     with tab_tpl:
         ids = [t["id"] for t in types]
         titles = {t["id"]: f'{t["icon"]} {t["title"]}' for t in types}
-        chosen = st.radio("Тип поста", ids, format_func=lambda i: titles[i],
-                          horizontal=True, key="end-type", label_visibility="collapsed")
+        chosen = st.selectbox("Тип поста", ids, format_func=lambda i: titles[i], key="end-type")
         st.text_area("Шаблон окончания", value=(data.get("templates") or {}).get(chosen, ""),
                      key=f"end-tpl-{chosen}", height=190,
                      help="Пустой шаблон – пост уйдёт без окончания")
@@ -1752,9 +1751,18 @@ def show_main(project_id: str) -> None:
     project = PROJECTS[project_id]
 
     with st.container(key="click-topbar"):
-      head, ctrl = st.columns([14, 1])
+      head, badge, ctrl = st.columns([9, 3, 1])
       with head:
-        html(T.topbar(project, status_pills(project_id)))
+        html(T.topbar(None, status_pills(project_id)))
+      with badge, st.container(key="projbadge"):
+        # Плашка проекта – это кнопка: по нажатию открывается «Сменить проект».
+        html(f'<style>.st-key-projbadge{{--dot:{project["color"]}}}</style>')
+        with st.popover(f'{project["name"]} – {project["fullName"]}', use_container_width=True):
+            st.caption(f'Аккаунт Яндекса: {config.get("email") or "не задан"}')
+            if st.button("↻ Сменить проект", key="btn-switch", use_container_width=True):
+                for k in list(st.session_state.keys()):
+                    del st.session_state[k]
+                st.rerun()
       with ctrl:
         st.button("🌙" if theme() == "dark" else "☀️", key="btn-theme", use_container_width=True,
                   help="Переключить тему", on_click=_toggle_theme)

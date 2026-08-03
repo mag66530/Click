@@ -63,6 +63,11 @@ PROJECTS: dict[str, dict] = {
     "MPE": {"id": "MPE", "name": "МПЭ", "fullName": "МетПромЭнерго", "color": "#f59e0b", "icon": "⚡",
             "yandexEmail": "mepen88@yandex.ru", "passwordHash": _hash("1101"),
             "presetCities": pdata.MPE_CITIES, "endings": pdata.MPE_ENDINGS},
+    # МПИ – первый проект без вшитого списка городов: они приходят из КП.
+    # Почта Яндекса заполняется в «Настройках», в коде её нет.
+    "MPI": {"id": "MPI", "name": "МПИ", "fullName": "МетПромИнтекс", "color": "#8b5cf6", "icon": "🛠",
+            "yandexEmail": "", "passwordHash": _hash("1717"),
+            "presetCities": [], "endings": pdata.MPI_ENDINGS},
 }
 
 def flag(name: str, height: int = 14) -> str:
@@ -537,7 +542,7 @@ def show_login() -> None:
          '<div class="auth-sub">Пакетная публикация в Яндекс.Бизнес – выберите проект</div></div>')
 
     selected = st.session_state.get("selected_project_id")
-    cols = st.columns(3)
+    cols = st.columns(len(PROJECTS))
     for col, (pid, p) in zip(cols, PROJECTS.items()):
         with col:
             html(T.project_tile(p, len(p["presetCities"] or []), selected == pid))
@@ -1056,6 +1061,8 @@ def _cities_source_block(project_id: str, config: dict) -> None:
         if not effective:
             st.caption("Ссылку можно задать здесь или секретом `kp_sheet_url_"
                        f"{project_id}` в настройках приложения.")
+        elif not saved_url:
+            st.caption(f"Используется таблица проекта по умолчанию: {effective}")
         if not has_key:
             st.warning(
                 "Не найден ключ сервисного аккаунта Google. Добавьте в секреты приложения "

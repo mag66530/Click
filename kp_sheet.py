@@ -74,10 +74,20 @@ def sheet_id(url: str) -> str:
     return url if re.fullmatch(r"[A-Za-z0-9_\-]{20,}", url or "") else ""
 
 
+# Известные таблицы проектов. Ссылка сама по себе доступа не даёт – читать
+# может только сервисный аккаунт, которому таблица расшарена. Держим их здесь,
+# чтобы в облаке ничего не настраивать руками: файловая система там временная,
+# и вписанная в приложении ссылка пропала бы при перезапуске.
+DEFAULT_SHEET_URLS = {
+    "MPI": "https://docs.google.com/spreadsheets/d/1Hb7R1scmyhSPyROUa2mWMzD4jDcdgBcs1IGu0WQ48O4/edit",
+}
+
+
 def sheet_url(project_id: str, from_config: str = "") -> str:
     """
     Приоритет: настройка в самом приложении → переменная окружения →
-    секрет kp_sheet_url_<ПРОЕКТ> → общий секрет kp_sheet_url.
+    секрет kp_sheet_url_<ПРОЕКТ> → общий секрет kp_sheet_url → таблица проекта
+    по умолчанию.
     """
     if (from_config or "").strip():
         return from_config.strip()
@@ -92,7 +102,7 @@ def sheet_url(project_id: str, from_config: str = "") -> str:
                 return str(v).strip()
     except Exception:
         pass
-    return ""
+    return DEFAULT_SHEET_URLS.get(project_id, "")
 
 
 # ─── Ключ сервисного аккаунта ───────────────────────────────────────

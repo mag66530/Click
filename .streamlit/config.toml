@@ -1,0 +1,13 @@
+# Базовая тема Streamlit подогнана под палитру оригинального Click (_ui.js).
+# Точный вид задаёт ui_theme.py — здесь только то, что Streamlit рисует до нашего CSS
+# (чтобы не мигало светлым при загрузке).
+[theme]
+base = "dark"
+primaryColor = "#5b7cfa"
+backgroundColor = "#0a0c14"
+secondaryBackgroundColor = "#10131d"
+textColor = "#e8eaf3"
+font = "sans serif"
+
+[server]
+maxUploadSize = 25

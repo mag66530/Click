@@ -1,0 +1,22 @@
+# Зависимости
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+
+# Личные данные проекта: пароли ЯБ, сессии/куки, города, картинки,
+# скриншоты, логи, отчёты, очередь задач, реестр публикаций.
+users-data/
+
+# Старая корневая структура данных (до users-data/{project}/)
+/session/
+/logs/
+/tasks/
+/reports/
+/screenshots/
+
+*.log
+
+# Секреты Streamlit
+.streamlit/secrets.toml
+.claude/settings.local.json

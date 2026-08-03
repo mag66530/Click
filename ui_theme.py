@@ -154,8 +154,11 @@ hr {{ border-color: var(--border) !important; }}
 }}
 .st-key-click-topbar [data-testid="stColumn"] {{ display: flex; align-items: center; }}
 .st-key-click-topbar [data-testid="stHorizontalBlock"] {{ gap: 8px; }}
+/* Ноль по вертикали: своё поле полосе задаёт контейнер выше. Иначе содержимое
+   шапки оказывается на 10px ниже кнопки темы – видно по несовпадению центров. */
 .st-key-click-topbar .click-topbar {{ border-radius: 0; border-left: none; border-right: none;
-  margin-bottom: 0; padding: 12px 22px; }}
+  margin: 0; padding: 0; min-height: 46px; align-items: center; }}
+.st-key-click-topbar [data-testid="stHorizontalBlock"] {{ align-items: center; }}
 .st-key-click-tabs {{ background: var(--bg-1); border-bottom: 1px solid var(--border);
   margin-bottom: 18px; }}
 .st-key-click-tabs [role="radiogroup"] {{ border-bottom: none; margin-bottom: 0; }}

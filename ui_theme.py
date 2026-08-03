@@ -1051,6 +1051,7 @@ _ROW_STYLE = {
     "unknown": ("warn", "⚠️"),
     "failed": ("err", "🔴"),
     "skipped-duplicate": ("skip", "⏭"),
+    "no-session": ("err", "🔒"),
     "actualized": ("ok", "✅"),
     "not-needed": ("skip", "⊝"),
 }

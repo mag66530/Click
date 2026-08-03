@@ -514,6 +514,18 @@ def _publish_worker(
                 save_report("in-progress")
                 push_state("running", processed, city)
 
+                # Сессия слетела – дальше идти незачем: остальные города упрутся
+                # в ту же страницу входа. Останавливаемся сразу и говорим почему.
+                if res["status"] == "no-session":
+                    _append_log(project_id, "ERROR",
+                                "❌ ОСТАНОВКА: сессия Яндекса не активна – вместо кабинета "
+                                "открывается страница входа")
+                    save_report("finished")
+                    push_state("error", processed, city,
+                               "Сессия Яндекса не активна: вместо кабинета открывается страница "
+                               "входа. Зайдите в «Настройки» и войдите в Яндекс заново.")
+                    return
+
                 # Детектор зависшего браузера
                 if res["status"] == "failed" and _is_protocol_fail(res.get("reason", "")):
                     protocol_fails += 1
@@ -623,6 +635,8 @@ def _publish_one_city(
 
     if res["status"] in ("ok", "no-image"):
         return res
+    if res["status"] == "no-session":
+        return res                       # повтор бессмыслен: сессии нет, прогон встанет
     if res["status"] == "unknown":
         yb.warn(f"  ⚠️ [{task.get('cityName')}] результат неопределён – ретрай ЗАПРЕЩЁН во избежание дубля")
         return res

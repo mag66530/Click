@@ -403,6 +403,51 @@ def test_packages_txt() -> None:
            "libcups2t64", "libatk1.0-0t64", "libatk-bridge2.0-0t64"} <= set(listed))
 
 
+def test_account_check_on_real_page() -> None:
+    """
+    Проверка аккаунта на НАСТОЯЩЕЙ странице в браузере.
+
+    Нужна потому, что разбор раньше жил в JS внутри page.evaluate: одна лишняя
+    обратная косая – и в облаке всё падало с «unterminated regular expression
+    literal», а проверка молча считала, что аккаунт определить нельзя. Тест
+    гоняет её на трёх страницах и ловит любую такую поломку.
+    """
+    import yb_playwright as yb
+    print("\n▸ Проверка аккаунта на живой странице")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    pages = {
+        "нужный аккаунт": ("<h1>Профиль</h1><p>metpromintex@yandex.com</p>", "ok"),
+        "чужой аккаунт": ("<h1>Профиль</h1><p>someone.else@yandex.ru</p>", "other"),
+        "страница входа": ("<form action='/auth/welcome'><input type='password'>"
+                           "<button>Create ID</button></form>", "anonymous"),
+        "пустая страница": ("<div></div>", "unknown"),
+    }
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+            page = browser.new_page()
+            for name, (body, expect) in pages.items():
+                page.set_content(f"<html><body>{body}</body></html>")
+                saved_goto = page.goto
+                page.goto = lambda *a, **k: None          # страницу уже задали руками
+                try:
+                    got = yb.verify_account(page, "metpromintex@yandex.com")
+                finally:
+                    page.goto = saved_goto
+                eq(f"{name} → {expect}", got.get("state"), expect)
+                check(f"{name}: проверка не сломалась", got.get("checked") is not False,
+                      "checked=False – значит упало исключение")
+            browser.close()
+    except Exception as e:  # noqa: BLE001
+        check("браузер запустился", False, str(e)[:120])
+
+
 def test_kp_sheet() -> None:
     """
     Разбор КП-таблицы. Ключевая сложность: шапка объединённая и колонка
@@ -528,6 +573,7 @@ def main() -> int:
         test_browser_fallback()
         test_engine_order()
         test_packages_txt()
+        test_account_check_on_real_page()
         test_kp_sheet()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

@@ -547,19 +547,48 @@ def is_404(page: Page) -> bool:
 #  Проверка аккаунта (порт защиты из publish.js – publish не с того аккаунта)
 # ════════════════════════════════════════════════════════════════════
 
+# Признаки страницы входа Яндекса. Ловим и по-русски, и по-английски: в облаке
+# у браузера английская локаль, и «Войти» там не появится вовсе.
+_LOGIN_MARKERS = (
+    "create id", "qr code", "face or fingerprint",
+    "войти", "создать id", "по qr-коду", "забыли пароль",
+)
+
+
+def looks_like_login_page(page: Page) -> bool:
+    """
+    Мы на странице входа, а не в кабинете? Проверяем по адресу и по содержимому:
+    Яндекс уводит на паспорт с разных доменов и не всегда меняет путь.
+    """
+    url = (page.url or "").lower()
+    if re.search(r"passport\.yandex\.[a-z.]+", url) and "/profile" not in url:
+        return True
+    try:
+        return bool(page.evaluate(
+            "() => !!document.querySelector('input[name=passwd], input[type=password], "
+            "form[action*=auth], [class*=passp-]')"
+        ))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def verify_account(page: Page, expected_email: str) -> dict:
     """
     Кто сейчас залогинен в Яндексе. Возвращает state:
 
       ok        – нужный аккаунт;
       other     – НАЙДЕН другой аккаунт (только это повод останавливать прогон);
-      anonymous – не залогинен вовсе, паспорт увёл на страницу входа;
+      anonymous – не залогинен: паспорт показывает форму входа;
       unknown   – определить не удалось: страница не отдала ни логина, ни почты.
 
     Разделение принципиальное. Раньше «ничего не нашли» приравнивалось к «чужой
     аккаунт», и прогон падал с текстом «залогинен НЕ ТОТ аккаунт, найдено: не
     определено» – при том что аккаунт был правильный, просто страница профиля
     не отдала данные. Останавливать работу из-за неудачи самой проверки нельзя.
+
+    Разбор текста делаем в Python, а не в браузере: JS-регулярку приходилось
+    экранировать дважды, и одна лишняя обратная косая превращала её в
+    «unterminated regular expression literal» – проверка молча ломалась.
 
     Сравниваем по ЛОГИНУ (часть до @): в профиле Яндекс показывает и привязанные
     адреса, из-за чего mepen88@yandex.ru с привязанным mepen888@gmail.com
@@ -577,27 +606,23 @@ def verify_account(page: Page, expected_email: str) -> dict:
         except Exception:                      # noqa: BLE001
             page.wait_for_timeout(2_000)
 
-        if re.search(r"passport\.yandex\.[a-z.]+/auth", page.url or "", re.I):
+        text = page.evaluate("() => document.body.innerText || document.body.textContent || ''") or ""
+        low = text.lower()
+
+        if looks_like_login_page(page) or any(m in low for m in _LOGIN_MARKERS):
             return {"state": "anonymous", "matched": False, "emails": [], "checked": True}
 
-        found = page.evaluate(
-            """(login) => {
-                const body = document.body.textContent || '';
-                const esc = login.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const wordRx = new RegExp('(^|[^\\w.-])' + esc + '([^\\w.-]|$)', 'i');
-                const mailRx = new RegExp('(^|[^\\w.+-])' + esc + '@(yandex\\.(ru|com|by|kz|ua)|ya\\.ru)', 'i');
-                return {
-                    matched: wordRx.test(body) || mailRx.test(body),
-                    emails: (body.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []).slice(0, 8),
-                    hasText: body.trim().length > 40,
-                };
-            }""",
-            login,
+        esc = re.escape(login)
+        matched = bool(
+            re.search(rf"(^|[^\w.-]){esc}([^\w.-]|$)", text, re.I)
+            or re.search(rf"(^|[^\w.+-]){esc}@(yandex\.(ru|com|by|kz|ua)|ya\.ru)", text, re.I)
         )
-        if found.get("matched"):
-            return {"state": "ok", "matched": True, "emails": found.get("emails") or [], "checked": True}
-        if found.get("emails"):
-            return {"state": "other", "matched": False, "emails": found["emails"], "checked": True}
+        emails = re.findall(r"[\w.+-]+@[\w-]+\.[\w.-]+", text)[:8]
+
+        if matched:
+            return {"state": "ok", "matched": True, "emails": emails, "checked": True}
+        if emails:
+            return {"state": "other", "matched": False, "emails": emails, "checked": True}
         return {"state": "unknown", "matched": True, "emails": [], "checked": True}
     except Exception as e:  # noqa: BLE001
         warn(f"⚠️ Не удалось проверить аккаунт Яндекса: {e}")
@@ -943,6 +968,13 @@ def publish_to_city(
             info(f"  🔬 Кнопки на странице: {json.dumps(btns[:15], ensure_ascii=False)}")
         except Exception:
             pass
+        # Частый случай: сессия слетела, и вместо кабинета открылась страница
+        # входа. Раньше это выглядело как «кнопка не найдена» и повторялось для
+        # каждого города – 137 бессмысленных попыток вместо одной понятной.
+        if looks_like_login_page(page):
+            result["steps"]["addButton"] = "no-session"
+            error("  ❌ Открылась страница входа Яндекса – сессия не активна")
+            return finish("no-session", "Сессия Яндекса не активна: открылась страница входа")
         result["steps"]["addButton"] = "missing"
         error("  ❌ Кнопка «Добавить пост» не найдена")
         return finish("failed", "Кнопка «Добавить пост» не найдена")

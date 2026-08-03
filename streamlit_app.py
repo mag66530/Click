@@ -21,6 +21,7 @@ from pathlib import Path
 
 import streamlit as st
 
+import paths
 import projects_data as pdata
 import runner
 import ui_theme as T
@@ -28,7 +29,7 @@ import yb_playwright as yb
 from playwright_worker import PlaywrightWorker
 
 ROOT = Path(__file__).parent
-USERS_DATA = ROOT / "users-data"
+USERS_DATA = paths.data_root()
 
 st.set_page_config(page_title="Click — публикация постов", page_icon="📮", layout="wide")
 
@@ -1074,6 +1075,7 @@ def tab_settings(project_id: str, config: dict) -> None:
 
     st.divider()
     html('<div class="card-title">🧹 Обслуживание</div>')
+    st.caption(f"📁 Данные проекта: `{paths.describe()}`")
     ledger = runner._read_ledger(project_id)  # noqa: SLF001 — служебный просмотр реестра
     st.caption(f"Реестр отправленных постов: {len(ledger)} записей. "
                "Именно он не даёт опубликовать один и тот же текст в город дважды.")

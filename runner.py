@@ -34,10 +34,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+import paths
 import yb_playwright as yb
 
 ROOT = Path(__file__).parent
-USERS_DATA = ROOT / "users-data"
+USERS_DATA = paths.data_root()
 
 DEDUP_WINDOW_HOURS = 12      # столько часов один и тот же текст не публикуется в тот же город повторно
 LIVE_LOG_MAX_BYTES = 400_000

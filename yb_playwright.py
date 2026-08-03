@@ -47,8 +47,10 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
+import paths
+
 ROOT = Path(__file__).parent
-USERS_DATA = ROOT / "users-data"
+USERS_DATA = paths.data_root()
 
 PASSPORT_URL = (
     "https://passport.yandex.ru/auth/welcome?origin=passport_auth2"

@@ -31,13 +31,20 @@ REVIEW.md            разбор переноса: что было сломан
 
 ## Запуск
 
+**Windows** — двойной клик по `START.bat`.
+**macOS / Linux** — `./START.command`.
+
+Первый запуск сам поставит Python-зависимости и браузер (1-3 минуты), дальше стартует
+за пару секунд. Откроется `http://localhost:8501`. Пароли проектов — те же, что были
+в `projects.js`.
+
+Вручную, если нужно:
+
 ```bash
 pip install -r requirements.txt
 python -m playwright install chromium
 streamlit run streamlit_app.py
 ```
-
-Откроется `http://localhost:8501`. Пароли проектов — те же, что были в `projects.js`.
 
 На Linux-сервере могут понадобиться системные библиотеки для браузера:
 
@@ -123,7 +130,20 @@ cd legacy-node && npm install && node app.js
 
 ## Где лежат данные
 
-`users-data/{ПРОЕКТ}/` — и это единственное место с личными данными, в git не попадает:
+Личные данные лежат **вне папки проекта**, чтобы обновление Click (скачали новый zip —
+новая папка) их не затрагивало:
+
+| | |
+|---|---|
+| Windows | `%LOCALAPPDATA%\\Click\\users-data` |
+| macOS | `~/Library/Application Support/Click/users-data` |
+| Linux | `~/.local/share/click/users-data` |
+
+Точный путь всегда виден в «Настройках» → «Обслуживание». Переопределяется переменной
+`CLICK_DATA_DIR`. Если папка `users-data/` уже есть внутри проекта (старая установка) —
+работаем с ней, ничего не переезжает.
+
+Внутри, по проектам:
 
 ```
 projects-config.json   email/пароль ЯБ, страны и города, настройки

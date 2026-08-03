@@ -104,6 +104,20 @@ hr {{ border-color: var(--border) !important; }}
 ::-webkit-scrollbar-thumb {{ background: var(--border-2); border-radius: 5px; border: 2px solid var(--bg); }}
 ::-webkit-scrollbar-thumb:hover {{ background: var(--border-hi); }}
 
+/* Шапка и вкладки – во всю ширину окна, содержимое остаётся по центру.
+   В оригинале .topbar и .tabs-bar это полосы на всю ширину, а main – 1240px. */
+/* Это flex-элемент внутри контейнера Streamlit: без min-width его ужимает
+   обратно до ширины колонки, и 100vw не срабатывает. */
+.st-key-click-topbar, .st-key-click-tabs {{
+  width: 100vw !important; min-width: 100vw; flex: 0 0 auto;
+  margin-left: calc(-50vw + 50%); padding: 0 22px;
+}}
+.st-key-click-topbar .click-topbar {{ border-radius: 0; border-left: none; border-right: none;
+  margin-bottom: 0; padding: 12px 22px; }}
+.st-key-click-tabs {{ background: var(--bg-1); border-bottom: 1px solid var(--border);
+  margin-bottom: 18px; }}
+.st-key-click-tabs [role="radiogroup"] {{ border-bottom: none; margin-bottom: 0; }}
+
 /* ─── Топбар ───────────────────────────────────────────────────── */
 .click-topbar {{
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
@@ -201,12 +215,26 @@ hr {{ border-color: var(--border) !important; }}
 [class*="st-key-danger-"] .stButton > button:hover,
 [class*="st-key-danger-"] button:hover {{ background: var(--red); color: #fff; }}
 
+/* Цвет подписи кнопки задаём явно: внутри неё markdown-контейнер, которому
+   общее правило даёт приглушённый цвет – на светлой теме это нечитаемо. */
+.stButton > button p, .stButton > button div, .stButton > button span,
+.stDownloadButton > button p, .stFormSubmitButton > button p {{ color: inherit !important; }}
+.stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {{
+  color: var(--text) !important;
+}}
+.stButton > button[kind="primary"], .stButton > button[kind="primary"] p {{ color: #fff !important; }}
+.stButton > button:disabled, .stButton > button:disabled p {{ color: var(--muted) !important; }}
+
 /* ─── Поля ввода ───────────────────────────────────────────────── */
 .stTextInput input, .stTextArea textarea, .stNumberInput input,
-[data-baseweb="input"], [data-baseweb="textarea"] {{
+[data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="input"] * {{
   background: var(--bg-2) !important; color: var(--text) !important;
+  border-color: var(--border) !important;
   border-radius: var(--r-sm) !important; font-family: var(--font) !important; font-size: 13.5px !important;
 }}
+.stTextInput input::placeholder, .stTextArea textarea::placeholder {{ color: var(--dim) !important; }}
+[data-baseweb="select"] *, [data-baseweb="popover"] li {{ color: var(--text) !important; }}
+.stCheckbox p, .stCheckbox label span {{ color: var(--text) !important; }}
 [data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="select"] > div {{
   border: 1px solid var(--border) !important; background: var(--bg-2) !important;
 }}
@@ -495,6 +523,16 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
   position: absolute; left: 0; white-space: nowrap; color: var(--muted);
 }}
 [data-testid="stFileUploaderDropzone"] button {{ font-size: 12px; }}
+
+/* Строка страны в «Актуализации»: заголовок экспандера – одна строка,
+   как ряд в оригинале, а не толстый блок. */
+.st-key-act-rows [data-testid="stExpander"] {{ margin-bottom: 6px; }}
+.st-key-act-rows [data-testid="stExpander"] summary {{
+  background: var(--bg-2); padding: 9px 14px !important; font-size: 13px;
+}}
+.st-key-act-rows [data-testid="stExpander"] summary p {{ font-weight: 700; }}
+.st-key-act-rows .stCheckbox {{ margin-bottom: 2px; }}
+.st-key-act-rows .stCheckbox p {{ font-size: 12px !important; }}
 
 /* ─── Превью текста поста ──────────────────────────────────────── */
 .preview-box {{

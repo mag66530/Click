@@ -348,6 +348,10 @@ def theme() -> str:
     return st.session_state.get("theme", "dark")
 
 
+def _toggle_theme() -> None:
+    st.session_state["theme"] = "light" if theme() == "dark" else "dark"
+
+
 def inject_css() -> None:
     st.markdown(T.css(theme()), unsafe_allow_html=True)
 
@@ -384,12 +388,10 @@ def city_selector(key_prefix: str, country: dict, default_all: bool = False) -> 
         st.session_state[state_key] = list(options) if default_all else []
 
     c1, c2, c3 = st.columns([1, 1, 2])
-    if c1.button("Выбрать все", key=f"{key_prefix}-all-{country['id']}", use_container_width=True):
-        st.session_state[state_key] = list(options)
-        st.rerun()
-    if c2.button("Снять все", key=f"{key_prefix}-none-{country['id']}", use_container_width=True):
-        st.session_state[state_key] = []
-        st.rerun()
+    c1.button("Выбрать все", key=f"{key_prefix}-all-{country['id']}", use_container_width=True,
+              on_click=_set_cities, args=(state_key, list(options)))
+    c2.button("Снять все", key=f"{key_prefix}-none-{country['id']}", use_container_width=True,
+              on_click=_set_cities, args=(state_key, []))
     selected = st.session_state.get(state_key) or []
     c3.markdown(
         f'<div style="padding-top:8px"><span class="badge badge-{"accent" if selected else "muted"}">'
@@ -398,6 +400,29 @@ def city_selector(key_prefix: str, country: dict, default_all: bool = False) -> 
     )
     return st.multiselect("Города", options=options, format_func=lambda cid: names.get(cid, cid),
                           key=state_key, label_visibility="collapsed")
+
+
+def _set_cities(state_key: str, value: list[str]) -> None:
+    st.session_state[state_key] = value
+
+
+def _set_post_type(type_id: str) -> None:
+    st.session_state["compose-type"] = type_id
+
+
+def _toggle_country(key_prefix: str, country_id: str) -> None:
+    key = f"{key_prefix}-cb-{country_id}"
+    now = not st.session_state.get(key)
+    st.session_state[key] = now
+    if not now:
+        st.session_state[f"{key_prefix}-{country_id}-cities-{country_id}"] = []
+
+
+def _toggle_all_countries(key_prefix: str, country_ids: list[str], turn_on: bool) -> None:
+    for cid in country_ids:
+        st.session_state[f"{key_prefix}-cb-{cid}"] = turn_on
+        if not turn_on:
+            st.session_state[f"{key_prefix}-{cid}-cities-{cid}"] = []
 
 
 def country_picker(key_prefix: str, config: dict, title: str = "Страны") -> list[dict]:
@@ -421,13 +446,9 @@ def country_picker(key_prefix: str, config: dict, title: str = "Страны") -
             f'<span class="badge badge-{"accent" if chosen else "muted"}">{len(chosen)}</span></div>',
             unsafe_allow_html=True)
         all_on = len(chosen) == len(countries)
-        if act.button("Снять все" if all_on else "Выбрать все",
-                      key=f"{key_prefix}-toggle-countries", use_container_width=True):
-            for c in countries:
-                st.session_state[cb_key(c["id"])] = not all_on
-                if all_on:
-                    st.session_state[f"{key_prefix}-{c['id']}-cities-{c['id']}"] = []
-            st.rerun()
+        act.button("Снять все" if all_on else "Выбрать все",
+                   key=f"{key_prefix}-toggle-countries", use_container_width=True,
+                   on_click=_toggle_all_countries, args=(key_prefix, [c["id"] for c in countries], not all_on))
 
         per_row = 4
         for start in range(0, len(countries), per_row):
@@ -436,11 +457,8 @@ def country_picker(key_prefix: str, config: dict, title: str = "Страны") -
                 active = bool(st.session_state.get(cb_key(c["id"])))
                 with col, st.container(key=f"tile-{key_prefix}-{c['id']}"):
                     html(T.country_card(flag(c["name"]), c["name"], len(c["cities"]), active))
-                    if st.button(c["name"], key=f"{key_prefix}-pick-{c['id']}", use_container_width=True):
-                        st.session_state[cb_key(c["id"])] = not active
-                        if active:
-                            st.session_state[f"{key_prefix}-{c['id']}-cities-{c['id']}"] = []
-                        st.rerun()
+                    st.button(c["name"], key=f"{key_prefix}-pick-{c['id']}", use_container_width=True,
+                              on_click=_toggle_country, args=(key_prefix, c["id"]))
 
     return [c for c in countries if st.session_state.get(cb_key(c["id"]))]
 
@@ -639,9 +657,8 @@ def tab_compose(project_id: str, config: dict) -> None:
         for col, t in zip(cols, types):
             with col, st.container(key=f"tile-pt-{t['id']}"):
                 html(T.post_type_card(t, t["id"] == post_type))
-                if st.button(t["title"], key=f"pt-{t['id']}", use_container_width=True):
-                    st.session_state["compose-type"] = t["id"]
-                    st.rerun()
+                st.button(t["title"], key=f"pt-{t['id']}", use_container_width=True,
+                          on_click=_set_post_type, args=(t["id"],))
     type_def = next(t for t in types if t["id"] == post_type)
 
     # ─── Страны для публикации: карточки со счётчиком городов, как в оригинале ───
@@ -780,66 +797,96 @@ def tab_compose(project_id: str, config: dict) -> None:
 #  РАЗДЕЛ: АКТУАЛИЗАЦИЯ
 # ════════════════════════════════════════════════════════════════════
 
+def _act_key(city_id: str) -> str:
+    return f"act-city-{city_id}"
+
+
+def _act_set(city_ids: list[str], value: bool) -> None:
+    for cid in city_ids:
+        st.session_state[_act_key(cid)] = value
+
+
 def tab_actualize(project_id: str, config: dict) -> None:
-    if not config["countries"]:
+    countries = config["countries"]
+    if not countries:
         html(T.empty("🏙", "Нет городов", "Добавьте страны и города во вкладке «Города»."))
         return
 
-    st.caption("Click зайдёт в раздел «Данные» каждой карточки и нажмёт «Данные актуальны», если кнопка "
-               "там есть. Кнопки нет – значит актуализация не требуется, это не ошибка.")
+    all_ids = [ct["id"] for c in countries for ct in c["cities"]]
+    for cid in all_ids:                       # по умолчанию выбраны все, как в оригинале
+        st.session_state.setdefault(_act_key(cid), True)
+    selected = [cid for cid in all_ids if st.session_state.get(_act_key(cid))]
 
     state = runner.read_state(project_id)
     running = state.get("status") == "running"
 
-    selected_countries = country_picker("act", config)
-    selection: dict[str, list[str]] = {}
-    for country in selected_countries:
-        with st.expander(f"{flag(country['name'])} {country['name']}", expanded=len(selected_countries) <= 2):
-            selection[country["id"]] = city_selector(f"act-{country['id']}", country, default_all=True)
+    with st.container(border=True):
+        html('<div class="card-title">🔄 Актуализация данных</div>')
+        html('<div class="hint" style="margin-bottom:12px">Скрипт зайдёт в раздел «Данные» каждого города '
+             'и нажмёт кнопку <b>«Данные актуальны»</b>, если она там есть. Кнопка появляется на странице '
+             'периодически – Яндекс просит подтверждать, что данные не изменились. '
+             'Если кнопки нет – актуализация не требуется.</div>')
 
-    total = sum(len(v) for v in selection.values())
-    if selected_countries:
-        st.write(f"Выбрано городов: **{total}**")
+        head, act = st.columns([3, 1])
+        head.markdown(
+            f'<div style="font-size:13px;font-weight:700;color:var(--text)">Выбрано: '
+            f'<span style="color:var(--acc)">{len(selected)}</span> / {len(all_ids)} городов</div>',
+            unsafe_allow_html=True)
+        all_on = len(selected) == len(all_ids)
+        act.button("Снять все" if all_on else "Выбрать все", key="act-toggle-all",
+                   use_container_width=True, on_click=_act_set, args=(all_ids, not all_on))
+
+        with st.container(key="act-rows"):
+            for c in countries:
+                ids = [ct["id"] for ct in c["cities"]]
+                n = sum(1 for cid in ids if st.session_state.get(_act_key(cid)))
+                mark = f"✓ все {len(ids)}" if n == len(ids) else (f"{n} из {len(ids)}" if n else "не выбрано")
+                with st.expander(f"{flag(c['name'])}  {c['name']}          {mark}"):
+                    st.button("Снять все" if n == len(ids) else "Выбрать все",
+                              key=f"act-toggle-{c['id']}",
+                              on_click=_act_set, args=(ids, n != len(ids)))
+                    per_row = 7
+                    for start_i in range(0, len(c["cities"]), per_row):
+                        cols = st.columns(per_row)
+                        for col, ct in zip(cols, c["cities"][start_i:start_i + per_row]):
+                            col.checkbox(ct["name"], key=_act_key(ct["id"]))
 
     if not yb.has_saved_session(project_id):
         st.warning("Сначала войдите в Яндекс в разделе «⚙️ Настройки».")
         return
 
-    c1, c2 = st.columns([2, 1])
-    with c1:
-        if st.button(f"🔄 Запустить актуализацию ({cities_word(total)})", type="primary",
-                     use_container_width=True, disabled=running or total == 0, key="btn-actualize"):
-            save_actualize_tasks(project_id, config, selection)
-            ok, msg = runner.start_actualize(project_id, headless=bool(get_settings(project_id)["headless"]))
-            (st.toast if ok else st.error)(msg)
-            time.sleep(0.6)
-            st.rerun()
-    with c2:
-        if st.button("⏹ Остановить", use_container_width=True, disabled=not running, key="btn-stop-act"):
-            runner.request_stop(project_id)
-            st.rerun()
+    with st.container(border=True):
+        _render_live_panel(project_id, was_running=False)
 
-    st.divider()
-    fragment = getattr(st, "fragment", None)
-    if fragment and running:
-        @fragment(run_every=2)
-        def _live():
-            _render_live_panel(project_id, was_running=True)
-        _live()
-    else:
-        _render_live_panel(project_id)
+    if st.button(f"🔄 Запустить актуализацию ({cities_word(len(selected))})", type="primary",
+                 use_container_width=True, disabled=running or not selected, key="btn-actualize"):
+        selection = {c["id"]: [ct["id"] for ct in c["cities"] if st.session_state.get(_act_key(ct["id"]))]
+                     for c in countries}
+        save_actualize_tasks(project_id, config, selection)
+        ok, msg = runner.start_actualize(project_id, headless=bool(get_settings(project_id)["headless"]))
+        (st.toast if ok else st.error)(msg)
+        time.sleep(0.6)
+        st.rerun()
+    if running:
+        st.button("⏹ Остановить", use_container_width=True, key="btn-stop-act",
+                  on_click=runner.request_stop, args=(project_id,))
 
     reports = runner.list_reports(project_id, "actualize", limit=1)
     if reports:
         data = runner.read_report(project_id, "actualize", reports[0]["name"])
         if data:
-            st.divider()
-            html('<div class="card-title">Последний отчёт актуализации</div>')
-            html(T.report_summary(data.get("totals") or {}, data.get("durationSec"),
-                                  keys=["actualized", "notNeeded", "failed"]))
-            with st.expander(f"Детали ({cities_word(len(data.get('results') or []))})"):
-                for r in data.get("results") or []:
-                    html(T.report_row(r))
+            with st.container(border=True):
+                when = (data.get("finishedAt") or "")[:19].replace("T", " ")
+                head, date = st.columns([3, 1])
+                head.markdown('<div class="card-title">📊 Последний отчёт актуализации</div>',
+                              unsafe_allow_html=True)
+                date.markdown(f'<div class="hint" style="text-align:right;padding-top:6px">{when}</div>',
+                              unsafe_allow_html=True)
+                html(T.report_summary(data.get("totals") or {}, data.get("durationSec"),
+                                      keys=["actualized", "notNeeded", "failed"]))
+                with st.expander(f"Показать детали ({cities_word(len(data.get('results') or []))})"):
+                    for r in data.get("results") or []:
+                        html(T.report_row(r))
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -1133,42 +1180,25 @@ def tab_settings(project_id: str, config: dict) -> None:
     _yandex_login_block(project_id, config)
 
     st.divider()
-    html('<div class="card-title">🧹 Обслуживание</div>')
-    where = "Streamlit Cloud" if yb.in_cloud() else "этот компьютер"
     engine = yb.current_engine()
-    st.caption(f"📁 Данные проекта: `{paths.describe()}`")
-    st.caption(f"🖥 Окружение: **{where}** · браузер: "
-               + (f"**{engine}**" if engine else "ещё не запускался"))
-    if st.button("Проверить браузер", key="btn-check-browser"):
+    c1, c2 = st.columns([1, 3])
+    if c1.button("Проверить браузер", key="btn-check-browser", use_container_width=True):
         try:
-            with st.spinner("Пробую запустить браузер… Первый запуск может занять 1-3 минуты – Click скачивает браузер."):
+            with st.spinner("Пробую запустить браузер… Первый запуск может занять 1-3 минуты."):
                 chosen = get_worker().call(yb.resolve_engine, None)
             st.success(f"Браузер работает: {chosen}")
         except Exception as e:  # noqa: BLE001
             _browser_error(e)
-    if yb.in_cloud():
-        st.warning(
-            "В облаке файловая система временная: при перезапуске приложения пропадут "
-            "сессия Яндекса, города и отчёты. Для постоянной работы запускайте Click "
-            "у себя через START.bat.",
-            icon="⚠️",
-        )
-    ledger = runner._read_ledger(project_id)  # noqa: SLF001 – служебный просмотр реестра
-    st.caption(f"Реестр отправленных постов: {len(ledger)} записей. "
-               "Именно он не даёт опубликовать один и тот же текст в город дважды.")
-    c1, c2 = st.columns(2)
-    with c1:
-        with st.container(key="danger-clear-ledger"):
-            if st.button("Очистить реестр публикаций", key="btn-clear-ledger"):
-                runner.clear_ledger(project_id)
-                st.toast("Реестр очищен – защита от дублей начнёт отсчёт заново.")
-                st.rerun()
-    with c2:
-        with st.container(key="danger-logout"):
-            if st.button("Выйти из проекта", key="btn-logout"):
-                for k in list(st.session_state.keys()):
-                    del st.session_state[k]
-                st.rerun()
+    c2.caption(f"Браузер: **{engine}**" if engine else "Браузер ещё не запускался.")
+
+    st.caption("⚠️ В облаке файловая система временная: при перезапуске приложения пропадут "
+               "сессия Яндекса и отчёты.")
+
+    with st.container(key="danger-logout"):
+        if st.button("Выйти из проекта", key="btn-logout"):
+            for k in list(st.session_state.keys()):
+                del st.session_state[k]
+            st.rerun()
 
 
 def _browser_error(exc: Exception) -> None:
@@ -1377,14 +1407,13 @@ def show_main(project_id: str) -> None:
     config = get_config(project_id)
     project = PROJECTS[project_id]
 
-    head, ctrl = st.columns([14, 1])
-    with head:
+    with st.container(key="click-topbar"):
+      head, ctrl = st.columns([14, 1])
+      with head:
         html(T.topbar(project, status_pills(project_id)))
-    with ctrl:
-        if st.button("🌙" if theme() == "dark" else "☀️", key="btn-theme", use_container_width=True,
-                     help="Переключить тему"):
-            st.session_state["theme"] = "light" if theme() == "dark" else "dark"
-            st.rerun()
+      with ctrl:
+        st.button("🌙" if theme() == "dark" else "☀️", key="btn-theme", use_container_width=True,
+                  help="Переключить тему", on_click=_toggle_theme)
 
     # ВАЖНО: активный раздел держим в СВОЁМ ключе, а не только в ключе виджета.
     # Streamlit удаляет состояние виджетов, которые не успели отрисоваться в прогоне

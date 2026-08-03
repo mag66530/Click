@@ -12,6 +12,7 @@ streamlit_app.py – Click на Streamlit. Интерфейс повторяет
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
@@ -24,6 +25,7 @@ import streamlit as st
 import kp_sheet
 import paths
 import projects_data as pdata
+import repo_store
 import runner
 import ui_theme as T
 import yb_playwright as yb
@@ -34,7 +36,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-03-tiles-as-buttons"
+UI_BUILD = "2026-08-03-endings-editor"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -56,7 +58,7 @@ def _hash(password: str) -> str:
 PROJECTS: dict[str, dict] = {
     "SMU": {"id": "SMU", "name": "СМУ", "fullName": "Стальметурал", "color": "#3b82f6", "icon": "🏗",
             "yandexEmail": "stalmetural19@yandex.ru", "passwordHash": _hash("1501"),
-            "presetCities": pdata.SMU_CITIES, "endings": None},
+            "presetCities": pdata.SMU_CITIES, "endings": pdata.SMU_ENDINGS},
     "IMP": {"id": "IMP", "name": "ИМП", "fullName": "Инметпром", "color": "#10b981", "icon": "🔩",
             "yandexEmail": "inmetprom77@yandex.ru", "passwordHash": _hash("2205"),
             "presetCities": pdata.IMP_CITIES, "endings": pdata.IMP_ENDINGS},
@@ -64,9 +66,9 @@ PROJECTS: dict[str, dict] = {
             "yandexEmail": "mepen88@yandex.ru", "passwordHash": _hash("1101"),
             "presetCities": pdata.MPE_CITIES, "endings": pdata.MPE_ENDINGS},
     # МПИ – первый проект без вшитого списка городов: они приходят из КП.
-    # Почта Яндекса заполняется в «Настройках», в коде её нет.
+    # Пароль от Яндекса не хранится в коде – он вводится в «Настройках».
     "MPI": {"id": "MPI", "name": "МПИ", "fullName": "МетПромИнтекс", "color": "#8b5cf6", "icon": "🛠",
-            "yandexEmail": "", "passwordHash": _hash("1717"),
+            "yandexEmail": "metpromintex@yandex.com", "passwordHash": _hash("1717"),
             "presetCities": [], "endings": pdata.MPI_ENDINGS},
 }
 
@@ -205,6 +207,43 @@ def country_by_id(config: dict, cid: str) -> dict | None:
 
 
 # ════════════════════════════════════════════════════════════════════
+#  Окончания постов: значения по умолчанию из кода + правки заказчика
+# ════════════════════════════════════════════════════════════════════
+
+def endings_defaults(project_id: str) -> dict:
+    return copy.deepcopy(PROJECTS[project_id]["endings"] or {})
+
+
+# Подмена окончаний на время предпросмотра в редакторе: предпросмотр обязан
+# собираться тем же build_final_text, что и публикация, иначе он врёт.
+_ENDINGS_OVERRIDE: dict[str, dict] = {}
+
+
+def project_endings(project_id: str) -> dict:
+    """
+    Окончания проекта: заготовка из кода, поверх – то, что вписали в приложении.
+    Правки лежат снаружи (репозиторий), поэтому переживают перезапуск в облаке.
+    """
+    if project_id in _ENDINGS_OVERRIDE:
+        return _ENDINGS_OVERRIDE[project_id]
+    base = endings_defaults(project_id)
+    saved = repo_store.load(f"endings-{project_id}")
+    if not saved:
+        return base
+    base.setdefault("contacts", {})
+    base.setdefault("templates", {})
+    for country, c in (saved.get("contacts") or {}).items():
+        base["contacts"][country] = {**(base["contacts"].get(country) or {}), **c}
+    base["templates"].update(saved.get("templates") or {})
+    return base
+
+
+def save_project_endings(project_id: str, data: dict) -> str:
+    return repo_store.save(f"endings-{project_id}", data,
+                           f"Click: окончания постов {project_id}")
+
+
+# ════════════════════════════════════════════════════════════════════
 #  Текст поста – построчный порт buildFinalText из _ui.js
 # ════════════════════════════════════════════════════════════════════
 
@@ -213,11 +252,14 @@ def build_final_text(project_id: str, country_name: str, post_type: str, body: s
     if (body or "").strip():
         lines.append(body.strip())
 
-    endings = PROJECTS[project_id]["endings"]
+    endings = project_endings(project_id)
 
-    # ── ИМП / МПЭ: динамические окончания, контакты подставляются по стране ──
+    # Окончание одно на все проекты: шаблон по типу поста + контакты по стране.
     if endings and endings.get("__dynamic"):
-        contacts = (endings.get("contacts") or {}).get(country_name)
+        by_country = endings.get("contacts") or {}
+        contacts = by_country.get(country_name)
+        if contacts is None and endings.get("fallback"):
+            contacts = by_country.get(endings["fallback"])
         template = (endings.get("templates") or {}).get(post_type)
         if not template or not contacts:
             return "\n".join(lines)
@@ -246,23 +288,6 @@ def build_final_text(project_id: str, country_name: str, post_type: str, body: s
         lines.append("\n".join(collapsed))
         return "\n".join(lines)
 
-    # ── СМУ: старая логика по COUNTRY_TEMPLATES ──
-    tpl = pdata.COUNTRY_TEMPLATES.get(country_name) or pdata.COUNTRY_TEMPLATES["Россия"]
-    type_def = next((t for t in pdata.POST_TYPES if t["id"] == post_type), pdata.POST_TYPES[0])
-    if type_def["hasContact"]:
-        lines += [
-            "",
-            "Ознакомиться с наличием металлопроката в вашем городе, оформить заказ "
-            "и проконсультироваться с менеджерами можно на нашем сайте:",
-            f"🌐 {tpl['site']}",
-            f"📩 {tpl['email']}",
-            f"📞 {tpl['phone']}",
-            "",
-            f"{type_def['hashtag']} {pdata.COMMON_HASHTAGS_SMU}".strip(),
-        ]
-    elif type_def["isInfo"]:
-        lines += ["", f"Ознакомиться с ассортиментом трубного проката и техническими "
-                      f"параметрами можно на нашем сайте {tpl['site']}"]
     return "\n".join(lines)
 
 
@@ -706,6 +731,152 @@ def tab_run(project_id: str, config: dict) -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+#  РЕДАКТОР ОКОНЧАНИЙ (шестерёнка в «Типе поста»)
+# ════════════════════════════════════════════════════════════════════
+
+def _open_endings() -> None:
+    st.session_state["endings-open"] = True
+
+
+def _show_endings_dialog(project_id: str, config: dict) -> None:
+    """Окно поверх страницы: список городов и текст поста остаются на месте."""
+    dialog = getattr(st, "dialog", None)
+    if dialog is None:                       # старая версия Streamlit – рисуем врезкой
+        with st.container(border=True):
+            html('<div class="card-title">⚙ Окончания постов</div>')
+            _endings_editor(project_id, config)
+        return
+
+    @dialog(f"Окончания постов · {PROJECTS[project_id]['name']}", width="large")
+    def _win() -> None:
+        _endings_editor(project_id, config)
+
+    _win()
+
+
+PLACEHOLDERS = [
+    ("{site}", "сайт страны"),
+    ("{email}", "почта страны"),
+    ("{phone}", "телефон страны"),
+    ("{phoneLine}", "строка «📞 телефон»; без телефона строка исчезает целиком"),
+    ("{phoneSpecialLine}", "то же со значком ☎️"),
+    ("{phoneSpecialLineMpe}", "то же в виде «📱 Телефон: …»"),
+]
+
+
+def _endings_editor(project_id: str, config: dict) -> None:
+    """
+    Окно правки окончаний. Контакты – общие по стране (решение заказчика),
+    хэштеги входят в текст шаблона, отдельного поля под них нет.
+    """
+    data = project_endings(project_id)
+    countries = [c["name"] for c in config["countries"]] or list((data.get("contacts") or {}).keys())
+    types = pdata.POST_TYPES
+
+    st.caption(f"Правки хранятся снаружи приложения: {repo_store.where()}. "
+               "Так они переживают перезапуск в облаке.")
+    if not repo_store.is_configured():
+        st.warning("Секрет `github_token` не задан – правки сохранятся только на этом "
+                   "компьютере. В облаке они пропадут при перезапуске.", icon="💾")
+
+    tab_tpl, tab_contacts = st.tabs(["Шаблоны по типам постов", "Контакты по странам"])
+
+    with tab_tpl:
+        ids = [t["id"] for t in types]
+        titles = {t["id"]: f'{t["icon"]} {t["title"]}' for t in types}
+        chosen = st.radio("Тип поста", ids, format_func=lambda i: titles[i],
+                          horizontal=True, key="end-type", label_visibility="collapsed")
+        st.text_area("Шаблон окончания", value=(data.get("templates") or {}).get(chosen, ""),
+                     key=f"end-tpl-{chosen}", height=190,
+                     help="Пустой шаблон – пост уйдёт без окончания")
+        html('<div class="ph-list">' + "".join(
+            f'<div><code>{T.esc(k)}</code> <span>{T.esc(v)}</span></div>'
+            for k, v in PLACEHOLDERS) + "</div>")
+
+    with tab_contacts:
+        for country in countries:
+            c = (data.get("contacts") or {}).get(country) or {}
+            st.markdown(f'<div class="hint" style="margin:8px 0 2px">{T.flag_svg(country)} '
+                        f'<b style="color:var(--text)">{T.esc(country)}</b></div>',
+                        unsafe_allow_html=True)
+            a, b, d = st.columns(3)
+            a.text_input("Сайт", value=c.get("site") or "", key=f"end-site-{country}")
+            b.text_input("Почта", value=c.get("email") or "", key=f"end-mail-{country}")
+            d.text_input("Телефон", value=c.get("phone") or "", key=f"end-phone-{country}")
+
+    # ── Как получится ──
+    st.divider()
+    prev_country = st.selectbox("Проверить на стране", countries or ["Россия"],
+                                key="end-preview-country")
+    draft = _endings_from_form(project_id, config, data)
+    html('<div class="card-title" style="margin-top:6px">Как получится</div>')
+    html(T.preview_box(_preview_with(project_id, draft, prev_country,
+                                     st.session_state.get("end-type") or types[0]["id"])))
+
+    c1, c2, c3 = st.columns([1, 1, 2])
+    if c1.button("Сохранить", type="primary", use_container_width=True, key="end-save"):
+        try:
+            note = save_project_endings(project_id, draft)
+        except Exception as e:  # noqa: BLE001
+            st.error(str(e))
+            return
+        st.session_state["endings-open"] = False
+        st.success(f"Окончания {note}.")
+        time.sleep(1.0)
+        st.rerun()
+    if c2.button("Вернуть как было", use_container_width=True, key="end-reset"):
+        for k in [k for k in st.session_state if k.startswith("end-")]:
+            del st.session_state[k]
+        try:
+            save_project_endings(project_id, {"contacts": {}, "templates": {}})
+        except Exception as e:  # noqa: BLE001
+            st.error(str(e))
+            return
+        st.rerun()
+    if c3.button("Закрыть", use_container_width=True, key="end-close"):
+        st.session_state["endings-open"] = False
+        st.rerun()
+
+
+def _endings_from_form(project_id: str, config: dict, data: dict) -> dict:
+    """Собрать окончания из полей окна. Незаполненные поля – пустые строки, не None."""
+    countries = [c["name"] for c in config["countries"]] or list((data.get("contacts") or {}).keys())
+    contacts = {}
+    for country in countries:
+        contacts[country] = {
+            "site": (st.session_state.get(f"end-site-{country}") or "").strip(),
+            "email": (st.session_state.get(f"end-mail-{country}") or "").strip(),
+            "phone": (st.session_state.get(f"end-phone-{country}") or "").strip(),
+        }
+    templates = dict(data.get("templates") or {})
+    for t in pdata.POST_TYPES:
+        key = f"end-tpl-{t['id']}"
+        if key in st.session_state:
+            templates[t["id"]] = st.session_state[key]
+    return {"contacts": contacts, "templates": templates}
+
+
+def _preview_with(project_id: str, draft: dict, country: str, post_type: str) -> str:
+    """Предпросмотр собирается тем же кодом, что и публикация – иначе это гадание."""
+    base = endings_defaults(project_id)
+    base.setdefault("contacts", {})
+    base.setdefault("templates", {})
+    for name, c in (draft.get("contacts") or {}).items():
+        base["contacts"][name] = {**(base["contacts"].get(name) or {}), **c}
+    base["templates"].update(draft.get("templates") or {})
+
+    saved = _ENDINGS_OVERRIDE.get(project_id)
+    _ENDINGS_OVERRIDE[project_id] = base
+    try:
+        return build_final_text(project_id, country, post_type, "Текст вашего поста")
+    finally:
+        if saved is None:
+            _ENDINGS_OVERRIDE.pop(project_id, None)
+        else:
+            _ENDINGS_OVERRIDE[project_id] = saved
+
+
+# ════════════════════════════════════════════════════════════════════
 #  РАЗДЕЛ: ПУБЛИКАЦИЯ
 # ════════════════════════════════════════════════════════════════════
 
@@ -720,10 +891,17 @@ def tab_compose(project_id: str, config: dict) -> None:
     types = pdata.POST_TYPES
     post_type = st.session_state.get("compose-type") or types[0]["id"]
     with st.container(border=True):
-        html('<div class="card-title">📄 Тип поста</div>')
+        title_col, gear_col = st.columns([12, 1])
+        with title_col:
+            html('<div class="card-title">📄 Тип поста</div>')
+        with gear_col, st.container(key="endings-gear"):
+            st.button("⚙", key="btn-endings", help="Окончания постов: контакты и хэштеги",
+                      use_container_width=True, on_click=_open_endings)
         # Иконку рисуем через CSS ::before у самой кнопки – так плитка остаётся
         # настоящей кнопкой и клик по ней срабатывает всегда.
         html(T.tile_css([(f"tile-pt-{t['id']}", {"--ico": T.css_text(t["icon"])}) for t in types]))
+        if st.session_state.get("endings-open"):
+            _show_endings_dialog(project_id, config)
         cols = st.columns(len(types))
         for col, t in zip(cols, types):
             with col, st.container(key=f"tile-pt-{t['id']}"):

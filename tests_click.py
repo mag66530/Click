@@ -102,13 +102,20 @@ def test_text() -> None:
     src = Path("streamlit_app.py").read_text(encoding="utf-8")
     start = src.index("def build_final_text(")
     end = src.index("# ═══", start)
-    ns = {"pdata": pdata, "PROJECTS": {
-        "SMU": {"endings": None},
-        "IMP": {"endings": pdata.IMP_ENDINGS},
-        "MPE": {"endings": pdata.MPE_ENDINGS},
-    }}
+    endings = {"SMU": pdata.SMU_ENDINGS, "IMP": pdata.IMP_ENDINGS,
+               "MPE": pdata.MPE_ENDINGS, "MPI": pdata.MPI_ENDINGS}
+    ns = {"pdata": pdata, "project_endings": lambda pid: endings[pid]}
     exec(compile(src[start:end], "bft", "exec"), ns)  # noqa: S102
     build = ns["build_final_text"]
+
+    # Эталон снят с прежней реализации ДО перевода СМУ на общий формат окончаний.
+    # Любая правка сборки текста, меняющая хоть один байт, обязана его уронить.
+    golden = json.loads(Path("tests_text_golden.json").read_text(encoding="utf-8"))
+    bodies = ["", "Короткий текст", "Строка один\nСтрока два\n\nСтрока четыре"]
+    diverged = [k for k, want in golden.items()
+                if build(*k.split("|")[:3], bodies[int(k.split("|")[3])]) != want]
+    check(f"текст поста совпадает с эталоном во всех {len(golden)} сочетаниях",
+          not diverged, f"разошлось: {diverged[:3]}")
 
     smu = build("SMU", "Россия", "arrival", "Поступил швеллер")
     check("СМУ: контакты страны подставлены", "stalmetural.ru" in smu and "+7 (499) 130-36-69" in smu)

@@ -17,7 +17,7 @@ import html as _html
 # Метка сборки. streamlit_app.py сверяет её со своей: разметка и стиль должны
 # быть из одной версии, иначе кнопки смещаются или пропадают. Менять вместе
 # с UI_BUILD в streamlit_app.py при любой правке разметки плиток.
-BUILD = "2026-08-03-tiles-as-buttons"
+BUILD = "2026-08-03-endings-editor"
 
 # ─── Палитра 1:1 из :root в _ui.js ──────────────────────────────────
 DARK = {
@@ -598,6 +598,33 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
   border-color: var(--border-hi); background-color: var(--bg-3); box-shadow: none;
 }}
 [class*="st-key-tile-row-"] .stButton > button[kind="primary"] p {{ color: var(--text) !important; }}
+
+/* Шестерёнка правки окончаний – ровно по строке заголовка карточки */
+.st-key-endings-gear .stButton > button {{
+  padding: 2px 0; min-height: 28px; font-size: 15px; line-height: 1;
+  background: transparent; border: 1px solid transparent; color: var(--muted) !important;
+}}
+.st-key-endings-gear .stButton > button:hover {{
+  background: var(--bg-3); border-color: var(--border); color: var(--acc) !important;
+}}
+
+/* Список подстановок под полем шаблона – в две колонки, а не строкой в кашу */
+.ph-list {{
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2px 18px; margin: 6px 0 2px;
+}}
+.ph-list > div {{ display: flex; align-items: baseline; gap: 8px; font-size: 12px; }}
+.ph-list code {{
+  font-family: var(--mono); font-size: 11.5px; color: var(--acc);
+  background: var(--acc-bg); padding: 1px 6px; border-radius: var(--r-xs); white-space: nowrap;
+}}
+.ph-list span {{ color: var(--muted); }}
+
+/* Окно правки окончаний */
+[data-testid="stDialog"] div[role="dialog"] {{
+  background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--r-md);
+}}
+[data-testid="stDialog"] h2 {{ font-size: 16px !important; }}
 
 /* Секции-карточки: st.container(border=True) → .card оригинала */
 [data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]) {{

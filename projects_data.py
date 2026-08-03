@@ -2150,3 +2150,34 @@ POST_TYPES = [
 ]
 
 COMMON_HASHTAGS_SMU = "#Стальметурал #СМУ #Металлопрокат"
+
+# ─── СМУ: окончания по странам ───
+# Раньше окончание СМУ собиралось прямо в коде (COUNTRY_TEMPLATES + POST_TYPES).
+# Теперь оно описано так же, как у остальных проектов – одним шаблоном на тип
+# поста. Текст получается ПОБАЙТОВО тот же (см. эталон в tests_text_golden.json),
+# зато его можно править из приложения, а не искать в коде.
+_SMU_CONTACT_TAIL = (
+    "Ознакомиться с наличием металлопроката в вашем городе, оформить заказ "
+    "и проконсультироваться с менеджерами можно на нашем сайте:\n"
+    "🌐 {site}\n📩 {email}\n📞 {phone}\n\n"
+)
+
+SMU_ENDINGS = {
+  "__dynamic": True,
+  # У СМУ для страны без своих контактов подставляются российские – так было
+  # в оригинале, сохраняем.
+  "fallback": "Россия",
+  "contacts": {},          # заполняется ниже из COUNTRY_TEMPLATES
+  "templates": {
+    "arrival":  _SMU_CONTACT_TAIL + "#Поступление_СМУ " + COMMON_HASHTAGS_SMU,
+    "shipment": _SMU_CONTACT_TAIL + "#Отгрузка_СМУ " + COMMON_HASHTAGS_SMU,
+    "special":  _SMU_CONTACT_TAIL + "#СПЕЦПРЕДЛОЖЕНИЕ_СМУ " + COMMON_HASHTAGS_SMU,
+    "info":     "Ознакомиться с ассортиментом трубного проката и техническими "
+                "параметрами можно на нашем сайте {site}",
+    "greeting": "",
+  },
+}
+SMU_ENDINGS["contacts"] = {
+    name: {"site": t["site"], "email": t["email"], "phone": t["phone"]}
+    for name, t in COUNTRY_TEMPLATES.items()
+}

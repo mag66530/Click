@@ -10,6 +10,7 @@ thread`). Решение – один постоянный поток-ворке
 
 from __future__ import annotations
 
+import asyncio
 import queue
 import threading
 from dataclasses import dataclass, field
@@ -31,6 +32,13 @@ class PlaywrightWorker:
         self._thread.start()
 
     def _run(self):
+        # Playwright sync API отказывается работать, если в потоке есть
+        # ЗАПУЩЕННЫЙ цикл asyncio. Свежий незапущенный цикл снимает вопрос и
+        # для тех версий, которые смотрят на get_event_loop().
+        try:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+        except Exception:  # noqa: BLE001
+            pass
         while True:
             job = self._jobs.get()
             if job is None:
@@ -40,6 +48,9 @@ class PlaywrightWorker:
                 job.result_q.put((True, result))
             except Exception as e:  # noqa: BLE001
                 job.result_q.put((False, e))
+
+    def alive(self) -> bool:
+        return self._thread.is_alive()
 
     def call(self, func: Callable, *args, **kwargs) -> Any:
         job = _Job(func, args, kwargs)

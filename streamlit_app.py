@@ -408,10 +408,16 @@ def clear_tasks(project_id: str) -> None:
 # ════════════════════════════════════════════════════════════════════
 
 def get_worker() -> PlaywrightWorker:
-    """Один постоянный поток для Playwright: sync API нельзя дёргать из разных потоков."""
-    if "pw_worker" not in st.session_state:
-        st.session_state.pw_worker = PlaywrightWorker()
-    return st.session_state.pw_worker
+    """
+    Один постоянный поток для Playwright: sync API нельзя дёргать из разных
+    потоков. Если поток по какой-то причине умер, заводим новый – иначе любой
+    вызов повиснет навсегда в ожидании ответа от несуществующего потока.
+    """
+    worker = st.session_state.get("pw_worker")
+    if worker is None or not worker.alive():
+        worker = PlaywrightWorker()
+        st.session_state.pw_worker = worker
+    return worker
 
 
 def theme() -> str:
@@ -1853,6 +1859,24 @@ def _finish_login(project_id: str, worker, flow) -> None:
     просто потому, что дошло сюда – и после неудачного входа сохраняло
     анонимные куки, а на публикации выяснялось, что в Яндексе никого нет.
     """
+    # Куки авторизации нет – браузер НЕ закрываем: человек продолжит с того же
+    # места пошагово. Закрыть его здесь означало бы «начните всё сначала».
+    try:
+        if not worker.call(flow.has_auth_cookie):
+            st.session_state.yb_step = "next"
+            st.session_state.yb_note = (
+                "Вход ещё не завершён: Яндекс не выдал куки авторизации. Посмотрите "
+                "на снимок ниже – обычно осталась непройденная проверка: код из "
+                "письма, капча или подтверждение в приложении.")
+            try:
+                st.session_state.yb_screenshot = worker.call(flow.screenshot)
+            except Exception:  # noqa: BLE001
+                pass
+            st.rerun()
+            return
+    except Exception:  # noqa: BLE001
+        pass
+
     account = None
     try:
         account = worker.call(flow.current_account)
@@ -1867,12 +1891,6 @@ def _finish_login(project_id: str, worker, flow) -> None:
             pass
     for k in ("yb_flow", "yb_screenshot", "yb_step", "yb_note"):
         st.session_state.pop(k, None)
-
-    if not yb.has_saved_session(project_id):
-        st.error("Вход не завершён: Яндекс не выдал куки авторизации. "
-                 "Попробуйте ещё раз – скорее всего осталась непройденная проверка "
-                 "(код из письма, капча или подтверждение в приложении).")
-        return
     st.success("Вход выполнен, сессия сохранена." + (f" Аккаунт: {account}" if account else ""))
 
 

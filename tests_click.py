@@ -18,6 +18,7 @@ import json
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -403,6 +404,47 @@ def test_packages_txt() -> None:
            "libcups2t64", "libatk1.0-0t64", "libatk-bridge2.0-0t64"} <= set(listed))
 
 
+def test_worker_thread() -> None:
+    """
+    Playwright sync API отказывается работать в потоке с запущенным циклом
+    asyncio – «It looks like you are using Playwright Sync API inside the
+    asyncio loop». Проверяем, что поток воркера чистый и что мёртвый воркер
+    заметен, а не висит молча.
+    """
+    import asyncio
+
+    from playwright_worker import PlaywrightWorker
+    print("\n▸ Поток для Playwright")
+
+    w = PlaywrightWorker()
+    check("поток живой", w.alive())
+
+    def probe() -> dict:
+        try:
+            running = asyncio.get_running_loop().is_running()
+        except RuntimeError:
+            running = False
+        return {"running": running, "has_loop": asyncio.get_event_loop() is not None}
+
+    got = w.call(probe)
+    check("в потоке НЕТ запущенного цикла asyncio", not got["running"])
+    check("цикл в потоке всё же задан – старые версии смотрят на него", got["has_loop"])
+    eq("значения возвращаются", w.call(lambda a, b: a + b, 2, 3), 5)
+
+    try:
+        w.call(lambda: (_ for _ in ()).throw(ValueError("тест")))
+        check("исключение пробрасывается вызывающему", False, "не бросилось")
+    except ValueError:
+        check("исключение пробрасывается вызывающему", True)
+
+    w.stop()
+    for _ in range(50):
+        if not w.alive():
+            break
+        time.sleep(0.02)
+    check("после stop поток завершается", not w.alive())
+
+
 def test_session_validity(tmp: Path) -> None:
     """
     «Сессия сохранена» должна означать НАСТОЯЩУЮ сессию. Файл с анонимными
@@ -623,6 +665,7 @@ def main() -> int:
         test_browser_fallback()
         test_engine_order()
         test_packages_txt()
+        test_worker_thread()
         test_session_validity(tmp)
         test_account_check_on_real_page()
         test_kp_sheet()

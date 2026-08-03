@@ -1729,18 +1729,40 @@ class YbLoginFlow:
                 self._skip_post_login_prompts()
                 continue
 
-            if step == "done" or self.is_logged_in():
+            # «done» само по себе – только вид страницы. Успехом считаем лишь
+            # появившуюся куку авторизации, иначе приложение рапортует о входе,
+            # которого не было.
+            if (step == "done" or self.is_logged_in()) and self.has_auth_cookie():
                 return {"ok": True, "step": "done", "screenshot": self.screenshot(),
                         "reason": "Вход выполнен автоматически."}
+            if step == "done":
+                return {"ok": False, "step": "unknown", "screenshot": self.screenshot(),
+                        "reason": "Яндекс показал кабинет, но куки авторизации не выдал – "
+                                  "скорее всего осталась непройденная проверка. Продолжите вручную."}
 
             return {"ok": False, "step": step, "screenshot": self.screenshot(),
                     "reason": reasons.get(step, reasons["unknown"])}
 
-        if self.is_logged_in():
+        if self.has_auth_cookie():
             return {"ok": True, "step": "done", "screenshot": self.screenshot(),
                     "reason": "Вход выполнен автоматически."}
         return {"ok": False, "step": last, "screenshot": self.screenshot(),
                 "reason": "Слишком много шагов – дальше вручную."}
+
+    def has_auth_cookie(self) -> bool:
+        """
+        Единственная надёжная правда о входе: кука авторизации в самом браузере.
+        Вид страницы обманывает – паспорт уводит на форму входа с адресом, где
+        встречается слово profile, и «мы в кабинете» отвечало «да» зря.
+        """
+        try:
+            return any(
+                (c.get("name") or "").lower() in AUTH_COOKIES
+                and "yandex" in (c.get("domain") or "").lower()
+                for c in self.context.cookies()
+            )
+        except Exception:  # noqa: BLE001
+            return False
 
     def is_logged_in(self) -> bool:
         # Не уходим на /profile, пока виден незавершённый шаг проверки –
@@ -1754,7 +1776,7 @@ class YbLoginFlow:
             self.page.wait_for_load_state("networkidle", timeout=8_000)
         except Exception:  # noqa: BLE001
             self.page.wait_for_timeout(1_500)
-        return not looks_like_login_page(self.page)
+        return self.has_auth_cookie() and not looks_like_login_page(self.page)
 
     def current_account(self) -> str | None:
         """Какой аккаунт реально залогинен – показываем в UI после входа."""

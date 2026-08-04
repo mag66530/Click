@@ -58,8 +58,28 @@ SPRAV_RX = re.compile(r"yandex\.[a-z.]+/sprav/\d+", re.I)
 #   Тех. проблемы       – берём, но помечаем: молча пропустить город хуже,
 #                         чем попробовать и увидеть ошибку в отчёте;
 #   Активная / Онлайн / пусто – обычная работа.
-SKIP_STATUS_RX = re.compile(r"удал|добав|заблок", re.I)
+# «не активная» – карточки для работы тоже нет. Проверяем ДО «актив», иначе
+# «активные» и «не активные» неотличимы: в одной строке есть подстрока другой.
+SKIP_STATUS_RX = re.compile(r"удал|добав|заблок|\bне\s*актив", re.I)
 WARN_STATUS_RX = re.compile(r"тех|проблем", re.I)
+
+# Одна и та же страна пишется в КП по-разному. Без сведения к одному имени
+# Click рисует две плитки («РФ» и «Россия»), а окончания постов ищутся по
+# названию страны – у «РФ» контактов не нашлось бы вовсе.
+COUNTRY_ALIASES = {
+    "рф": "Россия",
+    "российская федерация": "Россия",
+    "россия": "Россия",
+    "казахстан": "Казахстан",
+    "рк": "Казахстан",
+    "беларусь": "Беларусь",
+    "белоруссия": "Беларусь",
+    "рб": "Беларусь",
+}
+
+
+def normalize_country(name: str) -> str:
+    return COUNTRY_ALIASES.get(_norm(name), (name or "").strip())
 
 
 # ─── Ссылка на таблицу ──────────────────────────────────────────────
@@ -80,6 +100,7 @@ def sheet_id(url: str) -> str:
 # и вписанная в приложении ссылка пропала бы при перезапуске.
 DEFAULT_SHEET_URLS = {
     "MPI": "https://docs.google.com/spreadsheets/d/1Hb7R1scmyhSPyROUa2mWMzD4jDcdgBcs1IGu0WQ48O4/edit",
+    "APS": "https://docs.google.com/spreadsheets/d/1VCwHQRtxWzNv7yAK0pO4OHmxGOjrmI1f/edit",
 }
 
 
@@ -284,13 +305,17 @@ def parse_rows(rows: list[list[str]]) -> tuple[list[dict], dict]:
     col_phone = find("общий город", "общий\nгород", "телефон")
     diag["contactColumns"] = {"site": col_site, "email": col_email, "phone": col_phone}
 
-    # 3. «Статус» – ближайшая колонка справа от ссылок (у Яндекса свой, у 2ГИС свой)
+    # 3. «Статус» – ближайшая колонка справа от ссылок (у Яндекса свой, у 2ГИС свой).
+    #    Название бывает и «Статус», и «Яндекс_Статус» – ищем по вхождению, но
+    #    отсекаем чужие площадки, чтобы не подхватить статус 2ГИС или Гугла.
     col_status = -1
-    for c in range(best_col + 1, min(best_col + 5, len(header))):
-        if header[c] == "статус":
+    for c in range(best_col + 1, min(best_col + 6, len(header))):
+        h = header[c]
+        if "статус" in h and not re.search(r"2гис|2gis|гугл|google", h):
             col_status = c
             break
     diag["statusColumn"] = col_status
+    diag["statusHeader"] = rows[header_idx][col_status] if 0 <= col_status < len(rows[header_idx]) else ""
 
     cities: list[dict] = []
     for r in data:
@@ -312,7 +337,7 @@ def parse_rows(rows: list[list[str]]) -> tuple[list[dict], dict]:
         if status and WARN_STATUS_RX.search(status):
             diag["withProblems"] = diag.get("withProblems", 0) + 1
         cities.append({
-            "country": country,
+            "country": normalize_country(country),
             "name": name,
             "url": "https://" + m.group(0) if not url_raw.lower().startswith("http") else url_raw,
             "status": status,

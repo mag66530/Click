@@ -122,7 +122,8 @@ def test_text() -> None:
     start = src.index("def build_final_text(")
     end = src.index("# ═══", start)
     endings = {"SMU": pdata.SMU_ENDINGS, "IMP": pdata.IMP_ENDINGS,
-               "MPE": pdata.MPE_ENDINGS, "MPI": pdata.MPI_ENDINGS}
+               "MPE": pdata.MPE_ENDINGS, "MPI": pdata.MPI_ENDINGS,
+               "APS": pdata.APS_ENDINGS}
     ns = {"pdata": pdata, "project_endings": lambda pid: endings[pid]}
     exec(compile(src[start:end], "bft", "exec"), ns)  # noqa: S102
     build = ns["build_final_text"]
@@ -975,6 +976,70 @@ def test_report_summary() -> None:
         check(f"4 колонки: «{word}» есть и при нуле", word in zero)
 
 
+def test_aps_project() -> None:
+    """
+    АПС (Авиапромсталь) – пятый проект, города из КП «карта присутствия».
+
+    Её таблица отличается от МПИ: статус называется «Яндекс_Статус» (а не
+    «Статус»), значения «активные / не активные» (а не «Удалена»), и одна и
+    та же страна записана и «РФ», и «Россия». Без разбора всего этого Click
+    брал бы неактивные карточки и рисовал две плитки одной страны.
+    """
+    import kp_sheet
+    import projects_data as pdata
+    import streamlit_app as app
+    print("\n▸ Проект АПС и его КП")
+
+    check("проект есть в списке", "APS" in app.PROJECTS)
+    aps = app.PROJECTS.get("APS") or {}
+    eq("почта аккаунта", aps.get("yandexEmail"), "aviastalru@yandex.ru")
+    eq("название", aps.get("fullName"), "Авиапромсталь")
+    check("окончания подключены", aps.get("endings") is pdata.APS_ENDINGS)
+    check("таблица КП прописана", "APS" in kp_sheet.DEFAULT_SHEET_URLS)
+    check("id таблицы разбирается",
+          kp_sheet.sheet_id(kp_sheet.DEFAULT_SHEET_URLS["APS"]) == "1VCwHQRtxWzNv7yAK0pO4OHmxGOjrmI1f")
+    check("у всех проектов свой цвет",
+          len({p["color"] for p in app.PROJECTS.values()}) == len(app.PROJECTS))
+    check("у всех проектов свой пароль",
+          len({p["passwordHash"] for p in app.PROJECTS.values()}) == len(app.PROJECTS))
+
+    # ── Разбор строк ровно того вида, что в КП Авиапромстали ──
+    header = ["Страна", "Город", "Численность", "url", "Адрес", "Почта", "Общий\nГород"] \
+        + [""] * 8 + ["ЯндексБизнес", "ЯндексКарта", "Яндекс_Статус", "Яндекс дата статуса",
+                      "2ГИС.Бизнес", "2ГИС.Карта", "2ГИС_статус"]
+
+    def row(country, city, status, sprav="https://yandex.ru/sprav/111/edit", gis="активные"):
+        r = [country, city, "", f"https://{city}.aviastal.ru", "", f"{city}@aviastal.ru", ""] \
+            + [""] * 8 + [sprav, "", status, "", "", "", gis]
+        return r
+
+    rows = [["", "", "", "", "", "Телефония/Почта"], header,
+            row("РФ", "abakan", "активные"),
+            row("Россия", "moscow", "активные"),
+            row("Казахстан", "aktau", "не активные"),
+            row("Беларусь", "minsk", "удалён из справочника"),
+            row("Киргизия", "bishkek", "")]
+    cities, diag = kp_sheet.parse_rows(rows)
+
+    eq("колонка статуса найдена по «Яндекс_Статус»", diag.get("statusHeader"), "Яндекс_Статус")
+    check("взят статус Яндекса, а не 2ГИС", diag.get("statusColumn") == 17, str(diag))
+    names = [c["name"] for c in cities]
+    check("«не активные» отброшены", "aktau" not in names, str(names))
+    check("«удалён из справочника» отброшен", "minsk" not in names, str(names))
+    check("пустой статус берём", "bishkek" in names, str(names))
+    eq("отброшено ровно два города", diag.get("skippedDeleted"), 2)
+    eq("«РФ» и «Россия» слились в одну страну",
+       sorted({c["country"] for c in cities}), ["Киргизия", "Россия"])
+
+    eq("РФ → Россия", kp_sheet.normalize_country("РФ"), "Россия")
+    eq("Белоруссия → Беларусь", kp_sheet.normalize_country("Белоруссия"), "Беларусь")
+    eq("незнакомую страну не трогаем", kp_sheet.normalize_country("Армения"), "Армения")
+    check("«активные» НЕ считается неактивным",
+          not kp_sheet.SKIP_STATUS_RX.search("активные"))
+    check("«не активные» считается неактивным",
+          bool(kp_sheet.SKIP_STATUS_RX.search("не активные")))
+
+
 def test_yandex_domain() -> None:
     """
     Один ящик – два паспорта.
@@ -1033,6 +1098,7 @@ def main() -> int:
         test_report_render()
         test_report_summary()
         test_yandex_domain()
+        test_aps_project()
         test_local_time()
         test_browser_fallback()
         test_engine_order()

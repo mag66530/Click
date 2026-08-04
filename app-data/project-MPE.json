@@ -1,0 +1,733 @@
+{
+  "countries": [
+    {
+      "id": "c-MPE-0-россия",
+      "name": "Россия",
+      "cities": [
+        {
+          "id": "ct-MPE-0-0-москва",
+          "name": "Москва",
+          "url": "https://yandex.ru/sprav/140867501802/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-1-санкт-петербург",
+          "name": "Санкт-Петербург",
+          "url": "https://yandex.ru/sprav/46921969012/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-2-новосибирск",
+          "name": "Новосибирск",
+          "url": "https://yandex.ru/sprav/116846236337/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-3-екатеринбург",
+          "name": "Екатеринбург",
+          "url": "https://yandex.ru/sprav/120874718919/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-4-казань",
+          "name": "Казань",
+          "url": "https://yandex.ru/sprav/189687026781/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-5-нижний-новгород",
+          "name": "Нижний Новгород",
+          "url": "https://yandex.ru/sprav/133909976495/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-6-челябинск",
+          "name": "Челябинск",
+          "url": "https://yandex.ru/sprav/210362345398/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-7-красноярск",
+          "name": "Красноярск",
+          "url": "https://yandex.ru/sprav/210788388746/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-8-омск",
+          "name": "Омск",
+          "url": "https://yandex.ru/sprav/154630720177/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-9-ростов-на-дону",
+          "name": "Ростов-на-Дону",
+          "url": "https://yandex.ru/sprav/112917938811/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-10-самара",
+          "name": "Самара",
+          "url": "https://yandex.ru/sprav/118811461588/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-11-уфа",
+          "name": "Уфа",
+          "url": "https://yandex.ru/sprav/68482501329/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-12-воронеж",
+          "name": "Воронеж",
+          "url": "https://yandex.ru/sprav/19402359619/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-13-пермь",
+          "name": "Пермь",
+          "url": "https://yandex.ru/sprav/50929527354/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-14-волгоград",
+          "name": "Волгоград",
+          "url": "https://yandex.ru/sprav/129938274175/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-15-краснодар",
+          "name": "Краснодар",
+          "url": "https://yandex.ru/sprav/99691002814/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-16-саратов",
+          "name": "Саратов",
+          "url": "https://yandex.ru/sprav/239286294943/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-17-тюмень",
+          "name": "Тюмень",
+          "url": "https://yandex.ru/sprav/99219674768/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-18-тольятти",
+          "name": "Тольятти",
+          "url": "https://yandex.ru/sprav/223447148938/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-19-ижевск",
+          "name": "Ижевск",
+          "url": "https://yandex.ru/sprav/113694217806/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-20-барнаул",
+          "name": "Барнаул",
+          "url": "https://yandex.ru/sprav/201090287617/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-21-ульяновск",
+          "name": "Ульяновск",
+          "url": "https://yandex.ru/sprav/188547513698/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-22-иркутск",
+          "name": "Иркутск",
+          "url": "https://yandex.ru/sprav/69649874107/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-23-хабаровск",
+          "name": "Хабаровск",
+          "url": "https://yandex.ru/sprav/190272500997/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-24-владивосток",
+          "name": "Владивосток",
+          "url": "https://yandex.ru/sprav/113664142087/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-25-махачкала",
+          "name": "Махачкала",
+          "url": "https://yandex.ru/sprav/62574322612/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-26-ярославль",
+          "name": "Ярославль",
+          "url": "https://yandex.ru/sprav/83044565058/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-27-оренбург",
+          "name": "Оренбург",
+          "url": "https://yandex.ru/sprav/171400752610/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-28-томск",
+          "name": "Томск",
+          "url": "https://yandex.ru/sprav/205043118154/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-29-кемерово",
+          "name": "Кемерово",
+          "url": "https://yandex.ru/sprav/208586121178/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-30-новокузнецк",
+          "name": "Новокузнецк",
+          "url": "https://yandex.ru/sprav/23910489078/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-31-рязань",
+          "name": "Рязань",
+          "url": "https://yandex.ru/sprav/148452510342/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-32-астрахань",
+          "name": "Астрахань",
+          "url": "https://yandex.ru/sprav/99369138790/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-33-набережные-челны",
+          "name": "Набережные Челны",
+          "url": "https://yandex.ru/sprav/216943043640/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-34-пенза",
+          "name": "Пенза",
+          "url": "https://yandex.ru/sprav/232230464946/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-35-киров",
+          "name": "Киров",
+          "url": "https://yandex.ru/sprav/190462100131/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-36-липецк",
+          "name": "Липецк",
+          "url": "https://yandex.ru/sprav/215373870756/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-37-чебоксары",
+          "name": "Чебоксары",
+          "url": "https://yandex.ru/sprav/12862234874/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-38-калининград",
+          "name": "Калининград",
+          "url": "https://yandex.ru/sprav/141581805285/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-39-тула",
+          "name": "Тула",
+          "url": "https://yandex.ru/sprav/58674349714/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-40-курск",
+          "name": "Курск",
+          "url": "https://yandex.ru/sprav/9745185991/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-41-ставрополь",
+          "name": "Ставрополь",
+          "url": "https://yandex.ru/sprav/113226291416/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-42-улан-удэ",
+          "name": "Улан-Удэ",
+          "url": "https://yandex.ru/sprav/62476590298/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-43-тверь",
+          "name": "Тверь",
+          "url": "https://yandex.ru/sprav/11421798768/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-44-магнитогорск",
+          "name": "Магнитогорск",
+          "url": "https://yandex.ru/sprav/20988020191/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-45-брянск",
+          "name": "Брянск",
+          "url": "https://yandex.ru/sprav/118465407221/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-46-иваново",
+          "name": "Иваново",
+          "url": "https://yandex.ru/sprav/158096459962/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-47-сочи",
+          "name": "Сочи",
+          "url": "https://yandex.ru/sprav/64514516210/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-48-белгород",
+          "name": "Белгород",
+          "url": "https://yandex.ru/sprav/17325270531/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-49-сургут",
+          "name": "Сургут",
+          "url": "https://yandex.ru/sprav/29292054714/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-50-архангельск",
+          "name": "Архангельск",
+          "url": "https://yandex.ru/sprav/44213645510/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-51-владимир",
+          "name": "Владимир",
+          "url": "https://yandex.ru/sprav/170602475376/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-52-нижний-тагил",
+          "name": "Нижний Тагил",
+          "url": "https://yandex.ru/sprav/73884449686/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-53-чита",
+          "name": "Чита",
+          "url": "https://yandex.ru/sprav/46053586284/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-54-калуга",
+          "name": "Калуга",
+          "url": "https://yandex.ru/sprav/63580775441/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-55-симферополь",
+          "name": "Симферополь",
+          "url": "https://yandex.ru/sprav/23786301496/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-56-якутск",
+          "name": "Якутск",
+          "url": "https://yandex.ru/sprav/143605996086/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-57-волжский",
+          "name": "Волжский",
+          "url": "https://yandex.ru/sprav/116791030858/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-58-саранск",
+          "name": "Саранск",
+          "url": "https://yandex.ru/sprav/39063175305/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-59-смоленск",
+          "name": "Смоленск",
+          "url": "https://yandex.ru/sprav/239470067471/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-60-череповец",
+          "name": "Череповец",
+          "url": "https://yandex.ru/sprav/181626660468/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-61-вологда",
+          "name": "Вологда",
+          "url": "https://yandex.ru/sprav/177398750554/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-62-курган",
+          "name": "Курган",
+          "url": "https://yandex.ru/sprav/20152484434/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-63-владикавказ",
+          "name": "Владикавказ",
+          "url": "https://yandex.ru/sprav/33304235457/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-64-грозный",
+          "name": "Грозный",
+          "url": "https://yandex.ru/sprav/147778012163/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-65-орёл",
+          "name": "Орёл",
+          "url": "https://yandex.ru/sprav/149516632790/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-66-подольск",
+          "name": "Подольск",
+          "url": "https://yandex.ru/sprav/197265960256/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-67-тамбов",
+          "name": "Тамбов",
+          "url": "https://yandex.ru/sprav/229002669532/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-68-йошкар-ола",
+          "name": "Йошкар-Ола",
+          "url": "https://yandex.ru/sprav/199067371697/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-69-мурманск",
+          "name": "Мурманск",
+          "url": "https://yandex.ru/sprav/116870880364/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-70-нижневартовск",
+          "name": "Нижневартовск",
+          "url": "https://yandex.ru/sprav/222202906485/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-71-новороссийск",
+          "name": "Новороссийск",
+          "url": "https://yandex.ru/sprav/101518570775/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-72-петрозаводск",
+          "name": "Петрозаводск",
+          "url": "https://yandex.ru/sprav/113975994100/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-73-кострома",
+          "name": "Кострома",
+          "url": "https://yandex.ru/sprav/181738717953/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-74-мытищи",
+          "name": "Мытищи",
+          "url": "https://yandex.ru/sprav/139360732088/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-75-сыктывкар",
+          "name": "Сыктывкар",
+          "url": "https://yandex.ru/sprav/20641386198/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-76-таганрог",
+          "name": "Таганрог",
+          "url": "https://yandex.ru/sprav/56723520050/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-77-нальчик",
+          "name": "Нальчик",
+          "url": "https://yandex.ru/sprav/162572111983/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-78-братск",
+          "name": "Братск",
+          "url": "https://yandex.ru/sprav/177489948907/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-79-люберцы",
+          "name": "Люберцы",
+          "url": "https://yandex.ru/sprav/242420885081/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-80-энгельс",
+          "name": "Энгельс",
+          "url": "https://yandex.ru/sprav/154864359593/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-81-ангарск",
+          "name": "Ангарск",
+          "url": "https://yandex.ru/sprav/97926765376/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-82-великий-новгород",
+          "name": "Великий Новгород",
+          "url": "https://yandex.ru/sprav/96252399787/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-83-псков",
+          "name": "Псков",
+          "url": "https://yandex.ru/sprav/55974712627/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-84-бийск",
+          "name": "Бийск",
+          "url": "https://yandex.ru/sprav/66138466148/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-85-южно-сахалинск",
+          "name": "Южно-Сахалинск",
+          "url": "https://yandex.ru/sprav/159339437284/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-86-балаково",
+          "name": "Балаково",
+          "url": "https://yandex.ru/sprav/73875979150/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-87-абакан",
+          "name": "Абакан",
+          "url": "https://yandex.ru/sprav/183346596238/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-88-норильск",
+          "name": "Норильск",
+          "url": "https://yandex.ru/sprav/108171069972/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-89-петропавловск-камчатский",
+          "name": "Петропавловск-Камчатский",
+          "url": "https://yandex.ru/sprav/112176996189/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-90-каменск-уральский",
+          "name": "Каменск-Уральский",
+          "url": "https://yandex.ru/sprav/8388558443/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-91-новочеркасск",
+          "name": "Новочеркасск",
+          "url": "https://yandex.ru/sprav/67840627449/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-92-златоуст",
+          "name": "Златоуст",
+          "url": "https://yandex.ru/sprav/14202497094/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-93-домодедово",
+          "name": "Домодедово",
+          "url": "https://yandex.ru/sprav/164678898023/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-94-керчь",
+          "name": "Керчь",
+          "url": "https://yandex.ru/sprav/134720333394/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-95-колпино",
+          "name": "Колпино",
+          "url": "https://yandex.ru/sprav/60265021038/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-96-миасс",
+          "name": "Миасс",
+          "url": "https://yandex.ru/sprav/63117002028/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-97-электросталь",
+          "name": "Электросталь",
+          "url": "https://yandex.ru/sprav/5695081782/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-98-коломна",
+          "name": "Коломна",
+          "url": "https://yandex.ru/sprav/99184379670/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-99-майкоп",
+          "name": "Майкоп",
+          "url": "https://yandex.ru/sprav/18989744572/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-100-одинцово",
+          "name": "Одинцово",
+          "url": "https://yandex.ru/sprav/48752983548/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-101-батайск",
+          "name": "Батайск",
+          "url": "https://yandex.ru/sprav/110254356894/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-102-щелково",
+          "name": "Щелково",
+          "url": "https://yandex.ru/sprav/46455096300/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-103-долгопрудный",
+          "name": "Долгопрудный",
+          "url": "https://yandex.ru/sprav/15791955126/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-104-кызыл",
+          "name": "Кызыл",
+          "url": "https://yandex.ru/sprav/113696199079/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-105-новочебоксарск",
+          "name": "Новочебоксарск",
+          "url": "https://yandex.ru/sprav/236170877371/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-106-новый-уренгой",
+          "name": "Новый Уренгой",
+          "url": "https://yandex.ru/sprav/210389096586/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-107-обнинск",
+          "name": "Обнинск",
+          "url": "https://yandex.ru/sprav/204967830666/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-108-орехово-зуево",
+          "name": "Орехово-Зуево",
+          "url": "https://yandex.ru/sprav/175342479695/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-109-первоуральск",
+          "name": "Первоуральск",
+          "url": "https://yandex.ru/sprav/177621134341/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-110-черкесск",
+          "name": "Черкесск",
+          "url": "https://yandex.ru/sprav/135301534729/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-111-димитровград",
+          "name": "Димитровград",
+          "url": "https://yandex.ru/sprav/222943480750/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-112-жуковский",
+          "name": "Жуковский",
+          "url": "https://yandex.ru/sprav/86649139821/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-113-муром",
+          "name": "Муром",
+          "url": "https://yandex.ru/sprav/62874313659/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-114-артем",
+          "name": "Артем",
+          "url": "https://yandex.ru/sprav/2152632488/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-115-воткинск",
+          "name": "Воткинск",
+          "url": "https://yandex.ru/sprav/158319975655/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-116-ленинск-кузнецкий",
+          "name": "Ленинск-Кузнецкий",
+          "url": "https://yandex.ru/sprav/228523456917/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-117-ногинск",
+          "name": "Ногинск",
+          "url": "https://yandex.ru/sprav/82226356638/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-118-сергиев-посад",
+          "name": "Сергиев Посад",
+          "url": "https://yandex.ru/sprav/60085304072/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-119-ханты-мансийск",
+          "name": "Ханты-Мансийск",
+          "url": "https://yandex.ru/sprav/34711754231/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-120-элиста",
+          "name": "Элиста",
+          "url": "https://yandex.ru/sprav/91702720898/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-121-воскресенск",
+          "name": "Воскресенск",
+          "url": "https://yandex.ru/sprav/217629697094/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-122-магадан",
+          "name": "Магадан",
+          "url": "https://yandex.ru/sprav/62051039622/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-123-озерск",
+          "name": "Озерск",
+          "url": "https://yandex.ru/sprav/211426713216/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-124-белорецк",
+          "name": "Белорецк",
+          "url": "https://yandex.ru/sprav/183038124951/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-125-курганинск",
+          "name": "Курганинск",
+          "url": "https://yandex.ru/sprav/11484580554/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-126-анадырь",
+          "name": "Анадырь",
+          "url": "https://yandex.ru/sprav/35078679877/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-127-мышкин",
+          "name": "Мышкин",
+          "url": "https://yandex.ru/sprav/155072113449/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-0-128-железнодорожный",
+          "name": "Железнодорожный",
+          "url": "https://yandex.ru/sprav/228169465061/p/edit/posts/"
+        }
+      ]
+    },
+    {
+      "id": "c-MPE-1-казахстан",
+      "name": "Казахстан",
+      "cities": [
+        {
+          "id": "ct-MPE-1-0-шымкент",
+          "name": "Шымкент",
+          "url": "https://yandex.ru/sprav/120865007406/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-1-1-актобе",
+          "name": "Актобе",
+          "url": "https://yandex.ru/sprav/141871681522/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-1-2-караганда",
+          "name": "Караганда",
+          "url": "https://yandex.ru/sprav/180549239338/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-1-3-тараз",
+          "name": "Тараз",
+          "url": "https://yandex.ru/sprav/144687738493/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-1-4-семей",
+          "name": "Семей",
+          "url": "https://yandex.ru/sprav/245124817589/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-1-5-усть-каменогорск",
+          "name": "Усть-Каменогорск",
+          "url": "https://yandex.ru/sprav/7219297667/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-1-6-атырау",
+          "name": "Атырау",
+          "url": "https://yandex.ru/sprav/108114535156/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-1-7-уральск",
+          "name": "Уральск",
+          "url": "https://yandex.ru/sprav/110063922831/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-1-8-костанай",
+          "name": "Костанай",
+          "url": "https://yandex.ru/sprav/19586704883/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-1-9-кызылорда",
+          "name": "Кызылорда",
+          "url": "https://yandex.ru/sprav/107769173912/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-1-10-петропавловск",
+          "name": "Петропавловск",
+          "url": "https://yandex.ru/sprav/173961783407/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-1-11-абай",
+          "name": "Абай",
+          "url": "https://yandex.ru/sprav/227868942827/p/edit/posts/"
+        }
+      ]
+    },
+    {
+      "id": "c-MPE-2-беларусь",
+      "name": "Беларусь",
+      "cities": [
+        {
+          "id": "ct-MPE-2-0-минск",
+          "name": "Минск",
+          "url": "https://yandex.ru/sprav/49159280235/p/edit/posts/"
+        }
+      ]
+    }
+  ],
+  "email": "mepen88@yandex.ru"
+}

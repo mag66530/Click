@@ -131,26 +131,6 @@
       "sameSite": "None"
     },
     {
-      "name": "bh",
-      "value": "YPyOx9MGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
-      "domain": ".yandex.com",
-      "path": "/",
-      "expires": 1820401533.007,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "sync_cookie_csrf",
-      "value": "505607415fake",
-      "domain": ".mc.yandex.com",
-      "path": "/",
-      "expires": 1785842133,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "yandexuid",
       "value": "2902687631785841527",
       "domain": ".yandex.com",
@@ -225,8 +205,18 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817377838,
+      "expires": 1817380482,
       "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "bh",
+      "value": "YIKmx9MGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "domain": ".yandex.com",
+      "path": "/",
+      "expires": 1820404482,
+      "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
@@ -267,16 +257,6 @@
       "path": "/",
       "expires": 1817377527.548,
       "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "sync_cookie_csrf",
-      "value": "3275732023fake",
-      "domain": ".mc.yandex.ru",
-      "path": "/",
-      "expires": 1785842134,
-      "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
@@ -521,26 +501,6 @@
       "sameSite": "None"
     },
     {
-      "name": "receive-cookie-deprecation",
-      "value": "1",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1817377826,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "bh",
-      "value": "YKKRx9MGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1820401826,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "cycada",
       "value": "+kJJnBHXgM+qNn5wUuXYRyfA5hjy39BWIgnQZ/gtJxs=",
       "domain": ".yandex.ru",
@@ -551,21 +511,41 @@
       "sameSite": "None"
     },
     {
+      "name": "bh",
+      "value": "YP2lx9MGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1820404477.43,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "receive-cookie-deprecation",
+      "value": "1",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1817380481,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
       "name": "gdpr",
       "value": "0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817377839,
+      "expires": 1817380482,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "_ym_visorc",
-      "value": "b",
+      "value": "w",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1785843639,
+      "expires": 1785846282,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -588,8 +568,8 @@
           "value": "27646201117"
         },
         {
-          "name": "_ym56213845_lsid",
-          "value": "1691197175121"
+          "name": "_ym86525359_lsid",
+          "value": "609905896133"
         },
         {
           "name": "maps_analytics_event_index",
@@ -605,11 +585,7 @@
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "14"
-        },
-        {
-          "name": "_ym86525359_lsid",
-          "value": "609905896133"
+          "value": "15"
         },
         {
           "name": "_ym_wv2rf:85710618:0",
@@ -622,6 +598,10 @@
         {
           "name": "_mt__data",
           "value": "{\"1785841780820634-8384342504302121109-balancer-l7leveler-kubr-yp-sas-131-BAL\":[[105,240,1],1785841794513,1]}"
+        },
+        {
+          "name": "_ym56213845_lsid",
+          "value": "1691197175121"
         },
         {
           "name": "_ym_wv2rf:56213845:0",
@@ -641,7 +621,7 @@
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "151"
+          "value": "158"
         },
         {
           "name": "_ym86420123_lsid",
@@ -668,14 +648,6 @@
           "value": "{}"
         },
         {
-          "name": "_ym86226515_lsid",
-          "value": "1077109089945"
-        },
-        {
-          "name": "_ym24367924_lastHit",
-          "value": "1785841716779"
-        },
-        {
           "name": "_ym_wv2rf:46231566:0",
           "value": "1"
         },
@@ -688,8 +660,8 @@
           "value": "391174080352"
         },
         {
-          "name": "_ym86972774_lsid",
-          "value": "1165288391765"
+          "name": "_ym24367924_lastHit",
+          "value": "1785841716779"
         },
         {
           "name": "beerka",
@@ -728,6 +700,14 @@
           "value": "1"
         },
         {
+          "name": "_ym86972774_lsid",
+          "value": "1165288391765"
+        },
+        {
+          "name": "_ym86226515_lsid",
+          "value": "1077109089945"
+        },
+        {
           "name": "_ym24367924_lsid",
           "value": "483675407845"
         },
@@ -749,7 +729,7 @@
         },
         {
           "name": "_ym46231566:0_reqNum",
-          "value": "42"
+          "value": "44"
         },
         {
           "name": "_ym86796361:0_reqNum",
@@ -757,7 +737,7 @@
         },
         {
           "name": "_ym56213845:0_reqNum",
-          "value": "141"
+          "value": "148"
         },
         {
           "name": "_ym22555771_lsid",

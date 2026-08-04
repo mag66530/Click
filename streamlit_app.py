@@ -822,7 +822,9 @@ def tab_run(project_id: str, config: dict) -> None:
                 f"{cities_word(cities)} готово" if cities else ""))
 
     html(T.step(3, "Публикация",
-                "Браузер работает скрыто. Каждый город подтверждается ответом API Яндекса – "
+                ("Окно браузера будет видно – галочка в «Настройках» включена."
+                 if show_browser_window() else "Браузер работает скрыто.")
+                + " Каждый город подтверждается ответом API Яндекса – "
                 "в отчёт попадает реальный результат, а не «наверное получилось».",
                 "active" if (cities and has_session and not running) else ("done" if running else "locked")))
 

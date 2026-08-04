@@ -210,6 +210,34 @@ def main() -> int:
                    return e ? e.innerText.trim() : ''; }""")
             check("открылся раздел «Запуск»", "Запуск" in active, f"активно: {active!r}")
 
+            # ── Галочка «показывать окно браузера» переживает смену раздела ──
+            # Streamlit выбрасывает состояние виджетов, которых не было на
+            # текущем экране. Галочка жила в ключе виджета и гасла при уходе
+            # с «Настроек» – публикация после этого шла скрыто, и заказчик
+            # видел «галочка сбрасывается» и «прогресса всё равно не видно».
+            print("\n▸ Галочка «показывать окно браузера»")
+            box = "Показывать окно браузера"
+
+            def go(tab: str) -> None:
+                page.get_by_text(tab, exact=True).first.click()
+                page.wait_for_timeout(4000)
+
+            go("⚙️ Настройки")
+            cb = page.get_by_role("checkbox", name=box, exact=False)
+            if cb.count() == 0:
+                check("галочка есть в «Настройках»", False, "чекбокс не найден")
+            else:
+                # Сам input у Streamlit спрятан под оформлением – жмём подпись,
+                # ровно как это делает человек.
+                page.locator("label").filter(has_text=box).first.click()
+                page.wait_for_timeout(2500)
+                check("галочка встала", cb.first.is_checked())
+                go("📤 Публикация")
+                go("⚙️ Настройки")
+                cb = page.get_by_role("checkbox", name=box, exact=False)
+                check("галочка пережила переход на «Публикацию»",
+                      cb.count() > 0 and cb.first.is_checked(), "сбросилась")
+
             browser.close()
     finally:
         if proc is not None:

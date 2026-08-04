@@ -930,6 +930,27 @@ def test_report_summary() -> None:
     check("в публикации «Всего» осталось", "Всего" in pub)
 
 
+def test_yandex_domain() -> None:
+    """
+    Один ящик – два паспорта.
+
+    Живой случай: у трёх проектов стоял @yandex.ru и вход шёл письмом, у
+    четвёртого @yandex.com – и Яндекс уводил в международный паспорт, где
+    вход подтверждается звонком на телефон. Разница была ровно в домене.
+    """
+    import streamlit_app as app
+    print("\n▸ Домен аккаунта Яндекса")
+    eq("com → ru", app._ru_domain("metpromintex@yandex.com"), "metpromintex@yandex.ru")  # noqa: SLF001
+    eq("ya.ru → ru", app._ru_domain("vika@ya.ru"), "vika@yandex.ru")  # noqa: SLF001
+    eq("com.tr → ru", app._ru_domain("a@yandex.com.tr"), "a@yandex.ru")  # noqa: SLF001
+    eq("ru не трогаем", app._ru_domain("mepen88@yandex.ru"), "mepen88@yandex.ru")  # noqa: SLF001
+    eq("чужой домен не трогаем", app._ru_domain("v@gmail.com"), "v@gmail.com")  # noqa: SLF001
+    eq("пусто не ломает", app._ru_domain(""), "")  # noqa: SLF001
+    check("у всех проектов российский паспорт",
+          all(p["yandexEmail"].endswith("@yandex.ru") for p in app.PROJECTS.values()),
+          str({k: v["yandexEmail"] for k, v in app.PROJECTS.items()}))
+
+
 def test_local_time() -> None:
     """
     Время отчёта показываем по часам человека.
@@ -966,6 +987,7 @@ def main() -> int:
         test_task_format(tmp)
         test_report_render()
         test_report_summary()
+        test_yandex_domain()
         test_local_time()
         test_browser_fallback()
         test_engine_order()

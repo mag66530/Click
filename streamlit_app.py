@@ -37,7 +37,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-04-mail-first"
+UI_BUILD = "2026-08-04-ru-passport"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -90,7 +90,10 @@ PROJECTS: dict[str, dict] = {
     # МПИ – первый проект без вшитого списка городов: они приходят из КП.
     # Пароль от Яндекса не хранится в коде – он вводится в «Настройках».
     "MPI": {"id": "MPI", "name": "МПИ", "fullName": "МетПромИнтекс", "color": "#8b5cf6", "icon": "🛠",
-            "yandexEmail": "metpromintex@yandex.com", "passwordHash": _hash("1717"),
+            # Именно @yandex.ru, а не @yandex.com: у всех остальных проектов .ru,
+            # и только у МПИ был .com – с него Яндекс уводит в международный
+            # паспорт с другими правилами проверки (звонок вместо письма).
+            "yandexEmail": "metpromintex@yandex.ru", "passwordHash": _hash("1717"),
             "presetCities": [], "endings": pdata.MPI_ENDINGS},
 }
 
@@ -217,6 +220,21 @@ def get_config(project_id: str) -> dict:
         if sub["id"] == active:
             return sub
     return raw["projects"][0]
+
+
+# Домены-двойники Яндекса: ящик один, а паспорт разный. Международный
+# (.com и прочие) подтверждает вход звонком на телефон, российский – письмом.
+_YANDEX_ALIASES = ("yandex.com", "yandex.com.tr", "yandex.by", "yandex.kz",
+                   "yandex.ua", "ya.ru")
+
+
+def _ru_domain(email: str) -> str:
+    """Тот же ящик, но в российском написании: metpromintex@yandex.ru."""
+    email = (email or "").strip()
+    name, _, domain = email.partition("@")
+    if name and domain.lower() in _YANDEX_ALIASES:
+        return f"{name}@yandex.ru"
+    return email
 
 
 def local_time(iso: str | None) -> str:
@@ -1710,6 +1728,20 @@ def tab_settings(project_id: str, config: dict) -> None:
         save_config(project_id)
     st.caption(f"Проект {project['name']} рассчитан на аккаунт **{project['yandexEmail']}**. "
                "Click сверит его с тем, что реально залогинен, и не даст опубликовать не туда.")
+
+    # Один и тот же ящик у Яндекса открывается и как @yandex.ru, и как
+    # @yandex.com – но это РАЗНЫЕ паспорта. Международный проверяет вход
+    # строже и требует звонок на телефон вместо письма. У трёх проектов
+    # стоял .ru и вход шёл спокойно, у одного .com – и упирался в телефон.
+    fixed = _ru_domain(email)
+    if fixed != email:
+        st.warning(f"Адрес **{email}** уводит Click в международный паспорт Яндекса – "
+                   "там вход подтверждается звонком на телефон, а не письмом. "
+                   f"Тот же ящик по-русски: **{fixed}**.")
+        if st.button(f"Исправить на {fixed}", key="fix-domain", type="primary"):
+            config["email"] = fixed
+            save_config(project_id)
+            st.rerun()
 
     st.divider()
     _yandex_login_block(project_id, config)

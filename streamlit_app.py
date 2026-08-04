@@ -37,7 +37,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-05-report-tiles"
+UI_BUILD = "2026-08-05-no-duplicates"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -270,6 +270,46 @@ def _push_session(project_id: str) -> None:
             st.session_state[mark] = mtime
         except Exception:  # noqa: BLE001
             pass
+
+
+def _pull_ledger(project_id: str) -> None:
+    """
+    Реестр опубликованного – тоже наружу.
+
+    Это вторая защита от дублей: «этот текст уже уходил в этот город». В
+    облаке файлы стираются при перезапуске, и после ребута тот же прогон
+    публиковал ВСЁ заново. Копия лежит рядом с городами и настройками.
+    """
+    if not repo_store.is_configured():
+        return
+    fp = runner.p_ledger(project_id)
+    if fp.exists() and fp.stat().st_size > 2:
+        return
+    try:
+        data = repo_store.load(f"ledger-{project_id}")
+        lines = (data or {}).get("lines") or []
+        if lines:
+            fp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _push_ledger(project_id: str) -> None:
+    if not repo_store.is_configured():
+        return
+    fp = runner.p_ledger(project_id)
+    if not fp.exists():
+        return
+    mark, mtime = f"_pushed_ledger_{project_id}", fp.stat().st_mtime
+    if st.session_state.get(mark) == mtime:
+        return
+    try:
+        lines = [ln for ln in fp.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()]
+        repo_store.save(f"ledger-{project_id}", {"lines": lines[-5000:]},
+                        f"Click: реестр публикаций ({project_id})")
+        st.session_state[mark] = mtime
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _forget_session(project_id: str) -> None:
@@ -1512,16 +1552,13 @@ def tab_actualize(project_id: str, config: dict) -> None:
                             col.checkbox(ct["name"], value=ct["id"] in chosen, key=wkey,
                                          on_change=_act_toggle, args=(ct["id"], wkey))
 
-    # Панель прогона – ДО проверки сессии. Иначе идущий (или только что
-    # закончившийся) прогон исчезал с экрана вместе с кнопкой отчёта, стоило
-    # сессии слететь: человек видел бы только «войдите в Яндекс».
-    with st.container(border=True):
-        live_panel(project_id, running)
-
-    if not yb.has_saved_session(project_id):
+    if not yb.has_saved_session(project_id) and not running:
         st.warning("Сначала войдите в Яндекс в разделе «⚙️ Настройки».")
         return
 
+    # Порядок как у человека в голове: сначала запускаем, потом смотрим, как
+    # идёт. Раньше панель с «Посмотреть отчёт» стояла НАД кнопкой запуска, а
+    # ещё ниже висела вторая карточка отчёта – выглядело нацепленным сверху.
     if st.button(f"🔄 Запустить актуализацию ({cities_word(len(selected))})", type="primary",
                  use_container_width=True, disabled=running or not selected, key="btn-actualize"):
         selection = {c["id"]: [ct["id"] for ct in c["cities"] if ct["id"] in chosen]
@@ -1535,28 +1572,14 @@ def tab_actualize(project_id: str, config: dict) -> None:
         st.button("⏹ Остановить", use_container_width=True, key="btn-stop-act",
                   on_click=runner.request_stop, args=(project_id,))
 
-    reports = runner.list_reports(project_id, "actualize", limit=1)
-    if reports:
-        data = runner.read_report(project_id, "actualize", reports[0]["name"])
-        if data:
-            with st.container(border=True):
-                when = local_time(data.get("finishedAt"))
-                # Пока прогон идёт, отчёт наполняется на ходу. Называть его
-                # «последним» в этот момент нечестно: заказчик видел нули и
-                # решила, что отчёт не формируется вообще.
-                title = ("📊 Отчёт актуализации – заполняется по ходу"
-                         if data.get("state") == "in-progress"
-                         else "📊 Последний отчёт актуализации")
-                head, date = st.columns([3, 1])
-                head.markdown(f'<div class="card-title">{title}</div>',
-                              unsafe_allow_html=True)
-                date.markdown(f'<div class="hint" style="text-align:right;padding-top:6px">{when}</div>',
-                              unsafe_allow_html=True)
-                html(T.report_summary(data.get("totals") or {}, data.get("durationSec"),
-                                      keys=["actualized", "notNeeded", "failed"], with_total=False))
-                with st.expander(f"Показать детали ({cities_word(len(data.get('results') or []))})"):
-                    for r in data.get("results") or []:
-                        html(T.report_row(r))
+    # Панель показываем, только когда есть что показывать: до первого прогона
+    # пустая рамка с пустым логом только мешает.
+    if running or runner.read_state(project_id).get("status") not in (None, "idle"):
+        with st.container(border=True):
+            live_panel(project_id, running)
+
+    # Вторая карточка отчёта убрана: весь отчёт теперь на вкладке «Отчёт»,
+    # и туда ведёт кнопка «Посмотреть отчёт» из панели выше.
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -2413,8 +2436,10 @@ def show_main(project_id: str) -> None:
     ensure_dirs(project_id)
     if not st.session_state.get(f"_sess_pulled_{project_id}"):
         _pull_session(project_id)
+        _pull_ledger(project_id)
         st.session_state[f"_sess_pulled_{project_id}"] = True
     _push_session(project_id)          # дешёвая проверка по mtime: пуш только при изменении
+    _push_ledger(project_id)
     config = get_config(project_id)
     project = PROJECTS[project_id]
 

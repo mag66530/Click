@@ -284,9 +284,15 @@ def test_report_render() -> None:
     check("неопределённый статус рисуется отдельным стилем", "report-row warn" in row and "⚠️" in row)
     check("XSS в названии города экранируется",
           "&lt;script&gt;" in T.report_row({"status": "ok", "cityName": "<script>x</script>"}))
-    summary = T.report_summary({"total": 10, "ok": 7, "unknown": 2, "failed": 1}, 130)
-    check("сводка показывает «проверьте»", "Проверьте" in summary and ">2<" in summary)
-    check("сводка показывает время в минутах", "2.2 мин" in summary)
+    check("страна в строке показывается по требованию",
+          "Казахстан" in T.report_row({"status": "ok", "cityName": "Актау",
+                                       "country": "Казахстан"}, with_country=True))
+    check("без требования страны в строке нет",
+          "Казахстан" not in T.report_row({"status": "ok", "cityName": "Актау",
+                                           "country": "Казахстан"}))
+    import streamlit_app as app
+    check("время прогона в минутах", app._dur_text(130) == "2.2 мин")  # noqa: SLF001
+    check("короткое время в секундах", app._dur_text(45) == "45 сек")  # noqa: SLF001
     check("пустой лог даёт заглушку", "log-placeholder" in T.log_box(""))
     check("строки лога раскрашиваются", "log-err" in T.log_box("[ERROR] всё плохо"))
 
@@ -955,27 +961,116 @@ def test_login_step_detection() -> None:
             browser.close()
 
 
-def test_report_summary() -> None:
-    """Плитки отчёта: в актуализации «Всего» лишнее, время – по часам человека."""
-    import ui_theme as T
-    print("\n▸ Плитки отчёта")
+def test_toast_and_access_on_real_page() -> None:
+    """
+    Уведомление «Данные актуализированы» и заглушка «нет доступа».
 
-    act = T.report_summary({"total": 143, "actualized": 3, "notNeeded": 140, "failed": 0},
-                           1620, keys=["actualized", "notNeeded", "failed"], with_total=False)
-    check("в актуализации нет плитки «Всего»", "Всего" not in act)
-    for word in ("Актуализировано", "Не требовалось", "Ошибок", "Время"):
-        check(f"плитка «{word}» на месте", word in act)
-    check("время в минутах, а не в секундах", "27.0 мин" in act, act[-260:])
+    Живой случай: заказчик показала, что уведомление всплывает, а Click его
+    не видел – искал только внутри элементов с «правильными» классами.
+    И отдельно: недоступная карточка выдавала «Кнопка "Добавить пост" не
+    найдена», хотя искать там нечего – доступа нет.
+    """
+    import yb_playwright as yb
+    print("\n▸ Уведомление Яндекса и доступ к карточке")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
 
-    pub = T.report_summary({"total": 3, "ok": 3}, 30)
-    check("в публикации «Всего» осталось", "Всего" in pub)
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 1200, "height": 800}).new_page()
 
-    # Живой случай: при notNeeded=0 плитка пропадала, и колонок было три.
-    # Заказчику нужны ровно 4 колонки всегда, как в оригинале.
-    zero = T.report_summary({"total": 5, "actualized": 5, "notNeeded": 0, "failed": 0},
-                            60, keys=["actualized", "notNeeded", "failed"], with_total=False)
-    for word in ("Актуализировано", "Не требовалось", "Ошибок", "Время"):
-        check(f"4 колонки: «{word}» есть и при нуле", word in zero)
+            # Уведомление в контейнере с ПОСТОРОННИМ классом – как у Яндекса.
+            page.set_content("""<html><body style="margin:0">
+              <div style="height:400px">страница</div>
+              <div class="Popup2 Popup2_visible" style="position:fixed;top:20px;right:20px;
+                   width:320px;height:56px;background:#fff">
+                <span style="display:block">Данные актуализированы</span>
+              </div></body></html>""")
+            check("уведомление найдено, хотя класс посторонний",
+                  page.evaluate(yb._ACTUALIZE_TOAST_JS))  # noqa: SLF001
+
+            page.set_content("""<html><body>
+              <div>Режим работы</div><button>Данные актуальны</button></body></html>""")
+            check("без уведомления ничего не выдумываем",
+                  not page.evaluate(yb._ACTUALIZE_TOAST_JS))  # noqa: SLF001
+
+            # Заглушка недоступной карточки: одна кнопка «Перейти…».
+            page.set_content("""<html><body>
+              <button aria-label="Ваш профиль"></button>
+              <button>Перейти на страницу организаций</button></body></html>""")
+            check("недоступная карточка распознана", yb._looks_like_no_access(page))  # noqa: SLF001
+
+            page.set_content("""<html><body>
+              <button>Добавить пост</button><button>Товары и услуги</button>
+              <button>Публикации</button><button>Отзывы</button>
+              <button>Перейти на страницу организаций</button></body></html>""")
+            check("рабочая карточка НЕ считается недоступной",
+                  not yb._looks_like_no_access(page))  # noqa: SLF001
+        finally:
+            browser.close()
+
+
+def test_preflight_duplicate_guard() -> None:
+    """
+    Перед публикацией смотрим ленту: такой пост уже есть – не отправляем.
+
+    Живой случай: в облаке файлы стираются при перезапуске, вместе с ними
+    пропадал реестр публикаций – и тот же прогон создавал ВТОРОЙ пост.
+    Лента Яндекса не теряется никогда, поэтому проверка идёт по ней.
+    """
+    src = Path("yb_playwright.py").read_text(encoding="utf-8")
+    print("\n▸ Защита от повторной публикации")
+    body = src[src.index("def publish_to_city("):src.index("def actualize_city(")]
+    pre = body.index("check_post_already_exists")
+    click = body.index("_FIND_PUBLISH_BTN_JS")
+    check("лента проверяется ДО клика «Создать»", pre < click)
+    check("повтор помечается пропуском, а не ошибкой",
+          "skipped-duplicate" in body[pre:pre + 900])
+
+    import yb_playwright as yb
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+    text = "Отгрузили партию сотового поликарбоната на склад заказчика в этом городе"
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 1200, "height": 800}).new_page()
+            card = ('<div class="PostCard" style="width:600px;height:200px">'
+                    '<span>Публикация на модерации</span><p>{t}</p></div>')
+
+            page.set_content(f"<html><body>{card.format(t=text)}</body></html>")
+            got = yb.check_post_already_exists(page, text)
+            check("свежий пост в ленте найден", got.get("found") and got.get("fresh"), str(got))
+
+            page.set_content("<html><body>"
+                             + f'<div class="PostCard" style="width:600px;height:200px">'
+                               f'<span>3 дня назад</span><p>{text}</p></div>' + "</body></html>")
+            got = yb.check_post_already_exists(page, text)
+            check("старый пост найден, но НЕ свежий",
+                  got.get("found") and not got.get("fresh"), str(got))
+
+            page.set_content("<html><body>"
+                             + card.format(t="совершенно другой текст поста для города")
+                             + "</body></html>")
+            got = yb.check_post_already_exists(page, text)
+            check("чужой пост за свой не считаем", not got.get("found"), str(got))
+        finally:
+            browser.close()
 
 
 def test_bulk_city_duplicates() -> None:
@@ -1263,9 +1358,10 @@ def main() -> int:
         test_run_state(tmp)
         test_task_format(tmp)
         test_report_render()
-        test_report_summary()
         test_yandex_domain()
         test_aps_project()
+        test_toast_and_access_on_real_page()
+        test_preflight_duplicate_guard()
         test_bulk_city_duplicates()
         test_actualize_click_on_real_page()
         test_run_logs(tmp)

@@ -737,6 +737,29 @@ _CHECK_EXISTS_JS = r"""
 """
 
 
+_NO_ACCESS_JS = r"""
+() => {
+  const texts = [...document.querySelectorAll('button, [role="button"], a')]
+    .map(b => (b.textContent || '').trim().toLowerCase())
+    .filter(Boolean);
+  // На рабочей карточке кнопок много. Заглушка «нет доступа» показывает
+  // одну-единственную – увести на список организаций.
+  const own = texts.filter(t => t.length > 2 && t.length < 60);
+  const escape = own.some(t => /перейти на страницу организац|к списку организац|все организации/.test(t));
+  const body = (document.body.innerText || '').toLowerCase();
+  const denied = /нет доступа|доступ ограничен|организация не найдена|у вас нет прав/.test(body);
+  return denied || (escape && own.length <= 3);
+}
+"""
+
+
+def _looks_like_no_access(page: Page) -> bool:
+    try:
+        return bool(page.evaluate(_NO_ACCESS_JS))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def check_post_already_exists(page: Page, post_text: str) -> dict:
     full = (post_text or "").strip()
     if len(full) < 20:
@@ -1045,6 +1068,23 @@ def publish_to_city(
     if should_stop and should_stop():
         return finish("failed", "Остановлено пользователем до начала публикации")
 
+    # ─── 1б. ЛЕНТА УЖЕ СОДЕРЖИТ ЭТОТ ПОСТ? ───
+    # Последний рубеж против дубля, и он не зависит от причины. Реестр
+    # публикаций лежит в файлах, а в облаке файлы стираются при перезапуске:
+    # после ребута тот же прогон уходил заново и создавал ВТОРОЙ пост. Здесь
+    # мы смотрим на саму ленту Яндекса – она не теряется никогда.
+    try:
+        already = check_post_already_exists(page, task.get("postText", ""))
+    except Exception:  # noqa: BLE001
+        already = {"found": False, "fresh": False, "reason": ""}
+    if already.get("found") and already.get("fresh"):
+        result["steps"]["publish"] = "already-published"
+        reason = ("Такой пост уже есть в ленте города"
+                  + (f" ({already['reason']})" if already.get("reason") else "")
+                  + " – повтор не отправлен")
+        warn(f"  ⏭ {label}: {reason}")
+        return finish("skipped-duplicate", reason)
+
     # ─── 2. Кнопка «Добавить пост» ───
     add_btn = wait_for_text_button(
         page,
@@ -1101,6 +1141,14 @@ def publish_to_city(
             result["steps"]["addButton"] = "no-session"
             error("  ❌ Открылась страница входа Яндекса – сессия не активна")
             return finish("no-session", "Сессия Яндекса не активна: открылась страница входа")
+        # Карточка бывает просто НЕ ДОСТУПНА этому аккаунту: Яндекс показывает
+        # заглушку с единственной кнопкой «Перейти на страницу организаций».
+        # «Кнопка не найдена» тут врёт – искать нечего, доступа нет.
+        if _looks_like_no_access(page):
+            result["steps"]["addButton"] = "no-access"
+            error("  ❌ У аккаунта нет доступа к этой карточке")
+            return finish("failed", "Карточка недоступна этому аккаунту Яндекса – "
+                                    "проверьте ссылку и права на организацию")
         result["steps"]["addButton"] = "missing"
         error("  ❌ Кнопка «Добавить пост» не найдена")
         return finish("failed", "Кнопка «Добавить пост» не найдена")
@@ -1580,16 +1628,31 @@ _ACTUALIZE_BTN_JS = r"""
 }
 """
 
+# Ищем ТЕКСТ уведомления по всей странице, а не только внутри элементов с
+# «правильными» классами. Заказчик показала: уведомление «Данные
+# актуализированы» всплывает, а Click его не видел – значит контейнер
+# называется иначе. Смотрим на самый глубокий элемент с этим текстом:
+# так не поймаем body целиком и не упрёмся в ограничение длины.
 _ACTUALIZE_TOAST_JS = r"""
 () => {
-  const cands = document.querySelectorAll(
-    '[class*="oast"], [class*="otification"], [class*="otice"], [role="alert"], [role="status"]');
-  for (const el of cands) {
+  const RX = /(данные\s+актуализирован|актуализирован[оы]|сохранено|обновлено)/i;
+  for (const el of document.querySelectorAll('body *')) {
     const text = (el.textContent || '').trim();
-    if (!text || text.length < 5 || text.length > 100) continue;
+    if (!text || text.length < 5 || text.length > 160) continue;
+    if (!RX.test(text)) continue;
+    // Берём только тот элемент, у которого совпадающего текста нет глубже:
+    // иначе засчитаем родителя половины страницы.
+    let deeper = false;
+    for (const child of el.querySelectorAll('*')) {
+      const t = (child.textContent || '').trim();
+      if (t && t.length <= 160 && RX.test(t)) { deeper = true; break; }
+    }
+    if (deeper) continue;
     const r = el.getBoundingClientRect();
-    if (r.width < 50 || r.height < 10) continue;
-    if (/(данные\s+актуализирован|актуализирован|сохранено|обновлено)/i.test(text)) return true;
+    if (r.width < 30 || r.height < 8) continue;
+    const st = getComputedStyle(el);
+    if (st.visibility === 'hidden' || st.display === 'none' || st.opacity === '0') continue;
+    return true;
   }
   return false;
 }

@@ -205,7 +205,83 @@
     {
       "id": "c-APS-казахстан-1785841334",
       "name": "Казахстан",
-      "cities": []
+      "cities": [
+        {
+          "id": "ct-актау-1785841350940-0",
+          "name": "Актау",
+          "url": "https://yandex.ru/sprav/25637563/edit"
+        },
+        {
+          "id": "ct-актобе-1785841350940-1",
+          "name": "Актобе",
+          "url": "https://yandex.ru/sprav/21047040/edit"
+        },
+        {
+          "id": "ct-алматы-1785841350940-2",
+          "name": "Алматы",
+          "url": "https://yandex.ru/sprav/15350818/edit/main/"
+        },
+        {
+          "id": "ct-астана-нур-султан-1785841350940-3",
+          "name": "Астана/Нур-Султан",
+          "url": "https://yandex.ru/sprav/25279047/edit"
+        },
+        {
+          "id": "ct-атырау-1785841350940-4",
+          "name": "Атырау",
+          "url": "https://yandex.ru/sprav/21046316/edit/"
+        },
+        {
+          "id": "ct-караганда-1785841350940-5",
+          "name": "Караганда",
+          "url": "https://yandex.ru/sprav/21045811/edit/main"
+        },
+        {
+          "id": "ct-костанай-1785841350940-6",
+          "name": "Костанай",
+          "url": "https://yandex.ru/sprav/25638664/edit/main"
+        },
+        {
+          "id": "ct-кызылорда-1785841350940-7",
+          "name": "Кызылорда",
+          "url": "https://yandex.ru/sprav/25639288/edit"
+        },
+        {
+          "id": "ct-павлодар-1785841350940-8",
+          "name": "Павлодар",
+          "url": "https://yandex.ru/sprav/28010789/edit"
+        },
+        {
+          "id": "ct-петропавловск-1785841350940-9",
+          "name": "Петропавловск",
+          "url": "https://yandex.ru/sprav/25639595/edit"
+        },
+        {
+          "id": "ct-семей-1785841350940-10",
+          "name": "Семей",
+          "url": "https://yandex.ru/sprav/25640364/edit"
+        },
+        {
+          "id": "ct-тараз-1785841350940-11",
+          "name": "Тараз",
+          "url": "https://yandex.ru/sprav/25640819/edit"
+        },
+        {
+          "id": "ct-уральск-1785841350940-12",
+          "name": "Уральск",
+          "url": "https://yandex.ru/sprav/25640923/edit"
+        },
+        {
+          "id": "ct-усть-каменогорск-1785841350940-13",
+          "name": "Усть-Каменогорск",
+          "url": "https://yandex.ru/sprav/21045395/edit/main"
+        },
+        {
+          "id": "ct-шымкент-1785841350940-14",
+          "name": "Шымкент",
+          "url": "https://yandex.ru/sprav/21056226/edit/main"
+        }
+      ]
     }
   ],
   "email": "aviastalru@yandex.ru"

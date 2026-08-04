@@ -189,7 +189,18 @@
     {
       "id": "c-APS-киргизия-1785841282",
       "name": "Киргизия",
-      "cities": []
+      "cities": [
+        {
+          "id": "ct-бишкек-1785841309500-0",
+          "name": "Бишкек",
+          "url": "https://yandex.ru/sprav/31565270/edit"
+        },
+        {
+          "id": "ct-ош-1785841309500-1",
+          "name": "Ош",
+          "url": "https://yandex.ru/sprav/33891281/edit/main"
+        }
+      ]
     }
   ],
   "email": "aviastalru@yandex.ru"

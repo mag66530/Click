@@ -245,7 +245,7 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817383088,
+      "expires": 1817383317,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -541,22 +541,22 @@
       "sameSite": "None"
     },
     {
-      "name": "cycada",
-      "value": "rXmXnaZ6m+4IVUnfn3YlgifA5hjy39BWIgnQZ/gtJxs=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1787056686.623,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "receive-cookie-deprecation",
       "value": "1",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817383087,
+      "expires": 1817383289,
       "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "cycada",
+      "value": "hsIQAnQUhEIYZmyPxytwwyfA5hjy39BWIgnQZ/gtJxs=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1787056916.604,
+      "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
@@ -565,7 +565,7 @@
       "value": "0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817383089,
+      "expires": 1817383318,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -575,7 +575,7 @@
       "value": "b",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1785848889,
+      "expires": 1785849118,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -592,10 +592,6 @@
         {
           "name": "_ym86696578_lsid",
           "value": "373021258572"
-        },
-        {
-          "name": "_ym86969315:0_reqNum",
-          "value": "1"
         },
         {
           "name": "_ym87015871:0_reqNum",
@@ -635,7 +631,7 @@
         },
         {
           "name": "_ym46231566:0_reqNum",
-          "value": "198"
+          "value": "216"
         },
         {
           "name": "_ym22555771:0_reqNum",
@@ -646,8 +642,8 @@
           "value": "1302976782601"
         },
         {
-          "name": "_ym56213845:0_reqNum",
-          "value": "662"
+          "name": "_ym86969315:0_reqNum",
+          "value": "1"
         },
         {
           "name": "_ym87015871_lsid",
@@ -655,7 +651,7 @@
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "74"
+          "value": "76"
         },
         {
           "name": "_ym72578986:0_reqNum",
@@ -735,7 +731,7 @@
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "716"
+          "value": "746"
         },
         {
           "name": "_ym87015792:0_reqNum",
@@ -874,8 +870,8 @@
           "value": "57990267817"
         },
         {
-          "name": "_ym88849238:0_reqNum",
-          "value": "1"
+          "name": "_ym88257730_lsid",
+          "value": "1209544581740"
         },
         {
           "name": "_ym88849238_lsid",
@@ -934,12 +930,12 @@
           "value": "1416639858937"
         },
         {
-          "name": "_ym87649676:0_reqNum",
+          "name": "_ym88849238:0_reqNum",
           "value": "1"
         },
         {
-          "name": "_ym88257730_lsid",
-          "value": "1209544581740"
+          "name": "_ym87649676:0_reqNum",
+          "value": "1"
         },
         {
           "name": "_ym24367924_lsid",
@@ -982,6 +978,10 @@
           "value": "2"
         },
         {
+          "name": "_ym56213845:0_reqNum",
+          "value": "692"
+        },
+        {
           "name": "_ym87177657:0_reqNum",
           "value": "1"
         },
@@ -1012,7 +1012,7 @@
       "localStorage": [
         {
           "name": "_ym784657:0_reqNum",
-          "value": "4"
+          "value": "12"
         },
         {
           "name": "_ym784657_lsid",
@@ -1020,7 +1020,7 @@
         },
         {
           "name": "_ym54321510:0_reqNum",
-          "value": "1"
+          "value": "2"
         },
         {
           "name": "_ym54321510_lsid",
@@ -1085,10 +1085,6 @@
       "origin": "https://yandex.com",
       "localStorage": [
         {
-          "name": "maps_analytics_event_index",
-          "value": "{\"1785846949018298-14412930841387011385-balancer-l7leveler-kubr-yp-sas-106-BAL\":162}"
-        },
-        {
           "name": "_ym3_lsid",
           "value": "335923788948"
         },
@@ -1097,16 +1093,16 @@
           "value": "1"
         },
         {
-          "name": "_ym24367924_lsid",
-          "value": "1489499307259"
+          "name": "maps_analytics_event_index",
+          "value": "{\"1785846949018298-14412930841387011385-balancer-l7leveler-kubr-yp-sas-106-BAL\":162}"
+        },
+        {
+          "name": "_ym86931758:0_reqNum",
+          "value": "1"
         },
         {
           "name": "_ym86737736_lsid",
           "value": "1340620946161"
-        },
-        {
-          "name": "_ym24367924_lastHit",
-          "value": "1785846539683"
         },
         {
           "name": "_ym87649676_lsid",
@@ -1129,8 +1125,8 @@
           "value": "1422382975428"
         },
         {
-          "name": "_ym_uid",
-          "value": "\"1785846296759244775\""
+          "name": "_ym24367924_lastHit",
+          "value": "1785846539683"
         },
         {
           "name": "_ym24367924:0_reqNum",
@@ -1139,6 +1135,10 @@
         {
           "name": "beerka",
           "value": "2.1.0"
+        },
+        {
+          "name": "_ym_uid",
+          "value": "\"1785846296759244775\""
         },
         {
           "name": "_ym86420123:0_reqNum",
@@ -1165,8 +1165,8 @@
           "value": "6"
         },
         {
-          "name": "_ym86931758:0_reqNum",
-          "value": "1"
+          "name": "_ym24367924_lsid",
+          "value": "1489499307259"
         },
         {
           "name": "maps_fonts_by_family",

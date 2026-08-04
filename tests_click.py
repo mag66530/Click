@@ -988,9 +988,34 @@ def test_aps_project() -> None:
     import kp_sheet
     import projects_data as pdata
     import streamlit_app as app
+    import yb_playwright as yb
     print("\n▸ Проект АПС и его КП")
 
     check("проект есть в списке", "APS" in app.PROJECTS)
+
+    # Города зашиты списком: КП в таблице ещё не доделана.
+    check("города загружены", len(pdata.APS_CITIES) == 62, str(len(pdata.APS_CITIES)))
+    check("у каждого города есть страна, имя и ссылка",
+          all(c.get("country") and c.get("name") and c.get("url") for c in pdata.APS_CITIES))
+    check("нет городов-дублей",
+          len({(c["country"], c["name"]) for c in pdata.APS_CITIES}) == len(pdata.APS_CITIES))
+    check("все ссылки ведут в раздел «Посты»",
+          all(c["url"].endswith("/edit/posts/") for c in pdata.APS_CITIES),
+          str([c["url"] for c in pdata.APS_CITIES if not c["url"].endswith("/edit/posts/")][:2]))
+    check("для каждого города вытаскивается номер карточки",
+          all(yb.extract_company_id(c["url"]) for c in pdata.APS_CITIES))
+    check("страны АПС покрыты окончаниями",
+          {c["country"] for c in pdata.APS_CITIES} <= set(pdata.APS_ENDINGS["contacts"]),
+          str({c["country"] for c in pdata.APS_CITIES} - set(pdata.APS_ENDINGS["contacts"])))
+
+    # Новый адрес карточки Яндекса – в КП АПС он у трёх городов. Раньше такая
+    # ссылка не опознавалась вовсе, и город молча выпадал из прогона.
+    new_url = "https://yandex.ru/business/companies/company/70210624498/"
+    eq("номер из нового адреса", yb.extract_company_id(new_url), "70210624498")
+    eq("новый адрес → раздел «Посты»", yb.build_posts_url(new_url),
+       "https://yandex.ru/sprav/70210624498/p/edit/posts/")
+    eq("новый адрес → раздел «Данные»", yb.build_edit_url(new_url),
+       "https://yandex.ru/sprav/70210624498/p/edit/")
     aps = app.PROJECTS.get("APS") or {}
     eq("почта аккаунта", aps.get("yandexEmail"), "aviastalru@yandex.ru")
     eq("название", aps.get("fullName"), "Авиапромсталь")

@@ -37,7 +37,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-04-project-aps"
+UI_BUILD = "2026-08-04-aps-cities"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -95,10 +95,11 @@ PROJECTS: dict[str, dict] = {
             # паспорт с другими правилами проверки (звонок вместо письма).
             "yandexEmail": "metpromintex@yandex.ru", "passwordHash": _hash("1717"),
             "presetCities": [], "endings": pdata.MPI_ENDINGS},
-    # АПС – города тоже из КП («карта присутствия»), вшитого списка нет.
+    # АПС – КП в Google-таблице ещё не доделана, поэтому города зашиты списком.
+    # Когда таблица будет готова, она их перекроет («Города» → «Источник городов»).
     "APS": {"id": "APS", "name": "АПС", "fullName": "Авиапромсталь", "color": "#06b6d4", "icon": "✈",
             "yandexEmail": "aviastalru@yandex.ru", "passwordHash": _hash("2727"),
-            "presetCities": [], "endings": pdata.APS_ENDINGS},
+            "presetCities": pdata.APS_CITIES, "endings": pdata.APS_ENDINGS},
 }
 
 def flag(name: str, height: int = 14) -> str:

@@ -113,8 +113,16 @@ def error(msg: str) -> None:
 #  URL-хелперы (порт extractCompanyId / buildPostsUrl / buildEditUrl)
 # ════════════════════════════════════════════════════════════════════
 
+# Яндекс завёл второй адрес той же карточки:
+#   старый  https://yandex.ru/sprav/21461411/edit/
+#   новый   https://yandex.ru/business/companies/company/70210624498/
+# Номер в обоих один и тот же. Без разбора нового вида такие города молча
+# выпадали: ссылка не опознавалась, и до формы поста дело не доходило.
+COMPANY_ID_RX = re.compile(r"(?:sprav|/business/companies/company)/(\d+)", re.I)
+
+
 def extract_company_id(url: str | None) -> str | None:
-    m = re.search(r"sprav/(\d+)", url or "")
+    m = COMPANY_ID_RX.search(url or "")
     return m.group(1) if m else None
 
 
@@ -135,6 +143,10 @@ def build_posts_url(company_url: str | None, company_id: str | None = None) -> s
         if m:
             # Формат неизвестен – берём более частый «новый», со /p/
             return m.group(1) + "/p/edit/posts/"
+        # Новый адрес карточки – номер тот же, приводим к рабочему виду.
+        cid = extract_company_id(company_url)
+        if cid:
+            return f"https://yandex.ru/sprav/{cid}/p/edit/posts/"
     if company_id:
         return f"https://yandex.ru/sprav/{company_id}/p/edit/posts/"
     return None

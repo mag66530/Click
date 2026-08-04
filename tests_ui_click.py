@@ -200,6 +200,30 @@ def main() -> int:
             page.wait_for_timeout(3000)
             page.get_by_role("button", name="Добавить в очередь", exact=False).first.click()
             page.wait_for_timeout(3000)
+
+            # ── Поведение оригинала после добавления ──
+            # Заказчик: «не видно что снизу что-то добавилось», «следующая
+            # страна выбралась сама», «та что в очереди помечена галочкой».
+            note_ok = (page.get_by_text("следующая страна", exact=False).count() > 0
+                       or page.get_by_text("Все страны добавлены", exact=False).count() > 0)
+            check("после добавления видно подтверждение и следующую страну", note_ok)
+            mark = page.evaluate("""() => {
+                const box = document.querySelector('[class*="st-key-tile-cc-compose-2"] .stButton');
+                if (!box) return {};
+                const btn = box.querySelector('button');
+                return { meta: getComputedStyle(btn, '::after').content,
+                         badge: getComputedStyle(box, '::after').display };
+            }""")
+            check("плитка страны помечена «в очереди»",
+                  "в очереди" in (mark.get("meta") or ""), str(mark))
+            check("зелёная галочка на плитке видна", mark.get("badge") == "flex", str(mark))
+            primary = page.evaluate(
+                """() => [...document.querySelectorAll('[class*="st-key-tile-cc-compose-"] button')]
+                     .filter(b => b.getAttribute('kind') === 'primary')
+                     .map(b => b.innerText.trim().split('\\n')[0])""")
+            check("следующая страна выбралась сама",
+                  len(primary) == 1 and primary[0] != rows[-1]["text"], str(primary))
+
             page.get_by_role("button", name="Сохранить очередь в задачи").click()
             page.wait_for_timeout(5000)
             check("приложение не упало", page.get_by_text("StreamlitAPIException").count() == 0,

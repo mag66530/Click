@@ -37,7 +37,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-04-no-self-sms"
+UI_BUILD = "2026-08-04-queue-flow"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -220,6 +220,62 @@ def get_config(project_id: str) -> dict:
         if sub["id"] == active:
             return sub
     return raw["projects"][0]
+
+
+def _pull_session(project_id: str) -> None:
+    """
+    Возврат сессии после перезапуска облака.
+
+    Файловая система Streamlit Cloud временная: куки исчезали при каждом
+    рестарте, и вход приходилось проходить заново – «выкидывает». Копия
+    сессии лежит в приватном хранилище проекта (та же ветка, что города и
+    настройки) и восстанавливается, когда локального файла нет.
+    """
+    if not repo_store.is_configured():
+        return
+    pairs = ((f"session-{project_id}", yb.session_path(project_id)),
+             (f"device-{project_id}", yb.device_path(project_id)))
+    for name, path in pairs:
+        if path.exists() and path.stat().st_size > 2:
+            continue
+        try:
+            data = repo_store.load(name)
+            if data and data.get("cookies"):
+                path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _push_session(project_id: str) -> None:
+    """Свежие куки – в хранилище. Прогон продлевает их, копия не должна отставать."""
+    if not repo_store.is_configured():
+        return
+    pairs = ((f"session-{project_id}", yb.session_path(project_id), True),
+             (f"device-{project_id}", yb.device_path(project_id), False))
+    for name, path, need_auth in pairs:
+        if not path.exists() or (need_auth and not yb.has_saved_session(project_id)):
+            continue
+        mark = f"_pushed_{name}"
+        mtime = path.stat().st_mtime
+        if st.session_state.get(mark) == mtime:
+            continue
+        try:
+            repo_store.save(name, json.loads(path.read_text(encoding="utf-8")),
+                            f"Click: сессия Яндекса ({project_id})")
+            st.session_state[mark] = mtime
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _forget_session(project_id: str) -> None:
+    """«Войти заново»: стираем сессию и локально, и в хранилище."""
+    yb.session_path(project_id).unlink(missing_ok=True)
+    if repo_store.is_configured():
+        try:
+            repo_store.save(f"session-{project_id}", {},
+                            f"Click: сессия сброшена ({project_id})")
+        except Exception:  # noqa: BLE001
+            pass
 
 
 # Домены-двойники Яндекса: ящик один, а паспорт разный. Международный
@@ -694,13 +750,18 @@ def _city_duplicate(config: dict, url: str, name: str, country_id: str) -> str |
 
 
 def country_picker(key_prefix: str, config: dict, title: str = "Страны",
-                   with_cities: bool = False, cities: dict | None = None) -> list[dict]:
+                   with_cities: bool = False, cities: dict | None = None,
+                   queued: dict[str, int] | None = None) -> list[dict]:
     """
     Выбор стран карточками, как в оригинале: флаг, название, «N гор.».
     Сама карточка – HTML (Streamlit такого не умеет), клик – кнопкой под ней.
+
+    queued – сколько раз страна уже в очереди: такая плитка получает зелёную
+    рамку и «✓ в очереди», ровно как .country-tile.in-queue оригинала.
     """
     countries = config["countries"]
     cities = cities if cities is not None else {}
+    queued = queued or {}
     if not countries:
         return []
 
@@ -721,11 +782,21 @@ def country_picker(key_prefix: str, config: dict, title: str = "Страны",
                    on_click=_toggle_all_countries, args=(key_prefix, [c["id"] for c in countries], not all_on))
 
         # Ключи плиток – только латиница и цифры (см. T.tile_css).
+        def tile_vars(c: dict) -> dict:
+            n_q = queued.get(c["id"], 0)
+            v = {"--flag": T.flag_data_uri(c["name"]),
+                 "--meta": T.css_text(f'{len(c["cities"])} гор.')}
+            if n_q:
+                mark = "в очереди" + (f" ×{n_q}" if n_q > 1 else "")
+                v.update({
+                    "--meta": T.css_text(f'{len(c["cities"])} гор. · {mark}'),
+                    "--meta-c": "var(--grn)", "--qshow": "flex",
+                    "--qbord": "var(--grn)", "--qbg": "var(--grn-bg)",
+                })
+            return v
+
         html(T.tile_css([
-            (f"tile-cc-{key_prefix}-{n}", {
-                "--flag": T.flag_data_uri(c["name"]),
-                "--meta": T.css_text(f'{len(c["cities"])} гор.'),
-            }) for n, c in enumerate(countries)
+            (f"tile-cc-{key_prefix}-{n}", tile_vars(c)) for n, c in enumerate(countries)
         ]))
         per_row = 4
         for start in range(0, len(countries), per_row):
@@ -1106,8 +1177,12 @@ def tab_compose(project_id: str, config: dict) -> None:
 
     # ─── Страны для публикации: карточки со счётчиком городов, как в оригинале ───
     per_country: dict[str, list[str]] = {}
+    queued_count: dict[str, int] = {}
+    for q in queue:
+        queued_count[q["countryId"]] = queued_count.get(q["countryId"], 0) + 1
     selected_countries = country_picker("compose", config, title="🌍 Страны для публикации",
-                                        with_cities=True, cities=per_country)
+                                        with_cities=True, cities=per_country,
+                                        queued=queued_count)
 
     # ─── Текст и картинки – одна карточка, названная типом поста ───
     text_card = st.container(border=True)
@@ -1213,17 +1288,37 @@ def tab_compose(project_id: str, config: dict) -> None:
                 })
                 added += 1
             if added:
-                st.toast(f"Добавлено стран в очередь: {added}")
+                # Порт addToDraftQueue оригинала: выбор стран сбрасывается,
+                # сама выбирается ПЕРВАЯ страна, которой ещё нет в очереди;
+                # текст, тип и картинки остаются – пост едет дальше по странам.
+                queued_ids = {q["countryId"] for q in queue}
+                for c in config["countries"]:
+                    st.session_state[f"compose-cb-{c['id']}"] = False
+                nxt = next((c for c in config["countries"] if c["id"] not in queued_ids), None)
+                if nxt is not None:
+                    st.session_state[f"compose-cb-{nxt['id']}"] = True
+                    st.session_state["compose-note"] = (
+                        f"✓ Добавлено ({cities_word(sum(len(q['cityIds']) for q in queue[-added:]))}) · "
+                        f"следующая страна: {nxt['name']}")
+                else:
+                    st.session_state["compose-note"] = (
+                        "🎉 Все страны добавлены! Сохраните очередь – блок «В очереди к сохранению» ниже.")
             st.rerun()
     with c2:
         if not can_add:
             st.caption("Нужно: текст поста + хотя бы один выбранный город.")
 
+    # Заметка живёт до следующего добавления, а не мигает тостом: после
+    # перерисовки видно, ЧТО добавилось и какая страна выбралась сама.
+    note = st.session_state.get("compose-note")
+    if note:
+        st.success(note)
+
     # ─── Очередь ───
     if queue:
         st.divider()
-        html(f'<div class="card-title">📦 Очередь на публикацию – '
-             f'{plural(len(queue), "пакет", "пакета", "пакетов")}, '
+        html(f'<div class="card-title">📦 В очереди к сохранению '
+             f'<span class="badge badge-accent">{len(queue)}</span> · '
              f'{cities_word(sum(len(q["cityIds"]) for q in queue))}</div>')
         for i, item in enumerate(queue):
             preview = item["text"][:180] + ("…" if len(item["text"]) > 180 else "")
@@ -1241,6 +1336,7 @@ def tab_compose(project_id: str, config: dict) -> None:
                          use_container_width=True, key="btn-save-queue"):
                 saved = save_queue_to_tasks(project_id, config, queue)
                 st.session_state["queue"] = []
+                st.session_state.pop("compose-note", None)
                 goto_section(SECTIONS[0])       # дальше человеку всё равно на «Запуск»
                 # Новое поколение ключей очищает загрузчики файлов: их состояние
                 # переживает перерисовки, и старые картинки тихо прицеплялись к
@@ -1253,6 +1349,7 @@ def tab_compose(project_id: str, config: dict) -> None:
             with st.container(key="danger-clear-queue"):
                 if st.button("Очистить очередь", use_container_width=True, key="btn-drop-queue"):
                     st.session_state["queue"] = []
+                    st.session_state.pop("compose-note", None)
                     st.rerun()
 
 
@@ -1758,8 +1855,13 @@ def tab_settings(project_id: str, config: dict) -> None:
             _browser_error(e)
     c2.caption(f"Браузер: **{engine}**" if engine else "Браузер ещё не запускался.")
 
-    st.caption("⚠️ В облаке файловая система временная: при перезапуске приложения пропадут "
-               "сессия Яндекса и отчёты.")
+    if repo_store.is_configured():
+        st.caption("💾 Сессия Яндекса хранится в приватном хранилище проекта – "
+                   "переживает перезапуски облака. Сбросить: «Войти заново». "
+                   "Отчёты в облаке по-прежнему живут до перезапуска.")
+    else:
+        st.caption("⚠️ В облаке файловая система временная: при перезапуске приложения пропадут "
+                   "сессия Яндекса и отчёты.")
 
     with st.container(key="danger-logout"):
         if st.button("Выйти из проекта", key="btn-logout"):
@@ -1823,7 +1925,7 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
                            + (who.get("error") or "страница профиля ничего не отдала"))
         with st.container(key="danger-reset-session"):
             if st.button("Войти заново (сбросить сессию)", key="yb-reset"):
-                yb.session_path(project_id).unlink(missing_ok=True)
+                _forget_session(project_id)
                 for k in ("yb_flow", "yb_state", "yb_step"):
                     st.session_state.pop(k, None)
                 st.rerun()
@@ -2124,6 +2226,7 @@ def _finish_login(project_id: str, worker, flow) -> None:
         pass
     try:
         worker.call(flow.save_session)
+        _push_session(project_id)
     finally:
         try:
             worker.call(flow.close)
@@ -2141,6 +2244,10 @@ def _finish_login(project_id: str, worker, flow) -> None:
 def show_main(project_id: str) -> None:
     inject_css()
     ensure_dirs(project_id)
+    if not st.session_state.get(f"_sess_pulled_{project_id}"):
+        _pull_session(project_id)
+        st.session_state[f"_sess_pulled_{project_id}"] = True
+    _push_session(project_id)          # дешёвая проверка по mtime: пуш только при изменении
     config = get_config(project_id)
     project = PROJECTS[project_id]
 

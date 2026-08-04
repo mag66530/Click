@@ -912,6 +912,21 @@ def test_login_step_detection() -> None:
             check("без письма «Подтвердить» нажимается",
                   page.evaluate("window.__confirmed === 1"))
 
+            # Пароль: вписать и нажать «Далее» ОДИН раз. Раньше был каскад
+            # «Enter + кнопка + запасной клик» – лишние нажатия улетали в
+            # кнопки следующего экрана, и заказчик просил так не делать.
+            page.set_content("""<html><body style='margin:40px'>
+                <h1>Введите пароль</h1><input type="password" placeholder="Пароль">
+                <button onclick="window.__next=(window.__next||0)+1">Далее</button>
+                <script>document.addEventListener('keydown',
+                    e => { if (e.key === 'Enter') window.__enter = 1; });</script>
+                </body></html>""")
+            flow.submit_password("secret-123")
+            eq("«Далее» нажата ровно один раз", page.evaluate("window.__next"), 1)
+            check("Enter не нажимался вовсе", page.evaluate("window.__enter === undefined"))
+            eq("пароль действительно вписан",
+               page.evaluate("document.querySelector('input').value"), "secret-123")
+
             # Куки устройства помним, куки авторизации – НЕТ. Иначе «сбросить
             # сессию» переставало работать: сессию стёрли, а вход всё равно
             # под старым аккаунтом.
@@ -951,6 +966,13 @@ def test_report_summary() -> None:
 
     pub = T.report_summary({"total": 3, "ok": 3}, 30)
     check("в публикации «Всего» осталось", "Всего" in pub)
+
+    # Живой случай: при notNeeded=0 плитка пропадала, и колонок было три.
+    # Заказчику нужны ровно 4 колонки всегда, как в оригинале.
+    zero = T.report_summary({"total": 5, "actualized": 5, "notNeeded": 0, "failed": 0},
+                            60, keys=["actualized", "notNeeded", "failed"], with_total=False)
+    for word in ("Актуализировано", "Не требовалось", "Ошибок", "Время"):
+        check(f"4 колонки: «{word}» есть и при нуле", word in zero)
 
 
 def test_yandex_domain() -> None:

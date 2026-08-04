@@ -2006,9 +2006,43 @@ class YbLoginFlow:
         return self.state()
 
     def submit_password(self, password: str) -> dict:
+        """
+        Пароль: вписать – пауза – ОДНО нажатие «Далее». Без Enter и без
+        запасных кликов: заказчику важно, чтобы Click не жал ничего лишнего –
+        лишние нажатия улетали в кнопки следующего экрана.
+        """
         self._require_step("password")
-        self._submit_generic_field(password, PASSWORD_NEXT_BUTTON, "password")
+        field = self._field_for("password")
+        field.click()
+        try:
+            field.fill("")
+        except Exception:  # noqa: BLE001
+            pass
+        field.type(password, delay=40)
+        self.page.wait_for_timeout(1000)          # секунда «посмотреть», как просили
+        clicked = False
+        if self.page.locator(PASSWORD_NEXT_BUTTON).count() > 0:
+            try:
+                self.page.click(PASSWORD_NEXT_BUTTON, timeout=3000)
+                clicked = True
+            except Exception:  # noqa: BLE001
+                pass
+        if not clicked:
+            _click_exact_button(self.page, ["далее", "войти", "next", "log in"])
+        self.page.wait_for_timeout(2500)
         self._skip_post_login_prompts()
+        return self.state()
+
+    def type_only(self, value: str) -> dict:
+        """Только вписать в поле текущего экрана – НИЧЕГО не нажимая."""
+        field = self._field_for(self.detect_step())
+        field.click()
+        try:
+            field.fill("")
+        except Exception:  # noqa: BLE001
+            pass
+        field.type(value, delay=40)
+        self.page.wait_for_timeout(400)
         return self.state()
 
     def submit_code(self, code: str) -> dict:
@@ -2256,8 +2290,7 @@ class YbLoginFlow:
                 if not password:
                     return {"ok": False, "step": "password", "screenshot": self.screenshot(),
                             "reason": "В «Настройках» не заполнен пароль – введите его здесь вручную."}
-                self._submit_generic_field(password, PASSWORD_NEXT_BUTTON, "password")
-                self._skip_post_login_prompts()
+                self.submit_password(password)
                 continue
 
             # «done» само по себе – только вид страницы. Успехом считаем лишь

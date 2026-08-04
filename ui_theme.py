@@ -17,7 +17,7 @@ import html as _html
 # Метка сборки. streamlit_app.py сверяет её со своей: разметка и стиль должны
 # быть из одной версии, иначе кнопки смещаются или пропадают. Менять вместе
 # с UI_BUILD в streamlit_app.py при любой правке разметки плиток.
-BUILD = "2026-08-04-no-self-sms"
+BUILD = "2026-08-04-queue-flow"
 
 # ─── Палитра 1:1 из :root в _ui.js ──────────────────────────────────
 DARK = {
@@ -591,7 +591,21 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }}
 [class*="st-key-tile-cc-"] .stButton > button::after {{
-  content: var(--meta, ""); font-size: 11px; font-weight: 500; color: var(--muted);
+  content: var(--meta, ""); font-size: 11px; font-weight: 500;
+  color: var(--meta-c, var(--muted));
+}}
+/* Страна уже в очереди (.country-tile.in-queue оригинала): зелёная рамка и
+   галочка в углу. Управляется переменными --qshow/--qbord/--qbg из tile_css. */
+[class*="st-key-tile-cc-"] .stButton {{ position: relative; }}
+[class*="st-key-tile-cc-"] .stButton::after {{
+  content: "✓"; display: var(--qshow, none); position: absolute; top: 6px; right: 8px;
+  width: 18px; height: 18px; border-radius: 50%; background: var(--grn); color: #fff;
+  align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+  pointer-events: none; z-index: 1;
+}}
+[class*="st-key-tile-cc-"] .stButton > button {{
+  border-color: var(--qbord, var(--border));
+  background-color: var(--qbg, var(--bg-2));
 }}
 [class*="st-key-tile-cc-"] .stButton > button[kind="primary"]::after {{
   color: var(--acc); font-weight: 700;
@@ -930,7 +944,9 @@ def tile_css(rules: list[tuple[str, dict[str, str]]]) -> str:
     for key, vars_ in rules:
         body = ";".join(f"{k}:{v}" for k, v in vars_.items() if v)
         if body:
-            out.append(f'.st-key-{key} .stButton > button{{{body}}}')
+            # Переменные ставим на контейнер: CSS-переменные наследуются вниз,
+            # так их видит и сама кнопка, и бейдж «✓ в очереди» на контейнере.
+            out.append(f'.st-key-{key} .stButton{{{body}}}')
     return "<style>" + "".join(out) + "</style>" if out else ""
 
 
@@ -1045,7 +1061,7 @@ def report_summary(totals: dict, duration_sec: int | None = None, keys: list[str
         if k not in _STAT_META:
             continue
         value = int(totals.get(k, 0) or 0)
-        if k in ("skipped", "unknown", "noImage", "notNeeded") and value == 0:
+        if k in ("skipped", "unknown", "noImage") and value == 0:
             continue
         cls, label = _STAT_META[k]
         cells.append(

@@ -978,6 +978,44 @@ def test_report_summary() -> None:
         check(f"4 колонки: «{word}» есть и при нуле", word in zero)
 
 
+def test_bulk_city_duplicates() -> None:
+    """
+    Добавление городов СПИСКОМ тоже обязано ловить дубли.
+
+    Проверка стояла только на добавлении по одному, а «Списком» складывало
+    строки внутрь как есть – именно так в проект попадали одинаковые карточки.
+    """
+    src = Path("streamlit_app.py").read_text(encoding="utf-8")
+    print("\n▸ Дубли при добавлении списком")
+
+    start = src.index("with tab_bulk:")
+    end = src.index("st.divider()", start)
+    bulk_code = src[start:end]
+    check("список проверяется на дубли", "_city_duplicate(" in bulk_code)
+    check("про пропущенные говорим человеку", "дубли" in bulk_code.lower())
+
+    # Сама проверка: одна карточка в двух записях – второй раз не проходит.
+    import streamlit_app as app
+    cfg = {"countries": [
+        {"id": "ru", "name": "Россия", "cities": [
+            {"id": "1", "name": "Барнаул", "url": "https://yandex.ru/sprav/21461411/p/edit/posts/"}]},
+        {"id": "kz", "name": "Казахстан", "cities": []},
+    ]}
+    dup = app._city_duplicate  # noqa: SLF001
+    check("та же карточка – дубль",
+          dup(cfg, "https://yandex.ru/sprav/21461411/edit/", "Барнаул-2", "ru"))
+    check("та же карточка в ДРУГОЙ стране – тоже дубль",
+          dup(cfg, "https://yandex.ru/sprav/21461411/edit/", "Барнаул", "kz"))
+    check("новый адрес той же карточки – дубль",
+          dup(cfg, "https://yandex.ru/business/companies/company/21461411/", "Барнаул", "ru"))
+    check("то же имя в той же стране – дубль",
+          dup(cfg, "https://yandex.ru/sprav/99999/edit/", "барнаул", "ru"))
+    check("то же имя в другой стране – НЕ дубль",
+          not dup(cfg, "https://yandex.ru/sprav/99999/edit/", "Барнаул", "kz"))
+    check("новый город – не дубль",
+          not dup(cfg, "https://yandex.ru/sprav/99999/edit/", "Томск", "ru"))
+
+
 def test_actualize_click_on_real_page() -> None:
     """
     Клик «Данные актуальны» в НАСТОЯЩЕМ браузере.
@@ -1228,6 +1266,7 @@ def main() -> int:
         test_report_summary()
         test_yandex_domain()
         test_aps_project()
+        test_bulk_city_duplicates()
         test_actualize_click_on_real_page()
         test_run_logs(tmp)
         test_local_time()

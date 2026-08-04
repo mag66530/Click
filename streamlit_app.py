@@ -37,7 +37,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-05-live-panel"
+UI_BUILD = "2026-08-05-bulk-dupes"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -1697,6 +1697,7 @@ def tab_cities(project_id: str, config: dict) -> None:
                                     label_visibility="collapsed")
                 if st.button("Добавить списком", key=f"bulk-btn-{country['id']}"):
                     added = 0
+                    skipped: list[str] = []
                     for line in (bulk or "").splitlines():
                         parts = [p.strip() for p in re.split(r"[|\t]", line) if p.strip()]
                         if len(parts) < 2:
@@ -1707,15 +1708,34 @@ def tab_cities(project_id: str, config: dict) -> None:
                             name_, url_ = parts[0], parts[1]
                         if not url_.startswith("http"):
                             continue
+                        # Проверка на дубль была только у добавления по одному,
+                        # а списком города падали внутрь как есть – так в проект
+                        # и попадали одинаковые карточки. Проверяем и здесь;
+                        # заодно ловятся повторы ВНУТРИ самого списка, потому
+                        # что добавленное сразу попадает в тот же config.
+                        dup = _city_duplicate(config, url_, name_, country["id"])
+                        if dup:
+                            skipped.append(f"{name_} – {dup}")
+                            continue
                         country["cities"].append({
                             "id": f"ct-{_slug(name_)}-{int(time.time() * 1000)}-{added}",
                             "name": name_, "url": url_,
                         })
                         added += 1
+                    if skipped:
+                        st.session_state[f"bulk-skipped-{country['id']}"] = skipped
                     if added:
                         save_config(project_id)
                         st.toast(f"Добавлено городов: {added}")
                         st.rerun()
+                    elif skipped:
+                        st.rerun()
+
+                was_skipped = st.session_state.pop(f"bulk-skipped-{country['id']}", None)
+                if was_skipped:
+                    st.warning(f"Не добавлено (дубли): {len(was_skipped)}")
+                    for s in was_skipped[:20]:
+                        st.caption(f"• {s}")
 
             st.divider()
             for i, city in enumerate(country["cities"]):
@@ -1853,10 +1873,7 @@ def tab_report(project_id: str) -> None:
             # приходилось искать в логе.
             failed = [r for r in (data.get("results") or []) if r.get("status") == "failed"]
             if failed:
-                st.error("Не получилось: "
-                         + ", ".join(f'{r.get("cityName", "?")}' for r in failed[:12])
-                         + (f" и ещё {len(failed) - 12}" if len(failed) > 12 else ""))
-                with st.expander(f"Почему не получилось ({cities_word(len(failed))})", expanded=True):
+                with st.expander(f"❌ Почему не получилось ({cities_word(len(failed))})", expanded=True):
                     for r in failed:
                         html(T.report_row(r))
 
@@ -1889,7 +1906,11 @@ def tab_report(project_id: str) -> None:
                         html(T.report_row(r))
 
             # Скачать отчёт и лог именно этого прогона.
-            run_log = runner.read_run_log(project_id, kind, selected)
+            # getattr, а не прямой вызов: в облаке Streamlit после обновления
+            # кода держит СТАРЫЙ модуль runner в памяти до перезапуска, и
+            # новая функция роняла всю страницу с AttributeError.
+            reader = getattr(runner, "read_run_log", None)
+            run_log = reader(project_id, kind, selected) if reader else ""
             base_name = selected.replace(".json", "")
             with st.container(key="report-downloads"):
                 d1, d2, _ = st.columns([1, 1, 3])

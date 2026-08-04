@@ -37,7 +37,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-04-ru-passport"
+UI_BUILD = "2026-08-04-no-self-sms"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -1882,7 +1882,7 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
         spinner = "Подставляю логин и прошу Яндекс прислать письмо…"
         try:
             with st.spinner(spinner):
-                res = worker.call(flow.auto_login, email, password, 6, by_mail)
+                res = worker.call(flow.auto_login, email, password, 10, by_mail)
         except Exception as e:  # noqa: BLE001
             _browser_error(e)
             return
@@ -1972,21 +1972,23 @@ def _login_steps(project_id: str, worker, flow, email: str, password: str) -> No
                     new_state = worker.call(flow.submit_login, value)
 
         elif step == "password":
+            # Поле и его кнопка идут ПОДРЯД: два действия рядом читались как
+            # «либо одно, либо другое», хотя пароль надо сначала написать,
+            # а потом нажать. Остальные способы – ниже, отдельным блоком.
+            st.caption("Способ 1 – по паролю: впишите пароль и нажмите кнопку под ним.")
             value = st.text_input(field_label, value=password, type="password", key="yb-password")
-            c1, c2 = st.columns(2)
-            if c1.button("Войти по паролю", key="yb-submit-password",
-                         type="primary", use_container_width=True) and value:
+            if st.button("Войти по паролю", key="yb-submit-password", type="primary") and value:
                 with st.spinner("Проверяю пароль…"):
                     new_state = worker.call(flow.submit_password, value)
-            # Запасные пути с этого же экрана – когда пароль не подходит или
-            # Яндекс упирается в бесконечную проверку.
-            if c2.button("Отправить письмо для входа", key="yb-login-mail",
+
+            st.divider()
+            st.caption("Способ 2 – без пароля. Подтверждение придёт письмом или в SMS.")
+            c1, c2 = st.columns(2)
+            if c1.button("✉️ Отправить письмо для входа", key="yb-login-mail",
                          use_container_width=True):
                 with st.spinner("Прошу Яндекс прислать письмо…"):
                     new_state = worker.call(flow.send_login_email)
-                st.info("Письмо со ссылкой ушло на почту аккаунта. Откройте его на любом "
-                        "устройстве, подтвердите вход и нажмите «Обновить экран».")
-            if st.button("Войти с помощью SMS", key="yb-login-sms"):
+            if c2.button("Войти с помощью SMS", key="yb-login-sms", use_container_width=True):
                 with st.spinner("Прошу Яндекс прислать SMS…"):
                     new_state = worker.call(flow.send_sms_code)
 

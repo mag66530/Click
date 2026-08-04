@@ -2190,10 +2190,30 @@ class YbLoginFlow:
         }
         last = "unknown"
         confirms = 0
+        backs = 0
         for _ in range(max_steps):
             self._dismiss_cookie_banner()
             step = self.detect_step()
             last = step
+
+            # «Безопасный вход – подтвердите номер телефона» появляется СРАЗУ
+            # после логина, до экрана пароля. Раньше Click жал тут «Подтвердить»
+            # – и этим сам запускал отправку SMS, хотя мы шли за письмом.
+            # Идём назад, к экрану пароля: «Отправить письмо для входа» там.
+            if by_mail and step in ("challenge", "code") and backs < 3:
+                backs += 1
+                self.go_back()
+                continue
+
+            # Идём за письмом – «Подтвердить» на телефонном экране НЕ ЖМЁМ
+            # ни при каких условиях: это и есть отправка SMS.
+            if by_mail and step == "challenge":
+                return {"ok": False, "step": "challenge", "screenshot": self.screenshot(),
+                        "reason": "Яндекс требует подтверждение по телефону и не пускает "
+                                  "на экран пароля. Нажмите «← Назад на прошлый экран» – "
+                                  "на экране пароля есть «Отправить письмо для входа». "
+                                  "Если назад не выходит, подтвердите по телефону один раз: "
+                                  "дальше Click запомнит браузер и спрашивать перестанет."}
 
             # Экран без полей ввода: «Безопасный вход – подтвердите номер».
             # Тут нечего вводить, нужно просто нажать кнопку – жмём сами,
@@ -2257,6 +2277,11 @@ class YbLoginFlow:
         if self.has_auth_cookie():
             return {"ok": True, "step": "done", "screenshot": self.screenshot(),
                     "reason": "Вход выполнен автоматически."}
+        if by_mail:
+            return {"ok": False, "step": last, "screenshot": self.screenshot(),
+                    "reason": "Яндекс не пустил на экран пароля – он сразу требует "
+                              "подтверждение по телефону. Нажмите «← Назад на прошлый "
+                              "экран»: на экране пароля есть «Отправить письмо для входа»."}
         return {"ok": False, "step": last, "screenshot": self.screenshot(),
                 "reason": "Слишком много шагов – дальше вручную."}
 

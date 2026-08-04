@@ -889,6 +889,29 @@ def test_login_step_detection() -> None:
             check("с телефона переходим на вход по логину",
                   flow._switch_to_login_by_password() and flow.page_state()["step"] == "login")  # noqa: SLF001
 
+            # Идём за письмом – «Подтвердить» на телефонном экране жать нельзя:
+            # это и есть отправка SMS. Раньше Click жал её сам и своей же
+            # рукой уводил вход на телефон, хотя шли за письмом.
+            page.set_content("""<html><body style='margin:40px'>
+                <h1>Безопасный вход</h1>
+                <p>Пожалуйста, подтвердите номер телефона, который привязан к вашему аккаунту.</p>
+                <p>Ваш номер телефона: +7 965 ***-**-77</p>
+                <button onclick="window.__confirmed=1">Подтвердить</button></body></html>""")
+            res = flow.auto_login("a@yandex.ru", "secret", max_steps=4, by_mail=True)
+            check("по письму «Подтвердить» НЕ нажимается",
+                  page.evaluate("window.__confirmed === undefined"))
+            check("объяснено, что делать дальше",
+                  "Назад" in (res.get("reason") or ""), res.get("reason"))
+
+            # Обычный вход по паролю эту кнопку жать обязан – иначе тупик:
+            # полей на экране нет, нажимать в приложении нечего.
+            page.set_content("""<html><body style='margin:40px'>
+                <h1>Безопасный вход</h1><p>Подтвердите номер телефона</p>
+                <button onclick="window.__confirmed=1">Подтвердить</button></body></html>""")
+            flow.auto_login("a@yandex.ru", "secret", max_steps=2, by_mail=False)
+            check("без письма «Подтвердить» нажимается",
+                  page.evaluate("window.__confirmed === 1"))
+
             # Куки устройства помним, куки авторизации – НЕТ. Иначе «сбросить
             # сессию» переставало работать: сессию стёрли, а вход всё равно
             # под старым аккаунтом.

@@ -262,6 +262,55 @@ def main() -> int:
                 check("галочка пережила переход на «Публикацию»",
                       cb.count() > 0 and cb.first.is_checked(), "сбросилась")
 
+            # ── ГЛАВНОЕ: живая панель обновляется САМА ──
+            # Заказчик: «нажала актуализацию, а там как будто зависло на первом
+            # городе. Нажала остановить, а там оказывается 18 городов уже
+            # прошёл». Вкладка «Актуализация» рисовала панель без
+            # авто-обновления, и экран замирал, хотя прогон шёл дальше.
+            print("\n▸ Живая панель обновляется сама")
+            import json as _json
+            import paths as _paths
+            data = _paths.data_root() / "SMU"
+            live_log = data / ".run-log.txt"
+            state = data / ".run-state.json"
+            data.mkdir(parents=True, exist_ok=True)
+
+            # Прогон «чужого» процесса приложение честно считает прерванным
+            # (ownerPid), поэтому подделываем состояние от имени сервера.
+            app_pid = proc.pid if proc is not None else None
+
+            def fake_run(action: str, city: str) -> None:
+                state.write_text(_json.dumps({
+                    "runId": "ui-test", "action": action, "status": "running",
+                    "ownerPid": app_pid, "total": 3, "current": 1,
+                    "currentCity": city, "totals": {"total": 1},
+                }, ensure_ascii=False), encoding="utf-8")
+
+            tabs = (("🚀 Запуск", "publish"), ("🔄 Актуализация", "actualize"))
+            if app_pid is None:
+                check("живая панель: приложение подняли не мы – пропускаю", True)
+                tabs = ()
+            for tab, action in tabs:
+                fake_run(action, "Барнаул")
+                live_log.write_text("[10:00:00] [INFO] СТРОКА-ОДИН\n", encoding="utf-8")
+                page.get_by_text(tab, exact=True).first.click()
+                page.wait_for_timeout(4000)
+                check(f"{tab}: панель прогона видна",
+                      page.get_by_text("СТРОКА-ОДИН", exact=False).count() > 0)
+                # Дописываем лог и НИЧЕГО не нажимаем – панель обязана обновиться
+                live_log.write_text("[10:00:00] [INFO] СТРОКА-ОДИН\n"
+                                    "[10:00:05] [INFO] СТРОКА-ДВА\n", encoding="utf-8")
+                appeared = False
+                for _ in range(8):
+                    page.wait_for_timeout(1500)
+                    if page.get_by_text("СТРОКА-ДВА", exact=False).count() > 0:
+                        appeared = True
+                        break
+                check(f"{tab}: новая строка появилась БЕЗ нажатий", appeared)
+
+            state.unlink(missing_ok=True)
+            live_log.unlink(missing_ok=True)
+
             browser.close()
     finally:
         if proc is not None:

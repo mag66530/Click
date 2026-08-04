@@ -146,6 +146,33 @@ def request_stop(project_id: str) -> None:
     _append_log(project_id, "WARN", "⏹  Запрошена остановка – завершу после текущего города")
 
 
+def run_log_path(project_id: str, kind: str, report_name: str) -> Path:
+    """Файл лога рядом с отчётом: имя то же, расширение .log."""
+    folder = p_reports(project_id) if kind == "publish" else p_reports_actualize(project_id)
+    return folder / (Path(report_name).name.replace(".json", "") + ".log")
+
+
+def _snapshot_log(project_id: str, report_path: Path) -> None:
+    """Сохранить лог этого прогона рядом с его отчётом."""
+    try:
+        text = p_live_log(project_id).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    try:
+        report_path.with_suffix(".log").write_text(text, encoding="utf-8")
+    except OSError:
+        pass
+
+
+def read_run_log(project_id: str, kind: str, report_name: str) -> str:
+    """Лог конкретного прогона. Пусто – значит прогон был до этой версии."""
+    fp = run_log_path(project_id, kind, report_name)
+    try:
+        return fp.read_text(encoding="utf-8", errors="replace") if fp.exists() else ""
+    except OSError:
+        return ""
+
+
 def read_live_log(project_id: str, tail: int = 40_000) -> str:
     fp = p_live_log(project_id)
     if not fp.exists():
@@ -155,6 +182,10 @@ def read_live_log(project_id: str, tail: int = 40_000) -> str:
     except OSError:
         return ""
     return text[-tail:]
+
+
+# Какой прогон идёт сейчас – нужно только для имени файла лога.
+_LOG_KIND: dict[str, str] = {}
 
 
 def _append_log(project_id: str, level: str, msg: str) -> None:
@@ -172,7 +203,8 @@ def _append_log(project_id: str, level: str, msg: str) -> None:
     try:
         p_logs(project_id).mkdir(parents=True, exist_ok=True)
         day = datetime.now().strftime("%Y-%m-%d")
-        with (p_logs(project_id) / f"publish-{day}.log").open("a", encoding="utf-8") as f:
+        kind = _LOG_KIND.get(project_id, "publish")
+        with (p_logs(project_id) / f"{kind}-{day}.log").open("a", encoding="utf-8") as f:
             f.write(line)
     except OSError:
         pass
@@ -327,6 +359,7 @@ def start_publish(
 
         p_stop(project_id).unlink(missing_ok=True)
         p_live_log(project_id).write_text("", encoding="utf-8")
+        _LOG_KIND[project_id] = "publish"
 
         total = sum(len(cfg.get("tasks") or []) for _, cfg in files)
         _write_state(project_id, {
@@ -391,6 +424,11 @@ def _publish_worker(
             "results": [{k: v for k, v in r.items() if not k.startswith("_")} for r in results],
         }
         _write_atomic(report_path, json.dumps(report, ensure_ascii=False, indent=2))
+        # Лог прогона кладём рядом с отчётом, когда прогон закончился: по
+        # дневному файлу не понять, где чей прогон, а «Скачать лог» должен
+        # отдавать лог ИМЕННО этого отчёта.
+        if state != "in-progress":
+            _snapshot_log(project_id, report_path)
 
     def push_state(status: str, current: int, city: str, error: str | None = None) -> None:
         _write_state(project_id, {
@@ -876,6 +914,7 @@ def start_actualize(project_id: str, headless: bool = True, delay_s: float = 2.5
 
         p_stop(project_id).unlink(missing_ok=True)
         p_live_log(project_id).write_text("", encoding="utf-8")
+        _LOG_KIND[project_id] = "actualize"
 
         total = sum(len(cfg.get("tasks") or []) for _, cfg in files)
         _write_state(project_id, {
@@ -916,6 +955,8 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
             "totals": {"total": len(results), **counters},
             "results": results,
         }, ensure_ascii=False, indent=2))
+        if state != "in-progress":
+            _snapshot_log(project_id, report_path)
 
     def push_state(status: str, city: str, err: str | None = None) -> None:
         _write_state(project_id, {

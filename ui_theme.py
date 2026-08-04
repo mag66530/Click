@@ -17,7 +17,7 @@ import html as _html
 # Метка сборки. streamlit_app.py сверяет её со своей: разметка и стиль должны
 # быть из одной версии, иначе кнопки смещаются или пропадают. Менять вместе
 # с UI_BUILD в streamlit_app.py при любой правке разметки плиток.
-BUILD = "2026-08-04-aps-cities"
+BUILD = "2026-08-05-live-panel"
 
 # ─── Палитра 1:1 из :root в _ui.js ──────────────────────────────────
 DARK = {
@@ -476,16 +476,24 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 .run-progress-sub {{ font-size: 12px; color: var(--muted); }}
 
 /* ─── Лог ──────────────────────────────────────────────────────── */
+/* Лог всегда тёмный – и на светлой теме тоже: цветные строки читаются только
+   на тёмном фоне. !important обязателен: у Streamlit своя тема поверх нашей,
+   и внутри раскрывашек она пробовала красить содержимое в свой цвет текста. */
 .log-box {{
-  background: var(--log-bg); border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--log-bg) !important; border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   padding: 14px; font-family: var(--mono); font-size: 12px; line-height: 1.7;
-  color: var(--log-fg); max-height: 460px; overflow-y: auto;
+  color: var(--log-fg) !important; max-height: 460px; overflow-y: auto;
   /* column-reverse у контейнера с ОДНИМ ребёнком не меняет порядок текста,
      зато прокрутка стартует С НИЗА – свежие строки видны без скролла руками.
      Скриптом это не сделать: st.markdown вырезает <script>. */
   display: flex; flex-direction: column-reverse;
 }}
-.log-box .log-lines {{ white-space: pre-wrap; word-break: break-word; }}
+.log-box .log-lines {{
+  white-space: pre-wrap; word-break: break-word;
+  background: transparent !important; color: var(--log-fg) !important;
+}}
+.log-box p, .log-box span:not([class]) {{ color: var(--log-fg) !important; }}
 .log-ok {{ color: #33d298; }} .log-err {{ color: #ff7c7c; }}
 .log-warn {{ color: #fabe23; }} .log-info {{ color: #8fa8ff; }}
 .log-dim {{ color: #5b6485; }}

@@ -37,7 +37,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-04-aps-cities"
+UI_BUILD = "2026-08-05-live-panel"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -869,17 +869,27 @@ def show_login() -> None:
 #  РАЗДЕЛ: ЗАПУСК
 # ════════════════════════════════════════════════════════════════════
 
+def _open_report(kind: str, run_id: str = "") -> None:
+    """Уйти на вкладку «Отчёт» и показать там нужный вид отчёта."""
+    st.session_state["report-kind"] = kind
+    st.session_state.pop("report-select", None)   # выбор из другого вида не подойдёт
+    goto_section(SECTIONS[4])
+    st.rerun()
+
+
 def _render_live_panel(project_id: str, was_running: bool = False) -> None:
     state = runner.read_state(project_id)
     status = state.get("status")
-    action_ru = "Публикация" if state.get("action") == "publish" else "Актуализация"
+    kind = "publish" if state.get("action") == "publish" else "actualize"
+    action_ru = "Публикация" if kind == "publish" else "Актуализация"
+    running = status == "running"
 
     # Прогон только что закончился – перерисовываем страницу целиком, чтобы
     # разблокировалась кнопка запуска и обновились счётчики в шапке.
-    if was_running and status != "running":
+    if was_running and not running:
         st.rerun()
 
-    if status == "running":
+    if running:
         total = max(1, int(state.get("total") or 1))
         current = int(state.get("current") or 0)
         totals = state.get("totals") or {}
@@ -895,18 +905,53 @@ def _render_live_panel(project_id: str, was_running: bool = False) -> None:
         st.progress(min(1.0, current / total))
     elif status == "done":
         st.success(f"{action_ru} завершена.")
-        with st.container(key="go-report"):
-            if st.button("📊 Посмотреть отчёт", key=f"btn-report-{state.get('runId', '')}"):
-                goto_section(SECTIONS[4])
-                st.rerun()
     elif status == "stopped":
-        st.warning(f"{action_ru} остановлена пользователем. Сделанное сохранено в отчёте.")
+        st.warning(f"{action_ru} остановлена. Сделанное сохранено в отчёте.")
     elif status == "error":
         st.error(f"{action_ru} завершилась с ошибкой: {state.get('error') or 'см. лог'}")
     elif status == "interrupted":
         st.warning(state.get("error") or "Прогон был прерван.")
 
-    html(T.log_box(runner.read_live_log(project_id)))
+    # Прогон закончился – к отчёту. Кнопка нужна и после ОСТАНОВКИ: там тоже
+    # есть что смотреть, а раньше она показывалась только после «done».
+    if status in ("done", "stopped", "error", "interrupted"):
+        with st.container(key="go-report"):
+            if st.button("📊 Посмотреть отчёт", key=f"btn-report-{state.get('runId', '')}"):
+                _open_report(kind, state.get("runId", ""))
+
+    # Пока идёт прогон лог нужен на виду, после – он только мешает: экран
+    # длинный, а под ним отчёт. Сворачиваем.
+    log_text = runner.read_live_log(project_id)
+    if running or not log_text:
+        html(T.log_box(log_text))
+    else:
+        with st.expander("📄 Показать лог прогона"):
+            html(T.log_box(log_text))
+
+
+def live_panel(project_id: str, running: bool) -> None:
+    """
+    Живая панель прогона – одна на обе вкладки.
+
+    Пока прогон идёт, панель ОБЯЗАНА обновляться сама. На «Актуализации» она
+    рисовалась без авто-обновления, и экран замирал на первом городе, хотя
+    прогон шёл дальше: лог отставал на десятки городов, нажатая «Остановить»
+    выглядела как «не сработала» (на деле runner останавливался сразу), а
+    отчёт «не появлялся». Экран оживал только от постороннего действия –
+    заказчик переключила тему, и всё разом обновилось.
+
+    Поэтому обе вкладки ходят сюда: разойтись они больше не могут.
+    """
+    fragment = getattr(st, "fragment", None)
+    if fragment and running:
+        @fragment(run_every=2)
+        def _live() -> None:
+            _render_live_panel(project_id, was_running=True)
+        _live()
+        return
+    _render_live_panel(project_id)
+    if running:
+        st.caption("Обновите страницу, чтобы увидеть свежий прогресс.")
 
 
 def tab_run(project_id: str, config: dict) -> None:
@@ -974,17 +1019,8 @@ def tab_run(project_id: str, config: dict) -> None:
 
     st.divider()
 
-    # ─── Живой лог: обновляется сам, если версия Streamlit умеет фрагменты ───
-    fragment = getattr(st, "fragment", None)
-    if fragment and running:
-        @fragment(run_every=2)
-        def _live():
-            _render_live_panel(project_id, was_running=True)
-        _live()
-    else:
-        _render_live_panel(project_id)
-        if running:
-            st.caption("Обновите страницу, чтобы увидеть свежий прогресс.")
+    # ─── Живой лог: обновляется сам, пока идёт прогон ───
+    live_panel(project_id, running)
 
     # ─── Очередь задач ───
     st.divider()
@@ -1476,12 +1512,15 @@ def tab_actualize(project_id: str, config: dict) -> None:
                             col.checkbox(ct["name"], value=ct["id"] in chosen, key=wkey,
                                          on_change=_act_toggle, args=(ct["id"], wkey))
 
+    # Панель прогона – ДО проверки сессии. Иначе идущий (или только что
+    # закончившийся) прогон исчезал с экрана вместе с кнопкой отчёта, стоило
+    # сессии слететь: человек видел бы только «войдите в Яндекс».
+    with st.container(border=True):
+        live_panel(project_id, running)
+
     if not yb.has_saved_session(project_id):
         st.warning("Сначала войдите в Яндекс в разделе «⚙️ Настройки».")
         return
-
-    with st.container(border=True):
-        _render_live_panel(project_id, was_running=False)
 
     if st.button(f"🔄 Запустить актуализацию ({cities_word(len(selected))})", type="primary",
                  use_container_width=True, disabled=running or not selected, key="btn-actualize"):
@@ -1708,6 +1747,9 @@ def tab_cities(project_id: str, config: dict) -> None:
 
 _FILTERS = {"all": "Все", "ok": "✅ Успешно", "no-image": "🟡 Без картинки",
             "unknown": "⚠️ Проверьте", "failed": "❌ Ошибки", "skipped-duplicate": "⏭ Пропущено"}
+# У актуализации свои статусы: фильтры публикации тут не находят ничего.
+_ACT_FILTERS = {"all": "Все", "actualized": "✅ Актуализировано",
+                "not-needed": "⊝ Не требовалось", "failed": "❌ Ошибки"}
 
 
 def _report_csv(data: dict) -> bytes:
@@ -1727,10 +1769,37 @@ def _report_csv(data: dict) -> bytes:
     return ("﻿" + "\n".join(rows)).encode("utf-8")
 
 
+_REPORT_KINDS = {"publish": "📤 Публикация", "actualize": "🔄 Актуализация"}
+
+
+def _last_run_kind(project_id: str) -> str:
+    """Какой прогон был последним – его отчёт и показываем по умолчанию."""
+    state = runner.read_state(project_id)
+    return "actualize" if state.get("action") == "actualize" else "publish"
+
+
 def tab_report(project_id: str) -> None:
-    reports = runner.list_reports(project_id, "publish")
+    # Отчёты актуализации лежат в своей папке и на эту вкладку не попадали
+    # вовсе: заказчик видела «Отчётов пока нет» и один лог, хотя отчёт был –
+    # он показывался только на самой вкладке «Актуализация».
+    kind = st.session_state.get("report-kind") or _last_run_kind(project_id)
+    if kind not in _REPORT_KINDS:
+        kind = "publish"
+    k_cols = st.columns(len(_REPORT_KINDS))
+    for col, (k, label) in zip(k_cols, _REPORT_KINDS.items()):
+        n = len(runner.list_reports(project_id, k, limit=99))
+        if col.button(f"{label} ({n})", key=f"rk-{k}", use_container_width=True,
+                      type="primary" if k == kind else "secondary"):
+            st.session_state["report-kind"] = k
+            st.session_state.pop("report-select", None)
+            st.rerun()
+
+    is_act = kind == "actualize"
+    reports = runner.list_reports(project_id, kind)
     if not reports:
-        html(T.empty("📊", "Отчётов пока нет", "Отчёт появится после первой публикации."))
+        html(T.empty("📊", "Отчётов пока нет",
+                     "Отчёт появится после первой актуализации." if is_act
+                     else "Отчёт появится после первой публикации."))
     else:
         c1, c2 = st.columns([3, 1])
         with c1:
@@ -1740,6 +1809,9 @@ def tab_report(project_id: str) -> None:
                 r = next(x for x in reports if x["name"] == name)
                 t = r["totals"] or {}
                 when = local_time(r.get("finishedAt"))
+                if is_act:
+                    return (f'{when} · ✅ {t.get("actualized", 0)} · ⊝ {t.get("notNeeded", 0)}'
+                            f' · ❌ {t.get("failed", 0)}')
                 return f'{when} · ✅ {t.get("ok", 0)}/{t.get("total", 0)}'
 
             selected = st.selectbox("Отчёт", names, format_func=_label, key="report-select")
@@ -1748,10 +1820,14 @@ def tab_report(project_id: str) -> None:
             if st.button("🔄 Обновить список", use_container_width=True, key="btn-refresh-reports"):
                 st.rerun()
 
-        data = runner.read_report(project_id, "publish", selected)
+        data = runner.read_report(project_id, kind, selected)
         if data:
             totals = data.get("totals") or {}
-            html(T.report_summary(totals, data.get("durationSec")))
+            if is_act:
+                html(T.report_summary(totals, data.get("durationSec"),
+                                      keys=["actualized", "notNeeded", "failed"], with_total=False))
+            else:
+                html(T.report_summary(totals, data.get("durationSec")))
 
             notes = []
             if data.get("stoppedByUser"):
@@ -1772,14 +1848,28 @@ def tab_report(project_id: str) -> None:
             for n in notes:
                 st.caption(n)
 
-            f_cols = st.columns(len(_FILTERS))
+            # Какие города не получились – сразу в карточке. Раньше в отчёте
+            # стояло только «Ошибок: 3», а какие это города и почему –
+            # приходилось искать в логе.
+            failed = [r for r in (data.get("results") or []) if r.get("status") == "failed"]
+            if failed:
+                st.error("Не получилось: "
+                         + ", ".join(f'{r.get("cityName", "?")}' for r in failed[:12])
+                         + (f" и ещё {len(failed) - 12}" if len(failed) > 12 else ""))
+                with st.expander(f"Почему не получилось ({cities_word(len(failed))})", expanded=True):
+                    for r in failed:
+                        html(T.report_row(r))
+
+            filters = _ACT_FILTERS if is_act else _FILTERS
+            f_cols = st.columns(len(filters))
             current = st.session_state.get("report-filter", "all")
-            for col, (key, label) in zip(f_cols, _FILTERS.items()):
+            if current not in filters:
+                current = "all"
+            for col, (key, label) in zip(f_cols, filters.items()):
                 if col.button(label, key=f"rf-{key}", use_container_width=True,
                               type="primary" if current == key else "secondary"):
                     st.session_state["report-filter"] = key
                     st.rerun()
-            current = st.session_state.get("report-filter", "all")
 
             results = [r for r in (data.get("results") or [])
                        if current == "all" or r.get("status") == current]
@@ -1788,8 +1878,9 @@ def tab_report(project_id: str) -> None:
             for r in results:
                 by_country.setdefault(r.get("country") or r.get("package") or "–", []).append(r)
 
+            good = "actualized" if is_act else "ok"
             for country, rows in by_country.items():
-                ok = sum(1 for r in rows if r.get("status") == "ok")
+                ok = sum(1 for r in rows if r.get("status") == good)
                 bad = sum(1 for r in rows if r.get("status") == "failed")
                 with st.expander(f"{country} – {ok}/{len(rows)} успешно"
                                  + (f" · {plural(bad, 'ошибка', 'ошибки', 'ошибок')}" if bad else ""),
@@ -1797,12 +1888,24 @@ def tab_report(project_id: str) -> None:
                     for r in rows:
                         html(T.report_row(r))
 
-            st.download_button("⬇️ Выгрузить CSV", data=_report_csv(data),
-                               file_name=selected.replace(".json", ".csv"), mime="text/csv",
-                               key="btn-csv")
+            # Скачать отчёт и лог именно этого прогона.
+            run_log = runner.read_run_log(project_id, kind, selected)
+            base_name = selected.replace(".json", "")
+            with st.container(key="report-downloads"):
+                d1, d2, _ = st.columns([1, 1, 3])
+                d1.download_button("⬇ Отчёт (CSV)", data=_report_csv(data),
+                                   file_name=base_name + ".csv", mime="text/csv",
+                                   use_container_width=True, key="btn-csv")
+                d2.download_button("⬇ Лог (.txt)", data=(run_log or "Лог этого прогона не сохранён.")
+                                   .encode("utf-8"),
+                                   file_name=base_name + ".txt", mime="text/plain",
+                                   use_container_width=True, disabled=not run_log, key="btn-log")
+            if not run_log:
+                st.caption("Лог этого прогона не сохранён – он появится у прогонов, "
+                           "запущенных начиная с этой версии.")
 
     st.divider()
-    html('<div class="card-title">📄 Логи</div>')
+    html('<div class="card-title">📄 Логи за день</div>')
     logs = runner.list_logs(project_id)
     if not logs:
         st.caption("Логов пока нет.")

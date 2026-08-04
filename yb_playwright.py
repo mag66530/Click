@@ -1561,6 +1561,11 @@ def upload_product_photos(page: Page, task: dict, photo_urls: list[str], temp_di
 #  АКТУАЛИЗАЦИЯ (порт actualize.js)
 # ════════════════════════════════════════════════════════════════════
 
+# Возвращаем САМ ЭЛЕМЕНТ, а не координаты. Кнопка «Данные актуальны» у Яндекса
+# прилипшая и уезжает при дорисовке страницы: снятая точка устаревает, клик
+# уходит в пустоту – в логе «клик прошёл», а подтверждения нет. Ровно на этом
+# ломалась публикация («Создать»), и здесь было то же самое: у заказчика
+# 11 городов из 19 получили жёлтое «тост не появился».
 _ACTUALIZE_BTN_JS = r"""
 () => {
   for (const b of document.querySelectorAll('button, [role="button"]')) {
@@ -1568,8 +1573,7 @@ _ACTUALIZE_BTN_JS = r"""
     if (!t || t.length > 50) continue;
     if (/^данные\s+актуальны$/i.test(t) || /^актуализ[а-я]*\s+данные$/i.test(t)) {
       const r = b.getBoundingClientRect();
-      if (r.width >= 80 && r.height >= 20 && !b.disabled)
-        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      if (r.width >= 80 && r.height >= 20 && !b.disabled) return b;
     }
   }
   return null;
@@ -1629,24 +1633,35 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
     if is_404(page):
         return finish("failed", f"Страница не найдена (404): {edit_url}")
 
-    coords = None
+    btn = None
     deadline = time.time() + 4
     while time.time() < deadline:
-        coords = page.evaluate(_ACTUALIZE_BTN_JS)
-        if coords:
+        btn = page.evaluate_handle(_ACTUALIZE_BTN_JS).as_element()
+        if btn is not None:
             break
         page.wait_for_timeout(400)
 
-    if not coords:
+    if btn is None:
         out = finish("not-needed", "Кнопка «Данные актуальны» не найдена – актуализация не требуется")
         info(f"  ✓ {label}: {out['reason']} ({out['durationMs'] / 1000:.1f} сек)")
         return out
 
+    # Жмём ПО ЭЛЕМЕНТУ: он сам подскроллится под курсор. Координаты устаревают.
     try:
-        click_at(page, coords)
-        info("  🔘 Клик «Данные актуальны»")
-    except Exception as e:  # noqa: BLE001
-        return finish("failed", f"Ошибка клика «Данные актуальны»: {e}")
+        btn.scroll_into_view_if_needed(timeout=3_000)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        btn.click(timeout=8_000)
+        how = "по элементу"
+    except Exception as e1:  # noqa: BLE001
+        warn(f"  ⚠️ Обычный клик не прошёл ({_short_error(str(e1))}) – жму событием")
+        try:
+            btn.dispatch_event("click")
+            how = "событием click"
+        except Exception as e2:  # noqa: BLE001
+            return finish("failed", f"Ошибка клика «Данные актуальны»: {e2}")
+    info(f"  🔘 Клик «Данные актуальны» ({how})")
 
     toast = False
     deadline = time.time() + 6

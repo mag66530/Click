@@ -23,6 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import paths  # noqa: E402
+
 FAILED: list[str] = []
 PASSED = 0
 
@@ -976,6 +978,108 @@ def test_report_summary() -> None:
         check(f"4 колонки: «{word}» есть и при нуле", word in zero)
 
 
+def test_actualize_click_on_real_page() -> None:
+    """
+    Клик «Данные актуальны» в НАСТОЯЩЕМ браузере.
+
+    Живой случай: 11 городов из 19 получили жёлтое «клик прошёл, тост не
+    появился». Дело было не в тосте – кнопка у Яндекса прилипшая и уезжает
+    при дорисовке страницы, а клик шёл по СНЯТЫМ РАНЕЕ координатам и уходил
+    в пустоту. Та же поломка, что была с «Создать».
+    """
+    import yb_playwright as yb
+    print("\n▸ Клик «Данные актуальны» (живая страница)")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    page_html = """
+    <html><body style="margin:0">
+      <div style="height:1500px">много контента</div>
+      <button style="width:200px;height:40px"
+              onclick="window.__hit=1">Данные актуальны</button>
+      <button style="width:200px;height:40px" onclick="window.__wrong=1">Отменить</button>
+    </body></html>
+    """
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 900, "height": 600}).new_page()
+            page.set_content(page_html)
+
+            handle = page.evaluate_handle(yb._ACTUALIZE_BTN_JS)  # noqa: SLF001
+            el = handle.as_element()
+            check("кнопка найдена", el is not None)
+            if el is None:
+                browser.close()
+                return
+            box = el.bounding_box()
+            check("кнопка действительно ниже сгиба", box and box["y"] > 600, str(box))
+
+            # Так было раньше: клик по координатам мимо экрана – промах.
+            page.mouse.click(box["x"] + box["width"] / 2, min(box["y"] + 20, 599))
+            check("клик по протухшим координатам НЕ попадает",
+                  page.evaluate("window.__hit === undefined"))
+
+            el.scroll_into_view_if_needed(timeout=3000)
+            el.click(timeout=5000)
+            check("клик по элементу попадает в «Данные актуальны»",
+                  page.evaluate("window.__hit === 1"))
+            check("соседняя кнопка не задета", page.evaluate("window.__wrong === undefined"))
+
+            # Кнопки нет вовсе – это «актуализация не требуется», а не ошибка.
+            page.set_content("<html><body><button>Отменить</button></body></html>")
+            check("без кнопки ничего не находим",
+                  page.evaluate_handle(yb._ACTUALIZE_BTN_JS).as_element() is None)  # noqa: SLF001
+        finally:
+            browser.close()
+
+
+def test_run_logs(tmp: Path) -> None:
+    """
+    Лог каждого прогона лежит рядом со своим отчётом.
+
+    Дневной файл мешает все прогоны в кучу, и «Скачать лог» отдавал бы не то.
+    Заодно имя дневного файла врало: актуализация писалась в «publish-…».
+    """
+    import runner
+    print("\n▸ Логи прогонов")
+    pid = "TEST-LOGS"
+    runner.USERS_DATA = tmp
+    try:
+        runner._LOG_KIND[pid] = "actualize"  # noqa: SLF001
+        runner._append_log(pid, "INFO", "строка актуализации")  # noqa: SLF001
+        names = runner.list_logs(pid)
+        check("дневной лог назван по типу прогона",
+              any(n.startswith("actualize-") for n in names), str(names))
+
+        runner._LOG_KIND[pid] = "publish"  # noqa: SLF001
+        runner._append_log(pid, "INFO", "строка публикации")  # noqa: SLF001
+        names = runner.list_logs(pid)
+        check("публикация пишется в свой файл",
+              any(n.startswith("publish-") for n in names), str(names))
+
+        report = runner.p_reports_actualize(pid) / "actualize-2026-08-04T10-00-00.json"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text("{}", encoding="utf-8")
+        runner._snapshot_log(pid, report)  # noqa: SLF001
+        saved = runner.read_run_log(pid, "actualize", report.name)
+        check("лог прогона сохранён рядом с отчётом", "строка актуализации" in saved, saved[:80])
+        eq("путь лога совпадает с именем отчёта",
+           runner.run_log_path(pid, "actualize", report.name).name,
+           "actualize-2026-08-04T10-00-00.log")
+        eq("лога нет – пустая строка, а не падение",
+           runner.read_run_log(pid, "publish", "report-нет-такого.json"), "")
+    finally:
+        runner.USERS_DATA = paths.data_root()
+
+
 def test_aps_project() -> None:
     """
     АПС (Авиапромсталь) – пятый проект, города из КП «карта присутствия».
@@ -1124,6 +1228,8 @@ def main() -> int:
         test_report_summary()
         test_yandex_domain()
         test_aps_project()
+        test_actualize_click_on_real_page()
+        test_run_logs(tmp)
         test_local_time()
         test_browser_fallback()
         test_engine_order()

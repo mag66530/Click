@@ -37,7 +37,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-05-no-duplicates"
+UI_BUILD = "2026-08-05-goods-shipment"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -1287,16 +1287,22 @@ def tab_compose(project_id: str, config: dict) -> None:
       html('<div class="hint">Можно ссылки (ImgBB / Imgur / Я.Диск) ИЛИ загрузить файлы с компьютера. '
            'Если есть проблемы с интернетом – лучше загружайте файлы. До 20 МБ.</div>')
 
-      with st.container(key="goods-row"):
-          g1, g2 = st.columns([3, 1])
-          product_photos_raw = g1.text_area(
-              "Фото в раздел «Товары» (необязательно)", height=118, key="compose-product-photos",
-              placeholder="Ссылки или пути, по одной в строке\n"
-                          "Заливаются в карточку после успешной публикации поста",
-          )
-          goods_files = g2.file_uploader("Фото товаров", type=["jpg", "jpeg", "png", "gif", "webp"],
-                                         accept_multiple_files=True, key=f"compose-goods-files-{st.session_state.get('upl-gen', 0)}",
-                                         label_visibility="collapsed")
+      # Фото в «Товары» имеют смысл только у отгрузки – так и в оригинале
+      # (showProductPhotos = draft.postType === 'shipment'). У остальных типов
+      # поле только путало: заливать товары к поздравлению незачем.
+      product_photos_raw, goods_files = "", None
+      if post_type == "shipment":
+          with st.container(key="goods-row"):
+              g1, g2 = st.columns([3, 1])
+              product_photos_raw = g1.text_area(
+                  "Фото в раздел «Товары» (необязательно)", height=118, key="compose-product-photos",
+                  placeholder="Ссылки или пути, по одной в строке\n"
+                              "Заливаются в карточку после успешной публикации поста",
+              )
+              goods_files = g2.file_uploader("Фото товаров", type=["jpg", "jpeg", "png", "gif", "webp"],
+                                             accept_multiple_files=True,
+                                             key=f"compose-goods-files-{st.session_state.get('upl-gen', 0)}",
+                                             label_visibility="collapsed")
 
     image_urls = [u.strip() for u in (image_urls_raw or "").splitlines() if u.strip()]
     product_photos = [u.strip() for u in (product_photos_raw or "").splitlines() if u.strip()]

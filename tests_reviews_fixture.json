@@ -1,0 +1,236 @@
+{
+  "_комментарий": [
+    "Фикстура для тестов: реальные данные раздела отзывов Яндекс.Бизнеса.",
+    "Источник — сохранённая страница https://yandex.ru/sprav/20761435635/p/edit/reviews/ (АвиаПромСталь), 2026-08-04.",
+    "Путь в живой странице: window.__PRELOAD_DATA -> initialState.edit.reviews.list",
+    "Неотвеченный отзыв = у объекта НЕТ ключа owner_comment. Здесь такой ровно один.",
+    "CSRF-токены вырезаны: они привязаны к сессии, протухают и в репозитории им не место."
+  ],
+  "company": {
+    "id": 20761435635,
+    "displayName": "АвиаПромСталь"
+  },
+  "reviews": {
+    "page": 1,
+    "currentState": {
+      "filters": {
+        "ranking": "by_time",
+        "type": "company"
+      }
+    },
+    "list": {
+      "pager": {
+        "limit": 20,
+        "offset": 0,
+        "total": 13
+      },
+      "csrf_token": "<вырезано>",
+      "items": [
+        {
+          "id": "UZ5ISs2Ts4LFcpKVoHHoEBPjcGvuvHdGq",
+          "author": {
+            "user": "Надежда Х.",
+            "privacy": "display_name"
+          },
+          "time_created": 1780982438851,
+          "full_text": "Отличная компания : большой выбор металлопроката, возможность заказа с доставкой, персонал в целом приветливый и знающий. Однозначно рекомендую!",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>",
+          "owner_comment": {
+            "time_created": 1785485630811,
+            "text": "Рады, что смогли помочь, обращайтесь ещё!"
+          }
+        },
+        {
+          "id": "ByoqtoCzFtaGeS0msZQffexJr-vG2Q",
+          "author": {
+            "user": "Егор Федяков",
+            "privacy": "display_name"
+          },
+          "time_created": 1729175956540,
+          "full_text": "Листа нержавейка по хорошей цене. Заказывал прилично так. Нормальное качество.",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>",
+          "owner_comment": {
+            "time_created": 1768893627901,
+            "text": "Спасибо за ваш отзыв"
+          }
+        },
+        {
+          "id": "KqIPfHmBiII2IM5knf4Elv1HkrDKx-jJI",
+          "author": {
+            "user": "Денис",
+            "privacy": "display_name"
+          },
+          "time_created": 1705765818350,
+          "full_text": "Хороший выбор у них, громадный склад, ценник тоже адекватные. Думаю, теперь буду у них постоянно закупаться. ",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>",
+          "owner_comment": {
+            "time_created": 1768893637028,
+            "text": "Спасибо за ваш отзыв"
+          }
+        },
+        {
+          "id": "36c_YSYO0TL1hlwSQibGKUBaKZpXJ7",
+          "author": {
+            "user": "Маркеллин Глебов",
+            "privacy": "display_name"
+          },
+          "time_created": 1703265330298,
+          "full_text": "Нареканий по качеству работы данной компании нет, обязательно будем сотрудничать еще.",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>",
+          "owner_comment": {
+            "time_created": 1768893644322,
+            "text": "Спасибо, мы старались"
+          }
+        },
+        {
+          "id": "jlXti5Yig0ccNJ4tJ6oJ1yECdDdTzEJNi",
+          "author": {
+            "user": "Фёдор Смирнов",
+            "privacy": "display_name"
+          },
+          "time_created": 1698944216213,
+          "full_text": "Брал тут гладкую арматуру. Смог закупить в нужных объемах. Мне понравился их большой склад.",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>",
+          "owner_comment": {
+            "time_created": 1701238900491,
+            "text": "Спасибо за приятный отклик"
+          }
+        },
+        {
+          "id": "Jp0DKPvXK9_2XLTiZ3PggAxQitxajm00",
+          "author": {
+            "user": "Константин Лапшин",
+            "privacy": "display_name"
+          },
+          "time_created": 1697917328742,
+          "full_text": "Здесь большой выбор различных товаров - менеджеры помогут с выбором, в качестве тоже уверен",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>",
+          "owner_comment": {
+            "time_created": 1701238901990,
+            "text": "Спасибо за ваш отзыв"
+          }
+        },
+        {
+          "id": "tdilhZK9TqdozMM2DpiHbslS1ex2Awvs",
+          "author": {
+            "user": "Егор Севастьянов",
+            "privacy": "display_name"
+          },
+          "time_created": 1690250836338,
+          "full_text": "Уже довольно давно закупаем трубный прокат ассортимент как и цены нас устроил. Доставка тоже по сроках всегда точно.",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>"
+        },
+        {
+          "id": "e8KMl8S8UNZIM5Ee1YYxs9MXuLqji-jg",
+          "author": {
+            "user": "Егор Ж.",
+            "privacy": "display_name"
+          },
+          "time_created": 1688054262665,
+          "full_text": "Много раз покупал. Ассортимент ширится. Цены поднимают последними.",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>",
+          "owner_comment": {
+            "time_created": 1701238908669,
+            "text": "Спасибо за приятный отзыв"
+          }
+        },
+        {
+          "id": "PdssGRmqcCusgGpLHw_hUfwIbhBCTrj",
+          "author": {
+            "user": "Иван Никитин",
+            "privacy": "display_name"
+          },
+          "time_created": 1682083872005,
+          "full_text": "Здесь работают нормальные ребята. Цены у них самые низкие в городе.При заказе чугунной отливки в большом объеме ,получил еще и скидку. С доставкой тоже все было норм. ",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>",
+          "owner_comment": {
+            "time_created": 1682655014054,
+            "text": "Спасибо за приятный отзыв"
+          }
+        },
+        {
+          "id": "o8YzPM4OPWZfrwjfB5bZ9wqZVipmqPxsi",
+          "author": {
+            "user": "Кира Тарасенко",
+            "privacy": "display_name"
+          },
+          "time_created": 1681650910007,
+          "full_text": "На регулярной основе закупаемся кровельными материалами. качество хорошее. Думаю сотрудничество продолжим. ",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>",
+          "owner_comment": {
+            "time_created": 1682655010777,
+            "text": "Спасибо за ваш отзыв"
+          }
+        },
+        {
+          "id": "iTFaSmhr4KnDIdxSDyZa25nfChqs8X",
+          "author": {
+            "user": "Вероника Ремезова",
+            "privacy": "display_name"
+          },
+          "time_created": 1675607368548,
+          "full_text": "Заказывали машину нержавейки. Цены здесь оказались самыми низкими по городу.",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>",
+          "owner_comment": {
+            "time_created": 1679638745972,
+            "text": "Спасибо за приятный отзыв!"
+          }
+        },
+        {
+          "id": "4inDZ7euEEDeQ_qTHVmfoHwAlX3Tu43",
+          "author": {
+            "user": "Полина Лукьянова",
+            "privacy": "display_name"
+          },
+          "time_created": 1666966844612,
+          "full_text": "Приобрели все необходимое для проведения вентиляции в новый строящийся дом из сип-панелей.",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>",
+          "owner_comment": {
+            "time_created": 1671176050130,
+            "text": "Доброго дня, Полина! Благодарим, вас что обратились в нашу компанию. Ждем вас снова!"
+          }
+        },
+        {
+          "id": "Jm5owxScLn8n-iN3L0KiicH-fAk9sEE",
+          "author": {
+            "user": "Андрей Пакулев",
+            "privacy": "display_name"
+          },
+          "time_created": 1658334743115,
+          "full_text": "Большой выбор, есть все что хочешь, по ценам обсуждаемо.",
+          "rating": 5,
+          "can_generate_answer": true,
+          "business_answer_csrf_token": "<вырезано>",
+          "owner_comment": {
+            "time_created": 1660620236228,
+            "text": "Спасибо за то, что выбрали нашу компанию, Андрей. Будем рады увидеть вас снова."
+          }
+        }
+      ]
+    }
+  }
+}

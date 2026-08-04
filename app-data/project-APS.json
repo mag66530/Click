@@ -286,7 +286,38 @@
     {
       "id": "c-APS-беларусь-1785841362",
       "name": "Беларусь",
-      "cities": []
+      "cities": [
+        {
+          "id": "ct-брест-1785841377035-0",
+          "name": "Брест",
+          "url": "https://yandex.ru/sprav/22190783/edit/main"
+        },
+        {
+          "id": "ct-витебск-1785841377035-1",
+          "name": "Витебск",
+          "url": "https://yandex.ru/sprav/22191489/edit/main"
+        },
+        {
+          "id": "ct-гомель-1785841377035-2",
+          "name": "Гомель",
+          "url": "https://yandex.ru/sprav/22192555/edit/main"
+        },
+        {
+          "id": "ct-гродно-1785841377035-3",
+          "name": "Гродно",
+          "url": "https://yandex.ru/sprav/22192672/edit/main"
+        },
+        {
+          "id": "ct-минск-1785841377035-4",
+          "name": "Минск",
+          "url": "https://yandex.ru/sprav/22121268/edit/main"
+        },
+        {
+          "id": "ct-могилев-1785841377035-5",
+          "name": "Могилев",
+          "url": "https://yandex.ru/sprav/22192790/edit/main"
+        }
+      ]
     }
   ],
   "email": "aviastalru@yandex.ru"

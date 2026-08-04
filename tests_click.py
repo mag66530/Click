@@ -852,6 +852,15 @@ def test_login_step_detection() -> None:
                 page.set_content(f"<html><body style='margin:40px'>{body}</body></html>")
                 eq(f"английский экран «{expected}» распознан", flow.page_state()["step"], expected)
 
+            # Экран ожидания письма: полей нет, только «Другой способ входа».
+            page.set_content("""<html><body style='margin:40px'>
+                <p>Письмо отправлено на metpromintex@yandex.ru</p>
+                <p>Когда вы нажмёте на кнопку в письме, увидите на экране три символа</p>
+                <button>Другой способ входа</button></body></html>""")
+            eq("экран «письмо отправлено» распознан", flow.page_state()["step"], "mail-wait")
+            check("кнопка «Другой способ входа» нажимается",
+                  yb._click_exact_button(page, yb.ANOTHER_WAY_TEXTS))  # noqa: SLF001
+
             # Кнопка входа по почте должна находиться на обоих языках.
             for label in ("Отправить письмо для входа", "Send email for log in"):
                 page.set_content(f"""<html><body style='margin:40px'>
@@ -879,6 +888,21 @@ def test_login_step_detection() -> None:
                 </div></body></html>""")
             check("с телефона переходим на вход по логину",
                   flow._switch_to_login_by_password() and flow.page_state()["step"] == "login")  # noqa: SLF001
+
+            # Куки устройства помним, куки авторизации – НЕТ. Иначе «сбросить
+            # сессию» переставало работать: сессию стёрли, а вход всё равно
+            # под старым аккаунтом.
+            flow.project_id = "TEST-DEVICE"
+            context.add_cookies([
+                {"name": "yandexuid", "value": "1", "domain": ".yandex.ru", "path": "/"},
+                {"name": "Session_id", "value": "secret", "domain": ".yandex.ru", "path": "/"},
+            ])
+            flow.save_device()
+            saved = json.loads(yb.device_path("TEST-DEVICE").read_text(encoding="utf-8"))
+            names = {(c.get("name") or "").lower() for c in saved.get("cookies") or []}
+            check("кука устройства сохранена", "yandexuid" in names, str(names))
+            check("кука авторизации НЕ сохранена", "session_id" not in names, str(names))
+            shutil.rmtree(yb.device_path("TEST-DEVICE").parent.parent, ignore_errors=True)
 
             # Кнопку жмём по элементу: за сгибом координатный клик промахивается.
             page.set_content("""<html><body style='margin:0'>

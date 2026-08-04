@@ -405,6 +405,19 @@ def session_path(project_id: str) -> Path:
     return d / "yb_storage_state.json"
 
 
+def device_path(project_id: str) -> Path:
+    """
+    Куки «этого устройства» – их Яндекс ставит ещё до входа (yandexuid и
+    компания) и по ним потом узнаёт браузер. Раньше окно входа открывалось
+    каждый раз с нуля, и для Яндекса это был НОВЫЙ компьютер: отсюда
+    бесконечные «подтвердите вход» даже после письма. Файл живёт рядом с
+    сессией и наружу не уезжает (users-data в .gitignore).
+    """
+    d = USERS_DATA / project_id / "session"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "yb_device_state.json"
+
+
 # Куки, по которым Яндекс узнаёт залогиненного человека. Всё остальное
 # (yandexuid, spravka и прочее) выдаётся и анонимному посетителю.
 AUTH_COOKIES = {"session_id", "sessionid2", "yandex_login"}
@@ -1719,6 +1732,10 @@ LOGIN_BY_NAME_TEXTS = [
     "войти по логину", "log in with username", "log in with id", "войти по id",
 ]
 MORE_TEXTS = ["ещё", "еще", "more", "other options", "другие способы"]
+ANOTHER_WAY_TEXTS = [
+    "другой способ входа", "другой способ", "выбрать другой способ",
+    "another way to log in", "other login method", "try another way",
+]
 
 # Один заход в браузер вместо десятка мелких: забираем всё, по чему потом
 # на стороне Python решаем, что за экран перед нами.
@@ -1765,7 +1782,11 @@ class YbLoginFlow:
         try:
             self._pw = sync_playwright().start()
             self.browser = _launch(self._pw, engine, headless=self.headless)
+            # Куки устройства с прошлого раза: для Яндекса это тот же браузер,
+            # а не новый компьютер – проверок он просит заметно меньше.
+            dev = device_path(self.project_id)
             self.context = self.browser.new_context(
+                storage_state=str(dev) if dev.exists() else None,
                 viewport={"width": 1000, "height": 700}, user_agent=UA,
                 locale=LOCALE, extra_http_headers=LANG_HEADERS)
             self.page = self.context.new_page()
@@ -1845,6 +1866,17 @@ class YbLoginFlow:
         self._dismiss_cookie_banner()
         _click_exact_button(self.page, SMS_LOGIN_TEXTS)
         self.page.wait_for_timeout(2500)
+        return self.state()
+
+    def another_way(self) -> dict:
+        """
+        «Другой способ входа» – с экрана ожидания письма Яндекс отсюда
+        предлагает картинки, QR и прочее. Кнопка есть на экране, значит
+        должна быть и в приложении: иначе выбор только у Яндекса.
+        """
+        self._dismiss_cookie_banner()
+        _click_exact_button(self.page, ANOTHER_WAY_TEXTS)
+        self.page.wait_for_timeout(2000)
         return self.state()
 
     def go_back(self) -> dict:
@@ -2095,6 +2127,13 @@ class YbLoginFlow:
                        or "username" in hints or "логин" in hints or "email" in hints):
             return out("login")
 
+        # Письмо ушло – Яндекс ждёт, пока по ссылке нажмут. Полей тут нет,
+        # только «Другой способ входа»: экран отдельный, иначе он попадал в
+        # «непонятный» и человек не понимал, чего ждать.
+        if not inputs and ("письмо отправлено" in text or "email sent" in text
+                           or "нажмёте на кнопку в письме" in text):
+            return out("mail-wait")
+
         # Полей нет вовсе, а кнопка есть – это «Безопасный вход: подтвердите
         # номер телефона» и подобные. Нажать её может кто угодно, секрета там нет.
         if not inputs and any(
@@ -2261,7 +2300,28 @@ class YbLoginFlow:
         self.context.storage_state(path=str(path))
         return path
 
+    def save_device(self) -> None:
+        """
+        Запомнить браузер, чтобы следующий вход не выглядел «с нового устройства».
+
+        Куки авторизации СЮДА НЕ КЛАДЁМ. Иначе «Войти заново (сбросить сессию)»
+        перестало бы работать: сессию стёрли, а вход всё равно под старым
+        аккаунтом – ровно то, ради чего кнопка и нужна.
+        """
+        try:
+            if not self.context:
+                return
+            data = self.context.storage_state()
+            data["cookies"] = [c for c in (data.get("cookies") or [])
+                               if (c.get("name") or "").lower() not in AUTH_COOKIES]
+            data["origins"] = []
+            device_path(self.project_id).write_text(
+                json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            pass
+
     def close(self) -> None:
+        self.save_device()
         try:
             if self.browser:
                 self.browser.close()

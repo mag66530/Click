@@ -37,7 +37,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-03-publish-hardening"
+UI_BUILD = "2026-08-04-login-steps"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -2038,6 +2038,9 @@ def show_main(project_id: str) -> None:
         html(f'<style>.st-key-projbadge{{--dot:{project["color"]}}}</style>')
         with st.popover(f'{project["name"]} – {project["fullName"]}', use_container_width=True):
             st.caption(f'Аккаунт Яндекса: {config.get("email") or "не задан"}')
+            # Версия видна прямо в приложении: иначе после скачивания архива
+            # не понять, свежий он или старый – на этом уже обожглись.
+            st.caption(f"Версия: {UI_BUILD}")
             if st.button("↻ Сменить проект", key="btn-switch", use_container_width=True):
                 st.query_params.clear()
                 for k in list(st.session_state.keys()):

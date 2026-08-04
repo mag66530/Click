@@ -344,7 +344,13 @@
     {
       "id": "c-APS-узбекистан-1785841456",
       "name": "Узбекистан",
-      "cities": []
+      "cities": [
+        {
+          "id": "ct-ташкент-1785841467920-0",
+          "name": "Ташкент",
+          "url": "https://yandex.ru/sprav/31565459/edit/main"
+        }
+      ]
     }
   ],
   "email": "aviastalru@yandex.ru"

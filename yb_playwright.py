@@ -74,6 +74,7 @@ LANG_HEADERS = {"Accept-Language": "ru-RU,ru;q=0.9,en;q=0.5"}
 NAVIGATION_TIMEOUT = 45_000
 ACTION_TIMEOUT = 15_000
 API_WAIT_TIMEOUT = 8.0      # сколько ждём POST-ответ Яндекса после клика «Создать»
+API_GRACE_AFTER_HIT = 1.2   # …и сколько ещё, если ответ пришёл неточный
 UI_READY_TIMEOUT = 15_000   # сколько ждём, пока React отрисует интерфейс
 IMAGE_PREVIEW_TIMEOUT = 8_000
 TEXT_CONFIRM_TIMEOUT = 10_000
@@ -597,6 +598,81 @@ def click_at(page: Page, coords: dict) -> None:
     page.mouse.click(coords["x"], coords["y"])
 
 
+def click_element(page: Page, el, what: str) -> str:
+    """
+    Нажать НАЙДЕННЫЙ элемент, а не точку экрана.
+
+    Клик по координатам живёт ровно до первого скролла: страница
+    дорисовывается, кнопка уезжает – и клик уходит в пустоту. Так ломались
+    «Создать» и «Данные актуальны». Здесь элемент сам подъезжает под курсор.
+    Возвращает, каким способом получилось нажать (для лога).
+    """
+    try:
+        el.scroll_into_view_if_needed(timeout=3_000)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        el.click(timeout=8_000)
+        return "по элементу"
+    except Exception as e1:  # noqa: BLE001
+        warn(f"  ⚠️ Обычный клик по «{what}» не прошёл ({_short_error(str(e1))}) – жму событием")
+        el.dispatch_event("click")
+        return "событием click"
+
+
+# Кнопка «Добавить пост». Три способа найти – по тексту, по aria/title и по
+# плюсику – но результат один: САМ ЭЛЕМЕНТ.
+_FIND_ADD_POST_JS = r"""
+() => {
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 10 || r.height < 10) return false;
+    const st = window.getComputedStyle(el);
+    if (st.visibility === 'hidden' || st.display === 'none' || st.opacity === '0') return false;
+    return !(el.disabled || el.getAttribute('aria-disabled') === 'true');
+  };
+  const BY_TEXT = /(добавить|создать|новый|написать|опубликовать).*(пост|публикац|запис)|^(добавить|создать|опубликовать)$/i;
+
+  // 1. По тексту кнопки – основной путь.
+  for (const el of document.querySelectorAll(
+        'button, a, [role="button"], [role="tab"], [role="menuitem"]')) {
+    if (!BY_TEXT.test((el.textContent || '').trim())) continue;
+    if (visible(el)) return el;
+  }
+  // 2. По подписи для скринридера – когда на кнопке только иконка.
+  for (const el of document.querySelectorAll('button, [role="button"]')) {
+    const meta = ((el.getAttribute('aria-label') || '') + ' '
+                + (el.getAttribute('title') || '')).toLowerCase();
+    if (!/добавить|создать|новый|опубликовать/.test(meta)) continue;
+    if (!/пост|публикац/.test(meta)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > 20 && r.height > 20 && visible(el)) return el;
+  }
+  // 3. Голый плюсик.
+  for (const el of document.querySelectorAll('button, [role="button"]')) {
+    const t = (el.textContent || '').trim();
+    if (t !== '+' && t !== '＋') continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > 20 && r.height > 20 && visible(el)) return el;
+  }
+  return null;
+}
+"""
+
+
+def wait_for_element(page: Page, js: str, timeout_ms: int = 6_000):
+    """Ждём появления элемента: React дорисовывает интерфейс не мгновенно."""
+    deadline = time.time() + timeout_ms / 1000
+    while True:
+        try:
+            el = page.evaluate_handle(js).as_element()
+        except Exception:  # noqa: BLE001
+            el = None
+        if el is not None or time.time() >= deadline:
+            return el
+        page.wait_for_timeout(300)
+
+
 def wait_ui_ready(page: Page, timeout_ms: int = UI_READY_TIMEOUT) -> bool:
     """
     Ждём, пока React смонтирует интерфейс: на странице появилось ≥5 кнопок с текстом.
@@ -760,6 +836,29 @@ _CHECK_EXISTS_JS = r"""
   return { found: false, fresh: false, reason: '' };
 }
 """
+
+
+_NO_ACCESS_JS = r"""
+() => {
+  const texts = [...document.querySelectorAll('button, [role="button"], a')]
+    .map(b => (b.textContent || '').trim().toLowerCase())
+    .filter(Boolean);
+  // На рабочей карточке кнопок много. Заглушка «нет доступа» показывает
+  // одну-единственную – увести на список организаций.
+  const own = texts.filter(t => t.length > 2 && t.length < 60);
+  const escape = own.some(t => /перейти на страницу организац|к списку организац|все организации/.test(t));
+  const body = (document.body.innerText || '').toLowerCase();
+  const denied = /нет доступа|доступ ограничен|организация не найдена|у вас нет прав/.test(body);
+  return denied || (escape && own.length <= 3);
+}
+"""
+
+
+def _looks_like_no_access(page: Page) -> bool:
+    try:
+        return bool(page.evaluate(_NO_ACCESS_JS))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def check_post_already_exists(page: Page, post_text: str) -> dict:
@@ -968,6 +1067,21 @@ def _is_publish_api_response(url: str, method: str) -> bool:
     return bool(re.search(r"sprav|/api/|/posts?\b", path))
 
 
+# Насколько ответ похож на «пост создан». Нужно, когда после клика прилетело
+# несколько подходящих ответов: раньше брался ПЕРВЫЙ подвернувшийся, и
+# случайный запрос мог перебить настоящий. Теперь выигрывает самый точный.
+def _publish_response_score(url: str) -> int:
+    from urllib.parse import urlsplit
+    path = (urlsplit(url).path or "").lower()
+    if re.search(r"/company-post|/posts?/create|/create-post", path):
+        return 3        # именно создание поста – точнее не бывает
+    if re.search(r"/sprav/api/.*/posts?\b|/api/.*/company-post", path):
+        return 2        # API справочника про посты
+    if re.search(r"/posts?\b", path):
+        return 1
+    return 0
+
+
 # ════════════════════════════════════════════════════════════════════
 #  ПУБЛИКАЦИЯ ОДНОГО ГОРОДА
 # ════════════════════════════════════════════════════════════════════
@@ -1070,40 +1184,28 @@ def publish_to_city(
     if should_stop and should_stop():
         return finish("failed", "Остановлено пользователем до начала публикации")
 
+    # ─── 1б. ЛЕНТА УЖЕ СОДЕРЖИТ ЭТОТ ПОСТ? ───
+    # Последний рубеж против дубля, и он не зависит от причины. Реестр
+    # публикаций лежит в файлах, а в облаке файлы стираются при перезапуске:
+    # после ребута тот же прогон уходил заново и создавал ВТОРОЙ пост. Здесь
+    # мы смотрим на саму ленту Яндекса – она не теряется никогда.
+    try:
+        already = check_post_already_exists(page, task.get("postText", ""))
+    except Exception:  # noqa: BLE001
+        already = {"found": False, "fresh": False, "reason": ""}
+    if already.get("found") and already.get("fresh"):
+        result["steps"]["publish"] = "already-published"
+        reason = ("Такой пост уже есть в ленте города"
+                  + (f" ({already['reason']})" if already.get("reason") else "")
+                  + " – повтор не отправлен")
+        warn(f"  ⏭ {label}: {reason}")
+        return finish("skipped-duplicate", reason)
+
     # ─── 2. Кнопка «Добавить пост» ───
-    add_btn = wait_for_text_button(
-        page,
-        r"(добавить|создать|новый|написать|опубликовать).*(пост|публикац|запис)|^(добавить|создать|опубликовать)$",
-        6000,
-    )
-    if not add_btn:
-        add_btn = page.evaluate(
-            """() => {
-                for (const b of document.querySelectorAll('button, [role="button"]')) {
-                    const meta = ((b.getAttribute('aria-label') || '') + ' ' + (b.getAttribute('title') || '')).toLowerCase();
-                    if (/добавить|создать|новый|опубликовать/.test(meta) && /пост|публикац/.test(meta)) {
-                        const r = b.getBoundingClientRect();
-                        if (r.width > 20 && r.height > 20 && !b.disabled)
-                            return { x: r.x + r.width / 2, y: r.y + r.height / 2, text: meta.slice(0, 40) };
-                    }
-                }
-                return null;
-            }"""
-        )
-    if not add_btn:
-        add_btn = page.evaluate(
-            """() => {
-                for (const b of document.querySelectorAll('button, [role="button"]')) {
-                    const t = (b.textContent || '').trim();
-                    if (t === '+' || t === '＋') {
-                        const r = b.getBoundingClientRect();
-                        if (r.width > 20 && r.height > 20 && !b.disabled)
-                            return { x: r.x + r.width / 2, y: r.y + r.height / 2, text: '+' };
-                    }
-                }
-                return null;
-            }"""
-        )
+    # Ищем ЭЛЕМЕНТ, а не координаты: кнопка бывает ниже сгиба, и клик по
+    # снятой точке уходил в пустоту – город падал с «кнопка не найдена»,
+    # хотя кнопка была. Та же поломка, что была с «Создать».
+    add_btn = wait_for_element(page, _FIND_ADD_POST_JS, 6000)
 
     if not add_btn:
         try:
@@ -1126,13 +1228,28 @@ def publish_to_city(
             result["steps"]["addButton"] = "no-session"
             error("  ❌ Открылась страница входа Яндекса – сессия не активна")
             return finish("no-session", "Сессия Яндекса не активна: открылась страница входа")
+        # Карточка бывает просто НЕ ДОСТУПНА этому аккаунту: Яндекс показывает
+        # заглушку с единственной кнопкой «Перейти на страницу организаций».
+        # «Кнопка не найдена» тут врёт – искать нечего, доступа нет.
+        if _looks_like_no_access(page):
+            result["steps"]["addButton"] = "no-access"
+            error("  ❌ У аккаунта нет доступа к этой карточке")
+            return finish("failed", "Карточка недоступна этому аккаунту Яндекса – "
+                                    "проверьте ссылку и права на организацию")
         result["steps"]["addButton"] = "missing"
         error("  ❌ Кнопка «Добавить пост» не найдена")
         return finish("failed", "Кнопка «Добавить пост» не найдена")
 
-    click_at(page, add_btn)
+    try:
+        how_add = click_element(page, add_btn, "Добавить пост")
+    except Exception as e:  # noqa: BLE001
+        result["steps"]["addButton"] = "click-failed"
+        error(f"  ❌ Не удалось нажать «Добавить пост»: {_short_error(e)}")
+        return finish("failed", f"Не удалось нажать «Добавить пост»: {_short_error(e)}")
     page.wait_for_timeout(700)
     result["steps"]["addButton"] = "ok"
+    if how_add != "по элементу":
+        info(f"  🔘 «Добавить пост» нажата {how_add}")
 
     # ─── 3. ТЕКСТ (строго ДО картинки – как в оригинале) ───
     text = task.get("postText") or ""
@@ -1275,15 +1392,19 @@ def publish_to_city(
 
     # ─── 6. ВЕРИФИКАЦИЯ ЧЕРЕЗ ПЕРЕХВАТ API-ОТВЕТА ───
     # Слушателя ставим ДО клика. Ответ 2xx на POST к API постов = пост точно создан.
+    # Собираем ВСЕ подходящие ответы, а не первый попавшийся: решение примем
+    # по самому точному из них, а среди равных – по последнему (он и есть
+    # окончательный ответ Яндекса).
+    api_hits: list[dict] = []
     api_result: dict[str, Any] = {}
 
     def on_response(response):  # pragma: no cover - сетевой колбэк
         try:
             if not _is_publish_api_response(response.url, response.request.method):
                 return
-            api_result["url"] = response.url
-            api_result["status"] = response.status
-            api_result["method"] = response.request.method
+            api_hits.append({"url": response.url, "status": response.status,
+                             "method": response.request.method,
+                             "score": _publish_response_score(response.url)})
         except Exception:
             pass
 
@@ -1316,13 +1437,31 @@ def publish_to_city(
     except Exception as e:  # noqa: BLE001
         click_error = str(e)
 
+    # Ждём ответ. Если пришёл ТОЧНЫЙ (создание поста) – дальше ждать нечего.
+    # Если пришло что-то похожее, но не точное, дадим Яндексу досказать:
+    # вдруг следом придёт настоящий ответ.
     deadline = time.time() + API_WAIT_TIMEOUT
-    while time.time() < deadline and not api_result:
+    grace_until = None
+    while time.time() < deadline:
+        if any(h["score"] >= 3 for h in api_hits):
+            break
+        if api_hits:
+            if grace_until is None:
+                grace_until = time.time() + API_GRACE_AFTER_HIT
+            elif time.time() >= grace_until:
+                break
         page.wait_for_timeout(150)
     try:
         page.remove_listener("response", on_response)
     except Exception:
         pass
+
+    if api_hits:
+        # Самый точный ответ; среди одинаково точных – последний по времени.
+        best = max(range(len(api_hits)), key=lambda i: (api_hits[i]["score"], i))
+        api_result = dict(api_hits[best])
+        if len(api_hits) > 1:
+            info(f"  📡 Подходящих ответов: {len(api_hits)} – взят самый точный")
 
     _cleanup(temp_files)
 
@@ -1605,16 +1744,31 @@ _ACTUALIZE_BTN_JS = r"""
 }
 """
 
+# Ищем ТЕКСТ уведомления по всей странице, а не только внутри элементов с
+# «правильными» классами. Заказчик показала: уведомление «Данные
+# актуализированы» всплывает, а Click его не видел – значит контейнер
+# называется иначе. Смотрим на самый глубокий элемент с этим текстом:
+# так не поймаем body целиком и не упрёмся в ограничение длины.
 _ACTUALIZE_TOAST_JS = r"""
 () => {
-  const cands = document.querySelectorAll(
-    '[class*="oast"], [class*="otification"], [class*="otice"], [role="alert"], [role="status"]');
-  for (const el of cands) {
+  const RX = /(данные\s+актуализирован|актуализирован[оы]|сохранено|обновлено)/i;
+  for (const el of document.querySelectorAll('body *')) {
     const text = (el.textContent || '').trim();
-    if (!text || text.length < 5 || text.length > 100) continue;
+    if (!text || text.length < 5 || text.length > 160) continue;
+    if (!RX.test(text)) continue;
+    // Берём только тот элемент, у которого совпадающего текста нет глубже:
+    // иначе засчитаем родителя половины страницы.
+    let deeper = false;
+    for (const child of el.querySelectorAll('*')) {
+      const t = (child.textContent || '').trim();
+      if (t && t.length <= 160 && RX.test(t)) { deeper = true; break; }
+    }
+    if (deeper) continue;
     const r = el.getBoundingClientRect();
-    if (r.width < 50 || r.height < 10) continue;
-    if (/(данные\s+актуализирован|актуализирован|сохранено|обновлено)/i.test(text)) return true;
+    if (r.width < 30 || r.height < 8) continue;
+    const st = getComputedStyle(el);
+    if (st.visibility === 'hidden' || st.display === 'none' || st.opacity === '0') continue;
+    return true;
   }
   return false;
 }

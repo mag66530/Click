@@ -253,6 +253,30 @@ def scenario_safe_retry(pid: str) -> None:
     check("итог – успех", totals.get("ok") == 1, str(totals))
 
 
+def scenario_attempt_budget(pid: str) -> None:
+    """
+    На город – не больше ТРЁХ попыток.
+
+    Первый проход делал попытку + безопасный ретрай (две), второй проход звал
+    ту же функцию, и она снова делала две – итого четыре. Теперь во втором
+    проходе внутренний ретрай запрещён.
+    """
+    print("\n▸ На город не больше трёх попыток")
+    CALLS.clear(); SCRIPT.clear()
+    # Город падает ДО клика КАЖДЫЙ раз – значит повторяем по максимуму.
+    SCRIPT["Псков"] = [
+        {"status": "failed", "reason": "Кнопка «Добавить пост» не найдена",
+         "steps": {"addButton": "missing"}},
+    ]
+    write_tasks(pid, ["Псков"], text="Текст для подсчёта попыток")
+    runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru")
+    wait_done(pid)
+
+    check("попыток ровно три, а не четыре", CALLS.count("Псков") == 3, str(CALLS))
+    totals = (latest_report(pid).get("totals") or {})
+    check("город помечен ошибкой", totals.get("failed") == 1, str(totals))
+
+
 def scenario_double_start(pid: str) -> None:
     print("\n▸ Двойной клик по кнопке «Опубликовать» не запускает второй прогон")
     CALLS.clear(); SCRIPT.clear()
@@ -528,6 +552,7 @@ def main() -> int:
         scenario_dedup(pid)
         scenario_unknown_no_retry(pid)
         scenario_safe_retry(pid)
+        scenario_attempt_budget(pid)
         scenario_double_start(pid)
         scenario_stop(pid)
         runner.clear_ledger(pid)

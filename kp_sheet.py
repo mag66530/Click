@@ -100,7 +100,8 @@ def sheet_id(url: str) -> str:
 # и вписанная в приложении ссылка пропала бы при перезапуске.
 DEFAULT_SHEET_URLS = {
     "MPI": "https://docs.google.com/spreadsheets/d/1Hb7R1scmyhSPyROUa2mWMzD4jDcdgBcs1IGu0WQ48O4/edit",
-    "APS": "https://docs.google.com/spreadsheets/d/1VCwHQRtxWzNv7yAK0pO4OHmxGOjrmI1f/edit",
+    "APS": ("https://docs.google.com/spreadsheets/d/1VCwHQRtxWzNv7yAK0pO4OHmxGOjrmI1f"
+            "/edit?gid=266959061#gid=266959061"),
 }
 
 
@@ -200,6 +201,18 @@ def _read_values(file_id: str, sa_info: dict) -> list[list[str]]:
             "как Читатель и включён ли Google Sheets API в проекте?"
         )
     if meta.status_code != 200:
+        # Самый частый случай: файл Excel просто ЗАЛИТ на Google Диск и
+        # открывается в просмотрщике таблиц. Ссылка выглядит как у обычной
+        # Google-таблицы, но Sheets API такие файлы не читает. Говорим не
+        # кодом ошибки, а что именно сделать.
+        if "must not be an Office file" in (meta.text or ""):
+            raise RuntimeError(
+                "Это не Google-таблица, а файл Excel, залитый на Google Диск – "
+                "такие Click читать не умеет (ограничение самого Google). "
+                "Откройте таблицу и выберите «Файл» → «Сохранить как таблицу Google», "
+                "затем вставьте сюда ссылку на новую таблицу и не забудьте расшарить "
+                "её на сервисный аккаунт как Читателя."
+            )
         raise RuntimeError(f"Sheets API вернул HTTP {meta.status_code}: {meta.text[:160]}")
 
     titles = [s.get("properties", {}).get("title", "") for s in (meta.json() or {}).get("sheets", [])]

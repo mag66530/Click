@@ -17,7 +17,7 @@ import html as _html
 # Метка сборки. streamlit_app.py сверяет её со своей: разметка и стиль должны
 # быть из одной версии, иначе кнопки смещаются или пропадают. Менять вместе
 # с UI_BUILD в streamlit_app.py при любой правке разметки плиток.
-BUILD = "2026-08-05-report-tiles"
+BUILD = "2026-08-05-critical-four"
 
 # ─── Палитра 1:1 из :root в _ui.js ──────────────────────────────────
 DARK = {
@@ -1094,38 +1094,6 @@ _STAT_META = {
     "actualized": ("ok", "Актуализировано"),
     "notNeeded": ("skip", "Не требовалось"),
 }
-
-
-def report_summary(totals: dict, duration_sec: int | None = None, keys: list[str] | None = None,
-                   with_total: bool = True) -> str:
-    keys = keys or ["ok", "noImage", "unknown", "failed", "skipped"]
-    cells = []
-    # «Всего» – это сумма остальных плиток. В актуализации она только мешает:
-    # в оригинале там ровно «Актуализировано · Не требовалось · Ошибок · Время».
-    if with_total:
-        cells.append(
-            f'<div class="report-stat dur"><div class="report-stat-label">Всего</div>'
-            f'<div class="report-stat-value">{int(totals.get("total", 0))}</div></div>'
-        )
-    for k in keys:
-        if k not in _STAT_META:
-            continue
-        value = int(totals.get(k, 0) or 0)
-        if k in ("skipped", "unknown", "noImage") and value == 0:
-            continue
-        cls, label = _STAT_META[k]
-        cells.append(
-            f'<div class="report-stat {cls}"><div class="report-stat-label">{label}</div>'
-            f'<div class="report-stat-value">{value}</div></div>'
-        )
-    if duration_sec is not None:
-        mins = duration_sec / 60
-        dur = f"{duration_sec} сек" if duration_sec < 90 else f"{mins:.1f} мин"
-        cells.append(
-            f'<div class="report-stat dur"><div class="report-stat-label">Время</div>'
-            f'<div class="report-stat-value" style="font-size:19px">{dur}</div></div>'
-        )
-    return '<div class="report-summary">' + "".join(cells) + "</div>"
 
 
 _ROW_STYLE = {

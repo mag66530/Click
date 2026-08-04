@@ -145,6 +145,22 @@ def main() -> int:
             check(f"клик мышью по «{last['text']}» включил именно её",
                   active == [last["text"]], f"включилось {active}")
 
+            # ── Фото в «Товары» – только у «Отгрузки» (как в оригинале) ──
+            def goods_visible() -> bool:
+                return page.get_by_text("Фото в раздел", exact=False).count() > 0
+
+            page.locator('[class*="st-key-tile-pt-shipment"] button').first.click()
+            page.wait_for_timeout(3000)
+            check("у «Отгрузки» поле фото товаров есть", goods_visible())
+            page.locator('[class*="st-key-tile-pt-arrival"] button').first.click()
+            page.wait_for_timeout(3000)
+            check("у «Поступления» поля фото товаров нет", not goods_visible())
+            page.locator('[class*="st-key-tile-pt-greeting"] button').first.click()
+            page.wait_for_timeout(3000)
+            check("у «Поздравления» поля фото товаров нет", not goods_visible())
+            page.locator('[class*="st-key-tile-pt-arrival"] button').first.click()
+            page.wait_for_timeout(3000)
+
             # Промах: точка между карточками не должна ничего включать
             box = page.evaluate(
                 """() => { const b = document.querySelector('[class*="st-key-tile-pt-"] button');

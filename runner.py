@@ -896,7 +896,9 @@ def _cleanup_temp(project_id: str) -> None:
 #  АКТУАЛИЗАЦИЯ
 # ════════════════════════════════════════════════════════════════════
 
-def start_actualize(project_id: str, headless: bool = True, delay_s: float = 2.5) -> tuple[bool, str]:
+def start_actualize(project_id: str, headless: bool = True, delay_s: float = 2.5,
+                    with_reviews: bool = False) -> tuple[bool, str]:
+    """with_reviews – заодно собрать неотвеченные отзывы и черновики ответов."""
     with _lock:
         if is_running(project_id):
             return False, "Уже идёт другой прогон."
@@ -924,14 +926,95 @@ def start_actualize(project_id: str, headless: bool = True, delay_s: float = 2.5
             "totals": {"total": 0, "actualized": 0, "notNeeded": 0, "failed": 0}, "error": None,
         })
 
-        t = threading.Thread(target=_actualize_worker, args=(project_id, run_id, files, headless, delay_s),
+        t = threading.Thread(target=_actualize_worker,
+                             args=(project_id, run_id, files, headless, delay_s, with_reviews),
                              daemon=True, name=f"click-actualize-{project_id}")
         _threads[project_id] = t
         t.start()
-        return True, f"Актуализация запущена: {total} городов."
+        tail = " + отзывы" if with_reviews else ""
+        return True, f"Актуализация запущена: {total} городов{tail}."
 
 
-def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay_s: float) -> None:
+def _reviews_for_city(project_id: str, page, task: dict, prompt: str) -> dict:
+    """
+    Шаг по отзывам для одного города: прочитать раздел отзывов, отобрать
+    неотвеченные и написать черновики. Ничего не публикует.
+
+    Возвращает {'items': [...в очередь...], 'summary': 'что вышло словами'}.
+    Исключения наружу не пускает: сломавшийся шаг по отзывам не должен
+    ронять уже работающую актуализацию этого же города.
+    """
+    import reviews as rv
+
+    city = task.get("cityName") or "?"
+    company_url = task.get("companyUrl")
+    url = yb.build_reviews_url(company_url, task.get("companyId"))
+    out = {"items": [], "summary": "", "found": 0, "drafted": 0, "needsHuman": 0, "noDraft": 0}
+
+    data = yb.read_reviews(page, url)
+    if not data["ok"]:
+        out["summary"] = data["reason"]
+        _append_log(project_id, "WARN", f"  💬 {city}: отзывы не прочитаны – {data['reason']}")
+        return out
+
+    page_url = data["url"]
+    box = rv.triage(data["items"])
+    out["found"] = len(box["unanswered"])
+
+    if not box["unanswered"]:
+        out["summary"] = f"отзывов {data['total']}, все с ответом"
+        _append_log(project_id, "INFO", f"  💬 {city}: {out['summary']}")
+        return out
+
+    def add(item, status, draft="", note=""):
+        out["items"].append(rv.as_queue_item(
+            item, project_id=project_id, city=city, company_url=company_url,
+            reviews_url=page_url, status=status, draft=draft, note=note))
+
+    for item in box["no_text"]:
+        pass  # одни звёзды без текста – в очередь не берём (решение заказчика)
+
+    for item in box["needs_human"]:
+        add(item, rv.NEEDS_HUMAN, note=f"оценка {item.get('rating')} – отвечает человек")
+        out["needsHuman"] += 1
+
+    for item in box["over_limit"]:
+        add(item, rv.NO_DRAFT, note=f"сверх потолка {rv.MAX_DRAFTS_PER_CITY} черновиков на город")
+        out["noDraft"] += 1
+
+    for item in box["to_draft"]:
+        if not prompt.strip():
+            add(item, rv.NO_DRAFT, note="промпт проекта не задан – впишите его в «Настройках»")
+            out["noDraft"] += 1
+            continue
+        try:
+            import llm
+            draft = llm.generate(rv.build_prompt(prompt, item))
+            add(item, rv.DRAFTED, draft=draft)
+            out["drafted"] += 1
+        except Exception as e:  # noqa: BLE001 – причина уже человеческая
+            add(item, rv.NO_DRAFT, note=str(e))
+            out["noDraft"] += 1
+            _append_log(project_id, "WARN", f"  💬 {city}: черновик не вышел – {e}")
+
+    bits = [f"без ответа {out['found']}"]
+    if out["drafted"]:
+        bits.append(f"черновиков {out['drafted']}")
+    if out["needsHuman"]:
+        bits.append(f"человеку {out['needsHuman']}")
+    if out["noDraft"]:
+        bits.append(f"без черновика {out['noDraft']}")
+    if box["no_text"]:
+        bits.append(f"без текста пропущено {len(box['no_text'])}")
+    if data["total"] > data["shown"]:
+        bits.append(f"за первой страницей осталось {data['total'] - data['shown']}")
+    out["summary"] = ", ".join(bits)
+    _append_log(project_id, "INFO", f"  💬 {city}: {out['summary']}")
+    return out
+
+
+def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay_s: float,
+                      with_reviews: bool = False) -> None:
     yb.set_logger(lambda level, msg: _append_log(project_id, level, msg))
     started_at = _now_iso()
     start_ts = time.time()
@@ -940,6 +1023,8 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
 
     results: list[dict] = []
     counters = {"actualized": 0, "notNeeded": 0, "failed": 0}
+    review_totals = {"found": 0, "drafted": 0, "needsHuman": 0, "noDraft": 0}
+    collected: list[dict] = []
     total = sum(len(cfg.get("tasks") or []) for _, cfg in files)
     stopped = False
     processed = 0
@@ -948,13 +1033,17 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
         return p_stop(project_id).exists()
 
     def save_report(state: str) -> None:
-        _write_atomic(report_path, json.dumps({
+        payload = {
             "type": "actualize", "startedAt": started_at, "finishedAt": _now_iso(),
             "durationSec": int(time.time() - start_ts), "stoppedByUser": stopped,
             "state": state, "runId": run_id,
             "totals": {"total": len(results), **counters},
             "results": results,
-        }, ensure_ascii=False, indent=2))
+        }
+        if with_reviews:
+            payload["withReviews"] = True
+            payload["reviewTotals"] = dict(review_totals)
+        _write_atomic(report_path, json.dumps(payload, ensure_ascii=False, indent=2))
         if state != "in-progress":
             _snapshot_log(project_id, report_path)
 
@@ -968,8 +1057,24 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
         })
 
     browser = yb.YbBrowser(project_id, headless=headless)
+    prompt = ""
+    if with_reviews:
+        import reviews as rv
+        prompt = rv.project_prompt(project_id)
+
     try:
-        _append_log(project_id, "INFO", f"АКТУАЛИЗАЦИЯ · {total} городов")
+        head = f"АКТУАЛИЗАЦИЯ · {total} городов"
+        if with_reviews:
+            head += " · с отзывами"
+        _append_log(project_id, "INFO", head)
+        if with_reviews:
+            import llm
+            if not llm.is_configured():
+                _append_log(project_id, "WARN",
+                            "⚠️  Ключ Gemini не задан – отзывы соберём, но черновиков не будет")
+            if not prompt.strip():
+                _append_log(project_id, "WARN",
+                            "⚠️  Промпт проекта пуст – отзывы соберём, но черновиков не будет")
         save_report("in-progress")
         browser.start()
 
@@ -992,6 +1097,28 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                            "status": "failed", "reason": f"Критическая ошибка: {e}", "durationMs": 0}
                 res["country"] = country
                 res["package"] = country
+                # Отзывы – отдельным шагом ПОСЛЕ актуализации: он опциональный
+                # и не должен влиять на её статус, что бы там ни случилось.
+                if with_reviews:
+                    try:
+                        rr = _reviews_for_city(project_id, browser.page, task, prompt)
+                    except Exception as e:  # noqa: BLE001
+                        rr = {"items": [], "summary": f"сбой шага отзывов: {e}",
+                              "found": 0, "drafted": 0, "needsHuman": 0, "noDraft": 0}
+                        _append_log(project_id, "WARN",
+                                    f"  💬 {task.get('cityName', '?')}: {rr['summary']}")
+                    res["reviews"] = rr["summary"]
+                    for k in review_totals:
+                        review_totals[k] += rr.get(k, 0)
+                    if rr["items"]:
+                        collected.extend(rr["items"])
+                        # Пишем локально после каждого города: оборванный прогон
+                        # не должен уносить с собой уже написанные черновики.
+                        try:
+                            import reviews as rv
+                            rv.save_queue(project_id, rv.merge(rv.load_queue(project_id), collected))
+                        except Exception as e:  # noqa: BLE001
+                            _append_log(project_id, "WARN", f"  💬 очередь не сохранилась: {e}")
                 results.append(res)
                 counters[{"actualized": "actualized", "not-needed": "notNeeded"}.get(res["status"], "failed")] += 1
                 save_report("in-progress")
@@ -1006,6 +1133,22 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
         push_state("stopped" if stopped else "done", "")
         _append_log(project_id, "INFO",
                     f"ИТОГИ · ✅ {counters['actualized']} · ⊝ {counters['notNeeded']} · ❌ {counters['failed']}")
+        if with_reviews:
+            _append_log(project_id, "INFO",
+                        f"ОТЗЫВЫ · без ответа {review_totals['found']} · "
+                        f"черновиков {review_totals['drafted']} · "
+                        f"человеку {review_totals['needsHuman']} · "
+                        f"без черновика {review_totals['noDraft']}")
+            # Один раз наружу, в конце: в облаке файлы не переживают
+            # перезапуск, а коммитить на каждый город – это 140 коммитов.
+            if collected:
+                try:
+                    import reviews as rv
+                    where = rv.save_queue(project_id, rv.merge(rv.load_queue(project_id), collected),
+                                          push=True)
+                    _append_log(project_id, "INFO", f"ОЧЕРЕДЬ · {where}")
+                except Exception as e:  # noqa: BLE001
+                    _append_log(project_id, "WARN", f"ОЧЕРЕДЬ · сохранить наружу не вышло: {e}")
     except Exception as e:  # noqa: BLE001
         _append_log(project_id, "ERROR", f"💥 Критическая ошибка: {e}")
         save_report("crashed")

@@ -24,9 +24,11 @@ from pathlib import Path
 import streamlit as st
 
 import kp_sheet
+import llm
 import paths
 import projects_data as pdata
 import repo_store
+import reviews as rv
 import runner
 import ui_theme as T
 import yb_playwright as yb
@@ -1450,11 +1452,194 @@ def _act_toggle(city_id: str, widget_key: str) -> None:
         sel.discard(city_id)
 
 
+# ════════════════════════════════════════════════════════════════════
+#  Очередь ответов на отзывы
+# ════════════════════════════════════════════════════════════════════
+#
+# Отдельного раздела не заводим (решение заказчика: фича живёт внутри
+# «Актуализации»), но очередь показываем ПЕРВОЙ – после прогона человеку
+# нужна именно она, а не список городов.
+
+_REVIEW_LABELS = {
+    rv.DRAFTED: "Черновик готов",
+    rv.NEEDS_HUMAN: "Отвечаете сами",
+    rv.NO_DRAFT: "Без черновика",
+    rv.FAILED: "Не отправилось",
+}
+
+
+def _review_queue_state(project_id: str) -> list[dict]:
+    """Очередь держим в session_state: перечитывать файл на каждый клик незачем."""
+    key = f"_rvq_{project_id}"
+    if key not in st.session_state:
+        st.session_state[key] = rv.load_queue(project_id)
+    return st.session_state[key]
+
+
+def _review_queue_save(project_id: str, push: bool = True) -> None:
+    items = st.session_state.get(f"_rvq_{project_id}") or []
+    try:
+        rv.save_queue(project_id, items, push=push)
+    except Exception as e:  # noqa: BLE001
+        st.session_state["_store_error"] = str(e)
+
+
+def _review_regenerate(project_id: str, item: dict) -> None:
+    prompt = rv.project_prompt(project_id)
+    if not prompt.strip():
+        item["note"] = "Промпт проекта пуст – заполните его в «Настройках»"
+        return
+    fake = {"full_text": item.get("text"), "author": {"user": item.get("author")},
+            "rating": item.get("rating")}
+    try:
+        item["draft"] = llm.generate(rv.build_prompt(prompt, fake))
+        item["status"] = rv.DRAFTED
+        item["note"] = ""
+    except Exception as e:  # noqa: BLE001
+        item["note"] = str(e)
+        if not item.get("draft"):
+            item["status"] = rv.NO_DRAFT
+
+
+def _review_send(project_id: str, item: dict, text: str) -> tuple[str, str]:
+    """
+    Отправка ответа: тот же синхронный канал, что и вход в Яндекс.
+    Свой браузер, поэтому только когда фоновый прогон не идёт – иначе два
+    браузера дерутся за один файл сессии.
+    """
+    browser = yb.YbBrowser(project_id, headless=bool(get_settings(project_id)["headless"]))
+    worker = PlaywrightWorker()
+    try:
+        worker.call(browser.start)
+        res = worker.call(yb.publish_review_answer, browser.page, item.get("reviewsUrl"),
+                          item.get("reviewId"), text, item.get("text") or "")
+        worker.call(browser.save_session)
+        return res.get("status", "failed"), res.get("reason", "")
+    except Exception as e:  # noqa: BLE001
+        return "failed", str(e)
+    finally:
+        try:
+            worker.call(browser.close)
+        except Exception:  # noqa: BLE001
+            pass
+        worker.stop()
+
+
+def reviews_queue_block(project_id: str) -> None:
+    items = _review_queue_state(project_id)
+    pending = rv.open_items(items)
+    if not pending:
+        return
+
+    running = runner.read_state(project_id).get("status") == "running"
+    done = [it for it in items if it.get("status") not in rv.OPEN_STATUSES]
+
+    with st.container(border=True):
+        html(f'<div class="card-title">💬 Ответы на отзывы – на подтверждении '
+             f'({len(pending)})</div>')
+        if running:
+            st.info("Идёт прогон. Отправлять ответы можно будет, когда он закончится: "
+                    "во время прогона браузер занят, и второй вход в Яндекс его собьёт.")
+        else:
+            html('<div class="hint" style="margin-bottom:10px">Ничего не уходит в Яндекс само. '
+                 'Проверьте текст, при желании поправьте прямо здесь и нажмите '
+                 '«Отправить».</div>')
+
+        for n, item in enumerate(pending):
+            label = _REVIEW_LABELS.get(item.get("status"), "—")
+            stars = "★" * int(item.get("rating") or 0)
+            with st.container(border=True):
+                head, badge = st.columns([4, 1])
+                head.markdown(
+                    f'**{T.esc(item.get("city") or "?")}** · {T.esc(item.get("author") or "без имени")} '
+                    f'· <span style="color:var(--yel)">{stars}</span> '
+                    f'· <span class="hint">{local_time(item.get("createdAt"))}</span>',
+                    unsafe_allow_html=True)
+                badge.markdown(f'<div class="hint" style="text-align:right">{label}</div>',
+                               unsafe_allow_html=True)
+                html(T.preview_box(item.get("text") or ""))
+
+                if item.get("note"):
+                    st.caption(f"⚠️ {item['note']}")
+
+                if item.get("status") == rv.NEEDS_HUMAN:
+                    st.caption(f"Оценка ниже {rv.GOOD_RATING} – черновик не писали. "
+                               "Ответьте сами на карточке:")
+                    st.markdown(f"[Открыть отзывы этого города]({item.get('reviewsUrl')})")
+                    if st.button("Убрать из списка", key=f"rv-drop-{n}"):
+                        item["status"] = rv.SKIPPED
+                        _review_queue_save(project_id)
+                        st.rerun()
+                    continue
+
+                text = st.text_area("Ответ компании", value=item.get("draft") or "",
+                                    key=f"rv-text-{item.get('reviewId')}", height=160,
+                                    disabled=running)
+                bad = rv.banned_words(text)
+                if bad:
+                    st.warning("В ответе есть слова, которые промпт запрещает: "
+                               + ", ".join(f"«{w}»" for w in bad))
+
+                c1, c2, c3 = st.columns(3)
+                if c1.button("✅ Отправить", key=f"rv-send-{n}", type="primary",
+                             use_container_width=True, disabled=running or not text.strip()):
+                    with st.spinner("Открываю карточку и отправляю ответ…"):
+                        status, reason = _review_send(project_id, item, text)
+                    item["finalText"] = text
+                    item["note"] = reason
+                    if status == "answered":
+                        item["status"] = rv.ANSWERED
+                        st.success(reason)
+                    elif status == "already":
+                        item["status"] = rv.ALREADY
+                        st.info(reason)
+                    elif status == "unknown":
+                        item["status"] = rv.ANSWERED
+                        st.warning(reason)
+                    else:
+                        item["status"] = rv.FAILED
+                        st.error(reason)
+                    _review_queue_save(project_id)
+                    time.sleep(0.8)
+                    st.rerun()
+
+                if c2.button("🔁 Переписать", key=f"rv-again-{n}", use_container_width=True,
+                             disabled=not llm.is_configured()):
+                    with st.spinner("Прошу новый вариант…"):
+                        _review_regenerate(project_id, item)
+                    # Поле держит прежний текст, пока не сбросим его ключ.
+                    st.session_state.pop(f"rv-text-{item.get('reviewId')}", None)
+                    _review_queue_save(project_id, push=False)
+                    st.rerun()
+
+                if c3.button("⏭ Пропустить", key=f"rv-skip-{n}", use_container_width=True):
+                    item["status"] = rv.SKIPPED
+                    item["note"] = ""
+                    _review_queue_save(project_id)
+                    st.rerun()
+
+        if done:
+            c = rv.counters(done)
+            with st.expander(f"Разобрано за эту очередь ({len(done)})"):
+                st.caption(f"Отвечено {c['answered']} · пропущено {c['skipped']} · "
+                           f"не отправилось {c['failed']}")
+                for it in done:
+                    st.markdown(f"- **{T.esc(it.get('city') or '?')}** · "
+                                f"{T.esc(it.get('author') or '')} – {it.get('status')}")
+            if st.button("Очистить разобранное", key="rv-clear-done"):
+                st.session_state[f"_rvq_{project_id}"] = pending
+                _review_queue_save(project_id)
+                st.rerun()
+
+
 def tab_actualize(project_id: str, config: dict) -> None:
     countries = config["countries"]
     if not countries:
         html(T.empty("🏙", "Нет городов", "Добавьте страны и города во вкладке «Города»."))
         return
+
+    # Очередь ответов – первым делом: после прогона именно она и нужна.
+    reviews_queue_block(project_id)
 
     all_ids = [ct["id"] for c in countries for ct in c["cities"]]
     chosen = _act_selected(all_ids)
@@ -1522,12 +1707,34 @@ def tab_actualize(project_id: str, config: dict) -> None:
         st.warning("Сначала войдите в Яндекс в разделе «⚙️ Настройки».")
         return
 
+    with_reviews = st.checkbox(
+        "💬 Заодно проверить отзывы и подготовить ответы",
+        value=bool(st.session_state.get("act-reviews")), key="act-reviews",
+        help="Click зайдёт в раздел «Отзывы» каждой карточки, найдёт отзывы без ответа "
+             "и напишет черновики. Ничего не публикуется: ответы уйдут только после "
+             "вашего подтверждения, уже после прогона.",
+    )
+    if with_reviews:
+        notes = []
+        if not llm.is_configured():
+            notes.append("ключ Gemini не задан – отзывы соберутся, но черновиков не будет")
+        if not rv.project_prompt(project_id).strip():
+            notes.append("промпт проекта пуст – заполните его в «Настройках»")
+        if notes:
+            st.warning(" · ".join(notes).capitalize())
+        else:
+            st.caption(f"Черновики пишутся только на отзывы в {rv.GOOD_RATING} звёзд, "
+                       f"не больше {rv.MAX_DRAFTS_PER_CITY} на город. "
+                       "Всё, что ниже, попадёт в список без ответа – отвечаете сами. "
+                       "Прогон станет примерно в полтора раза длиннее.")
+
     if st.button(f"🔄 Запустить актуализацию ({cities_word(len(selected))})", type="primary",
                  use_container_width=True, disabled=running or not selected, key="btn-actualize"):
         selection = {c["id"]: [ct["id"] for ct in c["cities"] if ct["id"] in chosen]
                      for c in countries}
         save_actualize_tasks(project_id, config, selection)
-        ok, msg = runner.start_actualize(project_id, headless=bool(get_settings(project_id)["headless"]))
+        ok, msg = runner.start_actualize(project_id, headless=bool(get_settings(project_id)["headless"]),
+                                         with_reviews=bool(with_reviews))
         (st.toast if ok else st.error)(msg)
         time.sleep(0.6)
         st.rerun()
@@ -1554,6 +1761,13 @@ def tab_actualize(project_id: str, config: dict) -> None:
                               unsafe_allow_html=True)
                 html(T.report_summary(data.get("totals") or {}, data.get("durationSec"),
                                       keys=["actualized", "notNeeded", "failed"], with_total=False))
+                if data.get("withReviews"):
+                    rt = data.get("reviewTotals") or {}
+                    st.caption(
+                        f"💬 Отзывы: без ответа {rt.get('found', 0)} · "
+                        f"черновиков {rt.get('drafted', 0)} · "
+                        f"вам на ответ {rt.get('needsHuman', 0)} · "
+                        f"без черновика {rt.get('noDraft', 0)}")
                 with st.expander(f"Показать детали ({cities_word(len(data.get('results') or []))})"):
                     for r in data.get("results") or []:
                         html(T.report_row(r))
@@ -2011,6 +2225,9 @@ def tab_settings(project_id: str, config: dict) -> None:
     _yandex_login_block(project_id, config)
 
     st.divider()
+    _reviews_settings_block(project_id)
+
+    st.divider()
     engine = yb.current_engine()
     c1, c2 = st.columns([1, 3])
     if c1.button("Проверить браузер", key="btn-check-browser", use_container_width=True):
@@ -2036,6 +2253,53 @@ def tab_settings(project_id: str, config: dict) -> None:
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
             st.rerun()
+
+
+def _reviews_settings_block(project_id: str) -> None:
+    """Промпт ответов на отзывы – по проекту, рядом с остальными настройками."""
+    html('<div class="card-title">💬 Ответы на отзывы</div>')
+
+    if llm.is_configured():
+        st.caption(f"✅ {llm.where()}.")
+    else:
+        st.caption("⚠️ Ключ Gemini не задан. Черновики ответов писаться не будут – "
+                   "отзывы всё равно соберутся, но отвечать придётся вручную. "
+                   "Ключ берётся бесплатно в Google AI Studio и кладётся в секреты "
+                   "приложения строкой `gemini_api_key = \"…\"`.")
+
+    current = rv.project_prompt(project_id)
+    with st.expander(f"Промпт проекта {PROJECTS[project_id]['name']}"
+                     + (" · изменён" if rv.is_custom_prompt(project_id) else " · заводской")):
+        st.caption("Это инструкция для Gemini: тон, структура, ассортиментная фраза и запреты. "
+                   f"Маркеры **{pdata.REVIEW_TEXT_MARK}** и **{pdata.REVIEW_NAME_MARK}** "
+                   "заменяются на текст отзыва и имя автора – не убирайте их.")
+        text = st.text_area("Промпт", value=current, height=340, key=f"rv-prompt-{project_id}",
+                            label_visibility="collapsed")
+        missing = [m for m in (pdata.REVIEW_TEXT_MARK, pdata.REVIEW_NAME_MARK) if m not in text]
+        if missing:
+            st.warning("Пропали маркеры: " + ", ".join(missing)
+                       + ". Без них отзыв и имя в промпт не подставятся.")
+        c1, c2 = st.columns([1, 1])
+        if c1.button("Сохранить промпт", key=f"rv-prompt-save-{project_id}", type="primary",
+                     use_container_width=True):
+            try:
+                note = rv.save_project_prompt(project_id, text)
+                st.success(f"Промпт {note}.")
+            except Exception as e:  # noqa: BLE001
+                st.error(f"Не сохранилось: {e}")
+        if c2.button("Вернуть заводской", key=f"rv-prompt-reset-{project_id}",
+                     use_container_width=True):
+            try:
+                rv.save_project_prompt(project_id, "")
+                st.session_state.pop(f"rv-prompt-{project_id}", None)
+                st.success("Вернули промпт из документа заказчика.")
+                st.rerun()
+            except Exception as e:  # noqa: BLE001
+                st.error(f"Не сохранилось: {e}")
+
+    st.caption(f"Черновик пишется только на отзывы в {rv.GOOD_RATING} звёзд и не больше "
+               f"{rv.MAX_DRAFTS_PER_CITY} на город. Отзывы с оценкой ниже попадают в список "
+               "без черновика – их вы отвечаете сами. Отзывы без текста пропускаются.")
 
 
 def _browser_error(exc: Exception) -> None:

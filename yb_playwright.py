@@ -191,6 +191,31 @@ def build_photos_url(company_url: str | None, company_id: str | None = None) -> 
     )
 
 
+def build_reviews_url(company_url: str | None, company_id: str | None = None) -> str | None:
+    """
+    URL раздела «Отзывы». Схема ровно та же, что у постов и фото –
+    проверено на живой карточке: https://yandex.ru/sprav/20761435635/p/edit/reviews/
+
+    Формат сохраняем (со /p/ или без): угадать неверно – значит получить
+    404 на живой карточке. Если не угадали, `alt_posts_url` даёт второй
+    вариант, как и для постов.
+    """
+    if company_url:
+        m = re.match(r"^(https?://[^/]+/sprav/\d+/(?:p/)?edit)\b", company_url)
+        if m:
+            return m.group(1) + "/reviews/"
+        m = re.match(r"^(https?://[^/]+/sprav/\d+)", company_url)
+        if m:
+            # Формат неизвестен – берём более частый «новый», со /p/, как в build_posts_url
+            return m.group(1) + "/p/edit/reviews/"
+        cid = extract_company_id(company_url)
+        if cid:
+            return f"https://yandex.ru/sprav/{cid}/p/edit/reviews/"
+    if company_id:
+        return f"https://yandex.ru/sprav/{company_id}/p/edit/reviews/"
+    return None
+
+
 # ════════════════════════════════════════════════════════════════════
 #  Картинки: превращаем ссылку-галерею в прямую и скачиваем с ретраями
 #  (порт resolveImageUrl / downloadImage из publish.js)
@@ -1677,6 +1702,244 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
     )
     info(f"  {'✅' if toast else '🟡'} {label}: {out['reason']} ({out['durationMs'] / 1000:.1f} сек)")
     return out
+
+
+# ════════════════════════════════════════════════════════════════════
+#  ОТЗЫВЫ
+# ════════════════════════════════════════════════════════════════════
+#
+# Читаем не вёрстку, а состояние страницы: Яндекс кладёт весь список
+# отзывов готовым JSON в window.__PRELOAD_DATA (путь
+# initialState.edit.reviews.list). Проверено на живой карточке –
+# 13 отзывов, у 12 есть owner_comment, один без него.
+#
+# Так надёжнее: подписи и классы Яндекс меняет регулярно, а формат
+# состояния живёт дольше. И «есть ли ответ» становится однозначным
+# фактом, а не догадкой по внешнему виду поля.
+
+REVIEWS_WAIT_MS = 15_000
+
+
+def read_reviews(page: Page, url: str) -> dict:
+    """
+    Открыть раздел отзывов и вернуть {'ok', 'items', 'total', 'shown', 'reason', 'url'}.
+
+    ok=False – страница не открылась или состояния на ней не оказалось;
+    причина уже пригодна для показа человеку.
+    """
+    out = {"ok": False, "items": [], "total": 0, "shown": 0, "reason": "", "url": url}
+    if not url:
+        out["reason"] = "Не удалось определить URL раздела «Отзывы»"
+        return out
+
+    def load(u: str) -> str:
+        page.goto(u, wait_until="domcontentloaded", timeout=30_000)
+        return u
+
+    try:
+        load(url)
+    except Exception as e:  # noqa: BLE001
+        out["reason"] = f"Не удалось открыть страницу отзывов: {_short_error(e)}"
+        return out
+
+    # 404 – возможно, не угадали формат адреса. Пробуем второй, как с постами.
+    if is_404(page):
+        alt = alt_posts_url(url)
+        if alt:
+            try:
+                load(alt)
+                out["url"] = alt
+            except Exception:  # noqa: BLE001
+                pass
+        if is_404(page):
+            out["reason"] = f"Страница отзывов не найдена (404): {url}"
+            return out
+
+    if looks_like_login_page(page):
+        out["reason"] = "Яндекс увёл на страницу входа – сессия не действует"
+        return out
+
+    # Состояние приезжает вместе с HTML, но у медленной сети ждём чуть-чуть.
+    preload = None
+    deadline = time.time() + REVIEWS_WAIT_MS / 1000
+    while time.time() < deadline:
+        try:
+            preload = page.evaluate("() => window.__PRELOAD_DATA || null")
+        except Exception:  # noqa: BLE001 – страница ещё перерисовывается
+            preload = None
+        if preload:
+            break
+        page.wait_for_timeout(400)
+
+    if not preload:
+        out["reason"] = ("На странице отзывов не нашли window.__PRELOAD_DATA – "
+                         "Яндекс мог поменять отдачу страницы")
+        return out
+
+    import reviews as rv
+    block = rv.extract_list(preload)
+    out.update(ok=True, items=block["items"], total=block["total"], shown=block["shown"])
+    return out
+
+
+def review_state(page: Page, url: str, review_id: str) -> dict:
+    """
+    Свежее состояние одного отзыва – нужно прямо перед публикацией.
+    Пока черновик ждал человека, на отзыв мог ответить кто-то другой;
+    второй ответ на тот же отзыв – ровно то, чего заказчик не хочет.
+    """
+    data = read_reviews(page, url)
+    if not data["ok"]:
+        return {"ok": False, "found": False, "answered": False, "reason": data["reason"]}
+    for it in data["items"]:
+        if it.get("id") == review_id:
+            import reviews as rv
+            return {"ok": True, "found": True, "answered": not rv.is_unanswered(it),
+                    "reason": "", "item": it}
+    return {"ok": True, "found": False, "answered": False,
+            "reason": "Отзыв не найден на первой странице – возможно, уехал ниже"}
+
+
+# Ищем поле ответа именно у нужного отзыва, а не первое попавшееся:
+# на странице их столько же, сколько отзывов, и промах означал бы ответ
+# не тому человеку. Опора – текст отзыва, он уникален в пределах карточки.
+_FIND_ANSWER_FIELD_JS = r"""
+(payload) => {
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const needle = norm(payload.text).slice(0, 60);
+  if (!needle) return null;
+
+  document.querySelectorAll('[data-click-answer]').forEach(n => n.removeAttribute('data-click-answer'));
+
+  const editable = el =>
+    el.matches('textarea, input[type="text"], [contenteditable="true"]');
+
+  // Самый узкий блок, который содержит и текст отзыва, и поле для ответа.
+  let best = null, bestLen = Infinity;
+  for (const el of document.querySelectorAll('div, li, article, section, form')) {
+    const t = norm(el.innerText);
+    if (!t.includes(needle)) continue;
+    const field = el.querySelector('textarea, input[type="text"], [contenteditable="true"]');
+    if (!field) continue;
+    if (t.length < bestLen) { best = { box: el, field }; bestLen = t.length; }
+  }
+  if (!best) return null;
+
+  best.field.setAttribute('data-click-answer', '1');
+  best.box.setAttribute('data-click-answer-box', '1');
+  return { tag: best.field.tagName.toLowerCase(), contentEditable: editable(best.field) };
+}
+"""
+
+_FIND_SEND_BUTTON_JS = r"""
+() => {
+  const box = document.querySelector('[data-click-answer-box="1"]') || document;
+  for (const b of box.querySelectorAll('button, [role="button"]')) {
+    const t = (b.textContent || '').trim().toLowerCase();
+    if (!t || t.length > 40) continue;
+    if (/^(отправить|ответить|опубликовать|сохранить)$/.test(t)) {
+      const r = b.getBoundingClientRect();
+      if (r.width > 10 && r.height > 10 && !b.disabled) {
+        b.setAttribute('data-click-answer-send', '1');
+        return t;
+      }
+    }
+  }
+  return null;
+}
+"""
+
+
+def publish_review_answer(page: Page, url: str, review_id: str, text: str,
+                          review_text: str = "") -> dict:
+    """
+    Опубликовать подтверждённый человеком ответ на конкретный отзыв.
+
+    Перед отправкой ещё раз читаем состояние отзыва: если ответ там уже
+    появился – не публикуем. Возвращаем {'status', 'reason'}, статусы те
+    же по смыслу, что у публикации постов: 'answered' / 'already' /
+    'unknown' («клик был, подтверждения нет») / 'failed'.
+    """
+    body = (text or "").strip()
+    if not body:
+        return {"status": "failed", "reason": "Пустой текст ответа"}
+
+    state = review_state(page, url, review_id)
+    if not state["ok"]:
+        return {"status": "failed", "reason": state["reason"]}
+    if state["answered"]:
+        return {"status": "already", "reason": "На отзыв уже ответили – публикацию отменили"}
+    if not state["found"]:
+        return {"status": "failed", "reason": state["reason"]}
+
+    needle = review_text or ((state.get("item") or {}).get("full_text") or "")
+    if not needle:
+        return {"status": "failed", "reason": "Нечем опознать отзыв на странице"}
+
+    # React дорисовывает карточки отзывов не мгновенно.
+    field = None
+    deadline = time.time() + REVIEWS_WAIT_MS / 1000
+    while time.time() < deadline:
+        try:
+            field = page.evaluate(_FIND_ANSWER_FIELD_JS, {"text": needle})
+        except Exception:  # noqa: BLE001
+            field = None
+        if field:
+            break
+        page.wait_for_timeout(500)
+
+    if not field:
+        return {"status": "failed",
+                "reason": "Не нашли поле «Ответ компании» у этого отзыва на странице"}
+
+    target = page.locator('[data-click-answer="1"]').first
+    try:
+        target.scroll_into_view_if_needed(timeout=3_000)
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        target.click(timeout=8_000)
+        if field.get("contentEditable") and field.get("tag") not in ("textarea", "input"):
+            page.keyboard.insert_text(body)
+        else:
+            target.fill(body, timeout=8_000)
+    except Exception as e:  # noqa: BLE001
+        return {"status": "failed", "reason": f"Не удалось вписать ответ: {_short_error(e)}"}
+
+    # Кнопка отправки появляется только после ввода текста.
+    label = None
+    deadline = time.time() + 6
+    while time.time() < deadline:
+        try:
+            label = page.evaluate(_FIND_SEND_BUTTON_JS)
+        except Exception:  # noqa: BLE001
+            label = None
+        if label:
+            break
+        page.wait_for_timeout(300)
+
+    if label:
+        try:
+            page.locator('[data-click-answer-send="1"]').first.click(timeout=8_000)
+            info(f"  🔘 Ответ отправлен кнопкой «{label}»")
+        except Exception as e:  # noqa: BLE001
+            return {"status": "failed", "reason": f"Кнопка отправки не нажалась: {_short_error(e)}"}
+    else:
+        # Запасной путь: у Яндекса поле отправляется и с клавиатуры.
+        try:
+            page.keyboard.press("Control+Enter")
+            info("  🔘 Кнопки отправки не нашли – отправили Ctrl+Enter")
+        except Exception as e:  # noqa: BLE001
+            return {"status": "failed", "reason": f"Отправить ответ не удалось: {_short_error(e)}"}
+
+    # Проверяем результат по тому же состоянию страницы, а не по виду формы.
+    page.wait_for_timeout(2_500)
+    after = review_state(page, url, review_id)
+    if after["ok"] and after["answered"]:
+        return {"status": "answered", "reason": "Ответ опубликован"}
+    return {"status": "unknown",
+            "reason": "Отправили, но Яндекс ещё не показывает ответ – проверьте карточку"}
 
 
 # ════════════════════════════════════════════════════════════════════

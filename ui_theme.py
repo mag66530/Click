@@ -1147,6 +1147,8 @@ def report_row(item: dict, with_country: bool = False) -> str:
     reason = item.get("reason") or ""
     if item.get("imageError"):
         reason += f' · фото: {item["imageError"]}'
+    if item.get("reviews"):
+        reason += f' · 💬 {item["reviews"]}'
     pp = item.get("productPhotos")
     if pp:
         reason += f' · 📸 товары: {pp.get("uploaded", 0)}/{pp.get("requested", 0)}'

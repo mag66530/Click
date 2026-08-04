@@ -42,6 +42,9 @@ def check(name: str, cond: bool, detail: str = "") -> None:
         print(f"  ❌ {name}" + (f" – {detail}" if detail else ""))
 
 
+def eq(name: str, got, expected) -> None:
+    check(name, got == expected, f"получили {got!r}, ждали {expected!r}")
+
 # ─── Заглушки браузера ──────────────────────────────────────────────
 class FakePage:
     url = "https://yandex.ru/sprav/1/p/edit/posts/"
@@ -131,6 +134,20 @@ def wait_done(pid: str, timeout: float = 25) -> dict:
     return runner.read_state(pid)
 
 
+def settle(pid: str, timeout: float = 5) -> None:
+    """Дождаться, пока прогон реально отпустит лок. Между статусом «done»
+    и снятием лок-файла есть окно – без этой паузы следующий старт получал
+    «Уже идёт другой прогон»."""
+    end = time.time() + timeout
+    while time.time() < end and runner.is_running(pid):
+        time.sleep(0.05)
+    # Лок снят, но поток ещё доживает свой finally – без join следующий
+    # старт получает «Предыдущий прогон ещё не завершился».
+    t = runner._threads.get(pid)
+    if t:
+        t.join(timeout=max(0.1, end - time.time()))
+
+
 def latest_report(pid: str) -> dict:
     reports = runner.list_reports(pid, "publish", limit=1)
     return runner.read_report(pid, "publish", reports[0]["name"]) if reports else {}
@@ -143,7 +160,7 @@ def scenario_happy_path(pid: str) -> None:
     write_tasks(pid, ["Москва", "Казань", "Пермь"])
     ok, msg = runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru")
     check("прогон запустился", ok, msg)
-    state = wait_done(pid)
+    state = wait_done(pid); settle(pid)
     check("прогон завершился статусом done", state.get("status") == "done", str(state.get("status")))
 
     report = latest_report(pid)
@@ -171,7 +188,7 @@ def scenario_progress(pid: str) -> None:
     PROGRESS_AT_START.clear(); _PROGRESS_PID.clear(); _PROGRESS_PID.append(pid)
     write_tasks(pid, ["Тула", "Орёл"], text="Текст для проверки прогресса")
     runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru")
-    state = wait_done(pid)
+    state = wait_done(pid); settle(pid)
     _PROGRESS_PID.clear()
 
     check("на первом городе прогресс ещё 0",
@@ -188,7 +205,7 @@ def scenario_dedup(pid: str) -> None:
     write_tasks(pid, ["Москва", "Казань", "Пермь"])          # тот же текст, что и в прошлом прогоне
     ok, _ = runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru")
     check("второй прогон запустился", ok)
-    wait_done(pid)
+    wait_done(pid); settle(pid)
 
     check("НИ ОДИН город не отправлен в Яндекс повторно", CALLS == [], str(CALLS))
     totals = (latest_report(pid).get("totals") or {})
@@ -198,7 +215,7 @@ def scenario_dedup(pid: str) -> None:
     CALLS.clear()
     write_tasks(pid, ["Москва", "Казань"], text="Совершенно другой текст поста")
     runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru")
-    wait_done(pid)
+    wait_done(pid); settle(pid)
     check("новый текст ушёл в оба города", sorted(CALLS) == ["Казань", "Москва"], str(CALLS))
 
 
@@ -209,7 +226,7 @@ def scenario_unknown_no_retry(pid: str) -> None:
                        "steps": {"publish": "unknown"}}]
     write_tasks(pid, ["Сочи"], text="Текст для сценария unknown")
     runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru", retry_unknown=False)
-    wait_done(pid)
+    wait_done(pid); settle(pid)
 
     check("публикация вызвана РОВНО один раз", CALLS.count("Сочи") == 1, str(CALLS))
     totals = (latest_report(pid).get("totals") or {})
@@ -229,7 +246,7 @@ def scenario_safe_retry(pid: str) -> None:
     ]
     write_tasks(pid, ["Тверь"], text="Текст для сценария retry")
     runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru")
-    wait_done(pid)
+    wait_done(pid); settle(pid)
 
     check("была вторая попытка", CALLS.count("Тверь") == 2, str(CALLS))
     totals = (latest_report(pid).get("totals") or {})
@@ -256,7 +273,7 @@ def scenario_double_start(pid: str) -> None:
         check("первый запуск принят", ok1)
         check("второй запуск ОТКЛОНЁН", not ok2, msg2)
         check("причина отказа понятна пользователю", "уже" in msg2.lower(), msg2)
-        wait_done(pid)
+        wait_done(pid); settle(pid)
         check("каждый город опубликован один раз", sorted(CALLS) == ["Омск", "Томск", "Тула"], str(CALLS))
     finally:
         yb.publish_to_city = original  # type: ignore[assignment]
@@ -300,7 +317,7 @@ def scenario_wrong_account(pid: str) -> None:
         write_tasks(pid, ["Уфа"], text="Текст для проверки аккаунта")
         runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru",
                              strict_account_check=True)
-        state = wait_done(pid)
+        state = wait_done(pid); settle(pid)
         check("прогон остановлен с ошибкой", state.get("status") == "error", str(state.get("status")))
         check("ни один пост не отправлен", CALLS == [], str(CALLS))
         check("в ошибке названы оба аккаунта",
@@ -325,7 +342,7 @@ def scenario_account_unknown(pid: str) -> None:
         write_tasks(pid, ["Тверь"], text="Текст при неопределённом аккаунте")
         runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru",
                              strict_account_check=True)
-        state = wait_done(pid)
+        state = wait_done(pid); settle(pid)
         check("прогон дошёл до конца", state.get("status") == "done", str(state.get("status")))
         # В очереди могли остаться файлы прошлых сценариев – важно, что наш город ушёл.
         check("город опубликован", "Тверь" in CALLS, str(CALLS))
@@ -345,7 +362,7 @@ def scenario_no_session(pid: str) -> None:
         write_tasks(pid, ["Курск"], text="Текст без сессии")
         runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru",
                              strict_account_check=True)
-        state = wait_done(pid)
+        state = wait_done(pid); settle(pid)
         err = (state.get("error") or "").lower()
         check("прогон остановлен", state.get("status") == "error", str(state.get("status")))
         check("сказано про сессию, а не про чужой аккаунт",
@@ -354,9 +371,155 @@ def scenario_no_session(pid: str) -> None:
         yb.verify_account = original  # type: ignore[assignment]
 
 
+def scenario_actualize_reviews(pid: str) -> None:
+    """
+    Актуализация с галочкой «отзывы». Браузер и Gemini подменены –
+    проверяем именно склейку: что отбор доходит до очереди, что негатив
+    туда попадает без черновика, а отзыв с ответом не попадает вовсе.
+    """
+    print("\n▸ Актуализация с отзывами")
+    import reviews as rv
+
+    (runner.p_tasks_actualize(pid)).mkdir(parents=True, exist_ok=True)
+    (runner.p_tasks_actualize(pid) / "01-Россия.json").write_text(json.dumps({
+        "country": "Россия", "projectName": "TEST",
+        "tasks": [{"cityName": "Москва", "companyUrl": "https://yandex.ru/sprav/500/p/edit/",
+                   "companyId": "500"}],
+    }, ensure_ascii=False), encoding="utf-8")
+
+    rv.save_queue(pid, [])                       # начинаем с пустой очереди
+    yb.actualize_city = lambda page, task, i=0, t=1: {
+        "cityName": task["cityName"], "companyUrl": task["companyUrl"],
+        "status": "actualized", "reason": "клик прошёл", "durationMs": 10}
+    yb.read_reviews = lambda page, url: {
+        "ok": True, "url": url, "total": 3, "shown": 3, "reason": "",
+        "items": [
+            {"id": "r1", "rating": 5, "full_text": "всё отлично", "author": {"user": "Егор"},
+             "time_created": 1690250836338},
+            {"id": "r2", "rating": 2, "full_text": "долго везли", "author": {"user": "Иван"},
+             "time_created": 1690250836338},
+            {"id": "r3", "rating": 5, "full_text": "спасибо", "author": {"user": "Анна"},
+             "time_created": 1690250836338, "owner_comment": {"text": "и вам спасибо"}},
+        ]}
+    rv.project_prompt = lambda project_id: "Ответь на отзыв. [вставить отзыв] [имя]"
+    import llm
+    llm.generate = lambda prompt: "Уважаемый Егор! Благодарим за отзыв."
+
+    ok, msg = runner.start_actualize(pid, headless=True, delay_s=0, with_reviews=True)
+    check("прогон с отзывами стартовал", ok, msg)
+    check("в сообщении видно, что отзывы включены", "отзыв" in msg.lower(), msg)
+    wait_done(pid); settle(pid)
+
+    queue = rv.load_queue(pid)
+    eq("в очередь попали два отзыва (третий уже с ответом)", len(queue), 2)
+    by_id = {it["reviewId"]: it for it in queue}
+    eq("пятёрка получила черновик", by_id["r1"]["status"], rv.DRAFTED)
+    check("черновик не пустой", bool(by_id["r1"]["draft"]), by_id["r1"]["draft"])
+    eq("двойка ушла человеку", by_id["r2"]["status"], rv.NEEDS_HUMAN)
+    eq("человеку черновик не писали", by_id["r2"]["draft"], "")
+    check("отвеченный отзыв в очередь не попал", "r3" not in by_id)
+    check("в очереди есть ссылка на раздел отзывов",
+          by_id["r2"]["reviewsUrl"].endswith("/reviews/"), by_id["r2"]["reviewsUrl"])
+
+    reports = runner.list_reports(pid, "actualize", limit=1)
+    data = runner.read_report(pid, "actualize", reports[0]["name"]) if reports else {}
+    check("отчёт помечен как прогон с отзывами", bool(data.get("withReviews")))
+    eq("в отчёте два неотвеченных", (data.get("reviewTotals") or {}).get("found"), 2)
+    eq("в отчёте один черновик", (data.get("reviewTotals") or {}).get("drafted"), 1)
+    live = runner.read_live_log(pid)
+    check("итог по отзывам попал в лог", "ОТЗЫВЫ" in live, live[-300:])
+
+
+def scenario_actualize_reviews_off(pid: str) -> None:
+    """Галочка выключена – к отзывам не ходим вообще. Это обратная совместимость."""
+    print("\n▸ Актуализация без отзывов не трогает отзывы")
+    import reviews as rv
+
+    (runner.p_tasks_actualize(pid) / "01-Россия.json").write_text(json.dumps({
+        "country": "Россия", "projectName": "TEST",
+        "tasks": [{"cityName": "Казань", "companyUrl": "https://yandex.ru/sprav/501/p/edit/",
+                   "companyId": "501"}],
+    }, ensure_ascii=False), encoding="utf-8")
+    rv.save_queue(pid, [])
+
+    touched = []
+    yb.read_reviews = lambda page, url: touched.append(url) or {
+        "ok": True, "url": url, "total": 0, "shown": 0, "items": [], "reason": ""}
+
+    ok, msg = runner.start_actualize(pid, headless=True, delay_s=0)
+    check("прогон без отзывов стартовал", ok, msg)
+    wait_done(pid); settle(pid)
+    eq("к разделу отзывов не обращались", touched, [])
+    eq("очередь осталась пустой", rv.load_queue(pid), [])
+
+
+def scenario_reviews_llm_down(pid: str) -> None:
+    """Gemini недоступен – отзыв всё равно в очереди, но с ручным вводом."""
+    print("\n▸ Отзывы при недоступном Gemini")
+    import reviews as rv
+
+    (runner.p_tasks_actualize(pid) / "01-Россия.json").write_text(json.dumps({
+        "country": "Россия", "projectName": "TEST",
+        "tasks": [{"cityName": "Пермь", "companyUrl": "https://yandex.ru/sprav/502/p/edit/",
+                   "companyId": "502"}],
+    }, ensure_ascii=False), encoding="utf-8")
+    rv.save_queue(pid, [])
+
+    yb.read_reviews = lambda page, url: {
+        "ok": True, "url": url, "total": 1, "shown": 1, "reason": "",
+        "items": [{"id": "z1", "rating": 5, "full_text": "хорошо", "author": {"user": "Пётр"},
+                   "time_created": 1690250836338}]}
+    rv.project_prompt = lambda project_id: "Ответь на отзыв. [вставить отзыв] [имя]"
+    import llm
+
+    def boom(prompt):
+        raise llm.LlmError("Упёрлись в лимит запросов Gemini.")
+    llm.generate = boom
+
+    ok, msg = runner.start_actualize(pid, headless=True, delay_s=0, with_reviews=True)
+    check("прогон стартовал", ok, msg)
+    state = wait_done(pid); settle(pid)
+    eq("прогон дошёл до конца, а не упал", state.get("status"), "done")
+
+    queue = rv.load_queue(pid)
+    eq("отзыв всё равно в очереди", len(queue), 1)
+    eq("но без черновика", queue[0]["status"], rv.NO_DRAFT)
+    check("причина видна человеку", "лимит" in queue[0]["note"].lower(), queue[0]["note"])
+
+
+def scenario_reviews_page_broken(pid: str) -> None:
+    """Страница отзывов не открылась – город всё равно актуализирован."""
+    print("\n▸ Сбой страницы отзывов не ломает актуализацию")
+    import reviews as rv
+
+    (runner.p_tasks_actualize(pid) / "01-Россия.json").write_text(json.dumps({
+        "country": "Россия", "projectName": "TEST",
+        "tasks": [{"cityName": "Омск", "companyUrl": "https://yandex.ru/sprav/503/p/edit/",
+                   "companyId": "503"}],
+    }, ensure_ascii=False), encoding="utf-8")
+    rv.save_queue(pid, [])
+
+    yb.read_reviews = lambda page, url: {
+        "ok": False, "url": url, "total": 0, "shown": 0, "items": [],
+        "reason": "Страница отзывов не найдена (404)"}
+
+    ok, msg = runner.start_actualize(pid, headless=True, delay_s=0, with_reviews=True)
+    check("прогон стартовал", ok, msg)
+    wait_done(pid); settle(pid)
+
+    reports = runner.list_reports(pid, "actualize", limit=1)
+    data = runner.read_report(pid, "actualize", reports[0]["name"]) if reports else {}
+    row = (data.get("results") or [{}])[0]
+    eq("город всё равно актуализирован", row.get("status"), "actualized")
+    check("но про отзывы честно написано", "404" in (row.get("reviews") or ""), row.get("reviews"))
+    eq("в очередь ничего не добавилось", rv.load_queue(pid), [])
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="click-e2e-"))
     runner.USERS_DATA = tmp
+    import reviews as _rv
+    _rv.USERS_DATA = tmp
     install_fakes()
     pid = "E2E"
     try:
@@ -371,6 +534,10 @@ def main() -> int:
         scenario_wrong_account(pid)
         scenario_account_unknown(pid)
         scenario_no_session(pid)
+        scenario_actualize_reviews(pid)
+        scenario_actualize_reviews_off(pid)
+        scenario_reviews_llm_down(pid)
+        scenario_reviews_page_broken(pid)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

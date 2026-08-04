@@ -1207,6 +1207,138 @@ def test_aps_project() -> None:
           bool(kp_sheet.SKIP_STATUS_RX.search("не активные")))
 
 
+# ════════════════════════════════════════════════════════════════════
+def test_reviews() -> None:
+    """
+    Отзывы. Фикстура – настоящая страница карточки АвиаПромСталь
+    (tests_reviews_fixture.json): 13 отзывов, у 12 есть ответ компании,
+    один без него. Проверяем ровно то, на чём фича может тихо сломаться:
+    адрес раздела, признак «без ответа», отбор и правило имени.
+    """
+    import json as _json
+
+    import reviews as rv
+    import yb_playwright as yb
+    print("\n▸ Отзывы")
+
+    # ─── адрес раздела: подтверждён живой карточкой ───
+    eq("отзывы: /p/edit/reviews/ – как на живой карточке",
+       yb.build_reviews_url("https://yandex.ru/sprav/20761435635/p/edit/reviews/"),
+       "https://yandex.ru/sprav/20761435635/p/edit/reviews/")
+    eq("отзывы: из раздела «Посты» старого формата",
+       yb.build_reviews_url("https://yandex.ru/sprav/40691746/edit/posts/"),
+       "https://yandex.ru/sprav/40691746/edit/reviews/")
+    eq("отзывы: формат со /p/ сохраняется",
+       yb.build_reviews_url("https://yandex.ru/sprav/188702920373/p/edit/"),
+       "https://yandex.ru/sprav/188702920373/p/edit/reviews/")
+    eq("отзывы: новый адрес карточки приводится к рабочему виду",
+       yb.build_reviews_url("https://yandex.ru/business/companies/company/70210624498/"),
+       "https://yandex.ru/sprav/70210624498/p/edit/reviews/")
+    eq("отзывы: без ссылки – None", yb.build_reviews_url(None), None)
+
+    # ─── разбор настоящей страницы ───
+    fx = _json.loads((Path(__file__).parent / "tests_reviews_fixture.json").read_text(encoding="utf-8"))
+    preload = {"initialState": {"edit": {"reviews": fx["reviews"]}}}
+    block = rv.extract_list(preload)
+    eq("фикстура: отзывов на странице", block["shown"], 13)
+    eq("фикстура: всего по пейджеру", block["total"], 13)
+    eq("фикстура: страница вмещает", block["limit"], 20)
+
+    box = rv.triage(block["items"])
+    eq("фикстура: без ответа ровно один", len(box["unanswered"]), 1)
+    eq("фикстура: он же уходит в генерацию", len(box["to_draft"]), 1)
+    eq("фикстура: это отзыв Егора Севастьянова",
+       (box["to_draft"][0]["author"]["user"]), "Егор Севастьянов")
+
+    # Пустой __PRELOAD_DATA не должен ронять прогон – просто нет отзывов.
+    eq("пустое состояние страницы – ноль отзывов", rv.extract_list(None)["shown"], 0)
+    eq("чужое состояние страницы – ноль отзывов", rv.extract_list({"initialState": {}})["shown"], 0)
+
+    # ─── признак «есть ответ» ───
+    check("отзыв с owner_comment считается отвеченным",
+          not rv.is_unanswered({"owner_comment": {"text": "Спасибо за отзыв"}}))
+    check("отзыв без owner_comment считается неотвеченным",
+          rv.is_unanswered({"full_text": "текст"}))
+    check("пустой owner_comment – всё ещё без ответа",
+          rv.is_unanswered({"owner_comment": {"text": "   "}}))
+
+    # ─── отбор: пятёрки машине, остальное человеку ───
+    made = [
+        {"id": "a", "rating": 5, "full_text": "всё отлично", "author": {"user": "Егор"}},
+        {"id": "b", "rating": 4, "full_text": "неплохо, но", "author": {"user": "Иван"}},
+        {"id": "c", "rating": 1, "full_text": "ужасно",      "author": {"user": "Пётр"}},
+        {"id": "d", "rating": 5, "full_text": "",            "author": {"user": "Анна"}},
+        {"id": "e", "rating": 5, "full_text": "спасибо",     "author": {"user": "Ольга"},
+         "owner_comment": {"text": "уже ответили"}},
+    ]
+    box = rv.triage(made)
+    eq("отбор: без ответа четыре из пяти", len(box["unanswered"]), 4)
+    eq("отбор: черновик пишем только на пятёрку с текстом", [i["id"] for i in box["to_draft"]], ["a"])
+    eq("отбор: четвёрка и единица – человеку", [i["id"] for i in box["needs_human"]], ["b", "c"])
+    eq("отбор: отзыв без текста пропускаем", [i["id"] for i in box["no_text"]], ["d"])
+
+    many = [{"id": f"x{n}", "rating": 5, "full_text": "текст", "author": {"user": "Егор"}}
+            for n in range(9)]
+    box = rv.triage(many)
+    eq("потолок черновиков на город", len(box["to_draft"]), rv.MAX_DRAFTS_PER_CITY)
+    eq("остальные помечены как сверх потолка", len(box["over_limit"]), 9 - rv.MAX_DRAFTS_PER_CITY)
+
+    # ─── имя автора ───
+    eq("имя: обычное берём как есть", rv.nice_name("Егор Севастьянов"), "Егор Севастьянов")
+    eq("имя: инициал отбрасываем", rv.nice_name("Надежда Х."), "Надежда")
+    eq("имя: одно слово", rv.nice_name("Денис"), "Денис")
+    eq("имя: двойное через дефис", rv.nice_name("Анна-Мария"), "Анна-Мария")
+    eq("имя: с цифрами не берём", rv.nice_name("Пользователь 123"), None)
+    eq("имя: никнейм не берём", rv.nice_name("xxx_killer"), None)
+    eq("имя: грубость не берём", rv.nice_name("сука"), None)
+    eq("имя: почту не берём", rv.nice_name("ivan@mail.ru"), None)
+    eq("имя: пустое – «Клиент»", rv.name_for_prompt(""), rv.FALLBACK_NAME)
+    eq("имя: странное – «Клиент»", rv.name_for_prompt("Пользователь 123"), rv.FALLBACK_NAME)
+
+    # ─── промпты ───
+    import projects_data as pdata
+    eq("промпты есть на все пять проектов", sorted(pdata.REVIEW_PROMPTS), ["APS", "IMP", "MPE", "MPI", "SMU"])
+    for pid in pdata.REVIEW_PROMPTS:
+        check(f"маркеры на месте: {pid}",
+              pdata.REVIEW_TEXT_MARK in rv.default_prompt(pid)
+              and pdata.REVIEW_NAME_MARK in rv.default_prompt(pid))
+
+    item = {"full_text": "Хороший ассортимент", "author": {"user": "Надежда Х."}, "rating": 5}
+    built = rv.build_prompt(rv.default_prompt("APS"), item)
+    check("промпт: текст отзыва подставлен", "Хороший ассортимент" in built)
+    check("промпт: имя подставлено без инициала", "Надежда" in built and "Надежда Х." not in built)
+    check("промпт: маркеров не осталось",
+          pdata.REVIEW_TEXT_MARK not in built and pdata.REVIEW_NAME_MARK not in built)
+
+    anon = rv.build_prompt(rv.default_prompt("APS"),
+                           {"full_text": "текст", "author": {"user": "vasya2000"}, "rating": 5})
+    check("промпт: вместо никнейма «Клиент»", rv.FALLBACK_NAME in anon)
+
+    # МПИ по промпту заказчика не обращается по имени вовсе.
+    check("МПИ: промпт запрещает обращение по имени",
+          "без личного обращения по имени" in rv.default_prompt("MPI"))
+    check("МПИ есть в списке проектов без имени", "MPI" in pdata.REVIEW_NO_NAME_PROJECTS)
+
+    # ─── запрещённые слова ───
+    eq("запрет: «склад» и «магазин» ловятся",
+       sorted(rv.banned_words("Приезжайте на склад или в магазин")), ["магазин", "склад"])
+    eq("запрет: чистый ответ проходит", rv.banned_words("Благодарим за отзыв!"), [])
+
+    # ─── очередь ───
+    made_items = [rv.as_queue_item(box["to_draft"][0], project_id="APS", city="Москва",
+                                   company_url="https://yandex.ru/sprav/1/p/edit/",
+                                   reviews_url="https://yandex.ru/sprav/1/p/edit/reviews/",
+                                   status=rv.DRAFTED, draft="Спасибо!")]
+    eq("очередь: запись содержит id отзыва", made_items[0]["reviewId"], "x0")
+    eq("очередь: город записан", made_items[0]["city"], "Москва")
+    merged = rv.merge(made_items, made_items)
+    eq("очередь: повторный прогон не плодит дубли", len(merged), 1)
+
+    answered = dict(made_items[0], status=rv.ANSWERED)
+    eq("очередь: разобранное уходит из открытых", len(rv.open_items([answered])), 0)
+    c = rv.counters([answered])
+    eq("очередь: счётчик отвеченных", c["answered"], 1)
+
 def test_yandex_domain() -> None:
     """
     Один ящик – два паспорта.
@@ -1266,6 +1398,7 @@ def main() -> int:
         test_report_summary()
         test_yandex_domain()
         test_aps_project()
+        test_reviews()
         test_bulk_city_duplicates()
         test_actualize_click_on_real_page()
         test_run_logs(tmp)

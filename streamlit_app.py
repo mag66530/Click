@@ -39,7 +39,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-05-critical-four"
+UI_BUILD = "2026-08-05-reviews"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 

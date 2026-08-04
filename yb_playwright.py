@@ -1634,23 +1634,79 @@ POST_LOGIN_SKIP_BUTTONS = [
 
 
 def _click_exact_button(page: Page, texts: list[str]) -> bool:
-    coords = page.evaluate(
+    """
+    Нажать кнопку по её надписи.
+
+    Кликаем ПО ЭЛЕМЕНТУ, а не по координатам. Координаты живут ровно до
+    первого скролла: страница подъезжает – и клик уходит в пустоту. На этом
+    уже ломалась публикация («Создать» на y=2201 в окне высотой 600), тот же
+    промах здесь молча съедал «Далее» и «Подтвердить» на входе.
+    """
+    handle = page.evaluate_handle(
         """(texts) => {
             for (const btn of document.querySelectorAll('button, [role="button"]')) {
+                if (btn.disabled) continue;
                 const t = (btn.textContent || '').trim().toLowerCase();
                 if (texts.includes(t)) {
                     const r = btn.getBoundingClientRect();
-                    if (r.width > 30 && r.height > 15) return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                    if (r.width > 30 && r.height > 15) return btn;
                 }
             }
             return null;
         }""",
         texts,
     )
-    if coords:
-        page.mouse.click(coords["x"], coords["y"])
+    el = handle.as_element()
+    if el is None:
+        return False
+    try:
+        el.scroll_into_view_if_needed(timeout=2_000)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        el.click(timeout=5_000)
         return True
-    return False
+    except Exception:  # noqa: BLE001
+        try:
+            el.dispatch_event("click")
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+
+# Кнопки-подтверждения на «челлендж»-экранах паспорта: страница без единого
+# поля ввода, только текст и кнопка («Безопасный вход – подтвердите номер»).
+CONFIRM_BUTTON_TEXTS = [
+    "подтвердить", "продолжить", "далее", "хорошо", "готово", "войти",
+    "confirm", "continue", "next", "ok",
+]
+
+# Один заход в браузер вместо десятка мелких: забираем всё, по чему потом
+# на стороне Python решаем, что за экран перед нами.
+_PAGE_STATE_JS = """() => {
+    const visible = (el) => {
+        const r = el.getBoundingClientRect();
+        if (r.width < 10 || r.height < 8) return false;
+        const s = getComputedStyle(el);
+        return s.visibility !== 'hidden' && s.display !== 'none';
+    };
+    const inputs = [...document.querySelectorAll('input, textarea')].filter(visible);
+    return {
+        url: location.href,
+        text: (document.body.innerText || '').slice(0, 4000),
+        inputs: inputs.map((i) => ({
+            type: (i.type || 'text').toLowerCase(),
+            hint: [i.name, i.id, i.autocomplete, i.getAttribute('inputmode'),
+                   i.placeholder, i.getAttribute('data-testid')]
+                  .filter(Boolean).join(' ').toLowerCase(),
+        })),
+        buttons: [...document.querySelectorAll('button, [role="button"]')]
+            .filter(visible)
+            .filter((b) => !b.disabled)
+            .map((b) => (b.textContent || '').trim())
+            .filter(Boolean),
+    };
+}"""
 
 
 class YbLoginFlow:
@@ -1665,7 +1721,7 @@ class YbLoginFlow:
         self.context: BrowserContext | None = None
         self.page: Page | None = None
 
-    def start(self) -> bytes:
+    def start(self) -> dict:
         engine = resolve_engine()
         try:
             self._pw = sync_playwright().start()
@@ -1676,8 +1732,10 @@ class YbLoginFlow:
             self.page.goto(PASSPORT_URL, wait_until="domcontentloaded")
             self.page.wait_for_timeout(1500)
             self._dismiss_cookie_banner()
-            self._switch_to_login_by_password()
-            return self.page.screenshot(full_page=True)
+            # Паспорт встречает формой телефона – нам нужен вход по логину.
+            if self.detect_step() == "phone":
+                self._switch_to_login_by_password()
+            return self.state()
         except Exception:
             self.close()
             raise
@@ -1697,13 +1755,51 @@ class YbLoginFlow:
                         continue
             self.page.wait_for_timeout(500)
 
-    def _switch_to_login_by_password(self) -> None:
-        if self.page.locator(OTHER_METHOD_BUTTON).count() > 0:
-            self.page.click(OTHER_METHOD_BUTTON)
-            self.page.wait_for_timeout(600)
-        if self.page.locator(SWITCH_TO_LOGIN_OPTION).count() > 0:
-            self.page.click(SWITCH_TO_LOGIN_OPTION)
-            self.page.wait_for_timeout(800)
+    def _switch_to_login_by_password(self) -> bool:
+        """
+        Уйти с экрана «Введите номер телефона» на вход по логину.
+
+        Новый паспорт (/pwl-yandex/) открывается на телефоне, а нужный нам
+        путь спрятан за кнопкой «Ещё» → «Войти по логину». Ищем по НАДПИСЯМ:
+        старые data-testid на этом экране больше не встречаются, и молчаливый
+        промах оставлял Click на форме телефона – туда он потом и печатал
+        логин, а Яндекс отвечал ошибкой.
+        """
+        for _ in range(2):
+            if _click_exact_button(self.page, ["войти по логину", "log in with username"]):
+                self.page.wait_for_timeout(900)
+                return True
+            if self.page.locator(SWITCH_TO_LOGIN_OPTION).count() > 0:
+                self.page.click(SWITCH_TO_LOGIN_OPTION)
+                self.page.wait_for_timeout(900)
+                return True
+            # Пункта не видно – он под «Ещё».
+            opened = _click_exact_button(self.page, ["ещё", "еще", "more"])
+            if not opened and self.page.locator(OTHER_METHOD_BUTTON).count() > 0:
+                self.page.click(OTHER_METHOD_BUTTON)
+                opened = True
+            if not opened:
+                return False
+            self.page.wait_for_timeout(700)
+        return False
+
+    def send_login_email(self) -> dict:
+        """
+        «Отправить письмо для входа» – Яндекс пришлёт ссылку на почту, и вход
+        подтверждается с любого устройства. Когда пароль не подходит или
+        приходит бесконечная проверка, это самый короткий путь.
+        """
+        self._dismiss_cookie_banner()
+        _click_exact_button(self.page, ["отправить письмо для входа", "send a login link"])
+        self.page.wait_for_timeout(2000)
+        return self.state()
+
+    def send_sms_code(self) -> dict:
+        """«Войти с помощью смс» – код придёт на привязанный номер."""
+        self._dismiss_cookie_banner()
+        _click_exact_button(self.page, ["войти с помощью смс", "log in with sms"])
+        self.page.wait_for_timeout(2000)
+        return self.state()
 
     def _skip_post_login_prompts(self) -> None:
         for sel in POST_LOGIN_SKIP_BUTTONS:
@@ -1711,10 +1807,34 @@ class YbLoginFlow:
                 self.page.click(sel)
                 self.page.wait_for_timeout(800)
 
-    def _submit_generic_field(self, value: str, next_button_selector: str) -> None:
-        field = self.page.locator(GENERIC_TEXT_FIELD).first
+    def _field_for(self, kind: str):
+        """
+        Поле, которое соответствует ШАГУ, а не «первое попавшееся».
+
+        Слепое «первое текстовое поле» приводило к тому, что пароль улетал в
+        графу кода, а код – в графу логина: экран уже сменился, а код об этом
+        не знал. Пароль отличается типом поля, остальное – по подсказкам.
+        """
+        if kind == "password":
+            pw = self.page.locator('input[type="password"]')
+            if pw.count() > 0:
+                return pw.first
+        candidates = self.page.locator(
+            f'{GENERIC_TEXT_FIELD}, input[type="text"], input[type="email"], '
+            f'input[type="tel"], input:not([type])'
+        )
+        if candidates.count() > 0:
+            return candidates.first
+        return self.page.locator("input:not([type=hidden])").first
+
+    def _submit_generic_field(self, value: str, next_button_selector: str,
+                              kind: str = "login") -> None:
+        field = self._field_for(kind)
         field.click()
-        field.fill("")
+        try:
+            field.fill("")
+        except Exception:  # noqa: BLE001
+            pass
         field.type(value, delay=40)   # посимвольно: иначе кнопка «Далее» остаётся серой
         self._dismiss_cookie_banner()
         self.page.wait_for_timeout(400)
@@ -1729,7 +1849,7 @@ class YbLoginFlow:
         _click_exact_button(self.page, ["next", "continue", "войти", "продолжить", "далее"])
         self.page.wait_for_timeout(1500)
 
-    def click_next(self) -> bytes:
+    def click_next(self) -> dict:
         self._dismiss_cookie_banner()
         if self.page.locator(LOGIN_NEXT_BUTTON).count() > 0:
             self.page.click(LOGIN_NEXT_BUTTON)
@@ -1737,9 +1857,9 @@ class YbLoginFlow:
         if not _click_exact_button(self.page, ["next", "continue", "войти", "продолжить", "далее"]):
             self.page.keyboard.press("Enter")
         self.page.wait_for_timeout(1500)
-        return self.page.screenshot(full_page=True)
+        return self.state()
 
-    def submit_phone(self, phone: str) -> bytes:
+    def submit_phone(self, phone: str) -> dict:
         digits = "".join(ch for ch in phone if ch.isdigit())
         if digits.startswith(("7", "8")):
             digits = digits[1:]
@@ -1749,27 +1869,77 @@ class YbLoginFlow:
         if not _click_exact_button(self.page, ["log in", "войти"]):
             self.page.keyboard.press("Enter")
         self.page.wait_for_timeout(2500)
-        return self.page.screenshot(full_page=True)
+        return self.state()
 
-    def submit_login(self, login_value: str) -> bytes:
-        self._submit_generic_field(login_value, LOGIN_NEXT_BUTTON)
-        return self.page.screenshot(full_page=True)
+    # Экран сменился, пока человек печатал – значит вводить сюда нельзя.
+    # Иначе пароль попадает в графу кода (и наоборот), а Яндекс отвечает
+    # ошибкой, из которой вообще не понять, что произошло.
+    _WRONG_SCREEN = {
+        "login": "Яндекс сейчас просит не логин, а {}. Посмотрите на снимок ниже.",
+        "password": "Яндекс сейчас просит не пароль, а {}. Пароль вводить некуда – "
+                    "посмотрите на снимок ниже.",
+        "code": "Яндекс сейчас просит не код, а {}. Код улетел бы не в ту графу.",
+    }
+    _STEP_NAMES = {
+        "login": "логин", "password": "пароль", "code": "код",
+        "phone": "номер телефона", "captcha": "капчу",
+        "challenge": "подтверждение (кнопка, без ввода)", "done": "ничего – вход уже выполнен",
+        "unknown": "что-то, чего Click не разобрал",
+    }
 
-    def submit_password(self, password: str) -> bytes:
-        self._submit_generic_field(password, PASSWORD_NEXT_BUTTON)
+    def _require_step(self, kind: str) -> None:
+        step = self.detect_step()
+        if step == kind or step == "unknown":
+            return
+        raise RuntimeError(self._WRONG_SCREEN[kind].format(self._STEP_NAMES.get(step, step)))
+
+    def submit_login(self, login_value: str) -> dict:
+        if self.detect_step() == "phone":
+            self._switch_to_login_by_password()
+        self._require_step("login")
+        self._submit_generic_field(login_value, LOGIN_NEXT_BUTTON, "login")
         self._skip_post_login_prompts()
-        return self.page.screenshot(full_page=True)
+        return self.state()
 
-    def submit_code(self, code: str) -> bytes:
+    def submit_password(self, password: str) -> dict:
+        self._require_step("password")
+        self._submit_generic_field(password, PASSWORD_NEXT_BUTTON, "password")
+        self._skip_post_login_prompts()
+        return self.state()
+
+    def submit_code(self, code: str) -> dict:
         # Пока человек ждал код, паспорт мог откатиться на первый экран – тогда
         # код улетел бы в поле логина. Проверяем, что на экране действительно код.
-        if self.detect_step() == "login":
-            raise RuntimeError(
-                "Яндекс вернулся на экран логина – коду сейчас некуда. Введите логин "
-                "(или нажмите «Продолжить»), дождитесь НОВОГО кода и введите его.")
-        self._submit_generic_field(code, EMAIL_CODE_NEXT_BUTTON)
+        self._require_step("code")
+        self._submit_code_field(code)
         self._skip_post_login_prompts()
-        return self.page.screenshot(full_page=True)
+        return self.state()
+
+    def _submit_code_field(self, code: str) -> None:
+        """
+        Код из SMS. Паспорт рисует его либо одним полем, либо цепочкой
+        квадратиков по цифре в каждом – во втором случае fill() затирает
+        только первый, поэтому печатаем посимвольно: фокус переезжает сам.
+        """
+        digits = "".join(ch for ch in code if ch.isalnum())
+        field = self.page.locator(f"{GENERIC_TEXT_FIELD}, input:not([type=hidden])").first
+        field.click()
+        try:
+            field.fill("")
+        except Exception:  # noqa: BLE001
+            for _ in range(len(digits) + 2):
+                self.page.keyboard.press("Backspace")
+        self.page.keyboard.type(digits, delay=90)
+        self.page.wait_for_timeout(800)
+        # Часто форма уходит сама, как только введена последняя цифра.
+        if self.page.locator(EMAIL_CODE_NEXT_BUTTON).count() > 0:
+            try:
+                self.page.click(EMAIL_CODE_NEXT_BUTTON, timeout=3000)
+            except Exception:  # noqa: BLE001
+                pass
+        elif not _click_exact_button(self.page, ["войти", "продолжить", "далее", "next", "continue"]):
+            self.page.keyboard.press("Enter")
+        self.page.wait_for_timeout(2500)
 
     def screenshot(self) -> bytes:
         return self.page.screenshot(full_page=True)
@@ -1780,38 +1950,106 @@ class YbLoginFlow:
     # заполняем сами. Останавливаемся только там, где человек действительно нужен:
     # код из SMS/почты, капча, подтверждение в приложении.
 
-    def detect_step(self) -> str:
+    def page_state(self) -> dict:
         """
-        Что сейчас на экране Яндекса:
-          'login'    – просит логин или e-mail
-          'password' – просит пароль
-          'code'     – просит код (SMS / почта / приложение)
-          'captcha'  – капча
-          'done'     – похоже, уже вошли
-          'unknown'  – не разобрали, нужен человек
-        """
-        try:
-            if self.page.locator(EMAIL_CODE_NEXT_BUTTON).count() > 0:
-                return "code"
-            if self.page.locator('input[type="password"]').count() > 0 or \
-                    self.page.locator(PASSWORD_NEXT_BUTTON).count() > 0:
-                return "password"
+        Что паспорт показывает ПРЯМО СЕЙЧАС.
 
-            page_text = (self.page.inner_text("body") or "").lower()
-            if self.page.locator('img[src*="captcha"], [class*="captcha" i], [data-testid*="captcha"]').count() > 0 \
-                    or "captcha" in page_text or "введите символы" in page_text:
-                return "captcha"
-            if re.search(r"\bкод\b|подтвержд|confirmation code|one-time", page_text) and \
-                    self.page.locator(GENERIC_TEXT_FIELD).count() > 0:
-                return "code"
-            if self.page.locator(LOGIN_NEXT_BUTTON).count() > 0 or \
-                    self.page.locator(GENERIC_TEXT_FIELD).count() > 0:
-                return "login"
-            if "passport" not in self.page.url or "profile" in self.page.url:
-                return "done"
-        except Exception:
-            return "unknown"
-        return "unknown"
+        Раньше шаг угадывался один раз – после авто-входа – и больше не
+        пересматривался. Паспорт тем временем спокойно возвращался на экран
+        логина, а приложение продолжало показывать поля «Пароль» и «Код»:
+        вводить логин было буквально некуда. Поэтому шаг теперь читается
+        со страницы заново перед каждой отрисовкой.
+
+        step:
+          'login'     – просит логин или e-mail
+          'password'  – просит пароль
+          'code'      – просит код (SMS / почта / приложение)
+          'challenge' – экран без полей, нужно просто нажать кнопку
+          'captcha'   – капча
+          'done'      – вход выполнен (есть кука авторизации)
+          'unknown'   – не разобрали, показываем всё сразу
+        """
+        if self.has_auth_cookie():
+            return {"step": "done", "url": (self.page.url if self.page else ""),
+                    "title": "Вход выполнен.", "buttons": []}
+        try:
+            raw = self.page.evaluate(_PAGE_STATE_JS)
+        except Exception as e:  # noqa: BLE001
+            return {"step": "unknown", "url": "", "title": _short_error(e), "buttons": []}
+
+        text = (raw.get("text") or "").lower()
+        url = (raw.get("url") or "").lower()
+        inputs = raw.get("inputs") or []
+        buttons = raw.get("buttons") or []
+        hints = " ".join(i.get("hint", "") for i in inputs)
+
+        def title() -> str:
+            for line in (raw.get("text") or "").splitlines():
+                line = line.strip()
+                if len(line) > 3:
+                    return line[:120]
+            return ""
+
+        def out(step: str) -> dict:
+            return {"step": step, "url": raw.get("url") or "", "title": title(), "buttons": buttons}
+
+        if "captcha" in url or "captcha" in text or "введите символы" in text or "введите текст с картинки" in text:
+            return out("captcha")
+
+        if any(i["type"] == "password" for i in inputs):
+            return out("password")
+
+        # Код: экран сам про это пишет («Введите код из смс», «код из письма»).
+        # Проверяем ДО логина – на обоих экранах поле выглядит одинаково.
+        code_words = ("код из смс", "код из письма", "код из приложения", "введите код",
+                      "одноразовый", "confirmation code", "one-time", "код подтверждения")
+        if inputs and (any(w in text for w in code_words)
+                       or ("/challenges/" in url and "code" in url)
+                       or "otp" in hints or "one-time-code" in hints):
+            return out("code")
+
+        # Новый паспорт открывается на телефоне, а нам нужен вход по логину.
+        if "введите номер телефона" in text or "enter your phone number" in text or (
+                inputs and all(i["type"] == "tel" for i in inputs)):
+            return out("phone")
+
+        if inputs and ("введите логин" in text or "логин или email" in text
+                       or "username" in hints or "логин" in hints or "email" in hints):
+            return out("login")
+
+        # Полей нет вовсе, а кнопка есть – это «Безопасный вход: подтвердите
+        # номер телефона» и подобные. Нажать её может кто угодно, секрета там нет.
+        if not inputs and any(
+            (b or "").strip().lower() in CONFIRM_BUTTON_TEXTS for b in buttons
+        ):
+            return out("challenge")
+
+        if inputs:
+            return out("login")
+        if "passport" not in url:
+            return out("done")
+        return out("unknown")
+
+    def detect_step(self) -> str:
+        return self.page_state()["step"]
+
+    def state(self) -> dict:
+        """Шаг + снимок экрана одним заходом: картинка всегда от того же момента."""
+        st = self.page_state()
+        try:
+            st["screenshot"] = self.page.screenshot(full_page=True)
+        except Exception:  # noqa: BLE001
+            st["screenshot"] = None
+        return st
+
+    def press_confirm(self) -> dict:
+        """Нажать кнопку на экране-подтверждении («Подтвердить», «Далее»)."""
+        self._dismiss_cookie_banner()
+        if not _click_exact_button(self.page, CONFIRM_BUTTON_TEXTS):
+            self.page.keyboard.press("Enter")
+        self.page.wait_for_timeout(2500)
+        self._skip_post_login_prompts()
+        return self.state()
 
     def auto_login(self, email: str, password: str, max_steps: int = 6) -> dict:
         """
@@ -1826,18 +2064,36 @@ class YbLoginFlow:
             "code": "Яндекс просит код – его может ввести только человек.",
             "captcha": "Яндекс показывает капчу – введите её вручную по картинке.",
             "unknown": "Не разобрал, что просит страница, – дальше вручную.",
+            "phone": "Яндекс просит номер телефона – перейдите на вход по логину.",
         }
         last = "unknown"
+        confirms = 0
         for _ in range(max_steps):
             self._dismiss_cookie_banner()
             step = self.detect_step()
             last = step
 
+            # Экран без полей ввода: «Безопасный вход – подтвердите номер».
+            # Тут нечего вводить, нужно просто нажать кнопку – жмём сами,
+            # иначе человек упирается в тупик: полей нет, кнопки в UI тоже.
+            if step == "challenge" and confirms < 2:
+                confirms += 1
+                self.press_confirm()
+                continue
+
+            # Форма телефона: уходим на вход по логину («Ещё» → «Войти по логину»).
+            if step == "phone":
+                if not self._switch_to_login_by_password():
+                    return {"ok": False, "step": "phone", "screenshot": self.screenshot(),
+                            "reason": "Яндекс просит номер телефона, а перейти на вход по логину "
+                                      "не вышло. Нажмите «Ещё» → «Войти по логину» на снимке ниже."}
+                continue
+
             if step == "login":
                 if not email:
                     return {"ok": False, "step": "login", "screenshot": self.screenshot(),
                             "reason": "В «Настройках» не заполнен email аккаунта Яндекса."}
-                self._submit_generic_field(email, LOGIN_NEXT_BUTTON)
+                self._submit_generic_field(email, LOGIN_NEXT_BUTTON, "login")
                 self._skip_post_login_prompts()
                 continue
 
@@ -1845,7 +2101,7 @@ class YbLoginFlow:
                 if not password:
                     return {"ok": False, "step": "password", "screenshot": self.screenshot(),
                             "reason": "В «Настройках» не заполнен пароль – введите его здесь вручную."}
-                self._submit_generic_field(password, PASSWORD_NEXT_BUTTON)
+                self._submit_generic_field(password, PASSWORD_NEXT_BUTTON, "password")
                 self._skip_post_login_prompts()
                 continue
 

@@ -224,12 +224,23 @@ def can_show_browser() -> bool:
     return not yb.in_cloud()
 
 
+# Галочку храним НЕ в ключе виджета. Streamlit выбрасывает состояние виджетов,
+# которых не было на текущем экране: стоило уйти с «Настроек» на «Формирование
+# поста» – и галочка молча гасла. Публикация после этого шла скрыто, отсюда и
+# «галочка сбрасывается» и «прогресса всё равно не видно».
+HEADED_KEY = "headed_browser"
+
+
 def show_browser_window() -> bool:
     if not can_show_browser():
         return False
     if str(os.environ.get("CLICK_HEADED", "")).strip().lower() in ("1", "true", "yes", "да"):
         return True
-    return bool(st.session_state.get("show-browser"))
+    return bool(st.session_state.get(HEADED_KEY))
+
+
+def _remember_headed() -> None:
+    st.session_state[HEADED_KEY] = bool(st.session_state.get("show-browser"))
 
 
 def get_settings(project_id: str) -> dict:
@@ -1734,7 +1745,8 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
 
     if can_show_browser():
         st.checkbox("Показывать окно браузера – видно, как идёт публикация",
-                    key="show-browser",
+                    value=bool(st.session_state.get(HEADED_KEY)),
+                    key="show-browser", on_change=_remember_headed,
                     help="Только на своём компьютере. В облаке экрана нет, окно показать негде.")
 
     if yb.has_saved_session(project_id):
@@ -1755,7 +1767,7 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
         with st.container(key="danger-reset-session"):
             if st.button("Войти заново (сбросить сессию)", key="yb-reset"):
                 yb.session_path(project_id).unlink(missing_ok=True)
-                for k in ("yb_flow", "yb_screenshot", "yb_step"):
+                for k in ("yb_flow", "yb_state", "yb_step"):
                     st.session_state.pop(k, None)
                 st.rerun()
         return
@@ -1792,15 +1804,15 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
         try:
             with st.spinner("Открываю браузер… Первый запуск может занять 1-3 минуты – Click скачивает браузер."):
                 flow = yb.YbLoginFlow(project_id, headless=headless_login)
-                shot = worker.call(flow.start)
+                state = worker.call(flow.start)
         except Exception as e:  # noqa: BLE001
             _browser_error(e)
             return
         st.session_state.yb_flow = flow
-        st.session_state.yb_screenshot = shot
+        st.session_state.yb_state = state
+        st.session_state.yb_step = "manual"
 
         if manual:
-            st.session_state.yb_step = "first"
             st.rerun()
 
         # ── Автоматический вход ──
@@ -1810,89 +1822,136 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
         except Exception as e:  # noqa: BLE001
             _browser_error(e)
             return
-        if res.get("screenshot"):
-            st.session_state.yb_screenshot = res["screenshot"]
         if res.get("ok"):
             _finish_login(project_id, worker, flow)
             return
         # Не дошли сами – показываем, на чём встали, и передаём человеку
-        st.session_state.yb_step = "next" if res.get("step") in ("code", "password") else "first"
         st.session_state.yb_note = res.get("reason") or ""
+        st.session_state.yb_state = worker.call(flow.state)
         st.rerun()
 
+    flow: yb.YbLoginFlow = st.session_state.yb_flow
+    _login_steps(project_id, worker, flow, email, password)
+
+
+# Что писать над полем на каждом шаге. Шаг определяет САМА страница Яндекса –
+# раньше он угадывался один раз после авто-входа и больше не пересматривался,
+# из-за чего на экране «Введите логин» приложение показывало графы «Пароль» и
+# «Код»: логин вводить было буквально некуда.
+_STEP_TITLES = {
+    "login":     ("Яндекс просит логин", "Логин или e-mail"),
+    "password":  ("Яндекс просит пароль", "Пароль"),
+    "code":      ("Яндекс просит код", "Код из SMS / письма / приложения"),
+    "phone":     ("Яндекс просит номер телефона", "Номер телефона"),
+    "captcha":   ("Яндекс показывает капчу", "Символы с картинки"),
+    "challenge": ("Яндекс ждёт подтверждения", ""),
+    "unknown":   ("Click не разобрал экран", ""),
+}
+
+
+def _login_steps(project_id: str, worker, flow, email: str, password: str) -> None:
+    """Пошаговый вход. Поле на экране всегда одно – ровно то, что просит Яндекс."""
     note = st.session_state.pop("yb_note", "")
     if note:
         st.info(note)
-    st.image(st.session_state.yb_screenshot, caption="Что сейчас на экране Яндекса")
-    flow: yb.YbLoginFlow = st.session_state.yb_flow
-    shot = None
 
-    if step == "first":
-        st.caption("Если логин уже подставлен правильно – просто нажмите «Продолжить».")
-        if st.button("Продолжить (ничего не менять)", key="yb-just-next"):
-            with st.spinner("Жму «Далее»…"):
-                shot = worker.call(flow.click_next)
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**Если просит логин / e-mail**")
-            login_value = st.text_input("Логин или e-mail", key="yb-login")
-            if st.button("Отправить логин", key="yb-submit-login") and login_value:
-                with st.spinner("Отправляю логин…"):
-                    shot = worker.call(flow.submit_login, login_value)
-        with c2:
-            st.markdown("**Если просит телефон**")
-            phone = st.text_input("Номер телефона", key="yb-phone")
-            if st.button("Отправить телефон", key="yb-submit-phone") and phone:
-                with st.spinner("Отправляю номер…"):
-                    shot = worker.call(flow.submit_phone, phone)
-        if shot is not None:
-            st.session_state.yb_screenshot = shot
-            st.session_state.yb_step = "next"
-            st.rerun()
-        return
-
-    # step == 'next'
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("**Если просит пароль**")
-        password = st.text_input("Пароль", type="password", key="yb-password")
-        pw_clicked = st.button("Войти по паролю", key="yb-submit-password")
-    with c2:
-        st.markdown("**Если просит код (SMS / почта / приложение)**")
-        code = st.text_input("Код", key="yb-code")
-        code_clicked = st.button("Подтвердить код", key="yb-submit-code")
-
-    st.caption("Подтвердили вход в приложении Яндекса? Нажмите «Проверить вход».")
-    check_clicked = st.button("Проверить вход", key="yb-check")
-
-    try:
-        if pw_clicked and password:
-            with st.spinner("Проверяю пароль…"):
-                shot = worker.call(flow.submit_password, password)
-        elif code_clicked and code:
-            with st.spinner("Проверяю код…"):
-                shot = worker.call(flow.submit_code, code)
-        elif check_clicked:
-            shot = worker.call(flow.screenshot)
-    except Exception as e:  # noqa: BLE001
-        st.error(f"Ошибка: {type(e).__name__}: {e}")
-        return
-
-    if shot is None:
-        return
-
-    st.session_state.yb_screenshot = shot
-    try:
-        with st.spinner("Проверяю, выполнен ли вход…"):
-            logged_in = worker.call(flow.is_logged_in)
-    except Exception as e:  # noqa: BLE001
-        st.error(f"Ошибка: {type(e).__name__}: {e}")
-        return
-
-    if logged_in:
+    state = st.session_state.get("yb_state") or {}
+    step = state.get("step", "unknown")
+    if step == "done":
         _finish_login(project_id, worker, flow)
-    else:
-        st.warning("Похоже, вход ещё не завершён – посмотрите на новый снимок выше.")
+        return
+    if state.get("screenshot"):
+        st.image(state["screenshot"], caption="Что сейчас на экране Яндекса")
+
+    heading, field_label = _STEP_TITLES.get(step, _STEP_TITLES["unknown"])
+    st.markdown(f"**{heading}**")
+    if state.get("title"):
+        st.caption(state["title"])
+
+    new_state = None
+    try:
+        if step == "login":
+            value = st.text_input(field_label, value=email, key="yb-login")
+            if st.button("Отправить логин", key="yb-submit-login", type="primary") and value:
+                with st.spinner("Отправляю логин…"):
+                    new_state = worker.call(flow.submit_login, value)
+
+        elif step == "password":
+            value = st.text_input(field_label, value=password, type="password", key="yb-password")
+            c1, c2 = st.columns(2)
+            if c1.button("Войти по паролю", key="yb-submit-password",
+                         type="primary", use_container_width=True) and value:
+                with st.spinner("Проверяю пароль…"):
+                    new_state = worker.call(flow.submit_password, value)
+            # Запасные пути с этого же экрана – когда пароль не подходит или
+            # Яндекс упирается в бесконечную проверку.
+            if c2.button("Отправить письмо для входа", key="yb-login-mail",
+                         use_container_width=True):
+                with st.spinner("Прошу Яндекс прислать письмо…"):
+                    new_state = worker.call(flow.send_login_email)
+                st.info("Письмо со ссылкой ушло на почту аккаунта. Откройте его на любом "
+                        "устройстве, подтвердите вход и нажмите «Обновить экран».")
+            if st.button("Войти с помощью SMS", key="yb-login-sms"):
+                with st.spinner("Прошу Яндекс прислать SMS…"):
+                    new_state = worker.call(flow.send_sms_code)
+
+        elif step == "code":
+            value = st.text_input(field_label, key="yb-code")
+            if st.button("Подтвердить код", key="yb-submit-code", type="primary") and value:
+                with st.spinner("Проверяю код…"):
+                    new_state = worker.call(flow.submit_code, value)
+
+        elif step == "phone":
+            st.caption("Click сам переключит на вход по логину – нажмите кнопку. "
+                       "Если не выйдет, на снимке это «Ещё» → «Войти по логину».")
+            if st.button("Перейти ко входу по логину", key="yb-to-login", type="primary"):
+                with st.spinner("Переключаю…"):
+                    worker.call(flow._switch_to_login_by_password)  # noqa: SLF001
+                    new_state = worker.call(flow.state)
+
+        elif step == "challenge":
+            st.caption("На экране нет полей – Яндекс просто ждёт подтверждения. "
+                       "Кнопка нажмёт то же, что вы нажали бы сами.")
+            if st.button("Подтвердить", key="yb-confirm", type="primary"):
+                with st.spinner("Подтверждаю…"):
+                    new_state = worker.call(flow.press_confirm)
+
+        elif step == "captcha":
+            value = st.text_input(field_label, key="yb-captcha")
+            if st.button("Отправить", key="yb-submit-captcha", type="primary") and value:
+                with st.spinner("Отправляю…"):
+                    new_state = worker.call(flow.submit_login, value)
+
+        else:  # unknown – показываем всё сразу, чтобы не оказаться в тупике
+            st.caption("Экран непонятный. Введите то, что просит Яндекс на снимке, "
+                       "или нажмите «Продолжить».")
+            c1, c2 = st.columns(2)
+            free = c1.text_input("Что ввести", key="yb-free")
+            if c1.button("Отправить", key="yb-submit-free") and free:
+                with st.spinner("Отправляю…"):
+                    new_state = worker.call(flow.submit_login, free)
+            if c2.button("Продолжить (нажать кнопку на экране)", key="yb-just-next"):
+                with st.spinner("Жму кнопку…"):
+                    new_state = worker.call(flow.press_confirm)
+    except Exception as e:  # noqa: BLE001
+        st.error(str(e) if isinstance(e, RuntimeError) else f"Ошибка: {type(e).__name__}: {e}")
+        try:
+            st.session_state.yb_state = worker.call(flow.state)
+        except Exception:  # noqa: BLE001
+            pass
+        return
+
+    st.caption("Подтвердили вход на телефоне или по письму? Нажмите «Обновить экран».")
+    if st.button("Обновить экран", key="yb-check"):
+        with st.spinner("Смотрю, что на экране…"):
+            new_state = worker.call(flow.state)
+
+    if new_state is None:
+        return
+
+    st.session_state.yb_state = new_state
+    if new_state.get("step") == "done":
+        _finish_login(project_id, worker, flow)
     st.rerun()
 
 
@@ -1927,13 +1986,13 @@ def _finish_login(project_id: str, worker, flow) -> None:
     # места пошагово. Закрыть его здесь означало бы «начните всё сначала».
     try:
         if not worker.call(flow.has_auth_cookie):
-            st.session_state.yb_step = "next"
+            st.session_state.yb_step = "manual"
             st.session_state.yb_note = (
                 "Вход ещё не завершён: Яндекс не выдал куки авторизации. Посмотрите "
                 "на снимок ниже – обычно осталась непройденная проверка: код из "
                 "письма, капча или подтверждение в приложении.")
             try:
-                st.session_state.yb_screenshot = worker.call(flow.screenshot)
+                st.session_state.yb_state = worker.call(flow.state)
             except Exception:  # noqa: BLE001
                 pass
             st.rerun()
@@ -1953,7 +2012,7 @@ def _finish_login(project_id: str, worker, flow) -> None:
             worker.call(flow.close)
         except Exception:
             pass
-    for k in ("yb_flow", "yb_screenshot", "yb_step", "yb_note"):
+    for k in ("yb_flow", "yb_state", "yb_step", "yb_note"):
         st.session_state.pop(k, None)
     st.success("Вход выполнен, сессия сохранена." + (f" Аккаунт: {account}" if account else ""))
 

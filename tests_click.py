@@ -775,6 +775,95 @@ def yb_extract(url: str):
     return yb.extract_company_id(url)
 
 
+def test_login_step_detection() -> None:
+    """
+    Какой экран паспорта перед нами – читаем со страницы, а не помним.
+
+    Живой случай у заказчика: после авто-входа шаг угадали один раз («код»),
+    Яндекс тем временем вернулся на «Введите логин», а приложение продолжало
+    показывать графы «Пароль» и «Код». Логин вводить было некуда, а пароль,
+    введённый в единственное поле, улетал в графу кода.
+    """
+    import yb_playwright as yb
+    print("\n▸ Распознавание экранов входа")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    # Разметка повторяет настоящие экраны Яндекс ID (см. скриншоты заказчика).
+    screens = {
+        "phone": """<h1>Введите номер телефона</h1><p>Чтобы войти или зарегистрироваться</p>
+                    <input type="tel" placeholder="+7 (000) 000-00-00">
+                    <button>По лицу или отпечатку</button><button>QR-код</button><button>Ещё</button>""",
+        "login": """<h1>Введите логин</h1><p>Который вы указали при регистрации</p>
+                    <input type="text" placeholder="Логин или email"><button>Войти</button>""",
+        "password": """<h1>Введите пароль</h1><p>Чтобы войти в аккаунт metpromintex@yandex.com</p>
+                    <input type="password" placeholder="Пароль"><button>Далее</button>
+                    <button>Войти с помощью смс</button><button>Отправить письмо для входа</button>""",
+        "challenge": """<h1>Безопасный вход</h1>
+                    <p>Пожалуйста, подтвердите номер телефона, который привязан к вашему аккаунту.</p>
+                    <p>Ваш номер телефона: +7 965 ***-**-77</p><button>Подтвердить</button>""",
+        "code": """<h1>Введите код из смс</h1><p>Отправили на +7 965 ***-**-77</p>
+                    <input type="text" inputmode="numeric" maxlength="6">
+                    <button disabled>Отправить ещё код 00:58</button>""",
+        "captcha": """<h1>Введите символы с картинки</h1>
+                    <img src="/captcha.png"><input type="text"><button>Далее</button>""",
+    }
+
+    with sync_playwright() as pw:
+        # На сервере браузер лежит по фиксированному пути, на своём компьютере –
+        # там, где его поставил Playwright. Пробуем оба, иначе тест «падает»
+        # только из-за окружения.
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            try:
+                browser = pw.chromium.launch()
+            except Exception as e:  # noqa: BLE001
+                check("браузер запустился", False, str(e)[:120])
+                return
+        try:
+            context = browser.new_context(viewport={"width": 1000, "height": 700})
+            page = context.new_page()
+            flow = yb.YbLoginFlow.__new__(yb.YbLoginFlow)
+            flow.page, flow.context = page, context
+
+            for expected, body in screens.items():
+                page.set_content(f"<html><body style='margin:40px'>{body}</body></html>")
+                eq(f"экран «{expected}» распознан", flow.page_state()["step"], expected)
+
+            # Защита от «не в ту графу»: на экране логина пароль вводить нельзя.
+            page.set_content(f"<html><body>{screens['login']}</body></html>")
+            try:
+                flow._require_step("password")  # noqa: SLF001
+                check("пароль не уходит в чужое поле", False, "проверка не сработала")
+            except RuntimeError as e:
+                check("пароль не уходит в чужое поле", "логин" in str(e).lower(), str(e))
+
+            # «Ещё» → «Войти по логину»: пункт появляется только после «Ещё».
+            page.set_content("""<html><body style='margin:40px'>
+                <h1>Введите номер телефона</h1><input type="tel">
+                <button onclick="document.getElementById('m').style.display='block'">Ещё</button>
+                <div id="m" style="display:none">
+                  <button onclick="document.body.innerHTML='<h1>Введите логин</h1>'
+                          + '<input type=text placeholder=\\'Логин или email\\'>'">Войти по логину</button>
+                </div></body></html>""")
+            check("с телефона переходим на вход по логину",
+                  flow._switch_to_login_by_password() and flow.page_state()["step"] == "login")  # noqa: SLF001
+
+            # Кнопку жмём по элементу: за сгибом координатный клик промахивается.
+            page.set_content("""<html><body style='margin:0'>
+                <div style="height:1600px"></div>
+                <button onclick="window.__hit=1">Подтвердить</button></body></html>""")
+            yb._click_exact_button(page, yb.CONFIRM_BUTTON_TEXTS)  # noqa: SLF001
+            check("кнопка ниже сгиба нажимается", page.evaluate("window.__hit === 1"))
+        finally:
+            browser.close()
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="click-tests-"))
     try:
@@ -794,6 +883,7 @@ def main() -> int:
         test_worker_thread()
         test_session_validity(tmp)
         test_account_check_on_real_page()
+        test_login_step_detection()
         test_kp_sheet()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

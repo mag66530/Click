@@ -63,6 +63,13 @@ UA = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
+# Язык окна. Без него Яндекс отдаёт АНГЛИЙСКИЙ паспорт – а это не перевод, а
+# другой экран: вместо «Введите номер телефона» и «Ещё» там «Log in with ID»
+# с вкладками Email/Phone. Заказчик видела в своём браузере одно, Click в
+# своём – другое, и поиск по русским надписям промахивался мимо всего.
+LOCALE = "ru-RU"
+LANG_HEADERS = {"Accept-Language": "ru-RU,ru;q=0.9,en;q=0.5"}
+
 # Таймауты – 1:1 из DEFAULTS в publish.js
 NAVIGATION_TIMEOUT = 45_000
 ACTION_TIMEOUT = 15_000
@@ -446,6 +453,8 @@ class YbBrowser:
             storage_state=str(state) if state.exists() else None,
             viewport={"width": 1280, "height": 900},
             user_agent=UA,
+            locale=LOCALE,
+            extra_http_headers=LANG_HEADERS,
         )
         self.context.set_default_timeout(ACTION_TIMEOUT)
         self.context.set_default_navigation_timeout(NAVIGATION_TIMEOUT)
@@ -1694,6 +1703,23 @@ CONFIRM_BUTTON_TEXTS = [
     "confirm", "continue", "next", "ok",
 ]
 
+# Надписи держим на двух языках. Паспорт иногда отдаёт английский вариант, и
+# это не перевод, а другой экран: «Send email for log in» вместо «Отправить
+# письмо для входа». По русской строке такая кнопка не находилась вовсе.
+MAIL_LOGIN_TEXTS = [
+    "отправить письмо для входа", "войти по почте", "войти с помощью почты",
+    "send email for log in", "send email for login", "send a login link",
+    "log in with email",
+]
+SMS_LOGIN_TEXTS = [
+    "войти с помощью смс", "войти по смс",
+    "log in with sms code", "log in with sms",
+]
+LOGIN_BY_NAME_TEXTS = [
+    "войти по логину", "log in with username", "log in with id", "войти по id",
+]
+MORE_TEXTS = ["ещё", "еще", "more", "other options", "другие способы"]
+
 # Один заход в браузер вместо десятка мелких: забираем всё, по чему потом
 # на стороне Python решаем, что за экран перед нами.
 _PAGE_STATE_JS = """() => {
@@ -1739,7 +1765,9 @@ class YbLoginFlow:
         try:
             self._pw = sync_playwright().start()
             self.browser = _launch(self._pw, engine, headless=self.headless)
-            self.context = self.browser.new_context(viewport={"width": 1000, "height": 700}, user_agent=UA)
+            self.context = self.browser.new_context(
+                viewport={"width": 1000, "height": 700}, user_agent=UA,
+                locale=LOCALE, extra_http_headers=LANG_HEADERS)
             self.page = self.context.new_page()
             self.page.goto("about:blank", timeout=10_000)
             self.page.goto(PASSPORT_URL, wait_until="domcontentloaded")
@@ -1779,7 +1807,7 @@ class YbLoginFlow:
         логин, а Яндекс отвечал ошибкой.
         """
         for _ in range(2):
-            if _click_exact_button(self.page, ["войти по логину", "log in with username"]):
+            if _click_exact_button(self.page, LOGIN_BY_NAME_TEXTS):
                 self.page.wait_for_timeout(900)
                 return True
             if self.page.locator(SWITCH_TO_LOGIN_OPTION).count() > 0:
@@ -1787,7 +1815,7 @@ class YbLoginFlow:
                 self.page.wait_for_timeout(900)
                 return True
             # Пункта не видно – он под «Ещё».
-            opened = _click_exact_button(self.page, ["ещё", "еще", "more"])
+            opened = _click_exact_button(self.page, MORE_TEXTS)
             if not opened and self.page.locator(OTHER_METHOD_BUTTON).count() > 0:
                 self.page.click(OTHER_METHOD_BUTTON)
                 opened = True
@@ -1800,18 +1828,49 @@ class YbLoginFlow:
         """
         «Отправить письмо для входа» – Яндекс пришлёт ссылку на почту, и вход
         подтверждается с любого устройства. Когда пароль не подходит или
-        приходит бесконечная проверка, это самый короткий путь.
+        Яндекс требует звонок на телефон, это самый короткий путь.
         """
         self._dismiss_cookie_banner()
-        _click_exact_button(self.page, ["отправить письмо для входа", "send a login link"])
-        self.page.wait_for_timeout(2000)
-        return self.state()
+        ok = _click_exact_button(self.page, MAIL_LOGIN_TEXTS)
+        self.page.wait_for_timeout(2500)
+        st = self.state()
+        st["mail_sent"] = ok
+        if not ok:
+            st["note"] = ("Кнопки «Отправить письмо для входа» на этом экране нет. "
+                          "Она появляется на шаге ввода пароля – вернитесь назад.")
+        return st
 
     def send_sms_code(self) -> dict:
         """«Войти с помощью смс» – код придёт на привязанный номер."""
         self._dismiss_cookie_banner()
-        _click_exact_button(self.page, ["войти с помощью смс", "log in with sms"])
-        self.page.wait_for_timeout(2000)
+        _click_exact_button(self.page, SMS_LOGIN_TEXTS)
+        self.page.wait_for_timeout(2500)
+        return self.state()
+
+    def go_back(self) -> dict:
+        """
+        Стрелка «назад» в карточке Яндекса.
+
+        Нужна, чтобы уйти с экрана, который навязал сам Яндекс (звонок на
+        телефон), обратно к паролю – там есть «Отправить письмо для входа».
+        Иначе выбора у человека нет вообще.
+        """
+        self._dismiss_cookie_banner()
+        for sel in ('[data-testid*="back" i]', 'button[aria-label*="азад"]',
+                    'button[aria-label*="ack" i]'):
+            try:
+                loc = self.page.locator(sel)
+                if loc.count() > 0:
+                    loc.first.click(timeout=3_000)
+                    self.page.wait_for_timeout(1800)
+                    return self.state()
+            except Exception:  # noqa: BLE001
+                continue
+        try:
+            self.page.go_back(wait_until="domcontentloaded", timeout=8_000)
+            self.page.wait_for_timeout(1500)
+        except Exception:  # noqa: BLE001
+            pass
         return self.state()
 
     def _skip_post_login_prompts(self) -> None:
@@ -2006,7 +2065,8 @@ class YbLoginFlow:
         def out(step: str) -> dict:
             return {"step": step, "url": raw.get("url") or "", "title": title(), "buttons": buttons}
 
-        if "captcha" in url or "captcha" in text or "введите символы" in text or "введите текст с картинки" in text:
+        if "captcha" in url or "captcha" in text or "введите символы" in text \
+                or "введите текст с картинки" in text or "enter the characters" in text:
             return out("captcha")
 
         if any(i["type"] == "password" for i in inputs):
@@ -2014,8 +2074,11 @@ class YbLoginFlow:
 
         # Код: экран сам про это пишет («Введите код из смс», «код из письма»).
         # Проверяем ДО логина – на обоих экранах поле выглядит одинаково.
+        # Отдельно – звонок: Яндекс звонит и просит последние цифры номера.
         code_words = ("код из смс", "код из письма", "код из приложения", "введите код",
-                      "одноразовый", "confirmation code", "one-time", "код подтверждения")
+                      "одноразовый", "код подтверждения", "цифр номера", "вам звонит",
+                      "confirmation code", "one-time", "enter the code",
+                      "digits of the calling number", "code from")
         if inputs and (any(w in text for w in code_words)
                        or ("/challenges/" in url and "code" in url)
                        or "otp" in hints or "one-time-code" in hints):
@@ -2027,6 +2090,8 @@ class YbLoginFlow:
             return out("phone")
 
         if inputs and ("введите логин" in text or "логин или email" in text
+                       or "enter your login" in text or "username or email" in text
+                       or "log in with id" in text
                        or "username" in hints or "логин" in hints or "email" in hints):
             return out("login")
 
@@ -2064,9 +2129,14 @@ class YbLoginFlow:
         self._skip_post_login_prompts()
         return self.state()
 
-    def auto_login(self, email: str, password: str, max_steps: int = 6) -> dict:
+    def auto_login(self, email: str, password: str, max_steps: int = 6,
+                   by_mail: bool = False) -> dict:
         """
         Пробует войти сам по сохранённым email и паролю.
+
+        by_mail=True – вход по письму: Click доходит до экрана пароля и жмёт
+        там «Отправить письмо для входа», пароль не вводит вовсе. Иначе Яндекс
+        после пароля навязывает звонок на телефон, и выбора у человека уже нет.
 
         Возвращает {'ok': bool, 'step': ..., 'reason': ..., 'screenshot': bytes}.
         ok=False – не провал, а «дальше нужен человек»: код, капча или
@@ -2111,6 +2181,19 @@ class YbLoginFlow:
                 continue
 
             if step == "password":
+                # Вход по письму: пароль не трогаем вообще. После пароля
+                # Яндекс сам решает, чем подтвердить вход, и обычно выбирает
+                # звонок на телефон – с этого экрана назад уже не выбраться.
+                if by_mail:
+                    st = self.send_login_email()
+                    if st.get("mail_sent"):
+                        return {"ok": False, "step": "mail-sent", "screenshot": st.get("screenshot"),
+                                "reason": f"Письмо со ссылкой для входа отправлено на почту "
+                                          f"аккаунта {email}. Откройте письмо на любом устройстве, "
+                                          f"подтвердите вход и нажмите «Обновить экран»."}
+                    return {"ok": False, "step": "password", "screenshot": st.get("screenshot"),
+                            "reason": "Кнопку «Отправить письмо для входа» найти не удалось – "
+                                      "нажмите её на снимке ниже вручную."}
                 if not password:
                     return {"ok": False, "step": "password", "screenshot": self.screenshot(),
                             "reason": "В «Настройках» не заполнен пароль – введите его здесь вручную."}

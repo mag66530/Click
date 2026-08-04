@@ -37,7 +37,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-04-report-tiles"
+UI_BUILD = "2026-08-04-login-by-mail"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -1809,15 +1809,22 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
         else:
             st.caption("Заполните email и пароль выше – тогда Click сможет войти сам. "
                        "Без них вход будет пошаговым: по снимку экрана.")
+        st.caption("**Вход по письму** – Click дойдёт до экрана пароля и нажмёт там "
+                   "«Отправить письмо для входа». Пароль вводить не будет: после пароля "
+                   "Яндекс сам решает, чем подтвердить вход, и обычно требует звонок на телефон.")
         if yb.current_engine() is None:
             st.caption("⏳ Самый первый вход дольше обычного: Click докачивает браузер (1-3 минуты). "
                        "Дальше он открывается за секунды.")
 
-        c1, c2 = st.columns([2, 1])
+        c1, c2, c3 = st.columns([2, 2, 1])
         auto = c1.button("🔐 Войти автоматически", type="primary", key="yb-auto",
                          disabled=not (email and password), use_container_width=True)
-        manual = c2.button("Ввести вручную", key="yb-start", use_container_width=True)
-        if not (auto or manual):
+        by_mail = c2.button("✉️ Войти по письму", key="yb-mail",
+                            disabled=not email, use_container_width=True,
+                            help="Ссылка для входа придёт на почту аккаунта. "
+                                 "Пароль при этом не нужен.")
+        manual = c3.button("Вручную", key="yb-start", use_container_width=True)
+        if not (auto or by_mail or manual):
             return
 
         old = st.session_state.get("yb_flow")
@@ -1841,9 +1848,11 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
             st.rerun()
 
         # ── Автоматический вход ──
+        spinner = ("Иду до экрана пароля и прошу письмо…" if by_mail
+                   else "Вхожу под сохранёнными логином и паролем…")
         try:
-            with st.spinner("Вхожу под сохранёнными логином и паролем…"):
-                res = worker.call(flow.auto_login, email, password)
+            with st.spinner(spinner):
+                res = worker.call(flow.auto_login, email, password, 6, by_mail)
         except Exception as e:  # noqa: BLE001
             _browser_error(e)
             return
@@ -1852,7 +1861,10 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
             return
         # Не дошли сами – показываем, на чём встали, и передаём человеку
         st.session_state.yb_note = res.get("reason") or ""
-        st.session_state.yb_state = worker.call(flow.state)
+        fresh = worker.call(flow.state)
+        if res.get("step") == "mail-sent" and fresh.get("step") != "done":
+            fresh["step"] = "mail-sent"
+        st.session_state.yb_state = fresh
         st.rerun()
 
     flow: yb.YbLoginFlow = st.session_state.yb_flow
@@ -1866,12 +1878,39 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
 _STEP_TITLES = {
     "login":     ("Яндекс просит логин", "Логин или e-mail"),
     "password":  ("Яндекс просит пароль", "Пароль"),
-    "code":      ("Яндекс просит код", "Код из SMS / письма / приложения"),
+    "code":      ("Яндекс просит код", "Код из SMS / письма / звонка"),
     "phone":     ("Яндекс просит номер телефона", "Номер телефона"),
     "captcha":   ("Яндекс показывает капчу", "Символы с картинки"),
     "challenge": ("Яндекс ждёт подтверждения", ""),
+    "mail-sent": ("Письмо для входа отправлено", ""),
     "unknown":   ("Click не разобрал экран", ""),
 }
+
+
+def _login_controls(project_id: str, worker, flow) -> dict | None:
+    """
+    Кнопки, которые нужны на ЛЮБОМ шаге входа.
+
+    «Назад» – чтобы уйти с экрана, который навязал Яндекс (звонок на телефон),
+    обратно к паролю: там есть «Отправить письмо для входа». Без неё выбора у
+    человека нет вообще – только вводить то, что требуют.
+    «Остановить вход» – закрыть браузер и начать заново.
+    """
+    new_state = None
+    c1, c2 = st.columns(2)
+    if c1.button("← Назад на прошлый экран", key="yb-back", use_container_width=True):
+        with st.spinner("Возвращаюсь…"):
+            new_state = worker.call(flow.go_back)
+    with c2, st.container(key="danger-stop-login"):
+        if st.button("⏹ Остановить вход", key="yb-abort", use_container_width=True):
+            try:
+                worker.call(flow.close)
+            except Exception:  # noqa: BLE001
+                pass
+            for k in ("yb_flow", "yb_state", "yb_step", "yb_note"):
+                st.session_state.pop(k, None)
+            st.rerun()
+    return new_state
 
 
 def _login_steps(project_id: str, worker, flow, email: str, password: str) -> None:
@@ -1925,6 +1964,10 @@ def _login_steps(project_id: str, worker, flow, email: str, password: str) -> No
             if st.button("Подтвердить код", key="yb-submit-code", type="primary") and value:
                 with st.spinner("Проверяю код…"):
                     new_state = worker.call(flow.submit_code, value)
+            # Звонок на телефон Яндекс навязывает сам. Уйти с этого экрана
+            # можно только назад – к паролю, где есть вход по письму.
+            st.caption("Не подходит этот способ? Вернитесь назад – на экране пароля "
+                       "есть «Отправить письмо для входа».")
 
         elif step == "phone":
             st.caption("Click сам переключит на вход по логину – нажмите кнопку. "
@@ -1933,6 +1976,11 @@ def _login_steps(project_id: str, worker, flow, email: str, password: str) -> No
                 with st.spinner("Переключаю…"):
                     worker.call(flow._switch_to_login_by_password)  # noqa: SLF001
                     new_state = worker.call(flow.state)
+
+        elif step == "mail-sent":
+            st.success("Письмо со ссылкой для входа отправлено на почту аккаунта. "
+                       "Откройте его на любом устройстве, подтвердите вход и нажмите "
+                       "«Обновить экран» внизу.")
 
         elif step == "challenge":
             st.caption("На экране нет полей – Яндекс просто ждёт подтверждения. "
@@ -1967,9 +2015,14 @@ def _login_steps(project_id: str, worker, flow, email: str, password: str) -> No
         return
 
     st.caption("Подтвердили вход на телефоне или по письму? Нажмите «Обновить экран».")
-    if st.button("Обновить экран", key="yb-check"):
+    if st.button("Обновить экран", key="yb-check", type="primary"):
         with st.spinner("Смотрю, что на экране…"):
             new_state = worker.call(flow.state)
+
+    st.divider()
+    back = _login_controls(project_id, worker, flow)
+    if back is not None:
+        new_state = back
 
     if new_state is None:
         return

@@ -831,9 +831,35 @@ def test_login_step_detection() -> None:
             flow = yb.YbLoginFlow.__new__(yb.YbLoginFlow)
             flow.page, flow.context = page, context
 
+            # Английский паспорт – это НЕ перевод, а другой экран. Заказчику
+            # он и достался: вместо «Введите номер телефона» и «Ещё» там
+            # «Log in with ID», а вместо звонка «Enter the last 6 digits».
+            screens_en = {
+                "login": """<h1>Log in with ID</h1><button>Email</button><button>Phone number</button>
+                        <input type="text" placeholder="Username or email"><button>Next</button>""",
+                "password": """<h1>Enter password</h1><p>To log in to metpromintex@yandex.com account</p>
+                        <input type="password" placeholder="Password"><button>Next</button>
+                        <button>Log in with SMS code</button><button>Send email for log in</button>""",
+                "code": """<h1>Enter the last 6 digits of the calling number</h1>
+                        <p>Calling +7 965 ***-**-77 - you don't need to answer</p>
+                        <input type="text" inputmode="numeric"><button disabled>There was no call 00:57</button>""",
+            }
+
             for expected, body in screens.items():
                 page.set_content(f"<html><body style='margin:40px'>{body}</body></html>")
                 eq(f"экран «{expected}» распознан", flow.page_state()["step"], expected)
+            for expected, body in screens_en.items():
+                page.set_content(f"<html><body style='margin:40px'>{body}</body></html>")
+                eq(f"английский экран «{expected}» распознан", flow.page_state()["step"], expected)
+
+            # Кнопка входа по почте должна находиться на обоих языках.
+            for label in ("Отправить письмо для входа", "Send email for log in"):
+                page.set_content(f"""<html><body style='margin:40px'>
+                    <input type="password"><button>Далее</button>
+                    <button onclick="window.__mail=1">{label}</button></body></html>""")
+                check(f"кнопка «{label}» нажимается",
+                      yb._click_exact_button(page, yb.MAIL_LOGIN_TEXTS)  # noqa: SLF001
+                      and page.evaluate("window.__mail === 1"))
 
             # Защита от «не в ту графу»: на экране логина пароль вводить нельзя.
             page.set_content(f"<html><body>{screens['login']}</body></html>")

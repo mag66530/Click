@@ -754,17 +754,30 @@ def _attach_images(page: Page, image_paths: list[str]) -> tuple[bool, str]:
     Порт шага 5 из publishToCity: input[type=file] → превью на CDN → проверка тоста ошибки.
     """
     try:
+        chosen = False
         file_input = page.locator('input[type="file"]').first
         if file_input.count() == 0:
             btn = wait_for_text_button(page, r"(прикрепить|добавить\s*(фото|картинк|изображ)|загрузить)", 3000)
             if btn:
-                click_at(page, btn)
+                # Клик по «Добавить» открывает НАСТОЯЩЕЕ окно выбора файла
+                # операционной системы. Playwright перехватывает его только
+                # когда его ждут через expect_file_chooser – без этого окно
+                # повисает поверх браузера и остаётся на экране даже после
+                # успешной публикации (заказчик прислала снимок).
+                try:
+                    with page.expect_file_chooser(timeout=5_000) as fc:
+                        click_at(page, btn)
+                    fc.value.set_files(image_paths)
+                    chosen = True
+                except Exception:  # noqa: BLE001
+                    pass
                 page.wait_for_timeout(400)
             file_input = page.locator('input[type="file"]').first
-            if file_input.count() == 0:
+            if not chosen and file_input.count() == 0:
                 return False, "Поле загрузки файла не найдено"
 
-        file_input.set_input_files(image_paths)
+        if not chosen:
+            file_input.set_input_files(image_paths)
 
         try:
             page.wait_for_function(_PREVIEW_READY_JS, timeout=IMAGE_PREVIEW_TIMEOUT)

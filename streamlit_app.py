@@ -37,7 +37,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-04-login-steps"
+UI_BUILD = "2026-08-04-report-tiles"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -217,6 +217,23 @@ def get_config(project_id: str) -> dict:
         if sub["id"] == active:
             return sub
     return raw["projects"][0]
+
+
+def local_time(iso: str | None) -> str:
+    """
+    Время отчёта – по часам человека. В файлы оно пишется в UTC, и в шапке
+    отчёта стояло «07:33», когда в логе рядом было «12:33»: выглядело так,
+    будто показан какой-то посторонний, старый отчёт.
+    """
+    if not iso:
+        return ""
+    try:
+        dt = datetime.fromisoformat(iso)
+    except ValueError:
+        return str(iso)[:19].replace("T", " ")
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone().strftime("%d.%m.%Y, %H:%M:%S")
 
 
 def can_show_browser() -> bool:
@@ -1364,14 +1381,20 @@ def tab_actualize(project_id: str, config: dict) -> None:
         data = runner.read_report(project_id, "actualize", reports[0]["name"])
         if data:
             with st.container(border=True):
-                when = (data.get("finishedAt") or "")[:19].replace("T", " ")
+                when = local_time(data.get("finishedAt"))
+                # Пока прогон идёт, отчёт наполняется на ходу. Называть его
+                # «последним» в этот момент нечестно: заказчик видел нули и
+                # решила, что отчёт не формируется вообще.
+                title = ("📊 Отчёт актуализации – заполняется по ходу"
+                         if data.get("state") == "in-progress"
+                         else "📊 Последний отчёт актуализации")
                 head, date = st.columns([3, 1])
-                head.markdown('<div class="card-title">📊 Последний отчёт актуализации</div>',
+                head.markdown(f'<div class="card-title">{title}</div>',
                               unsafe_allow_html=True)
                 date.markdown(f'<div class="hint" style="text-align:right;padding-top:6px">{when}</div>',
                               unsafe_allow_html=True)
                 html(T.report_summary(data.get("totals") or {}, data.get("durationSec"),
-                                      keys=["actualized", "notNeeded", "failed"]))
+                                      keys=["actualized", "notNeeded", "failed"], with_total=False))
                 with st.expander(f"Показать детали ({cities_word(len(data.get('results') or []))})"):
                     for r in data.get("results") or []:
                         html(T.report_row(r))
@@ -1596,7 +1619,7 @@ def tab_report(project_id: str) -> None:
             def _label(name: str) -> str:
                 r = next(x for x in reports if x["name"] == name)
                 t = r["totals"] or {}
-                when = (r.get("finishedAt") or "")[:19].replace("T", " ")
+                when = local_time(r.get("finishedAt"))
                 return f'{when} · ✅ {t.get("ok", 0)}/{t.get("total", 0)}'
 
             selected = st.selectbox("Отчёт", names, format_func=_label, key="report-select")

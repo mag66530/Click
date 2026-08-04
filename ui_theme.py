@@ -17,7 +17,7 @@ import html as _html
 # Метка сборки. streamlit_app.py сверяет её со своей: разметка и стиль должны
 # быть из одной версии, иначе кнопки смещаются или пропадают. Менять вместе
 # с UI_BUILD в streamlit_app.py при любой правке разметки плиток.
-BUILD = "2026-08-04-login-steps"
+BUILD = "2026-08-04-report-tiles"
 
 # ─── Палитра 1:1 из :root в _ui.js ──────────────────────────────────
 DARK = {
@@ -1030,12 +1030,17 @@ _STAT_META = {
 }
 
 
-def report_summary(totals: dict, duration_sec: int | None = None, keys: list[str] | None = None) -> str:
+def report_summary(totals: dict, duration_sec: int | None = None, keys: list[str] | None = None,
+                   with_total: bool = True) -> str:
     keys = keys or ["ok", "noImage", "unknown", "failed", "skipped"]
-    cells = [
-        f'<div class="report-stat dur"><div class="report-stat-label">Всего</div>'
-        f'<div class="report-stat-value">{int(totals.get("total", 0))}</div></div>'
-    ]
+    cells = []
+    # «Всего» – это сумма остальных плиток. В актуализации она только мешает:
+    # в оригинале там ровно «Актуализировано · Не требовалось · Ошибок · Время».
+    if with_total:
+        cells.append(
+            f'<div class="report-stat dur"><div class="report-stat-label">Всего</div>'
+            f'<div class="report-stat-value">{int(totals.get("total", 0))}</div></div>'
+        )
     for k in keys:
         if k not in _STAT_META:
             continue

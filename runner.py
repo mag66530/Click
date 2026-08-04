@@ -469,7 +469,10 @@ def _publish_worker(
 
                 processed += 1
                 city = task.get("cityName", "?")
-                push_state("running", processed, city)
+                # В полосу прогресса идёт число ЗАКОНЧЕННЫХ городов, а не номер
+                # текущего: иначе на первом же городе пишется «1 из 1», человек
+                # видит «готово» и ждёт отчёт, которого ещё нет.
+                push_state("running", len(results), city)
 
                 # ── Уровень 2 защиты от дубля: реестр ──
                 dup = recent_publication(project_id, task, dedup_window_hours)
@@ -513,7 +516,7 @@ def _publish_worker(
                 _append_log(project_id, "INFO",
                             f"  {icon} ИТОГ [{processed}/{total}] {city}: {res.get('reason', '')}{dur}")
                 save_report("in-progress")
-                push_state("running", processed, city)
+                push_state("running", len(results), city)
 
                 # Скриншот в момент сбоя – в оригинале это был главный способ
                 # понять, ПОЧЕМУ город не опубликовался (25 точек takeScreenshot).
@@ -538,7 +541,7 @@ def _publish_worker(
                                 "❌ ОСТАНОВКА: сессия Яндекса не активна – вместо кабинета "
                                 "открывается страница входа")
                     save_report("finished")
-                    push_state("error", processed, city,
+                    push_state("error", len(results), city,
                                "Сессия Яндекса не активна: вместо кабинета открывается страница "
                                "входа. Зайдите в «Настройки» и войдите в Яндекс заново.")
                     return
@@ -588,11 +591,11 @@ def _publish_worker(
         # ── ВТОРОЙ ПРОХОД: только те, где клика «Создать» ТОЧНО не было ──
         if not stopped:
             _second_pass(browser, project_id, results, counters, run_id, retry_unknown,
-                         should_stop, save_report, lambda: push_state("running", processed, "второй проход"))
+                         should_stop, save_report, lambda: push_state("running", len(results), "второй проход"))
 
         browser.save_session()
         save_report("finished")
-        push_state("stopped" if stopped else "done", processed, "")
+        push_state("stopped" if stopped else "done", len(results), "")
         _append_log(project_id, "INFO", "═" * 46)
         _append_log(project_id, "INFO",
                     f"ИТОГИ · ✅ {counters['ok']} · 🟡 {counters['noImage']} · ⚠️ {counters['unknown']} "
@@ -603,7 +606,7 @@ def _publish_worker(
         _append_log(project_id, "ERROR", f"💥 Критическая ошибка прогона: {e}")
         _append_log(project_id, "ERROR", traceback.format_exc(limit=6))
         save_report("crashed")
-        push_state("error", processed, "", str(e))
+        push_state("error", len(results), "", str(e))
     finally:
         try:
             browser.close()
@@ -918,7 +921,8 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
         _write_state(project_id, {
             "runId": run_id, "action": "actualize", "status": status, "ownerPid": os.getpid(),
             "startedAt": started_at, "finishedAt": None if status == "running" else _now_iso(),
-            "total": total, "current": processed, "currentCity": city, "reportName": report_name,
+            # Считаем законченные города, а не текущий номер – см. публикацию.
+            "total": total, "current": len(results), "currentCity": city, "reportName": report_name,
             "totals": {"total": len(results), **counters}, "error": err,
         })
 

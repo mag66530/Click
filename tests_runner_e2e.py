@@ -68,10 +68,15 @@ class FakeBrowser:
 
 CALLS: list[str] = []
 SCRIPT: dict[str, list[dict]] = {}
+# Сколько городов прогон СЧИТАЛ сделанными в момент начала очередного города.
+PROGRESS_AT_START: list[int] = []
+_PROGRESS_PID: list[str] = []
 
 
 def fake_publish(page, task, idx=0, total=1, temp_dir=None, should_stop=None):
     city = task.get("cityName")
+    if _PROGRESS_PID:
+        PROGRESS_AT_START.append(int(runner.read_state(_PROGRESS_PID[0]).get("current") or 0))
     CALLS.append(city)
     queue = SCRIPT.get(city)
     if queue:
@@ -151,6 +156,30 @@ def scenario_happy_path(pid: str) -> None:
     check("файл задач уехал в done/", not list(runner.p_tasks(pid).glob("*.json")))
     check("лог прогона записан", "ИТОГИ" in runner.read_live_log(pid))
     check("файл лога на диске создан", bool(runner.list_logs(pid)))
+
+
+def scenario_progress(pid: str) -> None:
+    """
+    Полоса прогресса не должна забегать вперёд.
+
+    Живой случай: счётчик увеличивался ДО обработки города, и на одном городе
+    сразу писалось «1 из 1». Заказчик видела «готово», ждала отчёт и решала,
+    что он не формируется, хотя работа ещё шла.
+    """
+    print("\n▸ Прогресс показывает сделанное, а не начатое")
+    CALLS.clear(); SCRIPT.clear()
+    PROGRESS_AT_START.clear(); _PROGRESS_PID.clear(); _PROGRESS_PID.append(pid)
+    write_tasks(pid, ["Тула", "Орёл"], text="Текст для проверки прогресса")
+    runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru")
+    state = wait_done(pid)
+    _PROGRESS_PID.clear()
+
+    check("на первом городе прогресс ещё 0",
+          PROGRESS_AT_START[:1] == [0], str(PROGRESS_AT_START))
+    check("на втором городе прогресс 1 (первый закончен)",
+          PROGRESS_AT_START[1:2] == [1], str(PROGRESS_AT_START))
+    check("в конце прогресс равен числу городов",
+          int(state.get("current") or 0) == 2, str(state.get("current")))
 
 
 def scenario_dedup(pid: str) -> None:
@@ -332,6 +361,7 @@ def main() -> int:
     pid = "E2E"
     try:
         scenario_happy_path(pid)
+        scenario_progress(pid)
         scenario_dedup(pid)
         scenario_unknown_no_retry(pid)
         scenario_safe_retry(pid)

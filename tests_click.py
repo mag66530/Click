@@ -864,6 +864,46 @@ def test_login_step_detection() -> None:
             browser.close()
 
 
+def test_report_summary() -> None:
+    """Плитки отчёта: в актуализации «Всего» лишнее, время – по часам человека."""
+    import ui_theme as T
+    print("\n▸ Плитки отчёта")
+
+    act = T.report_summary({"total": 143, "actualized": 3, "notNeeded": 140, "failed": 0},
+                           1620, keys=["actualized", "notNeeded", "failed"], with_total=False)
+    check("в актуализации нет плитки «Всего»", "Всего" not in act)
+    for word in ("Актуализировано", "Не требовалось", "Ошибок", "Время"):
+        check(f"плитка «{word}» на месте", word in act)
+    check("время в минутах, а не в секундах", "27.0 мин" in act, act[-260:])
+
+    pub = T.report_summary({"total": 3, "ok": 3}, 30)
+    check("в публикации «Всего» осталось", "Всего" in pub)
+
+
+def test_local_time() -> None:
+    """
+    Время отчёта показываем по часам человека.
+
+    В файл оно пишется в UTC, и в шапке стояло «07:33», когда в логе рядом
+    было «12:33» – выглядело как посторонний старый отчёт.
+    """
+    from datetime import datetime, timezone
+    import streamlit_app as app
+    print("\n▸ Время отчёта")
+
+    iso = "2026-08-04T07:33:44.123456+00:00"
+    got = app.local_time(iso)
+    expect = datetime.fromisoformat(iso).astimezone().strftime("%d.%m.%Y, %H:%M:%S")
+    eq("время переведено в местное", got, expect)
+    check("формат как в оригинале (дд.мм.гггг)", got.count(".") >= 2 and ", " in got, got)
+    eq("пустое значение не ломает", app.local_time(None), "")
+    eq("мусор отдаётся как есть", app.local_time("не дата"), "не дата")
+    check("время без часового пояса считаем UTC",
+          app.local_time("2026-08-04T07:33:44")
+          == datetime(2026, 8, 4, 7, 33, 44, tzinfo=timezone.utc).astimezone()
+             .strftime("%d.%m.%Y, %H:%M:%S"))
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="click-tests-"))
     try:
@@ -875,6 +915,8 @@ def main() -> int:
         test_run_state(tmp)
         test_task_format(tmp)
         test_report_render()
+        test_report_summary()
+        test_local_time()
         test_browser_fallback()
         test_engine_order()
         test_packages_txt()

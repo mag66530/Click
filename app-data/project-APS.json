@@ -322,7 +322,13 @@
     {
       "id": "c-APS-армения-1785841387",
       "name": "Армения",
-      "cities": []
+      "cities": [
+        {
+          "id": "ct-ереван-1785841422925-0",
+          "name": "Ереван",
+          "url": "https://yandex.ru/sprav/31564993/edit"
+        }
+      ]
     }
   ],
   "email": "aviastalru@yandex.ru"

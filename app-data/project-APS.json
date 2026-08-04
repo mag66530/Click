@@ -333,7 +333,13 @@
     {
       "id": "c-APS-азербайджан-1785841434",
       "name": "Азербайджан",
-      "cities": []
+      "cities": [
+        {
+          "id": "ct-баку-1785841447528-0",
+          "name": "Баку",
+          "url": "https://yandex.ru/sprav/32661472/edit"
+        }
+      ]
     }
   ],
   "email": "aviastalru@yandex.ru"

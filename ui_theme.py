@@ -17,7 +17,7 @@ import html as _html
 # Метка сборки. streamlit_app.py сверяет её со своей: разметка и стиль должны
 # быть из одной версии, иначе кнопки смещаются или пропадают. Менять вместе
 # с UI_BUILD в streamlit_app.py при любой правке разметки плиток.
-BUILD = "2026-08-05-bulk-dupes"
+BUILD = "2026-08-05-report-tiles"
 
 # ─── Палитра 1:1 из :root в _ui.js ──────────────────────────────────
 DARK = {
@@ -513,6 +513,48 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 .report-stat.err {{ background: var(--red-bg); color: var(--red); border-color: rgba(239,68,68,.25); }}
 .report-stat.skip {{ background: var(--acc-bg); color: var(--acc); border-color: rgba(91,124,250,.25); }}
 .report-stat.dur {{ background: var(--bg-3); color: var(--text); }}
+
+/* Кликабельная плашка отчёта: она же и фильтр. Раньше под цветными плашками
+   стоял второй ряд кнопок с теми же названиями – одно и то же дважды. */
+[class*="st-key-tile-stat-"] .stButton > button {{
+  flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px;
+  padding: 12px 15px; min-height: 78px; text-align: left;
+  border: 1px solid var(--stat-bd, var(--border));
+  background-color: var(--stat-bg, var(--bg-3)) !important;
+}}
+[class*="st-key-tile-stat-"] .stButton > button p,
+[class*="st-key-tile-stat-"] .stButton > button[kind="primary"] p {{
+  font-size: 10.5px !important; font-weight: 700 !important; letter-spacing: .05em;
+  text-transform: uppercase; line-height: 1.2 !important;
+  color: var(--stat-c, var(--muted)) !important; opacity: .85;
+}}
+[class*="st-key-tile-stat-"] .stButton > button::after {{
+  content: var(--val, ""); font-family: var(--mono); font-size: 24px; font-weight: 800;
+  line-height: 1.05; color: var(--stat-c, var(--text));
+}}
+/* Выбранная плашка: Streamlit красит primary-кнопку СВОИМ градиентом через
+   сокращение background – background-color его не перебивает, и плашка
+   становилась фиолетовой, а подпись на ней пропадала. */
+[class*="st-key-tile-stat-"] .stButton > button[kind="primary"] {{
+  background: var(--stat-bg, var(--bg-3)) !important;
+  background-image: none !important;
+  box-shadow: inset 0 0 0 2px var(--stat-c, var(--acc)) !important;
+  border-color: var(--stat-c, var(--acc)) !important;
+}}
+[class*="st-key-tile-stat-"] .stButton > button[kind="primary"] p {{ opacity: 1; }}
+/* Плашка «Время» кликать нечего – но выглядеть должна как остальные. */
+[class*="st-key-tile-stat-"] .stButton > button:disabled {{
+  opacity: 1 !important; cursor: default; transform: none !important;
+}}
+[class*="st-key-tile-stat-"] .stButton > button:disabled:hover {{
+  border-color: var(--stat-bd, var(--border)); transform: none !important;
+}}
+
+/* Отчёт – один блок: карточка, дата справа в шапке. */
+.report-head {{ display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }}
+.report-head-title {{ font-size: 14px; font-weight: 700; color: var(--text); }}
+.report-head-date {{ margin-left: auto; font-size: 12px; color: var(--dim); font-family: var(--mono); }}
+.report-row-country {{ font-size: 11px; color: var(--dim); flex: 0 0 96px; }}
 
 .report-row {{
   display: flex; align-items: center; gap: 12px; padding: 9px 13px;
@@ -1098,7 +1140,7 @@ _ROW_STYLE = {
 }
 
 
-def report_row(item: dict) -> str:
+def report_row(item: dict, with_country: bool = False) -> str:
     cls, ico = _ROW_STYLE.get(item.get("status", ""), ("err", "🔴"))
     if item.get("status") == "ok" and item.get("retried"):
         ico = "⚡"
@@ -1109,8 +1151,13 @@ def report_row(item: dict) -> str:
     if pp:
         reason += f' · 📸 товары: {pp.get("uploaded", 0)}/{pp.get("requested", 0)}'
     dur = f'{item.get("durationMs", 0) / 1000:.1f} сек' if item.get("durationMs") else ""
+    country = ""
+    if with_country:
+        name = item.get("country") or item.get("package") or ""
+        country = f'<span class="report-row-country">{esc(name)}</span>'
     return (
         f'<div class="report-row {cls}"><span class="report-row-ico">{ico}</span>'
+        f'{country}'
         f'<span class="report-row-city">{esc(item.get("cityName", "–"))}</span>'
         f'<span class="report-row-reason">{esc(reason)}</span>'
         f'<span class="report-row-dur">{esc(dur)}</span></div>'

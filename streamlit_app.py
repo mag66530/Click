@@ -37,7 +37,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-05-bulk-dupes"
+UI_BUILD = "2026-08-05-report-tiles"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -1765,11 +1765,56 @@ def tab_cities(project_id: str, config: dict) -> None:
 #  РАЗДЕЛ: ОТЧЁТ
 # ════════════════════════════════════════════════════════════════════
 
-_FILTERS = {"all": "Все", "ok": "✅ Успешно", "no-image": "🟡 Без картинки",
-            "unknown": "⚠️ Проверьте", "failed": "❌ Ошибки", "skipped-duplicate": "⏭ Пропущено"}
-# У актуализации свои статусы: фильтры публикации тут не находят ничего.
-_ACT_FILTERS = {"all": "Все", "actualized": "✅ Актуализировано",
-                "not-needed": "⊝ Не требовалось", "failed": "❌ Ошибки"}
+# Плашка отчёта = фильтр. key – поле в totals, status – статус в строках.
+# «always» держит плашку на месте даже при нуле: заказчику нужны ровно эти
+# колонки всегда, как в оригинале.
+_PUB_TILES = [
+    {"key": "ok",       "status": "ok",                "label": "Успешно",       "colour": "ok",    "always": True},
+    {"key": "noImage",  "status": "no-image",          "label": "Без картинки",  "colour": "noimg", "always": False},
+    {"key": "unknown",  "status": "unknown",           "label": "Проверьте",     "colour": "warn",  "always": False},
+    {"key": "failed",   "status": "failed",            "label": "Ошибок",        "colour": "err",   "always": True},
+    {"key": "skipped",  "status": "skipped-duplicate", "label": "Пропущено",     "colour": "skip",  "always": False},
+]
+_ACT_TILES = [
+    {"key": "actualized", "status": "actualized", "label": "Актуализировано", "colour": "ok",   "always": True},
+    {"key": "notNeeded",  "status": "not-needed", "label": "Не требовалось",  "colour": "skip", "always": True},
+    {"key": "failed",     "status": "failed",     "label": "Ошибок",          "colour": "err",  "always": True},
+]
+# Цвет, фон и рамка плашки – те же, что у не кликабельных .report-stat.
+_STAT_COLOUR = {
+    "ok":    ("var(--grn)", "var(--grn-bg)", "rgba(16,185,129,.25)"),
+    "noimg": ("var(--yel)", "var(--yel-bg)", "rgba(245,158,11,.25)"),
+    "warn":  ("var(--yel)", "var(--yel-bg)", "rgba(245,158,11,.4)"),
+    "err":   ("var(--red)", "var(--red-bg)", "rgba(239,68,68,.25)"),
+    "skip":  ("var(--acc)", "var(--acc-bg)", "rgba(91,124,250,.25)"),
+    "dur":   ("var(--text)", "var(--bg-3)", "var(--border)"),
+}
+
+
+def _dur_text(sec: int | None) -> str:
+    if sec is None:
+        return ""
+    return f"{sec} сек" if sec < 90 else f"{sec / 60:.1f} мин"
+
+
+def _report_notes(data: dict, totals: dict) -> list[str]:
+    notes = []
+    if data.get("stoppedByUser"):
+        notes.append("⏹ Прогон был остановлен вручную – часть городов не обработана.")
+    if data.get("state") == "crashed":
+        notes.append("💥 Прогон упал: отчёт содержит всё, что успели сделать до падения.")
+    if data.get("state") == "in-progress":
+        notes.append("⏳ Прогон ещё идёт – отчёт обновляется после каждого города.")
+    if totals.get("unknown"):
+        notes.append(f'⚠️ {cities_word(totals["unknown"])} с неподтверждённой публикацией. '
+                     "Клик «Создать» был сделан, но Яндекс не подтвердил. "
+                     "Проверьте вручную – повторять автоматически опасно (дубль).")
+    if totals.get("skipped"):
+        notes.append(f'⏭ {cities_word(totals["skipped"])} пропущено: этот же текст уже уходил '
+                     "в эти карточки недавно (защита от дублей).")
+    if totals.get("retried"):
+        notes.append(f'⚡ {cities_word(totals["retried"])} удалось со второй попытки.')
+    return notes
 
 
 def _report_csv(data: dict) -> bytes:
@@ -1820,112 +1865,105 @@ def tab_report(project_id: str) -> None:
         html(T.empty("📊", "Отчётов пока нет",
                      "Отчёт появится после первой актуализации." if is_act
                      else "Отчёт появится после первой публикации."))
-    else:
-        c1, c2 = st.columns([3, 1])
-        with c1:
-            names = [r["name"] for r in reports]
+        return _day_logs(project_id)
 
-            def _label(name: str) -> str:
-                r = next(x for x in reports if x["name"] == name)
-                t = r["totals"] or {}
-                when = local_time(r.get("finishedAt"))
-                if is_act:
-                    return (f'{when} · ✅ {t.get("actualized", 0)} · ⊝ {t.get("notNeeded", 0)}'
-                            f' · ❌ {t.get("failed", 0)}')
-                return f'{when} · ✅ {t.get("ok", 0)}/{t.get("total", 0)}'
+    names = [r["name"] for r in reports]
+    with st.container(border=True):
+        # Отчёт – ОДИН блок: шапка с датой справа, выбор, плашки, детали.
+        # Раньше всё это лежало вразнобой по странице.
+        head = next((r for r in reports
+                     if r["name"] == st.session_state.get("report-select")), reports[0])
+        html(f'<div class="report-head">'
+             f'<span class="report-head-title">📊 Отчёт '
+             f'{"актуализации" if is_act else "публикации"}</span>'
+             f'<span class="report-head-date">{T.esc(local_time(head.get("finishedAt")))}</span>'
+             f'</div>')
 
-            selected = st.selectbox("Отчёт", names, format_func=_label, key="report-select")
-        with c2:
-            st.write("")
-            if st.button("🔄 Обновить список", use_container_width=True, key="btn-refresh-reports"):
-                st.rerun()
+        # Выбор нужен только когда отчётов больше одного: иначе одна и та же
+        # дата стояла бы и в шапке, и в списке. Список сам обновляется при
+        # каждой перерисовке – кнопка «Обновить» не нужна.
+        if len(names) > 1:
+            selected = st.selectbox("Отчёт", names, key="report-select",
+                                    format_func=lambda n: local_time(
+                                        next(r for r in reports if r["name"] == n).get("finishedAt")),
+                                    label_visibility="collapsed")
+        else:
+            selected = names[0]
 
         data = runner.read_report(project_id, kind, selected)
-        if data:
-            totals = data.get("totals") or {}
-            if is_act:
-                html(T.report_summary(totals, data.get("durationSec"),
-                                      keys=["actualized", "notNeeded", "failed"], with_total=False))
-            else:
-                html(T.report_summary(totals, data.get("durationSec")))
+        if not data:
+            return _day_logs(project_id)
 
-            notes = []
-            if data.get("stoppedByUser"):
-                notes.append("⏹ Прогон был остановлен вручную – часть городов не обработана.")
-            if data.get("state") == "crashed":
-                notes.append("💥 Прогон упал: отчёт содержит всё, что успели сделать до падения.")
-            if data.get("state") == "in-progress":
-                notes.append("⏳ Прогон ещё идёт – отчёт обновляется после каждого города.")
-            if totals.get("unknown"):
-                notes.append(f'⚠️ {cities_word(totals["unknown"])} с неподтверждённой публикацией. '
-                             "Клик «Создать» был сделан, но Яндекс не подтвердил. "
-                             "Проверьте вручную – повторять автоматически опасно (дубль).")
-            if totals.get("skipped"):
-                notes.append(f'⏭ {cities_word(totals["skipped"])} пропущено: этот же текст уже уходил '
-                             "в эти карточки недавно (защита от дублей).")
-            if totals.get("retried"):
-                notes.append(f'⚡ {cities_word(totals["retried"])} удалось со второй попытки.')
-            for n in notes:
-                st.caption(n)
+        totals = data.get("totals") or {}
+        results = data.get("results") or []
+        current = st.session_state.get("report-filter", "all")
 
-            # Какие города не получились – сразу в карточке. Раньше в отчёте
-            # стояло только «Ошибок: 3», а какие это города и почему –
-            # приходилось искать в логе.
-            failed = [r for r in (data.get("results") or []) if r.get("status") == "failed"]
-            if failed:
-                with st.expander(f"❌ Почему не получилось ({cities_word(len(failed))})", expanded=True):
-                    for r in failed:
-                        html(T.report_row(r))
+        # ─── Плашки = фильтры ───
+        tiles = _ACT_TILES if is_act else _PUB_TILES
+        shown = [t for t in tiles if totals.get(t["key"]) or t["always"]]
+        dur = data.get("durationSec")
+        cells = shown + ([{"key": "__time", "label": "Время", "colour": "dur", "always": True}]
+                         if dur is not None else [])
 
-            filters = _ACT_FILTERS if is_act else _FILTERS
-            f_cols = st.columns(len(filters))
-            current = st.session_state.get("report-filter", "all")
-            if current not in filters:
-                current = "all"
-            for col, (key, label) in zip(f_cols, filters.items()):
-                if col.button(label, key=f"rf-{key}", use_container_width=True,
-                              type="primary" if current == key else "secondary"):
-                    st.session_state["report-filter"] = key
+        html(T.tile_css([
+            (f"tile-stat-{n}", {
+                "--val": T.css_text(_dur_text(dur) if t["key"] == "__time"
+                                    else str(int(totals.get(t["key"], 0) or 0))),
+                "--stat-c": _STAT_COLOUR[t["colour"]][0],
+                "--stat-bg": _STAT_COLOUR[t["colour"]][1],
+                "--stat-bd": _STAT_COLOUR[t["colour"]][2],
+            }) for n, t in enumerate(cells)
+        ]))
+        cols = st.columns(len(cells))
+        for n, (col, t) in enumerate(zip(cols, cells)):
+            with col, st.container(key=f"tile-stat-{n}"):
+                is_time = t["key"] == "__time"
+                picked = (not is_time) and current == t["status"]
+                if st.button(t["label"], key=f"stat-{t['key']}", use_container_width=True,
+                             disabled=is_time,
+                             type="primary" if picked else "secondary") and not is_time:
+                    st.session_state["report-filter"] = "all" if picked else t["status"]
                     st.rerun()
 
-            results = [r for r in (data.get("results") or [])
-                       if current == "all" or r.get("status") == current]
+        for n in _report_notes(data, totals):
+            st.caption(n)
 
-            by_country: dict[str, list[dict]] = {}
-            for r in results:
-                by_country.setdefault(r.get("country") or r.get("package") or "–", []).append(r)
+        # ─── Детали: один плоский список, без разбивки по странам ───
+        current = st.session_state.get("report-filter", "all")
+        if current not in {t["status"] for t in tiles} | {"all"}:
+            current = "all"
+        rows = [r for r in results if current == "all" or r.get("status") == current]
+        rows = sorted(rows, key=lambda r: ((r.get("country") or r.get("package") or ""),
+                                           r.get("cityName") or ""))
+        picked_label = next((t["label"] for t in tiles if t["status"] == current), "")
+        title = (f"Показать детали ({cities_word(len(rows))})" if current == "all"
+                 else f"{picked_label}: {cities_word(len(rows))} – показать")
+        with st.expander(title, expanded=current != "all"):
+            if not rows:
+                st.caption("Ничего не подошло под выбранную плашку.")
+            for r in rows:
+                html(T.report_row(r, with_country=True))
 
-            good = "actualized" if is_act else "ok"
-            for country, rows in by_country.items():
-                ok = sum(1 for r in rows if r.get("status") == good)
-                bad = sum(1 for r in rows if r.get("status") == "failed")
-                with st.expander(f"{country} – {ok}/{len(rows)} успешно"
-                                 + (f" · {plural(bad, 'ошибка', 'ошибки', 'ошибок')}" if bad else ""),
-                                 expanded=current != "all" or bad > 0):
-                    for r in rows:
-                        html(T.report_row(r))
-
-            # Скачать отчёт и лог именно этого прогона.
-            # getattr, а не прямой вызов: в облаке Streamlit после обновления
-            # кода держит СТАРЫЙ модуль runner в памяти до перезапуска, и
-            # новая функция роняла всю страницу с AttributeError.
+            # Скачивание – внутри деталей, чтобы не мешалось в шапке.
             reader = getattr(runner, "read_run_log", None)
             run_log = reader(project_id, kind, selected) if reader else ""
             base_name = selected.replace(".json", "")
-            with st.container(key="report-downloads"):
-                d1, d2, _ = st.columns([1, 1, 3])
-                d1.download_button("⬇ Отчёт (CSV)", data=_report_csv(data),
-                                   file_name=base_name + ".csv", mime="text/csv",
-                                   use_container_width=True, key="btn-csv")
-                d2.download_button("⬇ Лог (.txt)", data=(run_log or "Лог этого прогона не сохранён.")
-                                   .encode("utf-8"),
-                                   file_name=base_name + ".txt", mime="text/plain",
-                                   use_container_width=True, disabled=not run_log, key="btn-log")
+            d1, d2, _ = st.columns([1, 1, 3])
+            d1.download_button("⬇ Отчёт (CSV)", data=_report_csv(data),
+                               file_name=base_name + ".csv", mime="text/csv",
+                               use_container_width=True, key="btn-csv")
+            d2.download_button("⬇ Лог (.txt)", data=(run_log or "Лог этого прогона не сохранён.")
+                               .encode("utf-8"),
+                               file_name=base_name + ".txt", mime="text/plain",
+                               use_container_width=True, disabled=not run_log, key="btn-log")
             if not run_log:
                 st.caption("Лог этого прогона не сохранён – он появится у прогонов, "
                            "запущенных начиная с этой версии.")
 
-    st.divider()
+    _day_logs(project_id)
+
+
+def _day_logs(project_id: str) -> None:
     html('<div class="card-title">📄 Логи за день</div>')
     logs = runner.list_logs(project_id)
     if not logs:

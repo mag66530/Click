@@ -311,6 +311,73 @@ def main() -> int:
             state.unlink(missing_ok=True)
             live_log.unlink(missing_ok=True)
 
+            # ── Отчёт: плашки И ЕСТЬ фильтры ──
+            # Заказчик: «сделаем плашки кликабельными, чтобы не дублировались
+            # кнопки». Раньше под цветными плашками стоял второй ряд кнопок с
+            # теми же названиями.
+            print("\n▸ Отчёт: цветные плашки работают как фильтры")
+            import json as _js
+            rep = _paths.data_root() / "SMU" / "reports-actualize"
+            rep.mkdir(parents=True, exist_ok=True)
+            (rep / "actualize-2026-08-04T09-00-00.json").write_text(_js.dumps({
+                "type": "actualize", "startedAt": "2026-08-04T09:00:00+00:00",
+                "finishedAt": "2026-08-04T09:04:00+00:00", "durationSec": 240,
+                "state": "finished", "runId": "ui",
+                "totals": {"total": 3, "actualized": 2, "notNeeded": 0, "failed": 1},
+                "results": [
+                    {"cityName": "Барнаул", "country": "Россия", "status": "actualized",
+                     "reason": "Клик прошёл", "durationMs": 11000},
+                    {"cityName": "Воронеж", "country": "Россия", "status": "actualized",
+                     "reason": "Клик прошёл", "durationMs": 12000},
+                    {"cityName": "Волгоград", "country": "Россия", "status": "failed",
+                     "reason": "Не удалось определить URL", "durationMs": 3000},
+                ]}, ensure_ascii=False), encoding="utf-8")
+
+            page.get_by_text("📊 Отчёт", exact=True).first.click()
+            page.wait_for_timeout(4000)
+            page.get_by_role("button", name="Актуализация", exact=False).first.click()
+            page.wait_for_timeout(4000)
+
+            check("страница отчёта не упала",
+                  page.get_by_text("Traceback", exact=False).count() == 0)
+            check("кнопки «Обновить список» больше нет",
+                  page.get_by_role("button", name="Обновить список").count() == 0)
+            tiles = page.evaluate("""() =>
+                [...document.querySelectorAll('[class*="st-key-tile-stat-"] button')].map(b => ({
+                  label: b.innerText.trim(),
+                  val: getComputedStyle(b, '::after').content.replace(/"/g, ''),
+                  off: b.disabled }))""")
+            check("плашки собраны", len(tiles) == 4, str(tiles))
+            check("значения на плашках верные",
+                  [t["val"] for t in tiles] == ["2", "0", "1", "4.0 мин"], str(tiles))
+            check("«Время» не кликается", tiles and tiles[-1]["off"], str(tiles))
+            # Кнопка с такой надписью должна быть РОВНО одна – сама плашка.
+            same = page.evaluate("""() =>
+                [...document.querySelectorAll('button')]
+                  .filter(b => b.innerText.trim().toLowerCase() === 'не требовалось').length""")
+            check("второго ряда кнопок-фильтров нет", same == 1, f"кнопок с этой надписью: {same}")
+
+            page.locator('[class*="st-key-tile-stat-"] button').nth(2).click()
+            page.wait_for_timeout(3500)
+            check("нажатая плашка подсветилась",
+                  page.evaluate("""() =>
+                      [...document.querySelectorAll('[class*="st-key-tile-stat-"] button')]
+                        .filter(b => b.getAttribute('kind') === 'primary')
+                        .map(b => b.innerText.trim())""") == ["ОШИБОК"])
+            check("нажатая плашка осталась своего цвета, а не фиолетовой",
+                  page.evaluate("""() => {
+                      const b = document.querySelector(
+                        '[class*="st-key-tile-stat-"] button[kind="primary"]');
+                      const bg = getComputedStyle(b).backgroundImage;
+                      return !b || bg === 'none';
+                  }"""))
+            rows = page.evaluate(
+                """() => [...document.querySelectorAll('.report-row')].map(r => r.className)""")
+            check("в деталях остались только ошибки",
+                  rows == ["report-row err"], str(rows))
+            check("детали не разбиты по странам – один список",
+                  page.get_by_text("успешно", exact=False).count() == 0)
+
             browser.close()
     finally:
         if proc is not None:

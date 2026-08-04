@@ -115,6 +115,29 @@ def test_publish_api_filter() -> None:
     check("ключевые слова только в параметрах, путь чужой – не считается",
           not f("https://yandex.ru/collections/save?from=%2Fsprav%2Fposts%2F", "POST"))
 
+    # Из нескольких подходящих ответов берём САМЫЙ ТОЧНЫЙ, а не первый.
+    score = yb._publish_response_score  # noqa: SLF001
+    eq("создание поста – высший приоритет",
+       score("https://yandex.ru/sprav/api/71186454150/company-post"), 3)
+    check("общий API постов – ниже",
+          score("https://yandex.ru/sprav/api/companies/1/posts?lang=ru") < 3)
+    check("посторонний путь справочника – ноль",
+          score("https://yandex.ru/sprav/api/settings") == 0)
+    hits = [
+        {"url": "https://yandex.ru/sprav/api/1/posts", "status": 200, "score":
+         score("https://yandex.ru/sprav/api/1/posts")},
+        {"url": "https://yandex.ru/sprav/api/1/company-post", "status": 403, "score":
+         score("https://yandex.ru/sprav/api/1/company-post")},
+    ]
+    best = max(range(len(hits)), key=lambda i: (hits[i]["score"], i))
+    check("отказ на точном адресе не перебивается ранним «успехом»",
+          hits[best]["status"] == 403, str(hits[best]))
+    same = [{"url": "https://yandex.ru/sprav/api/1/posts", "status": 500, "score": 1},
+            {"url": "https://yandex.ru/sprav/api/1/posts", "status": 200, "score": 1}]
+    best = max(range(len(same)), key=lambda i: (same[i]["score"], i))
+    check("среди одинаковых берём последний – он окончательный",
+          same[best]["status"] == 200, str(same[best]))
+
 
 def test_text() -> None:
     print("\n▸ Текст поста (порт buildFinalText)")
@@ -230,6 +253,41 @@ def test_ledger_and_lock(tmp: Path) -> None:
     runner._threads.pop(pid, None)
     runner._release_lock(pid)
     check("лок снимается", not runner.p_lock(pid).exists())
+
+    # ── Лок между РАЗНЫМИ копиями Click ──
+    # Раньше чужой процесс считался протухшим и лок у него отбирался: две
+    # копии на одном компьютере запускали прогоны параллельно – со всеми
+    # дублями. Живость судим по «пульсу»: пока прогон идёт, файл лока
+    # регулярно обновляется. Проверять PID чужого процесса нельзя – на
+    # Windows os.kill(pid, 0) убивает процесс, а не проверяет его.
+    import json as _json
+    import os as _os
+    lock = runner.p_lock(pid)
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text(_json.dumps({"runId": "run-чужой", "ownerPid": _os.getpid() + 12345}),
+                    encoding="utf-8")
+    runner._LOCK_HELD.discard(pid)
+    check("лок ЖИВОЙ чужой копии не забирается", not runner._acquire_lock(pid, "run-D"))
+    check("видно, кто держит лок",
+          (runner.lock_owner(pid) or {}).get("runId") == "run-чужой")
+
+    # Тот же лок, но пульса давно нет – копию закрыли, лок можно забрать.
+    old_time = time.time() - runner.LOCK_STALE_S - 30
+    _os.utime(lock, (old_time, old_time))
+    check("брошенный чужой лок забирается", runner._acquire_lock(pid, "run-E"))
+    check("после захвата в локе наш прогон",
+          _json.loads(lock.read_text(encoding="utf-8"))["runId"] == "run-E")
+    # Свой лок без живого потока – это закончившийся прогон, он свободен.
+    check("свой лок без живого прогона считается свободным", runner.lock_owner(pid) is None)
+
+    # Пульс: пока прогон идёт, метка времени обновляется.
+    stale = time.time() - 60
+    _os.utime(lock, (stale, stale))
+    runner._LOCK_TOUCHED.pop(pid, None)
+    runner._touch_lock(pid)
+    check("прогон отмечает, что жив", lock.stat().st_mtime > stale + 30)
+    runner._threads.pop(pid, None)
+    runner._release_lock(pid)
 
 
 def test_run_state(tmp: Path) -> None:
@@ -961,6 +1019,66 @@ def test_login_step_detection() -> None:
             browser.close()
 
 
+def test_add_post_click_on_real_page() -> None:
+    """
+    Клик «Добавить пост» в НАСТОЯЩЕМ браузере.
+
+    Четвёртое место с той же поломкой: кнопка искалась по координатам и
+    жалась по точке экрана. Если она ниже сгиба – промах, и город падал с
+    «Кнопка "Добавить пост" не найдена», хотя кнопка была на месте.
+    """
+    import yb_playwright as yb
+    print("\n▸ Клик «Добавить пост» (живая страница)")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 900, "height": 600}).new_page()
+
+            page.set_content("""<html><body style="margin:0">
+              <div style="height:1500px">лента постов</div>
+              <button style="width:200px;height:40px" onclick="window.__add=1">Добавить пост</button>
+              <button style="width:200px;height:40px" onclick="window.__wrong=1">Удалить пост</button>
+            </body></html>""")
+            el = yb.wait_for_element(page, yb._FIND_ADD_POST_JS, 2000)  # noqa: SLF001
+            check("кнопка найдена", el is not None)
+            box = el.bounding_box() if el else None
+            check("кнопка действительно ниже сгиба", box and box["y"] > 600, str(box))
+            page.mouse.click(box["x"] + box["width"] / 2, min(box["y"] + 10, 599))
+            check("клик по протухшим координатам НЕ попадает",
+                  page.evaluate("window.__add === undefined"))
+            eq("клик по элементу сработал", yb.click_element(page, el, "Добавить пост"), "по элементу")
+            check("нажата именно «Добавить пост»", page.evaluate("window.__add === 1"))
+            check("соседняя кнопка не задета", page.evaluate("window.__wrong === undefined"))
+
+            # Кнопка только с иконкой – ищем по подписи для скринридера.
+            page.set_content("""<html><body>
+              <button aria-label="Добавить публикацию" style="width:44px;height:44px"
+                      onclick="window.__add=1"></button></body></html>""")
+            check("кнопка-иконка находится по aria-label",
+                  yb.wait_for_element(page, yb._FIND_ADD_POST_JS, 1500) is not None)  # noqa: SLF001
+
+            page.set_content("""<html><body>
+              <button style="width:44px;height:44px" onclick="window.__add=1">+</button></body></html>""")
+            check("голый плюсик тоже находится",
+                  yb.wait_for_element(page, yb._FIND_ADD_POST_JS, 1500) is not None)  # noqa: SLF001
+
+            page.set_content("<html><body><button>Отзывы</button></body></html>")
+            check("на чужой странице ничего не выдумываем",
+                  yb.wait_for_element(page, yb._FIND_ADD_POST_JS, 800) is None)  # noqa: SLF001
+        finally:
+            browser.close()
+
+
 def test_toast_and_access_on_real_page() -> None:
     """
     Уведомление «Данные актуализированы» и заглушка «нет доступа».
@@ -1360,6 +1478,7 @@ def main() -> int:
         test_report_render()
         test_yandex_domain()
         test_aps_project()
+        test_add_post_click_on_real_page()
         test_toast_and_access_on_real_page()
         test_preflight_duplicate_guard()
         test_bulk_city_duplicates()

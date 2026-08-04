@@ -190,6 +190,7 @@ _LOG_KIND: dict[str, str] = {}
 
 def _append_log(project_id: str, level: str, msg: str) -> None:
     line = f"[{datetime.now().strftime('%H:%M:%S')}] [{level}] {msg}\n"
+    _touch_lock(project_id)
     try:
         live = p_live_log(project_id)
         live.parent.mkdir(parents=True, exist_ok=True)
@@ -266,25 +267,63 @@ def clear_ledger(project_id: str) -> None:
 
 
 # ─── лок ────────────────────────────────────────────────────────────
-def _acquire_lock(project_id: str, run_id: str) -> bool:
+# Лок «дышит»: пока прогон идёт, файл лока регулярно обновляется. Если пульса
+# нет дольше этого времени – прогон умер вместе с приложением, лок можно
+# забирать. Судить по PID нельзя: чужой процесс проверить переносимо не выйдет,
+# а на Windows os.kill(pid, 0) вообще убивает процесс.
+LOCK_STALE_S = 180
+_LOCK_HELD: set[str] = set()
+_LOCK_TOUCHED: dict[str, float] = {}
+
+
+def _touch_lock(project_id: str) -> None:
+    """Отметить, что прогон жив. Зовётся часто, поэтому не чаще раза в 5 секунд."""
+    if project_id not in _LOCK_HELD:
+        return
+    now = time.time()
+    if now - _LOCK_TOUCHED.get(project_id, 0) < 5:
+        return
+    _LOCK_TOUCHED[project_id] = now
+    try:
+        os.utime(p_lock(project_id), None)
+    except OSError:
+        pass
+
+
+def lock_owner(project_id: str) -> dict | None:
+    """Кто держит лок прямо сейчас. None – свободен или брошен."""
     fp = p_lock(project_id)
-    if fp.exists():
-        try:
-            data = json.loads(fp.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            data = {}
-        # Лок от живого прогона в ЭТОМ же процессе – отказ.
-        if data.get("ownerPid") == os.getpid():
-            thread = _threads.get(project_id)
-            if thread and thread.is_alive():
-                return False
-        # Иначе лок протухший (приложение перезапускали) – забираем.
+    if not fp.exists():
+        return None
+    try:
+        data = json.loads(fp.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        data = {}
+    try:
+        age = time.time() - fp.stat().st_mtime
+    except OSError:
+        return None
+    if data.get("ownerPid") == os.getpid():
+        thread = _threads.get(project_id)
+        return {**data, "age": age, "mine": True} if (thread and thread.is_alive()) else None
+    # Чужой процесс: живым считаем только пока лок «дышит».
+    return {**data, "age": age, "mine": False} if age < LOCK_STALE_S else None
+
+
+def _acquire_lock(project_id: str, run_id: str) -> bool:
+    if lock_owner(project_id) is not None:
+        return False
+    fp = p_lock(project_id)
     fp.write_text(json.dumps({"runId": run_id, "ownerPid": os.getpid(), "at": _now_iso()},
                              ensure_ascii=False), encoding="utf-8")
+    _LOCK_HELD.add(project_id)
+    _LOCK_TOUCHED[project_id] = time.time()
     return True
 
 
 def _release_lock(project_id: str) -> None:
+    _LOCK_HELD.discard(project_id)
+    _LOCK_TOUCHED.pop(project_id, None)
     p_lock(project_id).unlink(missing_ok=True)
 
 
@@ -355,7 +394,8 @@ def start_publish(
 
         run_id = f"run-{int(time.time() * 1000)}"
         if not _acquire_lock(project_id, run_id):
-            return False, "Прогон уже запущен другим окном."
+            return False, ("Прогон уже идёт – запущен другим окном или другой копией Click. "
+                           "Если та копия закрыта, подождите пару минут: лок освободится сам.")
 
         p_stop(project_id).unlink(missing_ok=True)
         p_live_log(project_id).write_text("", encoding="utf-8")
@@ -691,6 +731,7 @@ def _publish_one_city(
     total_in_pkg: int,
     run_id: str,
     should_stop: Callable[[], bool],
+    allow_retry: bool = True,
 ) -> dict:
     """
     Одна попытка + БЕЗОПАСНЫЙ ретрай.
@@ -698,6 +739,9 @@ def _publish_one_city(
     Ретрай разрешён ТОЛЬКО если первая попытка упала ДО клика «Создать»
     (кнопка «Добавить пост» не найдена, поле текста не найдено, контекст умер).
     Если клик был – статус 'unknown', повтор запрещён: дубль хуже, чем ручная проверка.
+
+    allow_retry=False зовёт второй проход: там это УЖЕ повтор, и внутренний
+    ретрай сделал бы четвёртую попытку по одному городу вместо трёх.
     """
     retryable = ("Кнопка «Добавить пост» не найдена", "Execution context was destroyed",
                  "Target closed", "Не найдено поле для текста", "Target page, context or browser has been closed")
@@ -732,6 +776,8 @@ def _publish_one_city(
         return res
     if not any(x.lower() in (res.get("reason") or "").lower() for x in retryable):
         return res
+    if not allow_retry:
+        return res                       # это уже второй проход – третья попытка последняя
     if should_stop():
         return res
 
@@ -843,7 +889,10 @@ def _second_pass(
             browser.new_page()
         except Exception:
             pass
-        retry = _publish_one_city(browser, project_id, task, n, len(candidates), run_id, should_stop)
+        # Внутренний ретрай тут запрещён: первый проход уже сделал две попытки,
+        # эта – третья и последняя. Иначе на город выходило четыре.
+        retry = _publish_one_city(browser, project_id, task, n, len(candidates), run_id,
+                                  should_stop, allow_retry=False)
 
         _downgrade(counters, failed["status"])
         retry["country"] = failed.get("country")
@@ -910,7 +959,8 @@ def start_actualize(project_id: str, headless: bool = True, delay_s: float = 2.5
 
         run_id = f"act-{int(time.time() * 1000)}"
         if not _acquire_lock(project_id, run_id):
-            return False, "Прогон уже запущен другим окном."
+            return False, ("Прогон уже идёт – запущен другим окном или другой копией Click. "
+                           "Если та копия закрыта, подождите пару минут: лок освободится сам.")
 
         p_stop(project_id).unlink(missing_ok=True)
         p_live_log(project_id).write_text("", encoding="utf-8")

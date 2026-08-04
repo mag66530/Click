@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -218,6 +219,19 @@ def get_config(project_id: str) -> dict:
     return raw["projects"][0]
 
 
+def can_show_browser() -> bool:
+    """Окно браузера возможно только на своём компьютере: в облаке экрана нет."""
+    return not yb.in_cloud()
+
+
+def show_browser_window() -> bool:
+    if not can_show_browser():
+        return False
+    if str(os.environ.get("CLICK_HEADED", "")).strip().lower() in ("1", "true", "yes", "да"):
+        return True
+    return bool(st.session_state.get("show-browser"))
+
+
 def get_settings(project_id: str) -> dict:
     """
     Параметры прогона НЕ настраиваются: зашиты безопасные значения.
@@ -225,7 +239,9 @@ def get_settings(project_id: str) -> dict:
     не с того аккаунта, а выигрыша от них нет.
     """
     return {
-        "headless": True,               # окна браузера нет ни в облаке, ни локально
+        # В облаке экрана нет – всегда скрыто. Локально можно смотреть, как идёт
+        # публикация: галочка в «Настройках» или переменная CLICK_HEADED=1.
+        "headless": not show_browser_window(),
         "delayBetweenPosts": 3,         # меньше – ловим антифлуд Яндекса
         "strictAccountCheck": True,     # чужой аккаунт – стоп, а не «опубликуем куда-нибудь»
         "retryUnknown": False,          # повтор после неподтверждённого клика = дубль
@@ -1715,6 +1731,11 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
     worker = get_worker()
     html('<div class="card-title">🔐 Вход в Яндекс</div>')
     headless_login = bool(get_settings(project_id)["headless"])
+
+    if can_show_browser():
+        st.checkbox("Показывать окно браузера – видно, как идёт публикация",
+                    key="show-browser",
+                    help="Только на своём компьютере. В облаке экрана нет, окно показать негде.")
 
     if yb.has_saved_session(project_id):
         st.success("Сессия Яндекса сохранена – публикация пойдёт в фоне без повторного входа.")

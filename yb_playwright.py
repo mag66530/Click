@@ -803,9 +803,13 @@ def _attach_images(page: Page, image_paths: list[str]) -> tuple[bool, str]:
 
 _FIND_PUBLISH_BTN_JS = r"""
 () => {
+  // Возвращаем САМ ЭЛЕМЕНТ, а не координаты. Оригинал делал именно так
+  // (page.evaluateHandle + elementHandle.click()): Playwright и Puppeteer сами
+  // прокручивают элемент в зону видимости и жмут по нему, а не по точке экрана.
+  // Координаты успевают протухнуть – страница дорисовывается и уезжает.
+  //
   // Сначала кнопки ВНУТРИ формы поста, потом остальной документ: «Создать»
-  // где-нибудь в шапке не должна перехватить публикацию (PLAN 1.4).
-  document.querySelectorAll('[data-click-target]').forEach(e => e.removeAttribute('data-click-target'));
+  // где-нибудь в шапке не должна перехватить публикацию.
   const roots = [];
   for (const f of document.querySelectorAll('[class*="PostForm"], [class*="PostAddForm"], [role="dialog"], [class*="odal"]')) {
     const r = f.getBoundingClientRect();
@@ -813,39 +817,36 @@ _FIND_PUBLISH_BTN_JS = r"""
   }
   roots.push(document);
   const seen = new Set();
-  const allBtns = [];
+  const candidates = [];
   for (const root of roots)
     for (const b of root.querySelectorAll('button, [role="button"], [type="submit"]')) {
       if (seen.has(b)) continue;
       seen.add(b);
-      allBtns.push(b);
+      const text = (b.textContent || '').trim();
+      if (!text || text.length > 30) continue;
+      const low = text.toLowerCase();
+      // Запрещённые – чтобы никогда не нажать «Сохранить черновик» / «Отменить» / «Удалить»
+      if (/(черновик|отмен|удал|закр|назад|отказ|войти|выйти|настрой|регистр)/i.test(low)) continue;
+      const r = b.getBoundingClientRect();
+      if (r.width < 30 || r.height < 18) continue;
+      if (b.disabled || b.getAttribute('aria-disabled') === 'true') continue;
+      const st = window.getComputedStyle(b);
+      if (st.display === 'none' || st.visibility === 'hidden') continue;
+      candidates.push({ el: b, text: low });
     }
-  const candidates = [];
-  for (const b of allBtns) {
-    const text = (b.textContent || '').trim();
-    if (!text || text.length > 30) continue;
-    const low = text.toLowerCase();
-    // Запрещённые – чтобы никогда не нажать «Сохранить черновик» / «Отменить» / «Удалить»
-    if (/(черновик|отмен|удал|закр|назад|отказ|войти|выйти|настрой|регистр)/i.test(low)) continue;
-    const r = b.getBoundingClientRect();
-    if (r.width < 30 || r.height < 18) continue;
-    if (b.disabled || b.getAttribute('aria-disabled') === 'true') continue;
-    const st = window.getComputedStyle(b);
-    if (st.display === 'none' || st.visibility === 'hidden') continue;
-    candidates.push({ el: b, text: low, r });
-  }
-  const pick = (c) => { c.el.setAttribute('data-click-target', '1');
-                        return { x: c.r.x + c.r.width / 2, y: c.r.y + c.r.height / 2,
-                                 text: (c.el.textContent || '').trim().slice(0, 60),
-                                 w: Math.round(c.r.width), h: Math.round(c.r.height) }; };
-  for (const name of ['создать', 'опубликовать', 'отправить', 'publish', 'submit']) {
-    for (const c of candidates) if (c.text === name) return pick(c);
-  }
-  for (const c of candidates) if (/(опубликовать|создать пост|отправить пост)/i.test(c.text)) return pick(c);
-  for (const c of candidates) if (c.text === 'создать' || c.text.startsWith('создать ')) return pick(c);
+  for (const name of ['создать', 'опубликовать', 'отправить', 'publish', 'submit'])
+    for (const c of candidates) if (c.text === name) return c.el;
+  for (const c of candidates) if (/(опубликовать|создать пост|отправить пост)/i.test(c.text)) return c.el;
+  for (const c of candidates) if (c.text === 'создать' || c.text.startsWith('создать ')) return c.el;
   return null;
 }
 """
+
+_BTN_INFO_JS = """(b) => { const r = b.getBoundingClientRect();
+    return { text: (b.textContent || '').trim().slice(0, 60),
+             x: Math.round(r.x), y: Math.round(r.y),
+             w: Math.round(r.width), h: Math.round(r.height) }; }"""
+
 
 _DOM_FALLBACK_JS = r"""
 (needleText) => {
@@ -1165,17 +1166,23 @@ def publish_to_city(
             warn(f"  ⚠️ {upload_error} – публикуем без картинки")
 
     # ─── 5. Кнопка публикации ───
-    # С опросом до 12 сек: пока Яндекс крутит загрузку картинки, «Создать»
-    # отключена и однократный поиск её «не находил» – хотя через пару секунд
-    # она появлялась (это видно по тому, что ретрай кнопку находил).
+    # С опросом: пока Яндекс дожёвывает картинку, «Создать» отключена, и
+    # однократный поиск её «не находил» – хотя через пару секунд она появлялась.
+    pub_el = None
     pub = None
     deadline_btn = time.time() + 12
     while True:
-        pub = page.evaluate(_FIND_PUBLISH_BTN_JS)
-        if pub or time.time() >= deadline_btn:
+        handle = page.evaluate_handle(_FIND_PUBLISH_BTN_JS)
+        pub_el = handle.as_element()
+        if pub_el is not None:
+            try:
+                pub = pub_el.evaluate(_BTN_INFO_JS)
+            except Exception:  # noqa: BLE001
+                pub_el = None
+        if pub_el is not None or time.time() >= deadline_btn:
             break
         page.wait_for_timeout(700)
-    if not pub:
+    if pub_el is None:
         try:
             btns = page.evaluate(
                 """() => Array.from(document.querySelectorAll('button, [role="button"]'))
@@ -1192,7 +1199,7 @@ def publish_to_city(
         error("  ❌ Кнопка «Создать»/«Опубликовать» не найдена")
         _cleanup(temp_files)
         return finish("failed", "Кнопка «Создать»/«Опубликовать» не найдена")
-    info(f"  🎯 Кнопка публикации: «{pub['text']}» {pub['w']}×{pub['h']}")
+    info(f"  🎯 Кнопка публикации: «{pub['text']}» {pub['w']}×{pub['h']} на y={pub['y']}")
 
     # ─── 6. ВЕРИФИКАЦИЯ ЧЕРЕЗ ПЕРЕХВАТ API-ОТВЕТА ───
     # Слушателя ставим ДО клика. Ответ 2xx на POST к API постов = пост точно создан.
@@ -1212,15 +1219,27 @@ def publish_to_city(
     page.wait_for_timeout(200)
 
     click_error = None
+    how = ""
     try:
-        # locator.click сам прокручивает к кнопке и ждёт кликабельности – как
-        # elementHandle.click() в оригинале. Координаты остаются запасным путём:
-        # кнопка ниже сгиба по координатам не нажимается вовсе (PLAN 1.1).
+        # Кликаем ПО ЭЛЕМЕНТУ, как оригинал: сам прокрутит и нажмёт куда надо.
+        # Клик по координатам оставлен последним запасным путём – он мажет,
+        # если страница успела дорисоваться и уехать (а она успевает).
         try:
-            page.locator('[data-click-target="1"]').first.click(timeout=5_000)
-        except Exception:
-            click_at(page, pub)
-        info(f"  🔘 Клик «{pub['text']}» сделан")
+            pub_el.scroll_into_view_if_needed(timeout=3_000)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            pub_el.click(timeout=8_000)
+            how = "по элементу"
+        except Exception as e1:  # noqa: BLE001
+            warn(f"  ⚠️ Обычный клик не прошёл ({_short_error(str(e1))}) – жму событием")
+            try:
+                pub_el.dispatch_event("click")
+                how = "событием click"
+            except Exception:  # noqa: BLE001
+                click_at(page, pub)
+                how = "по координатам"
+        info(f"  🔘 Клик «{pub['text']}» сделан ({how})")
         result["steps"]["publish"] = "clicked"
     except Exception as e:  # noqa: BLE001
         click_error = str(e)
@@ -1274,6 +1293,20 @@ def publish_to_city(
         fb = page.evaluate(_DOM_FALLBACK_JS, text.strip())
     except Exception:
         fb = {"formOpen": False, "postFound": False}
+
+    # Лента могла не перерисоваться сама. Перечитываем страницу и смотрим ещё
+    # раз: это чтение, дубль создать не может, а «неизвестно» превращает в
+    # честный ответ. Раньше на этом месте прогон сдавался.
+    if not fb.get("postFound"):
+        try:
+            page.goto(posts_url, wait_until="domcontentloaded", timeout=20_000)
+            wait_ui_ready(page, 10_000)
+            page.wait_for_timeout(1200)
+            fb = page.evaluate(_DOM_FALLBACK_JS, text.strip())
+            if fb.get("postFound"):
+                info("  🔎 Пост найден в ленте после перечитывания страницы")
+        except Exception:  # noqa: BLE001
+            pass
 
     if fb.get("postFound") and not fb.get("formOpen"):
         result["steps"]["publish"] = "dom-confirmed"

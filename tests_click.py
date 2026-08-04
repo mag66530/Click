@@ -430,6 +430,74 @@ def test_packages_txt() -> None:
            "libcups2t64", "libatk1.0-0t64", "libatk-bridge2.0-0t64"} <= set(listed))
 
 
+def test_publish_click_on_real_page() -> None:
+    """
+    Клик по кнопке «Создать» в НАСТОЯЩЕМ браузере.
+
+    Живой случай: кнопка публикации у Яндекса оказывается далеко ниже сгиба, а
+    страница дорисовывается уже после того, как мы сняли координаты. Клик по
+    точке экрана уходит в пустоту – в логе «Клик сделан», а поста нет.
+    Оригинал жал по элементу (elementHandle.click), поэтому и работал.
+    """
+    import yb_playwright as yb
+    print("\n▸ Клик по кнопке публикации (живая страница)")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    html = """
+    <html><body style="margin:0">
+    <div id="pad" style="height:1400px"></div>
+    <div class="PostFormRoot" style="width:600px;height:400px">
+      <button id="cancel">Отменить</button>
+      <button id="draft">Сохранить черновик</button>
+      <button id="create">Создать</button>
+    </div>
+    <script>
+      window.clicked = null;
+      for (const id of ['cancel', 'draft', 'create'])
+        document.getElementById(id).onclick = () => { window.clicked = id; };
+      setTimeout(() => { document.getElementById('pad').style.height = '2200px'; }, 300);
+    </script></body></html>
+    """
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+            page = browser.new_context(viewport={"width": 900, "height": 600}).new_page()
+
+            # 1. Так было раньше: снимаем координаты, страница уезжает, клик мимо.
+            page.set_content(html)
+            coords = page.evaluate("""() => { const r = document.getElementById('create')
+                .getBoundingClientRect(); return {x: r.x + r.width / 2, y: r.y + r.height / 2}; }""")
+            page.wait_for_timeout(600)
+            page.mouse.click(coords["x"], coords["y"])
+            check("клик по протухшим координатам НЕ попадает (так и ломалось)",
+                  page.evaluate("() => window.clicked") is None,
+                  str(page.evaluate("() => window.clicked")))
+
+            # 2. Как сейчас: ищем элемент и жмём по нему.
+            page.set_content(html)
+            page.wait_for_timeout(600)
+            el = page.evaluate_handle(yb._FIND_PUBLISH_BTN_JS).as_element()
+            check("кнопка найдена", el is not None)
+            if el is None:
+                browser.close()
+                return
+            got = el.evaluate(yb._BTN_INFO_JS)
+            eq("найдена именно «Создать», а не «Отменить»/«Черновик»", got["text"], "Создать")
+            check("кнопка действительно ниже сгиба", got["y"] > 600, f"y={got['y']}")
+            el.scroll_into_view_if_needed()
+            el.click()
+            eq("клик по элементу попадает в «Создать»",
+               page.evaluate("() => window.clicked"), "create")
+            browser.close()
+    except Exception as e:  # noqa: BLE001
+        check("браузер запустился", False, str(e)[:120])
+
+
 def test_city_duplicates() -> None:
     """Один и тот же город (та же карточка или то же имя) нельзя добавить дважды."""
     import re
@@ -721,6 +789,7 @@ def main() -> int:
         test_browser_fallback()
         test_engine_order()
         test_packages_txt()
+        test_publish_click_on_real_page()
         test_city_duplicates()
         test_worker_thread()
         test_session_validity(tmp)

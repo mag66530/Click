@@ -1612,6 +1612,10 @@ def test_reviews() -> None:
     eq("имя: одно слово", rv.nice_name("Денис"), "Денис")
     eq("имя: двойное через дефис", rv.nice_name("Анна-Мария"), "Анна-Мария")
     eq("имя: с цифрами не берём", rv.nice_name("Пользователь 123"), None)
+    # Транслит не берём: пол по нему не прочитать, а в русском ответе он
+    # выглядит чужеродно – заказчик просила в таких случаях «клиент».
+    eq("имя: латиницей не берём", rv.nice_name("Michail Derugin"), None)
+    eq("имя: латиницей – «Клиент»", rv.name_for_prompt("Felix Ostrovitov"), rv.FALLBACK_NAME)
     eq("имя: никнейм не берём", rv.nice_name("xxx_killer"), None)
     eq("имя: грубость не берём", rv.nice_name("сука"), None)
     eq("имя: почту не берём", rv.nice_name("ivan@mail.ru"), None)
@@ -1682,7 +1686,7 @@ def test_reviews() -> None:
        rv.clean_draft("«Уважаемый Иван! Спасибо.»"), "Уважаемый Иван! Спасибо.")
     eq("чистка: лишние пустые строки схлопываются",
        rv.clean_draft("А.\n\n\n\nБ."), "А.\n\nБ.")
-    check("«Уважаемый(ая)» – негодный черновик",
+    check("«Уважаемый(ая)» – неудачный черновик",
           rv.looks_broken("Уважаемый(ая) Michail! Благодарим за отзыв о поставке."))
 
     # Промпт АПС переписан по эталонам заказчика: конкретика из отзыва
@@ -1697,16 +1701,49 @@ def test_reviews() -> None:
           "обратную связь" in aps and "оправдываться" in aps)
     check("АПС: закрытие на месте", "С уважением, команда Авиапромсталь." in aps)
 
+    # Раскладка исходов отправки. Отдельно проверяем «не подтвердилось»:
+    # раньше такой ответ считался успехом и уходил из списка, а в Яндексе
+    # его не было.
+    import streamlit_app as _app
+    for status, want in (("answered", rv.ANSWERED), ("already", rv.ALREADY),
+                         ("unknown", rv.FAILED), ("failed", rv.FAILED)):
+        it = {"status": rv.DRAFTED}
+        _app._apply_send_result(it, status, "почему")
+        eq(f"исход отправки «{status}»", it["status"], want)
+    it = {"status": rv.DRAFTED}
+    _app._apply_send_result(it, "unknown", "Яндекс пока не показывает ответ")
+    check("не подтверждённый ответ остаётся в списке", it["status"] in rv.OPEN_STATUSES)
+
+    # Правила, о которых заказчик просила отдельно.
+    rules = pdata.REVIEW_COMMON_RULES
+    check("правило: конкретика из отзыва", "Назови то, что клиент купил" in rules)
+    check("правило: ассортиментная фраза без добавок", "НИЧЕГО КРОМЕ НЕЁ" in rules)
+    check("правило: «вы» со строчной", "со строчной буквы" in rules)
+    check("правило: «Уважаемый клиент» без имени", "Уважаемый клиент!" in rules)
+    eq("в общих правилах нет длинных тире", rules.count("\u2014"), 0)
+
+    # Длина абзацев: заказчик просила, чтобы первый абзац не был вдвое
+    # длиннее ассортиментной фразы.
+    check("АПС: задана длина абзаца благодарности", "150-230 знаков" in aps)
+    check("АПС: ровно три предложения в благодарности", "РОВНО ТРИ" in aps)
+    import re as _re
+    for body in _re.findall(r"Ответ:\n(.+?)(?=\n\nОтзыв:|$)", aps, _re.S):
+        paras = [x.strip() for x in body.strip().split("\n\n") if x.strip()]
+        if len(paras) >= 3:
+            check(f"эталон: абзацы соразмерны ({len(paras[1])} и {len(paras[2])})",
+                  len(paras[1]) <= len(paras[2]) * 1.9,
+                  f"{len(paras[1])} против {len(paras[2])}")
+
     # Негодный черновик – не только оборванный. Один из боевых заканчивался
     # точкой и потому считался целым, хотя целиком состоял из размышлений
     # модели о том, как трактовать промпт.
-    check("негодный: пустой", rv.looks_broken(""))
-    check("негодный: оборван", rv.looks_broken("Благодарим за отзыв и"))
-    check("негодный: заметки модели",
+    check("неудачный: пустой", rv.looks_broken(""))
+    check("неудачный: оборван", rv.looks_broken("Благодарим за отзыв и"))
+    check("неудачный: заметки модели",
           rv.looks_broken('" is proper, but let\'s check if the prompt specifies exact string.'))
-    check("негодный: рассуждение про абзацы",
+    check("неудачный: рассуждение про абзацы",
           rv.looks_broken("Salutation a sentence? If every paragraph MUST be 2 sentences."))
-    check("негодный: сплошная латиница", rv.looks_broken("Thank you for your kind feedback!"))
+    check("неудачный: сплошная латиница", rv.looks_broken("Thank you for your kind feedback!"))
     good = ("Уважаемый Святослав!\n\nБлагодарим за оставленный отзыв и обратную связь. "
             "Мы оптимизируем логистику.\n\nС уважением, команда Авиапромсталь.")
     check("годный черновик проходит", not rv.looks_broken(good))
@@ -1740,6 +1777,42 @@ def test_reviews() -> None:
     eq("Gemini: слушаем подсказку retryDelay",
        llm._retry_after({"error": {"details": [{"retryDelay": "27s"}]}}), 27.0)
     eq("Gemini: без подсказки – ноль", llm._retry_after({"error": {}}), 0.0)
+    # Несколько ключей: лимит Gemini считается на каждый отдельно, поэтому
+    # два-три ключа – самый дешёвый способ ускорить генерацию.
+    import os as _os
+    saved = {k: _os.environ.get(k) for k in
+             ("gemini_api_key", "gemini_api_key_2", "gemini_api_keys")}
+    try:
+        _os.environ["gemini_api_key"] = "k1"
+        _os.environ["gemini_api_key_2"] = "k2"
+        _os.environ["gemini_api_keys"] = "k3, k2"      # повтор не должен задваиваться
+        eq("ключи собираются из всех секретов", llm.api_keys(), ["k1", "k2", "k3"])
+        check("несколько ключей видно в описании", "3" in llm.where(), llm.where())
+
+        llm._key_cool.clear(); llm._key_last.clear()
+        key, wait = llm._pick_key(llm.api_keys())
+        eq("свободный ключ берётся сразу", (key, wait == 0), ("k1", True))
+        llm._cool("k1")
+        key, _ = llm._pick_key(llm.api_keys())
+        eq("отказавший ключ откладывается", key, "k2")
+        llm._cool("k2"); llm._cool("k3")
+        _, wait = llm._pick_key(llm.api_keys())
+        check("когда все в остывании – ждём, а не долбим", wait > 1, wait)
+        llm._key_cool.clear(); llm._key_last.clear()
+
+        _os.environ.pop("gemini_api_key_2"); _os.environ.pop("gemini_api_keys")
+        eq("один ключ – тоже рабочий случай", llm.api_keys(), ["k1"])
+        check("при одном ключе подсказываем добавить второй",
+              "gemini_api_key_2" in llm.where(), llm.where())
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                _os.environ.pop(k, None)
+            else:
+                _os.environ[k] = v
+
+    check("общее время на один черновик ограничено", llm.TOTAL_BUDGET_S <= 120, llm.TOTAL_BUDGET_S)
+    check("кругов по моделям немного", llm.ROUNDS <= 3, llm.ROUNDS)
     was = llm.current_gap()
     llm._slower()
     check("после отказа Gemini пауза растёт", llm.current_gap() > was, llm.current_gap())
@@ -1759,6 +1832,71 @@ def test_reviews() -> None:
     eq("очередь: разобранное уходит из открытых", len(rv.open_items([answered])), 0)
     c = rv.counters([answered])
     eq("очередь: счётчик отвеченных", c["answered"], 1)
+# ════════════════════════════════════════════════════════════════════
+def test_review_batch() -> None:
+    """
+    Пачка «Переписать все» / «Отправить все» идёт по одной штуке за
+    перерисовку – только так работает кнопка «Остановить». Блокирующий
+    цикл её не давал: страница замирала, и прервать было нечем.
+    """
+    import streamlit as st
+    import streamlit_app as app
+    import reviews as rv
+    print("\n▸ Пачка ответов с остановкой")
+
+    class Rerun(Exception):
+        pass
+
+    keep = (st.rerun, st.progress, st.button, st.caption, st.success,
+            app._review_queue_save, app._review_regenerate)
+    st.rerun = lambda *a, **k: (_ for _ in ()).throw(Rerun())
+    st.progress = st.caption = st.success = lambda *a, **k: None
+    st.button = lambda *a, **k: False
+    app._review_queue_save = lambda *a, **k: None
+    app._review_regenerate = lambda pid, it: it.update(draft="переписано.", status=rv.DRAFTED)
+
+    def step(items):
+        try:
+            app._batch_block("APS", items)
+        except Rerun:
+            pass
+
+    try:
+        st.session_state.clear()
+        items = [{"reviewId": f"r{n}", "status": rv.DRAFTED, "draft": "старое",
+                  "city": "Гродно", "author": "Иван", "text": "отзыв"} for n in range(4)]
+        app._batch_start("redo", items, "APS")
+        eq("пачка знает свой объём", st.session_state["rv-batch"]["total"], 4)
+
+        step(items)
+        eq("за перерисовку обрабатывается ровно одна штука",
+           st.session_state["rv-batch"]["done"], 1)
+        eq("первый черновик переписан", items[0]["draft"], "переписано.")
+        eq("второй пока не тронут", items[1]["draft"], "старое")
+
+        app._batch_stop()
+        check("остановка запомнена", st.session_state["rv-batch"]["stop"])
+        step(items)
+        check("после остановки пачки нет", "rv-batch" not in st.session_state)
+        note = st.session_state.get("rv-batch-note") or ""
+        check("в итоге сказано, сколько осталось", "осталось 3" in note, note)
+        eq("остальные черновики не тронуты", items[3]["draft"], "старое")
+
+        # Пачка доходит до конца сама, если не останавливать.
+        st.session_state.clear()
+        items = [{"reviewId": f"x{n}", "status": rv.DRAFTED, "draft": "старое",
+                  "city": "Баку", "author": "Пётр", "text": "отзыв"} for n in range(3)]
+        app._batch_start("redo", items, "APS")
+        for _ in range(4):
+            step(items)
+        check("пачка сама завершилась", "rv-batch" not in st.session_state)
+        eq("переписаны все", [i["draft"] for i in items], ["переписано."] * 3)
+    finally:
+        (st.rerun, st.progress, st.button, st.caption, st.success,
+         app._review_queue_save, app._review_regenerate) = keep
+        st.session_state.clear()
+
+
 
 def test_yandex_domain() -> None:
     """
@@ -1819,6 +1957,7 @@ def main() -> int:
         test_yandex_domain()
         test_aps_project()
         test_reviews()
+        test_review_batch()
         test_actualize_selection()
         test_add_post_click_on_real_page()
         test_toast_and_access_on_real_page()

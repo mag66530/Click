@@ -92,6 +92,42 @@ def norm_city(name: str) -> str:
     return s.strip(" .,")
 
 
+def city_variants(name: str) -> list[str]:
+    """
+    Все написания города из одной ячейки КП.
+
+    В таблице города со сменившимся именем записаны через косую черту:
+    «Астана/Нур-Султан», «Сумгаит/Сумгайыт», «Нахичевань /Нахчыван». Яндекс
+    знает одно из них – значит, проверять надо оба.
+    """
+    parts = re.split(r"\s*[/|]\s*", str(name or ""))
+    out, seen = [], set()
+    for p in parts:
+        v = norm_city(p)
+        if v and v not in seen:
+            seen.add(v)
+            out.append(v)
+    return out
+
+
+# Страна из КП и код региона у Яндекса. Нужны из-за одинаковых названий:
+# Армавир есть и в России, и в Армении – без страны карточка одного города
+# садится на строку другого.
+COUNTRY_CODES = {
+    "россия": "RU", "рф": "RU", "российская федерация": "RU",
+    "казахстан": "KZ", "рк": "KZ",
+    "беларусь": "BY", "белоруссия": "BY", "рб": "BY",
+    "азербайджан": "AZ", "армения": "AM", "грузия": "GE",
+    "киргизия": "KG", "кыргызстан": "KG", "узбекистан": "UZ",
+    "таджикистан": "TJ", "туркменистан": "TM", "молдова": "MD", "молдавия": "MD",
+    "украина": "UA",
+}
+
+
+def country_code(name: str) -> str:
+    return COUNTRY_CODES.get(norm_text(name), "")
+
+
 def address_places(address: str) -> set[str]:
     """
     Населённые пункты из адреса Яндекса.
@@ -289,6 +325,7 @@ def parse_sheet(rows: list[list[str]]) -> dict:
 SCORE_LINK = 100        # в КП стоит прямая ссылка на эту карточку – спорить не о чем
 SCORE_SITE = 10         # совпал хост городского сайта
 SCORE_PLACE = 6         # город назван в адресе отдельной частью
+SCORE_COUNTRY = 2       # страна КП совпала с регионом карточки
 SCORE_INSIDE = 2        # город лишь встречается в строке адреса
 
 
@@ -298,20 +335,31 @@ def match_score(item: dict, company: dict) -> int:
     if kp_id and kp_id == str(company.get("id") or ""):
         return SCORE_LINK
 
-    score = 0
+    # Разные страны – разговор окончен. Иначе армянский Армавир садится на
+    # строку российского: название одно, и по нему они неотличимы.
+    kp_country = country_code(item.get("country", ""))
+    ya_country = (company.get("regionCode") or "").upper()
+    if kp_country and ya_country and kp_country != ya_country:
+        return 0
+
+    score = SCORE_COUNTRY if (kp_country and kp_country == ya_country) else 0
     kp_host = site_host(item.get("site", ""))
     ya_hosts = {site_host(u) for u in (company.get("sites") or [company.get("site", "")])}
     ya_hosts.discard("")
     if kp_host and kp_host in ya_hosts:
         score += SCORE_SITE
 
-    city = norm_city(item.get("city", ""))
-    if city:
-        places = address_places(company.get("address", ""))
+    places = address_places(company.get("address", ""))
+    address = norm_text(company.get("address", ""))
+    for city in city_variants(item.get("city", "")):
         if city in places:
             score += SCORE_PLACE
-        elif re.search(rf"(?<![а-я]){re.escape(city)}(?![а-я])", norm_text(company.get("address", ""))):
+            break
+        # Совсем короткие названия («Ош», «РФ») по кусочку строки не ищем:
+        # такое совпадение чаще случайное, чем настоящее.
+        if len(city) >= 4 and re.search(rf"(?<![а-я]){re.escape(city)}(?![а-я])", address):
             score += SCORE_INSIDE
+            break
     return score
 
 
@@ -328,6 +376,9 @@ def match(items: list[dict], companies: list[dict]) -> dict:
     chains = [c for c in companies if (c.get("type") or "") == "chain"]
     ordinary = [c for c in companies if c not in chains]
 
+    def longest(it: dict) -> int:
+        return max((len(v) for v in city_variants(it.get("city", ""))), default=0)
+
     by_row: dict[int, list[dict]] = {it["rowIdx"]: [] for it in items}
     extra: list[dict] = []
     for co in ordinary:
@@ -335,9 +386,11 @@ def match(items: list[dict], companies: list[dict]) -> dict:
         for it in items:
             s = match_score(it, co)
             if s > best_score or (s == best_score and s and best_item is not None
-                                  and len(norm_city(it["city"])) > len(norm_city(best_item["city"]))):
+                                  and longest(it) > longest(best_item)):
                 best_item, best_score = it, s
-        if best_item is None or best_score <= 0:
+        # Одной страны мало: без совпадения по городу или сайту карточка
+        # села бы на первую попавшуюся строку той же страны.
+        if best_item is None or best_score <= SCORE_COUNTRY:
             extra.append(co)
             continue
         entry = dict(co)
@@ -346,6 +399,7 @@ def match(items: list[dict], companies: list[dict]) -> dict:
                               "сайт и адрес" if best_score >= SCORE_SITE + SCORE_PLACE else
                               "сайт" if best_score >= SCORE_SITE else
                               "адрес" if best_score >= SCORE_PLACE else "адрес (нестрого)")
+        entry["matchedCountry"] = co.get("regionCode") or ""
         by_row[best_item["rowIdx"]].append(entry)
 
     for row in by_row.values():

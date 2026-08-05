@@ -1045,9 +1045,19 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str) -> dict:
             continue
         try:
             import llm
+            t0 = time.time()
             draft = rv.clean_draft(llm.generate(rv.build_prompt(prompt, item)))
             add(item, rv.DRAFTED, draft=draft)
             out["drafted"] += 1
+            # Замер в лог: без него «долго генерирует» не отличить от
+            # «упёрлись в лимит и ждём» – а лечится это по-разному.
+            st = getattr(llm, "last_stats", {}) or {}
+            slow = time.time() - t0
+            if slow > 8:
+                _append_log(project_id, "WARN",
+                            f"  💬 {city}: черновик за {slow:.0f} сек "
+                            f"(модель {st.get('model') or '?'}, запросов {st.get('calls', 1)}, "
+                            f"пауза {st.get('gap', '?')} сек) – Gemini придерживает по лимиту")
         except Exception as e:  # noqa: BLE001 – причина уже человеческая
             add(item, rv.NO_DRAFT, note=str(e))
             out["noDraft"] += 1

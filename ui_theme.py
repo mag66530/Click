@@ -159,6 +159,17 @@ hr {{ border-color: var(--border) !important; }}
 .st-key-click-topbar .click-topbar {{ border-radius: 0; border-left: none; border-right: none;
   margin: 0; padding: 0; min-height: 46px; align-items: center; }}
 .st-key-click-topbar [data-testid="stHorizontalBlock"] {{ align-items: center; }}
+/* Левая часть шапки – обычный markdown-блок, и Streamlit вешает на его
+   обёртки свои отступы. Из-за них логотип со статусами стоял ниже плашки
+   проекта и кнопки темы: справа настоящие виджеты, слева – разметка с
+   чужим полем. Обнуляем отступы обёрток и слегка приподнимаем блок,
+   чтобы центры совпали. */
+.st-key-click-topbar [data-testid="stColumn"]:first-child [data-testid="stElementContainer"],
+.st-key-click-topbar [data-testid="stColumn"]:first-child [data-testid="stMarkdown"],
+.st-key-click-topbar [data-testid="stColumn"]:first-child [data-testid="stMarkdownContainer"] {{
+  margin: 0; padding: 0; width: 100%;
+}}
+.st-key-click-topbar [data-testid="stColumn"]:first-child .click-topbar {{ margin-top: -4px; }}
 .st-key-click-tabs {{ background: var(--bg-1); border-bottom: 1px solid var(--border);
   margin-bottom: 18px; }}
 .st-key-click-tabs [role="radiogroup"] {{ border-bottom: none; margin-bottom: 0; }}

@@ -137,7 +137,14 @@ def nice_name(raw: str | None) -> str | None:
         return None
     if not all(_WORD.fullmatch(w.rstrip(".")) for w in words):
         return None
-    return words[0].rstrip(".")
+
+    name = words[0].rstrip(".")
+    # Имя латиницей – это транслит («Michail», «Felix», «Vakhit»). В русском
+    # ответе оно смотрится чужеродно, а пол по нему не прочитать. Заказчик
+    # решила так: не понимаем имя – пишем «клиент».
+    if re.search(r"[A-Za-z]", name):
+        return None
+    return name
 
 
 def name_for_prompt(raw: str | None) -> str:
@@ -237,7 +244,7 @@ _THINKING_TRACE = re.compile(
 
 def looks_broken(text: str) -> bool:
     """
-    Черновик негодный: пустой, оборванный или с рассуждениями модели вместо
+    Черновик неудачный: пустой, оборванный или с рассуждениями модели вместо
     ответа. Такие надо переписать, а не отправлять.
 
     Одного признака «оборван» мало: один черновик заканчивался точкой и

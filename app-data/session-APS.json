@@ -551,16 +551,6 @@
       "sameSite": "None"
     },
     {
-      "name": "bh",
-      "value": "YMiAzdMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1820497992.325,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "_yasc",
       "value": "oyBEtpqIDxakD+WoSv5SfEDvYlbdOUKkjx8ny1r6VL7osciEIs/itKI3C3+ll3SPH55cLQ8v7N3AP3+ZWew+/CpFgdtkeCEM4wiilK7W0ux29i6wOZChlRQ9YQ==",
       "domain": ".yandex.ru",
@@ -606,6 +596,16 @@
       "domain": ".yandex.ru",
       "path": "/",
       "expires": 1785940288,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "bh",
+      "value": "YLaGzdMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1820498742.165,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"

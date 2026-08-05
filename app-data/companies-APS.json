@@ -1,10 +1,12 @@
 {
-  "collectedAt": "2026-08-05T11:21:52.390601+00:00",
+  "collectedAt": "2026-08-05T12:29:29.923632+00:00",
   "count": 207,
-  "withCards": true,
+  "withCards": false,
   "companies": [
     {
       "id": "204171703116",
+      "tycoonId": "23171574",
+      "permanentId": "204171703116",
       "type": "chain",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -24,14 +26,12 @@
       "phones": [],
       "rubrics": [],
       "noAccess": false,
-      "rating": null,
-      "fromDom": true,
-      "url": "https://yandex.ru/sprav/204171703116/p/edit/",
-      "companyId": "204171703116",
-      "fromCard": true
+      "rating": null
     },
     {
       "id": "2283959861",
+      "tycoonId": "64409953",
+      "permanentId": "2283959861",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -46,26 +46,21 @@
         "https://shahty.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (863) 206-68-85"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/2283959861/p/edit/",
-      "companyId": "2283959861",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "2883461537",
+      "tycoonId": "64695741",
+      "permanentId": "2883461537",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -80,26 +75,21 @@
         "https://berdsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (383) 255-73-36"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/2883461537/p/edit/",
-      "companyId": "2883461537",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "6349428425",
+      "tycoonId": "64798889",
+      "permanentId": "6349428425",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -114,26 +104,21 @@
         "https://bataysk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (863) 206-68-85"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/6349428425/p/edit/",
-      "companyId": "6349428425",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "10349733203",
+      "tycoonId": "64410367",
+      "permanentId": "10349733203",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -148,26 +133,21 @@
         "https://saransk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (831) 414-40-86"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Цветные металлы"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/10349733203/p/edit/",
-      "companyId": "10349733203",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "10873194809",
+      "tycoonId": "25755702",
+      "permanentId": "10873194809",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -183,9 +163,9 @@
         "https://mariupol.aviastal.ru/"
       ],
       "social": {
+        "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
         "vkontakte": "https://vk.com/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012",
-        "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy"
+        "ok": "https://ok.ru/group/70000048012012"
       },
       "emails": [
         "mariupol@aviastal.ru"
@@ -193,19 +173,14 @@
       "phones": [
         "8 (800) 700-36-89"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Снабжение строительных объектов",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/10873194809/p/edit/",
-      "companyId": "10873194809",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "13968797615",
+      "tycoonId": "64696794",
+      "permanentId": "13968797615",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -220,26 +195,21 @@
         "https://bijsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (3852) 25-26-58"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/13968797615/p/edit/",
-      "companyId": "13968797615",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "14394444946",
+      "tycoonId": "64442394",
+      "permanentId": "14394444946",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -254,26 +224,21 @@
         "https://pskov.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (812) 986-43-38"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/14394444946/p/edit/",
-      "companyId": "14394444946",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "15817232938",
+      "tycoonId": "64798836",
+      "permanentId": "15817232938",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -288,26 +253,21 @@
         "https://balashiha.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/15817232938/p/edit/",
-      "companyId": "15817232938",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "16294152881",
+      "tycoonId": "64447677",
+      "permanentId": "16294152881",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -322,26 +282,21 @@
         "https://nalchik.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 411-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/16294152881/p/edit/",
-      "companyId": "16294152881",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "20761435635",
+      "tycoonId": "24213964",
+      "permanentId": "20761435635",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -359,10 +314,10 @@
         "https://yaroslavl.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79033660443"
+        "whatsapp": "https://wa.me/79033660443",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "yaroslavl@aviastal.ru"
@@ -370,19 +325,14 @@
       "phones": [
         "+7 (4852) 66-29-46"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Снабжение строительных объектов"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.6,
-      "url": "https://yandex.ru/sprav/20761435635/p/edit/",
-      "companyId": "20761435635",
-      "fromCard": true
+      "rating": 4.6
     },
     {
       "id": "21049290830",
+      "tycoonId": "62755226",
+      "permanentId": "21049290830",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -397,26 +347,21 @@
         "https://vladikavkaz.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/21049290830/p/edit/",
-      "companyId": "21049290830",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "21984615989",
+      "tycoonId": "64695575",
+      "permanentId": "21984615989",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -431,26 +376,21 @@
         "https://derbent.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/21984615989/p/edit/",
-      "companyId": "21984615989",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "23409378171",
+      "tycoonId": "22421831",
+      "permanentId": "23409378171",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -468,10 +408,10 @@
         "https://samara.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
+        "whatsapp": "https://wa.me/79033660443",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+79033660443",
-        "whatsapp": "https://wa.me/79033660443"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "samara@aviastal.ru"
@@ -479,19 +419,14 @@
       "phones": [
         "+7 (846) 267-10-74"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.7,
-      "url": "https://yandex.ru/sprav/23409378171/p/edit/",
-      "companyId": "23409378171",
-      "fromCard": true
+      "rating": 4.7
     },
     {
       "id": "24889242330",
+      "tycoonId": "62820875",
+      "permanentId": "24889242330",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -506,26 +441,21 @@
         "https://syzran.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (846) 267-10-74"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/24889242330/p/edit/",
-      "companyId": "24889242330",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "31378468879",
+      "tycoonId": "64798307",
+      "permanentId": "31378468879",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -540,26 +470,21 @@
         "https://engels.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (8452) 53-11-49"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/31378468879/p/edit/",
-      "companyId": "31378468879",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "34012197901",
+      "tycoonId": "31512804",
+      "permanentId": "34012197901",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Аэросталь",
@@ -581,17 +506,14 @@
       "phones": [
         "+996 227 58 84 57"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/34012197901/p/edit/",
-      "companyId": "34012197901",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "37034863975",
+      "tycoonId": "15351827",
+      "permanentId": "37034863975",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -609,10 +531,10 @@
         "https://nn.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79625563974"
+        "whatsapp": "https://wa.me/79625563974",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "nn@aviastal.ru"
@@ -620,19 +542,14 @@
       "phones": [
         "+7 (831) 414-40-86"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.6,
-      "url": "https://yandex.ru/sprav/37034863975/p/edit/",
-      "companyId": "37034863975",
-      "fromCard": true
+      "rating": 4.6
     },
     {
       "id": "41441572103",
+      "tycoonId": "64696577",
+      "permanentId": "41441572103",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -647,26 +564,21 @@
         "https://bryansk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4872) 38-54-05"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/41441572103/p/edit/",
-      "companyId": "41441572103",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "41585087662",
+      "tycoonId": "64443046",
+      "permanentId": "41585087662",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -685,19 +597,14 @@
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/41585087662/p/edit/",
-      "companyId": "41585087662",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "41770792252",
+      "tycoonId": "64800611",
+      "permanentId": "41770792252",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -716,19 +623,14 @@
       "phones": [
         "+7 (423) 254-00-59"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/41770792252/p/edit/",
-      "companyId": "41770792252",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "43413703859",
+      "tycoonId": "62148383",
+      "permanentId": "43413703859",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -743,26 +645,21 @@
         "https://novorossijsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/43413703859/p/edit/",
-      "companyId": "43413703859",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "44437398539",
+      "tycoonId": "19855714",
+      "permanentId": "44437398539",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -780,8 +677,8 @@
         "https://saratov.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw"
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "saratov@aviastal.ru"
@@ -789,19 +686,14 @@
       "phones": [
         "+7 (8452) 53-11-49"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.7,
-      "url": "https://yandex.ru/sprav/44437398539/p/edit/",
-      "companyId": "44437398539",
-      "fromCard": true
+      "rating": 4.7
     },
     {
       "id": "47042593377",
+      "tycoonId": "64800084",
+      "permanentId": "47042593377",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -816,26 +708,21 @@
         "https://naberezhnye-chelny.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (8552) 20-00-56"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/47042593377/p/edit/",
-      "companyId": "47042593377",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "50517893001",
+      "tycoonId": "22126255",
+      "permanentId": "50517893001",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -853,10 +740,10 @@
         "https://novokuznetsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
+        "whatsapp": "https://wa.me/79620583176",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+79620583176",
-        "whatsapp": "https://wa.me/79620583176"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "novokuznetsk@aviastal.ru"
@@ -864,19 +751,14 @@
       "phones": [
         "+7 (3843) 20-99-82"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/50517893001/p/edit/",
-      "companyId": "50517893001",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "53780554800",
+      "tycoonId": "31564993",
+      "permanentId": "53780554800",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -901,17 +783,14 @@
       "phones": [
         "+7 (962) 386-88-83"
       ],
-      "rubrics": [
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 5,
-      "url": "https://yandex.ru/sprav/53780554800/p/edit/",
-      "companyId": "53780554800",
-      "fromCard": true
+      "rating": 5
     },
     {
       "id": "54136626753",
+      "tycoonId": "64689220",
+      "permanentId": "54136626753",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -926,26 +805,21 @@
         "https://rubcovsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 058-31-76"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/54136626753/p/edit/",
-      "companyId": "54136626753",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "54216947938",
+      "tycoonId": "64687607",
+      "permanentId": "54216947938",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -960,26 +834,21 @@
         "https://kaluga.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/54216947938/p/edit/",
-      "companyId": "54216947938",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "54338245359",
+      "tycoonId": "64691434",
+      "permanentId": "54338245359",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -994,26 +863,21 @@
         "https://nefteyugansk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/54338245359/p/edit/",
-      "companyId": "54338245359",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "54940381636",
+      "tycoonId": "64687741",
+      "permanentId": "54940381636",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1028,26 +892,21 @@
         "https://kaliningrad.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 686-43-38"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/54940381636/p/edit/",
-      "companyId": "54940381636",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "58961828615",
+      "tycoonId": "64442078",
+      "permanentId": "58961828615",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1062,26 +921,21 @@
         "https://pushkino.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/58961828615/p/edit/",
-      "companyId": "58961828615",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "59222237228",
+      "tycoonId": "64699757",
+      "permanentId": "59222237228",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1096,26 +950,21 @@
         "https://chita.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (3952) 57-93-87"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/59222237228/p/edit/",
-      "companyId": "59222237228",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "60054259141",
+      "tycoonId": "64693264",
+      "permanentId": "60054259141",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1130,26 +979,21 @@
         "https://kaspiysk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/60054259141/p/edit/",
-      "companyId": "60054259141",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "61836386159",
+      "tycoonId": "64443194",
+      "permanentId": "61836386159",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1164,26 +1008,21 @@
         "https://petrozavodsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (812) 986-43-38"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/61836386159/p/edit/",
-      "companyId": "61836386159",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "61915164594",
+      "tycoonId": "64443995",
+      "permanentId": "61915164594",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1198,26 +1037,21 @@
         "https://orel.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4872) 38-54-05"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/61915164594/p/edit/",
-      "companyId": "61915164594",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "63694617955",
+      "tycoonId": "64690475",
+      "permanentId": "63694617955",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1232,26 +1066,21 @@
         "https://novocheboksarsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 556-39-74"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/63694617955/p/edit/",
-      "companyId": "63694617955",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "64142931785",
+      "tycoonId": "64409805",
+      "permanentId": "64142931785",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1266,26 +1095,21 @@
         "https://shchelkovo.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/64142931785/p/edit/",
-      "companyId": "64142931785",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "65710519570",
+      "tycoonId": "62521909",
+      "permanentId": "65710519570",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1300,26 +1124,21 @@
         "https://volzhskij.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (8442) 60-99-52"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/65710519570/p/edit/",
-      "companyId": "65710519570",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "67394894431",
+      "tycoonId": "64689637",
+      "permanentId": "67394894431",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1334,26 +1153,21 @@
         "https://prokopevsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 058-31-76"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/67394894431/p/edit/",
-      "companyId": "67394894431",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "68429112051",
+      "tycoonId": "23771439",
+      "permanentId": "68429112051",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1371,10 +1185,10 @@
         "https://tomsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
+        "whatsapp": "https://wa.me/79620583176",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+79620583176",
-        "whatsapp": "https://wa.me/79620583176"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "tomsk@aviastal.ru"
@@ -1382,19 +1196,14 @@
       "phones": [
         "+7 (3822) 22-65-08"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.7,
-      "url": "https://yandex.ru/sprav/68429112051/p/edit/",
-      "companyId": "68429112051",
-      "fromCard": true
+      "rating": 4.7
     },
     {
       "id": "68807947468",
+      "tycoonId": "64690548",
+      "permanentId": "68807947468",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1409,26 +1218,21 @@
         "https://nevinnomyssk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 411-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/68807947468/p/edit/",
-      "companyId": "68807947468",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "69844828771",
+      "tycoonId": "64692667",
+      "permanentId": "69844828771",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1449,19 +1253,14 @@
       "phones": [
         "+7 (903) 411-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/69844828771/p/edit/",
-      "companyId": "69844828771",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "70210624498",
+      "tycoonId": "21887473",
+      "permanentId": "70210624498",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -1479,10 +1278,10 @@
         "https://volgograd.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "whatsapp": "https://wa.me/79034116468",
         "telegram": "https://t.me/+79034116468",
-        "whatsapp": "https://wa.me/79034116468"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "volgograd@aviastal.ru"
@@ -1490,19 +1289,14 @@
       "phones": [
         "+7 (8442) 60-99-52"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/70210624498/p/edit/",
-      "companyId": "70210624498",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "71186454150",
+      "tycoonId": "31565459",
+      "permanentId": "71186454150",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1519,10 +1313,10 @@
         "https://aviastal.uz/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "whatsapp": "https://wa.me/998900638688",
         "telegram": "https://t.me/+998900638688",
-        "whatsapp": "https://wa.me/998900638688"
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "info@aviastal.uz"
@@ -1531,19 +1325,14 @@
         "+998 90 063 86 88",
         "+998 74 510 10 01"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Чёрная металлургия",
-        "Цветные металлы"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 5,
-      "url": "https://yandex.ru/sprav/71186454150/p/edit/",
-      "companyId": "71186454150",
-      "fromCard": true
+      "rating": 5
     },
     {
       "id": "72066530499",
+      "tycoonId": "7330581",
+      "permanentId": "72066530499",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Национальная ипотечная компания",
@@ -1569,17 +1358,14 @@
       "phones": [
         "+374 10 560741"
       ],
-      "rubrics": [
-        "Банк"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/72066530499/p/edit/",
-      "companyId": "72066530499",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "72177026477",
+      "tycoonId": "21894770",
+      "permanentId": "72177026477",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -1595,10 +1381,10 @@
         "https://krasnoyarsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79620583176"
+        "whatsapp": "https://wa.me/79620583176",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "krasnoyarsk@aviastal.ru"
@@ -1606,19 +1392,14 @@
       "phones": [
         "+7 (391) 271-75-19"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/72177026477/p/edit/",
-      "companyId": "72177026477",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "73092542124",
+      "tycoonId": "64447416",
+      "permanentId": "73092542124",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1633,26 +1414,21 @@
         "https://nizhnekamsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (843) 216-39-74"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/73092542124/p/edit/",
-      "companyId": "73092542124",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "73379986438",
+      "tycoonId": "64691944",
+      "permanentId": "73379986438",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1667,26 +1443,21 @@
         "https://nahodka.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 058-31-76"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/73379986438/p/edit/",
-      "companyId": "73379986438",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "75375145939",
+      "tycoonId": "64446357",
+      "permanentId": "75375145939",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1701,26 +1472,21 @@
         "https://novomoskovsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4872) 38-54-05"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/75375145939/p/edit/",
-      "companyId": "75375145939",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "75791954421",
+      "tycoonId": "25637563",
+      "permanentId": "75791954421",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -1736,9 +1502,9 @@
         "https://aktau.aviastal.kz/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/77007704963",
         "telegram": "https://t.me/%2BE7Cj9KKMp7k3MmMy",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "whatsapp": "https://wa.me/77007704963",
         "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
@@ -1747,19 +1513,14 @@
       "phones": [
         "+7 (700) 697-16-12"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 5,
-      "url": "https://yandex.ru/sprav/75791954421/p/edit/",
-      "companyId": "75791954421",
-      "fromCard": true
+      "rating": 5
     },
     {
       "id": "77435068230",
+      "tycoonId": "62755277",
+      "permanentId": "77435068230",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1774,26 +1535,21 @@
         "https://velikiy-novgorod.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (812) 986-43-38"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/77435068230/p/edit/",
-      "companyId": "77435068230",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "78645586138",
+      "tycoonId": "25640819",
+      "permanentId": "78645586138",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -1811,8 +1567,8 @@
         "https://taraz.aviastal.kz/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/77006971612",
         "telegram": "https://t.me/%2BE7Cj9KKMp7k3MmMy",
+        "whatsapp": "https://wa.me/77006971612",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "vkontakte": "https://vk.ru/public214715361"
       },
@@ -1822,19 +1578,14 @@
       "phones": [
         "+7 (700) 697-16-12"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 5,
-      "url": "https://yandex.ru/sprav/78645586138/p/edit/",
-      "companyId": "78645586138",
-      "fromCard": true
+      "rating": 5
     },
     {
       "id": "79128729083",
+      "tycoonId": "64410031",
+      "permanentId": "79128729083",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1849,26 +1600,21 @@
         "https://severodvinsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (812) 986-43-38"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/79128729083/p/edit/",
-      "companyId": "79128729083",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "79541162805",
+      "tycoonId": "62868515",
+      "permanentId": "79541162805",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1883,26 +1629,21 @@
         "https://sterlitamak.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (347) 299-66-54"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/79541162805/p/edit/",
-      "companyId": "79541162805",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "79912116456",
+      "tycoonId": "64800429",
+      "permanentId": "79912116456",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1917,26 +1658,21 @@
         "https://kirov.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (8332) 20-50-34"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/79912116456/p/edit/",
-      "companyId": "79912116456",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "81648603694",
+      "tycoonId": "64800359",
+      "permanentId": "81648603694",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1951,26 +1687,21 @@
         "https://kursk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4712) 22-05-06"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/81648603694/p/edit/",
-      "companyId": "81648603694",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "82537826419",
+      "tycoonId": "64696153",
+      "permanentId": "82537826419",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -1985,26 +1716,21 @@
         "https://himki.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/82537826419/p/edit/",
-      "companyId": "82537826419",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "82561967081",
+      "tycoonId": "64696112",
+      "permanentId": "82561967081",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2019,26 +1745,21 @@
         "https://almetevsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (347) 299-66-54"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/82561967081/p/edit/",
-      "companyId": "82561967081",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "83548368411",
+      "tycoonId": "64689943",
+      "permanentId": "83548368411",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2053,26 +1774,21 @@
         "https://noyabrsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/83548368411/p/edit/",
-      "companyId": "83548368411",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "85528621717",
+      "tycoonId": "64699859",
+      "permanentId": "85528621717",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2087,26 +1803,21 @@
         "https://dimitrovgrad.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (846) 267-10-74"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/85528621717/p/edit/",
-      "companyId": "85528621717",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "87220510332",
+      "tycoonId": "22192790",
+      "permanentId": "87220510332",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -2124,10 +1835,10 @@
         "https://mogilev.aviastal.by/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/375445038886"
+        "whatsapp": "https://wa.me/375445038886",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "mogilev@aviastal.by"
@@ -2135,19 +1846,14 @@
       "phones": [
         "+375 44 503-88-86"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Снабжение строительных объектов"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/87220510332/p/edit/",
-      "companyId": "87220510332",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "88124070545",
+      "tycoonId": "64799791",
+      "permanentId": "88124070545",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2162,26 +1868,21 @@
         "https://sochi.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (862) 291-70-17"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/88124070545/p/edit/",
-      "companyId": "88124070545",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "89476802628",
+      "tycoonId": "64447063",
+      "permanentId": "89476802628",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2196,26 +1897,21 @@
         "https://norilsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (3462) 90-50-88"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/89476802628/p/edit/",
-      "companyId": "89476802628",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "90834377770",
+      "tycoonId": "31565270",
+      "permanentId": "90834377770",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2233,8 +1929,8 @@
         "https://aviastal.kg/"
       ],
       "social": {
-        "telegram": "https://t.me/+996223967688",
-        "whatsapp": "https://wa.me/996223967688"
+        "whatsapp": "https://wa.me/996223967688",
+        "telegram": "https://t.me/+996223967688"
       },
       "emails": [
         "info@aviastal.kg"
@@ -2242,19 +1938,14 @@
       "phones": [
         "+996 223 96 76 88"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Чёрная металлургия",
-        "Цветные металлы"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.9,
-      "url": "https://yandex.ru/sprav/90834377770/p/edit/",
-      "companyId": "90834377770",
-      "fromCard": true
+      "rating": 4.9
     },
     {
       "id": "92685556982",
+      "tycoonId": "64695052",
+      "permanentId": "92685556982",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2269,26 +1960,21 @@
         "https://essentuki.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/92685556982/p/edit/",
-      "companyId": "92685556982",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "95006335549",
+      "tycoonId": "21144078",
+      "permanentId": "95006335549",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -2306,10 +1992,10 @@
         "https://kemerovo.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
+        "whatsapp": "https://wa.me/79620583176",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+79620583176",
-        "whatsapp": "https://wa.me/79620583176"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "kemerovo@aviastal.ru"
@@ -2317,19 +2003,14 @@
       "phones": [
         "+7 (3842) 24-02-57"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Металлоконструкции"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/95006335549/p/edit/",
-      "companyId": "95006335549",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "95649031960",
+      "tycoonId": "64688859",
+      "permanentId": "95649031960",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2344,26 +2025,21 @@
         "https://vidnoe.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/95649031960/p/edit/",
-      "companyId": "95649031960",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "95961521241",
+      "tycoonId": "62521340",
+      "permanentId": "95961521241",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2378,26 +2054,21 @@
         "https://yakutsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4212) 60-19-28"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/95961521241/p/edit/",
-      "companyId": "95961521241",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "96537982538",
+      "tycoonId": "64689491",
+      "permanentId": "96537982538",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2412,26 +2083,21 @@
         "https://reutov.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/96537982538/p/edit/",
-      "companyId": "96537982538",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "96681280557",
+      "tycoonId": "15351553",
+      "permanentId": "96681280557",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -2449,10 +2115,10 @@
         "https://irkutsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79620583176"
+        "whatsapp": "https://wa.me/79620583176",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "irkutsk@aviastal.ru"
@@ -2460,19 +2126,14 @@
       "phones": [
         "+7 (3952) 57-93-87"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.7,
-      "url": "https://yandex.ru/sprav/96681280557/p/edit/",
-      "companyId": "96681280557",
-      "fromCard": true
+      "rating": 4.7
     },
     {
       "id": "99476455227",
+      "tycoonId": "31679794",
+      "permanentId": "99476455227",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -2496,19 +2157,14 @@
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/99476455227/p/edit/",
-      "companyId": "99476455227",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "100640982006",
+      "tycoonId": "64798542",
+      "permanentId": "100640982006",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2523,26 +2179,21 @@
         "https://arzamas.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (831) 414-40-86"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/100640982006/p/edit/",
-      "companyId": "100640982006",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "101279712653",
+      "tycoonId": "21643318",
+      "permanentId": "101279712653",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -2560,10 +2211,10 @@
         "https://aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
+        "whatsapp": "https://wa.me/79037553618",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+79037553618",
-        "whatsapp": "https://wa.me/79037553618"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "moscow@aviastal.ru"
@@ -2571,19 +2222,14 @@
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.9,
-      "url": "https://yandex.ru/sprav/101279712653/p/edit/",
-      "companyId": "101279712653",
-      "fromCard": true
+      "rating": 4.9
     },
     {
       "id": "102090025338",
+      "tycoonId": "20916866",
+      "permanentId": "102090025338",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -2604,19 +2250,14 @@
       "phones": [
         "+7 (3843) 20-99-82"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Снабжение строительных объектов",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/102090025338/p/edit/",
-      "companyId": "102090025338",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "102318931888",
+      "tycoonId": "64687260",
+      "permanentId": "102318931888",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2631,26 +2272,21 @@
         "https://kerch.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 411-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/102318931888/p/edit/",
-      "companyId": "102318931888",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "104397178504",
+      "tycoonId": "64699694",
+      "permanentId": "104397178504",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2665,26 +2301,21 @@
         "https://cherepovets.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4852) 66-29-46"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/104397178504/p/edit/",
-      "companyId": "104397178504",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "105590254945",
+      "tycoonId": "64694319",
+      "permanentId": "105590254945",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2699,26 +2330,21 @@
         "https://evpatoriya.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/105590254945/p/edit/",
-      "companyId": "105590254945",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "106104969628",
+      "tycoonId": "64686691",
+      "permanentId": "106104969628",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2733,26 +2359,21 @@
         "https://korolev.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/106104969628/p/edit/",
-      "companyId": "106104969628",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "107139596112",
+      "tycoonId": "62525806",
+      "permanentId": "107139596112",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2767,26 +2388,21 @@
         "https://vologda.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4852) 66-29-46"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/107139596112/p/edit/",
-      "companyId": "107139596112",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "108268606967",
+      "tycoonId": "64443623",
+      "permanentId": "108268606967",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2801,26 +2417,21 @@
         "https://petropavlovsk-kamchatskij.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4212) 60-19-28"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/108268606967/p/edit/",
-      "companyId": "108268606967",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "110172200486",
+      "tycoonId": "64799632",
+      "permanentId": "110172200486",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2835,26 +2446,21 @@
         "https://ulyanovsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (8422) 73-05-02"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/110172200486/p/edit/",
-      "companyId": "110172200486",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "112256493852",
+      "tycoonId": "22070291",
+      "permanentId": "112256493852",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -2872,10 +2478,10 @@
         "https://orenburg.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
+        "whatsapp": "https://wa.me/79033660443",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+79033660443",
-        "whatsapp": "https://wa.me/79033660443"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "orenburg@aviastal.ru"
@@ -2883,19 +2489,14 @@
       "phones": [
         "+7 (3532) 26-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/112256493852/p/edit/",
-      "companyId": "112256493852",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "113911932443",
+      "tycoonId": "64696009",
+      "permanentId": "113911932443",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -2910,26 +2511,21 @@
         "https://artem.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4212) 60-19-28"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/113911932443/p/edit/",
-      "companyId": "113911932443",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "116000226138",
+      "tycoonId": "31508443",
+      "permanentId": "116000226138",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Аэросталь",
@@ -2951,17 +2547,14 @@
       "phones": [
         "+994 50 429 04 95"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/116000226138/p/edit/",
-      "companyId": "116000226138",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "116227716049",
+      "tycoonId": "25639595",
+      "permanentId": "116227716049",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -2975,9 +2568,9 @@
       "site": "",
       "sites": [],
       "social": {
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "whatsapp": "https://wa.me/+77007704963",
         "telegram": "https://t.me/+77007704963",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
@@ -2986,19 +2579,14 @@
       "phones": [
         "+7 (700) 697-16-12"
       ],
-      "rubrics": [
-        "Оптовая компания",
-        "Металлопрокат",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 5,
-      "url": "https://yandex.ru/sprav/116227716049/p/edit/",
-      "companyId": "116227716049",
-      "fromCard": true
+      "rating": 5
     },
     {
       "id": "116915072091",
+      "tycoonId": "64447549",
+      "permanentId": "116915072091",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3013,26 +2601,21 @@
         "https://neftekamsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (347) 299-66-54"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/116915072091/p/edit/",
-      "companyId": "116915072091",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "116940224126",
+      "tycoonId": "23867544",
+      "permanentId": "116940224126",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -3050,10 +2633,10 @@
         "https://ufa.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
+        "whatsapp": "https://wa.me/79033660443",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+79033660443",
-        "whatsapp": "https://wa.me/79033660443"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "ufa@aviastal.ru"
@@ -3061,19 +2644,14 @@
       "phones": [
         "+7 (347) 299-66-54"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.7,
-      "url": "https://yandex.ru/sprav/116940224126/p/edit/",
-      "companyId": "116940224126",
-      "fromCard": true
+      "rating": 4.7
     },
     {
       "id": "117563131121",
+      "tycoonId": "64690356",
+      "permanentId": "117563131121",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3088,26 +2666,21 @@
         "https://novoshahtinsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 411-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/117563131121/p/edit/",
-      "companyId": "117563131121",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "119869986279",
+      "tycoonId": "64692301",
+      "permanentId": "119869986279",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3122,26 +2695,21 @@
         "https://murino.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 686-43-38"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/119869986279/p/edit/",
-      "companyId": "119869986279",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "120855432901",
+      "tycoonId": "64410264",
+      "permanentId": "120855432901",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3156,26 +2724,21 @@
         "https://serpuhov.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/120855432901/p/edit/",
-      "companyId": "120855432901",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "121599850257",
+      "tycoonId": "31458099",
+      "permanentId": "121599850257",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Аэросталь",
@@ -3197,19 +2760,14 @@
       "phones": [
         "+7 (962) 386-88-83"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/121599850257/p/edit/",
-      "companyId": "121599850257",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "121937734219",
+      "tycoonId": "25755984",
+      "permanentId": "121937734219",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -3231,19 +2789,14 @@
       "phones": [
         "8 (800) 700-36-89"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Снабжение строительных объектов",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/121937734219/p/edit/",
-      "companyId": "121937734219",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "122867699172",
+      "tycoonId": "59636589",
+      "permanentId": "122867699172",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -3259,10 +2812,10 @@
         "https://kazan.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "whatsapp": "https://wa.me/79625563974",
         "telegram": "https://t.me/+79625563974",
-        "whatsapp": "https://wa.me/79625563974"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "kazan@aviastal.ru"
@@ -3270,19 +2823,14 @@
       "phones": [
         "+7 (843) 216-39-74"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлоконструкции"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.9,
-      "url": "https://yandex.ru/sprav/122867699172/p/edit/",
-      "companyId": "122867699172",
-      "fromCard": true
+      "rating": 4.9
     },
     {
       "id": "123425966212",
+      "tycoonId": "64801377",
+      "permanentId": "123425966212",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3297,26 +2845,21 @@
         "https://astrakhan.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (8512) 69-00-13"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/123425966212/p/edit/",
-      "companyId": "123425966212",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "124895665665",
+      "tycoonId": "62820510",
+      "permanentId": "124895665665",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3331,26 +2874,21 @@
         "https://tver.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/124895665665/p/edit/",
-      "companyId": "124895665665",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "126257818484",
+      "tycoonId": "23021185",
+      "permanentId": "126257818484",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -3368,10 +2906,10 @@
         "https://nizhnevartovsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "whatsapp": "https://wa.me/79033660443",
         "telegram": "https://t.me/+79033660443",
-        "whatsapp": "https://wa.me/79033660443"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "nizhnevartovsk@aviastal.ru"
@@ -3380,19 +2918,14 @@
         "+7 (3466) 22-15-88",
         "8 (800) 700-36-89"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/126257818484/p/edit/",
-      "companyId": "126257818484",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "126947554182",
+      "tycoonId": "62755075",
+      "permanentId": "126947554182",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3407,26 +2940,21 @@
         "https://volgodonsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (863) 206-68-85"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/126947554182/p/edit/",
-      "companyId": "126947554182",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "128367635353",
+      "tycoonId": "64696870",
+      "permanentId": "128367635353",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3441,26 +2969,21 @@
         "https://berezniki.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (342) 259-18-98"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/128367635353/p/edit/",
-      "companyId": "128367635353",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "132349588682",
+      "tycoonId": "22191489",
+      "permanentId": "132349588682",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -3476,10 +2999,10 @@
         "https://vitebsk.aviastal.by/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/375(44)503-88-86"
+        "whatsapp": "https://wa.me/375(44)503-88-86",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "vitebsk@aviastal.by"
@@ -3487,19 +3010,14 @@
       "phones": [
         "+375 44 503-88-86"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Снабжение строительных объектов",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.9,
-      "url": "https://yandex.ru/sprav/132349588682/p/edit/",
-      "companyId": "132349588682",
-      "fromCard": true
+      "rating": 4.9
     },
     {
       "id": "135310646003",
+      "tycoonId": "23666081",
+      "permanentId": "135310646003",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -3517,10 +3035,10 @@
         "https://surgut.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79634523239"
+        "whatsapp": "https://wa.me/79634523239",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "surgut@aviastal.ru"
@@ -3528,19 +3046,14 @@
       "phones": [
         "+7 (3462) 90-50-88"
       ],
-      "rubrics": [
-        "Металлоконструкции",
-        "Металлоизделия",
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/135310646003/p/edit/",
-      "companyId": "135310646003",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "137373411557",
+      "tycoonId": "64449069",
+      "permanentId": "137373411557",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3555,26 +3068,21 @@
         "https://kurgan.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 487-65-31"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/137373411557/p/edit/",
-      "companyId": "137373411557",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "139014854122",
+      "tycoonId": "62909554",
+      "permanentId": "139014854122",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3589,26 +3097,21 @@
         "https://smolensk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4872) 38-54-05"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/139014854122/p/edit/",
-      "companyId": "139014854122",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "139031059312",
+      "tycoonId": "62147259",
+      "permanentId": "139031059312",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3623,26 +3126,21 @@
         "https://cheboksary.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (843) 216-39-74"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/139031059312/p/edit/",
-      "companyId": "139031059312",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "139789867782",
+      "tycoonId": "15355204",
+      "permanentId": "139789867782",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -3658,10 +3156,10 @@
         "https://rostov.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79034116468"
+        "whatsapp": "https://wa.me/79034116468",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "rostov@aviastal.ru"
@@ -3669,19 +3167,14 @@
       "phones": [
         "+7 (863) 206-68-85"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/139789867782/p/edit/",
-      "companyId": "139789867782",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "142940225706",
+      "tycoonId": "64695502",
+      "permanentId": "142940225706",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3696,26 +3189,21 @@
         "https://elista.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (8442) 60-99-52"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/142940225706/p/edit/",
-      "companyId": "142940225706",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "143412755320",
+      "tycoonId": "64689713",
+      "permanentId": "143412755320",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3730,26 +3218,21 @@
         "https://orekhovo-zuevo.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/143412755320/p/edit/",
-      "companyId": "143412755320",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "144650399953",
+      "tycoonId": "64689843",
+      "permanentId": "144650399953",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3764,26 +3247,21 @@
         "https://oktyabryskiy.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/144650399953/p/edit/",
-      "companyId": "144650399953",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "144988441911",
+      "tycoonId": "21873032",
+      "permanentId": "144988441911",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3799,10 +3277,10 @@
         "https://ekb.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/9033660443"
+        "whatsapp": "https://wa.me/9033660443",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "ekb@aviastal.ru"
@@ -3810,19 +3288,14 @@
       "phones": [
         "+7 (343) 200-33-88"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.7,
-      "url": "https://yandex.ru/sprav/144988441911/p/edit/",
-      "companyId": "144988441911",
-      "fromCard": true
+      "rating": 4.7
     },
     {
       "id": "145880784742",
+      "tycoonId": "21715667",
+      "permanentId": "145880784742",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -3840,10 +3313,10 @@
         "https://voronezh.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
+        "whatsapp": "https://wa.me/79033660443",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+79033660443",
-        "whatsapp": "https://wa.me/79033660443"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "voronezh@aviastal.ru"
@@ -3851,19 +3324,14 @@
       "phones": [
         "+7 (473) 251-41-03"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/145880784742/p/edit/",
-      "companyId": "145880784742",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "146061799795",
+      "tycoonId": "64696649",
+      "permanentId": "146061799795",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3878,26 +3346,21 @@
         "https://bratsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (3952) 57-93-87"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/146061799795/p/edit/",
-      "companyId": "146061799795",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "146304944378",
+      "tycoonId": "64799298",
+      "permanentId": "146304944378",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3912,26 +3375,21 @@
         "https://abakan.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (391) 271-75-19"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/146304944378/p/edit/",
-      "companyId": "146304944378",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "146593084663",
+      "tycoonId": "64693169",
+      "permanentId": "146593084663",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3946,26 +3404,21 @@
         "https://khasavyurt.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/146593084663/p/edit/",
-      "companyId": "146593084663",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "146787226449",
+      "tycoonId": "64409681",
+      "permanentId": "146787226449",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -3980,26 +3433,21 @@
         "https://simferopol.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/146787226449/p/edit/",
-      "companyId": "146787226449",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "149054142964",
+      "tycoonId": "21424818",
+      "permanentId": "149054142964",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -4017,10 +3465,10 @@
         "https://izhevsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
+        "whatsapp": "https://wa.me/79641901898",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+79641901898",
-        "whatsapp": "https://wa.me/79641901898"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "izhevsk@aviastal.ru"
@@ -4028,19 +3476,14 @@
       "phones": [
         "+7 (3412) 32-30-84"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/149054142964/p/edit/",
-      "companyId": "149054142964",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "149057236343",
+      "tycoonId": "62146664",
+      "permanentId": "149057236343",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4055,26 +3498,21 @@
         "https://ivanovo.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/149057236343/p/edit/",
-      "companyId": "149057236343",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "150344629508",
+      "tycoonId": "22121268",
+      "permanentId": "150344629508",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4092,10 +3530,10 @@
         "https://aviastal.by/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+3755038886",
-        "whatsapp": "https://wa.me/+375445038886"
+        "whatsapp": "https://wa.me/+375445038886",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "minsk@aviastal.by"
@@ -4103,19 +3541,14 @@
       "phones": [
         "+375 44 503-88-86"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.9,
-      "url": "https://yandex.ru/sprav/150344629508/p/edit/",
-      "companyId": "150344629508",
-      "fromCard": true
+      "rating": 4.9
     },
     {
       "id": "151727487336",
+      "tycoonId": "64692390",
+      "permanentId": "151727487336",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4130,26 +3563,21 @@
         "https://mihaylovsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 411-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/151727487336/p/edit/",
-      "companyId": "151727487336",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "155117237103",
+      "tycoonId": "64692030",
+      "permanentId": "155117237103",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4164,26 +3592,21 @@
         "https://murom.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 556-39-74"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/155117237103/p/edit/",
-      "companyId": "155117237103",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "155261167159",
+      "tycoonId": "62820822",
+      "permanentId": "155261167159",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4198,26 +3621,21 @@
         "https://taganrog.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (863) 206-68-85"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/155261167159/p/edit/",
-      "companyId": "155261167159",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "155430858495",
+      "tycoonId": "62148958",
+      "permanentId": "155430858495",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4232,26 +3650,21 @@
         "https://ryazan.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4872) 38-54-05"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/155430858495/p/edit/",
-      "companyId": "155430858495",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "155950733851",
+      "tycoonId": "22192555",
+      "permanentId": "155950733851",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -4267,10 +3680,10 @@
         "https://gomel.aviastal.by/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/375(44)503-88-86"
+        "whatsapp": "https://wa.me/375(44)503-88-86",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "gomel@aviastal.by"
@@ -4278,19 +3691,14 @@
       "phones": [
         "+375 44 503-88-86"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Снабжение строительных объектов"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 5,
-      "url": "https://yandex.ru/sprav/155950733851/p/edit/",
-      "companyId": "155950733851",
-      "fromCard": true
+      "rating": 5
     },
     {
       "id": "156925990664",
+      "tycoonId": "64691860",
+      "permanentId": "156925990664",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4305,26 +3713,21 @@
         "https://nazran.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 411-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/156925990664/p/edit/",
-      "companyId": "156925990664",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "157804514684",
+      "tycoonId": "64686471",
+      "permanentId": "157804514684",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4339,26 +3742,21 @@
         "https://kostroma.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/157804514684/p/edit/",
-      "companyId": "157804514684",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "160113730203",
+      "tycoonId": "62755411",
+      "permanentId": "160113730203",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4373,26 +3771,21 @@
         "https://ulan-ude.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (3952) 57-93-87"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/160113730203/p/edit/",
-      "companyId": "160113730203",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "160454450350",
+      "tycoonId": "23397644",
+      "permanentId": "160454450350",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -4410,10 +3803,10 @@
         "https://khabarovsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79620583176"
+        "whatsapp": "https://wa.me/79620583176",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "khabarovsk@aviastal.ru"
@@ -4421,19 +3814,14 @@
       "phones": [
         "+7 (4212) 60-19-28"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.7,
-      "url": "https://yandex.ru/sprav/160454450350/p/edit/",
-      "companyId": "160454450350",
-      "fromCard": true
+      "rating": 4.7
     },
     {
       "id": "161554714522",
+      "tycoonId": "47693582",
+      "permanentId": "161554714522",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4452,10 +3840,10 @@
         "https://aviastal.az/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "whatsapp": "https://wa.me/994504295779",
         "telegram": "https://t.me/+994504295779",
-        "whatsapp": "https://wa.me/994504295779"
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "info@aviastal.az"
@@ -4464,19 +3852,14 @@
         "+994 12 311 01 28",
         "+994 12 003 27 00"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Цветные металлы",
-        "Чёрная металлургия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 5,
-      "url": "https://yandex.ru/sprav/161554714522/p/edit/",
-      "companyId": "161554714522",
-      "fromCard": true
+      "rating": 5
     },
     {
       "id": "163370360812",
+      "tycoonId": "62868464",
+      "permanentId": "163370360812",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4491,26 +3874,21 @@
         "https://syktyvkar.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (843) 216-39-74"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/163370360812/p/edit/",
-      "companyId": "163370360812",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "165529637568",
+      "tycoonId": "62868638",
+      "permanentId": "165529637568",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4525,26 +3903,21 @@
         "https://pervouralsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (343) 290-98-78"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/165529637568/p/edit/",
-      "companyId": "165529637568",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "165824565707",
+      "tycoonId": "64448686",
+      "permanentId": "165824565707",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4559,26 +3932,21 @@
         "https://makhachkala.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 411-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/165824565707/p/edit/",
-      "companyId": "165824565707",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "166287114965",
+      "tycoonId": "64447288",
+      "permanentId": "166287114965",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4593,26 +3961,21 @@
         "https://noginsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/166287114965/p/edit/",
-      "companyId": "166287114965",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "167777906638",
+      "tycoonId": "64686870",
+      "permanentId": "167777906638",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4627,26 +3990,21 @@
         "https://komsomolsk-na-amure.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 058-31-76"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/167777906638/p/edit/",
-      "companyId": "167777906638",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "167988713550",
+      "tycoonId": "64448843",
+      "permanentId": "167988713550",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4661,26 +4019,21 @@
         "https://magnitogorsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (351) 216-65-31"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/167988713550/p/edit/",
-      "companyId": "167988713550",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "169642969893",
+      "tycoonId": "64687334",
+      "permanentId": "169642969893",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4695,26 +4048,21 @@
         "https://kamensk-uralskiy.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/169642969893/p/edit/",
-      "companyId": "169642969893",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "169981171110",
+      "tycoonId": "64799913",
+      "permanentId": "169981171110",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4729,26 +4077,21 @@
         "https://penza.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (8412) 30-02-38"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/169981171110/p/edit/",
-      "companyId": "169981171110",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "171406614637",
+      "tycoonId": "64687116",
+      "permanentId": "171406614637",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4763,26 +4106,21 @@
         "https://kolomna.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviaproms",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviaproms"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/171406614637/p/edit/",
-      "companyId": "171406614637",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "171599463428",
+      "tycoonId": "64693105",
+      "permanentId": "171599463428",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4797,26 +4135,21 @@
         "https://kislovodsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviaproms",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviaproms"
       },
       "emails": [],
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/171599463428/p/edit/",
-      "companyId": "171599463428",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "171976239998",
+      "tycoonId": "23369127",
+      "permanentId": "171976239998",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4834,10 +4167,10 @@
         "https://tolyatti.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79033660443"
+        "whatsapp": "https://wa.me/79033660443",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "tolyatti@aviastal.ru"
@@ -4845,19 +4178,14 @@
       "phones": [
         "+7 (8482) 71-33-94"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.7,
-      "url": "https://yandex.ru/sprav/171976239998/p/edit/",
-      "companyId": "171976239998",
-      "fromCard": true
+      "rating": 4.7
     },
     {
       "id": "173595048561",
+      "tycoonId": "64799200",
+      "permanentId": "173595048561",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4872,26 +4200,21 @@
         "https://angarsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (3952) 57-93-87"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/173595048561/p/edit/",
-      "companyId": "173595048561",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "174009873119",
+      "tycoonId": "64797943",
+      "permanentId": "174009873119",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4912,19 +4235,14 @@
       "phones": [
         "+7 (831) 414-40-86"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/174009873119/p/edit/",
-      "companyId": "174009873119",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "174417502952",
+      "tycoonId": "62146482",
+      "permanentId": "174417502952",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4945,19 +4263,14 @@
       "phones": [
         "+7 (962) 686-43-38"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/174417502952/p/edit/",
-      "companyId": "174417502952",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "176952881022",
+      "tycoonId": "64409560",
+      "permanentId": "176952881022",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -4972,26 +4285,21 @@
         "https://smolensk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4872) 38-54-05"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Трубы и комплектующие",
-        "Резиновые и резинотехнические изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/176952881022/p/edit/",
-      "companyId": "176952881022",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "177008358894",
+      "tycoonId": "64446819",
+      "permanentId": "177008358894",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5006,26 +4314,21 @@
         "https://novocherkassk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (863) 206-68-85"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Резиновые и резинотехнические изделия",
-        "Крепёжные изделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/177008358894/p/edit/",
-      "companyId": "177008358894",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "177873923453",
+      "tycoonId": "33891281",
+      "permanentId": "177873923453",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5052,19 +4355,14 @@
       "phones": [
         "+996 223 96 76 88"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.9,
-      "url": "https://yandex.ru/sprav/177873923453/p/edit/",
-      "companyId": "177873923453",
-      "fromCard": true
+      "rating": 4.9
     },
     {
       "id": "178521513389",
+      "tycoonId": "64798761",
+      "permanentId": "178521513389",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5079,26 +4377,21 @@
         "https://balakovo.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (8452) 53-11-49"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/178521513389/p/edit/",
-      "companyId": "178521513389",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "179806306434",
+      "tycoonId": "64446982",
+      "permanentId": "179806306434",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5113,26 +4406,21 @@
         "https://noviy-urengoy.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (3462) 90-50-88"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/179806306434/p/edit/",
-      "companyId": "179806306434",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "180114208554",
+      "tycoonId": "64693367",
+      "permanentId": "180114208554",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5147,26 +4435,21 @@
         "https://groznyj.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/180114208554/p/edit/",
-      "companyId": "180114208554",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "180546993655",
+      "tycoonId": "64448929",
+      "permanentId": "180546993655",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5181,26 +4464,21 @@
         "https://lyubercy.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/180546993655/p/edit/",
-      "companyId": "180546993655",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "181620591868",
+      "tycoonId": "64447833",
+      "permanentId": "181620591868",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5215,26 +4493,21 @@
         "https://mytishchi.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/181620591868/p/edit/",
-      "companyId": "181620591868",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "181820002445",
+      "tycoonId": "64448616",
+      "permanentId": "181820002445",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5249,26 +4522,21 @@
         "https://miass.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 487-65-31"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/181820002445/p/edit/",
-      "companyId": "181820002445",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "185413871457",
+      "tycoonId": "7661756",
+      "permanentId": "185413871457",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -5284,10 +4552,10 @@
         "https://krasnodar.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79034116468"
+        "whatsapp": "https://wa.me/79034116468",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "krasnodar@aviastal.ru"
@@ -5295,19 +4563,14 @@
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/185413871457/p/edit/",
-      "companyId": "185413871457",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "186115546718",
+      "tycoonId": "7661863",
+      "permanentId": "186115546718",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -5325,10 +4588,10 @@
         "https://perm.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
+        "whatsapp": "https://wa.me/79641901898",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+79641901898",
-        "whatsapp": "https://wa.me/79641901898"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "perm@aviastal.ru"
@@ -5336,19 +4599,14 @@
       "phones": [
         "+7 (342) 259-18-98"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.6,
-      "url": "https://yandex.ru/sprav/186115546718/p/edit/",
-      "companyId": "186115546718",
-      "fromCard": true
+      "rating": 4.6
     },
     {
       "id": "186240749021",
+      "tycoonId": "25639288",
+      "permanentId": "186240749021",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -5367,8 +4625,8 @@
       ],
       "social": {
         "whatsapp": "https://wa.me/77006971612",
-        "telegram": "https://t.me/+77007704963",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "telegram": "https://t.me/+77007704963",
         "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
@@ -5377,19 +4635,14 @@
       "phones": [
         "+7 (700) 697-16-12"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 5,
-      "url": "https://yandex.ru/sprav/186240749021/p/edit/",
-      "companyId": "186240749021",
-      "fromCard": true
+      "rating": 5
     },
     {
       "id": "187296247479",
+      "tycoonId": "62520004",
+      "permanentId": "187296247479",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5404,26 +4657,21 @@
         "https://yoshkar-ola.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (843) 216-39-74"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/187296247479/p/edit/",
-      "companyId": "187296247479",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "193142813873",
+      "tycoonId": "64692760",
+      "permanentId": "193142813873",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5438,24 +4686,21 @@
         "https://kyzyl.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 058-31-76"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/193142813873/p/edit/",
-      "companyId": "193142813873",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "195049814303",
+      "tycoonId": "64799005",
+      "permanentId": "195049814303",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5470,26 +4715,21 @@
         "https://arhangelsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (812) 986-43-38"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/195049814303/p/edit/",
-      "companyId": "195049814303",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "195095211701",
+      "tycoonId": "64686296",
+      "permanentId": "195095211701",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5504,26 +4744,21 @@
         "https://kovrov.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/195095211701/p/edit/",
-      "companyId": "195095211701",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "195429331944",
+      "tycoonId": "22069504",
+      "permanentId": "195429331944",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5541,10 +4776,10 @@
         "https://omsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+79620583176",
-        "whatsapp": "https://wa.me/79620583176"
+        "whatsapp": "https://wa.me/79620583176",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "omsk@aviastal.ru"
@@ -5552,19 +4787,14 @@
       "phones": [
         "+7 (3812) 63-31-76"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Чёрная металлургия",
-        "Цветные металлы"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.6,
-      "url": "https://yandex.ru/sprav/195429331944/p/edit/",
-      "companyId": "195429331944",
-      "fromCard": true
+      "rating": 4.6
     },
     {
       "id": "196853454779",
+      "tycoonId": "62146904",
+      "permanentId": "196853454779",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5579,26 +4809,21 @@
         "https://vladimir.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/196853454779/p/edit/",
-      "companyId": "196853454779",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "203391044204",
+      "tycoonId": "64410579",
+      "permanentId": "203391044204",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5613,26 +4838,21 @@
         "https://rybinsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4852) 66-29-46"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/203391044204/p/edit/",
-      "companyId": "203391044204",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "207062873730",
+      "tycoonId": "64410449",
+      "permanentId": "207062873730",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5647,26 +4867,21 @@
         "https://salavat.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (347) 299-66-54"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/207062873730/p/edit/",
-      "companyId": "207062873730",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "210219931438",
+      "tycoonId": "64699910",
+      "permanentId": "210219931438",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5681,26 +4896,21 @@
         "https://dolgoprudnyj.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/210219931438/p/edit/",
-      "companyId": "210219931438",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "210578955949",
+      "tycoonId": "64696706",
+      "permanentId": "210578955949",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5715,26 +4925,21 @@
         "https://blagoveshchensk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4212) 60-19-28"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/210578955949/p/edit/",
-      "companyId": "210578955949",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "211624166545",
+      "tycoonId": "64692882",
+      "permanentId": "211624166545",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5749,26 +4954,21 @@
         "https://kopeysk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (351) 216-65-31"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/211624166545/p/edit/",
-      "companyId": "211624166545",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "211980978304",
+      "tycoonId": "64689120",
+      "permanentId": "211980978304",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5783,26 +4983,21 @@
         "https://seversk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 058-31-76"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/211980978304/p/edit/",
-      "companyId": "211980978304",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "214794015373",
+      "tycoonId": "64799708",
+      "permanentId": "214794015373",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5817,26 +5012,21 @@
         "https://stavropol.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (8652) 69-20-29"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/214794015373/p/edit/",
-      "companyId": "214794015373",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "215914235035",
+      "tycoonId": "64410091",
+      "permanentId": "215914235035",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5851,26 +5041,21 @@
         "https://sevastopol.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/215914235035/p/edit/",
-      "companyId": "215914235035",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "217061179891",
+      "tycoonId": "64449214",
+      "permanentId": "217061179891",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5885,26 +5070,21 @@
         "https://krasnogorsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/217061179891/p/edit/",
-      "companyId": "217061179891",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "217391444190",
+      "tycoonId": "64443851",
+      "permanentId": "217391444190",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5919,26 +5099,21 @@
         "https://orsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (3532) 26-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/217391444190/p/edit/",
-      "companyId": "217391444190",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "218198490173",
+      "tycoonId": "64446045",
+      "permanentId": "218198490173",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5953,26 +5128,21 @@
         "https://obninsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (4872) 38-54-05"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/218198490173/p/edit/",
-      "companyId": "218198490173",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "220756427179",
+      "tycoonId": "64688679",
+      "permanentId": "220756427179",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -5987,26 +5157,21 @@
         "https://zhukovskij.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 366-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/220756427179/p/edit/",
-      "companyId": "220756427179",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "222339794753",
+      "tycoonId": "64444295",
+      "permanentId": "222339794753",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -6021,26 +5186,21 @@
         "https://odincovo.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/222339794753/p/edit/",
-      "companyId": "222339794753",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "223482586154",
+      "tycoonId": "24494360",
+      "permanentId": "223482586154",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -6058,10 +5218,10 @@
         "https://chelyabinsk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79624876531"
+        "whatsapp": "https://wa.me/79624876531",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "chelyabinsk@aviastal.ru"
@@ -6069,19 +5229,14 @@
       "phones": [
         "+7 (351) 216-65-31"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.5,
-      "url": "https://yandex.ru/sprav/223482586154/p/edit/",
-      "companyId": "223482586154",
-      "fromCard": true
+      "rating": 4.5
     },
     {
       "id": "223821497352",
+      "tycoonId": "64441695",
+      "permanentId": "223821497352",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -6096,26 +5251,21 @@
         "https://ramenskoe.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/223821497352/p/edit/",
-      "companyId": "223821497352",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "223933585677",
+      "tycoonId": "64695694",
+      "permanentId": "223933585677",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -6130,26 +5280,21 @@
         "https://cherkessk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (861) 944-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/223933585677/p/edit/",
-      "companyId": "223933585677",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "230060176088",
+      "tycoonId": "25640364",
+      "permanentId": "230060176088",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -6165,9 +5310,9 @@
         "https://semej.aviastal.kz/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/77006971612",
         "telegram": "https://t.me/+7700-770-49-63",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "whatsapp": "https://wa.me/77006971612",
         "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
@@ -6176,19 +5321,14 @@
       "phones": [
         "+7 (700) 697-16-12"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 5,
-      "url": "https://yandex.ru/sprav/230060176088/p/edit/",
-      "companyId": "230060176088",
-      "fromCard": true
+      "rating": 5
     },
     {
       "id": "231117775995",
+      "tycoonId": "23691050",
+      "permanentId": "231117775995",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -6206,11 +5346,11 @@
         "https://tula.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
+        "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
+        "whatsapp": "https://wa.me/79033660443",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "ok": "https://ok.ru/group/70000048012012",
-        "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79033660443"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "tula@aviastal.ru"
@@ -6218,19 +5358,14 @@
       "phones": [
         "+7 (4872) 38-54-05"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.6,
-      "url": "https://yandex.ru/sprav/231117775995/p/edit/",
-      "companyId": "231117775995",
-      "fromCard": true
+      "rating": 4.6
     },
     {
       "id": "232542467240",
+      "tycoonId": "64800180",
+      "permanentId": "232542467240",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -6249,17 +5384,14 @@
       "phones": [
         "+7 (4742) 37-70-18"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/232542467240/p/edit/",
-      "companyId": "232542467240",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "233219184733",
+      "tycoonId": "62147718",
+      "permanentId": "233219184733",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -6274,26 +5406,21 @@
         "https://nizhnij-tagil.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (343) 290-98-78"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/233219184733/p/edit/",
-      "companyId": "233219184733",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "233837985761",
+      "tycoonId": "64687956",
+      "permanentId": "233837985761",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -6308,26 +5435,21 @@
         "https://zlatoust.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 487-65-31"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/233837985761/p/edit/",
-      "companyId": "233837985761",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "235535561738",
+      "tycoonId": "22192672",
+      "permanentId": "235535561738",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -6345,10 +5467,10 @@
         "https://grodno.aviastal.by/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/375(44)503-88-86"
+        "whatsapp": "https://wa.me/375(44)503-88-86",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "grodno@aviastal.by"
@@ -6356,19 +5478,14 @@
       "phones": [
         "+375 44 503-88-86"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Снабжение строительных объектов"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.7,
-      "url": "https://yandex.ru/sprav/235535561738/p/edit/",
-      "companyId": "235535561738",
-      "fromCard": true
+      "rating": 4.7
     },
     {
       "id": "15311018620",
+      "tycoonId": "62820547",
+      "permanentId": "15311018620",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -6383,26 +5500,21 @@
         "https://tambov.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.com/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.com/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (473) 251-41-03"
       ],
-      "rubrics": [
-        "Металлоизделия",
-        "Металлообработка",
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/15311018620/p/edit/",
-      "companyId": "15311018620",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "38275268267",
+      "tycoonId": "62868580",
+      "permanentId": "38275268267",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -6417,26 +5529,21 @@
         "https://staryj-oskol.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.com/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.com/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (473) 251-41-03"
       ],
-      "rubrics": [
-        "Металлоизделия",
-        "Металлообработка",
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/38275268267/p/edit/",
-      "companyId": "38275268267",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "74035974608",
+      "tycoonId": "25755100",
+      "permanentId": "74035974608",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -6463,19 +5570,14 @@
       "phones": [
         "8 (800) 700-36-89"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлоконструкции"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/74035974608/p/edit/",
-      "companyId": "74035974608",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "81388190501",
+      "tycoonId": "25755305",
+      "permanentId": "81388190501",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -6493,8 +5595,8 @@
         "https://lugansk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.com/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.com/aviapromstal"
       },
       "emails": [
         "lugansk@aviastal.ru"
@@ -6502,19 +5604,14 @@
       "phones": [
         "8 (800) 700-36-89"
       ],
-      "rubrics": [
-        "Металлоизделия",
-        "Снабжение строительных объектов",
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/81388190501/p/edit/",
-      "companyId": "81388190501",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "110682934398",
+      "tycoonId": "25756934",
+      "permanentId": "110682934398",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -6542,19 +5639,14 @@
       "phones": [
         "8 (800) 700-36-89"
       ],
-      "rubrics": [
-        "Снабжение строительных объектов",
-        "Металлоизделия",
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/110682934398/p/edit/",
-      "companyId": "110682934398",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "237240426416",
+      "tycoonId": "22190783",
+      "permanentId": "237240426416",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -6572,9 +5664,9 @@
         "https://brest.aviastal.by/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
+        "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
-        "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy"
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "brest@aviastal.by"
@@ -6582,19 +5674,14 @@
       "phones": [
         "+375 44 503-88-86"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Снабжение строительных объектов"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.9,
-      "url": "https://yandex.ru/sprav/237240426416/p/edit/",
-      "companyId": "237240426416",
-      "fromCard": true
+      "rating": 4.9
     },
     {
       "id": "238013877655",
+      "tycoonId": "64690031",
+      "permanentId": "238013877655",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -6609,26 +5696,21 @@
         "https://kamyshin.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (903) 411-64-68"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/238013877655/p/edit/",
-      "companyId": "238013877655",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "238448811690",
+      "tycoonId": "21461411",
+      "permanentId": "238448811690",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -6646,10 +5728,10 @@
         "https://barnaul.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79620583176"
+        "whatsapp": "https://wa.me/79620583176",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "barnaul@aviastal.ru"
@@ -6657,19 +5739,14 @@
       "phones": [
         "+7 (3852) 25-26-58"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Металлоконструкции"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.8,
-      "url": "https://yandex.ru/sprav/238448811690/p/edit/",
-      "companyId": "238448811690",
-      "fromCard": true
+      "rating": 4.8
     },
     {
       "id": "239092825899",
+      "tycoonId": "64797707",
+      "permanentId": "239092825899",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -6684,24 +5761,21 @@
         "https://dolgoprudnyj.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/239092825899/p/edit/",
-      "companyId": "239092825899",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "241846359119",
+      "tycoonId": "64798114",
+      "permanentId": "241846359119",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -6716,26 +5790,21 @@
         "https://elektrostal.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (495) 755-36-18"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/241846359119/p/edit/",
-      "companyId": "241846359119",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "241912802785",
+      "tycoonId": "22885340",
+      "permanentId": "241912802785",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -6753,10 +5822,10 @@
         "https://spb.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79626864338"
+        "whatsapp": "https://wa.me/79626864338",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "spb@aviastal.ru"
@@ -6764,19 +5833,14 @@
       "phones": [
         "+7 (812) 986-43-38"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.7,
-      "url": "https://yandex.ru/sprav/241912802785/p/edit/",
-      "companyId": "241912802785",
-      "fromCard": true
+      "rating": 4.7
     },
     {
       "id": "242060204854",
+      "tycoonId": "64688986",
+      "permanentId": "242060204854",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -6791,26 +5855,21 @@
         "https://ussuriysk.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.ru/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (962) 058-31-76"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоизделия",
-        "Металлообработка"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/242060204854/p/edit/",
-      "companyId": "242060204854",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "244865820252",
+      "tycoonId": "16677943",
+      "permanentId": "244865820252",
       "type": "ordinal",
       "publishing": "publish",
       "name": "АвиаПромСталь",
@@ -6827,10 +5886,10 @@
         "https://tyumen.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.ru/public214715361",
-        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
         "telegram": "https://t.me/+E7Cj9KKMp7k3MmMy",
-        "whatsapp": "https://wa.me/79634523239"
+        "whatsapp": "https://wa.me/79634523239",
+        "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
         "tyumen@aviastal.ru"
@@ -6838,19 +5897,14 @@
       "phones": [
         "+7 (3452) 53-32-39"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлообработка",
-        "Металлоконструкции"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.7,
-      "url": "https://yandex.ru/sprav/244865820252/p/edit/",
-      "companyId": "244865820252",
-      "fromCard": true
+      "rating": 4.7
     },
     {
       "id": "53237476004",
+      "tycoonId": "15355410",
+      "permanentId": "53237476004",
       "type": "ordinal",
       "publishing": "closed",
       "name": "АвиаПромСталь",
@@ -6869,17 +5923,14 @@
       "phones": [
         "+7 (8452) 53-11-49"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/53237476004/p/edit/",
-      "companyId": "53237476004",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "55923237279",
+      "tycoonId": "15355084",
+      "permanentId": "55923237279",
       "type": "ordinal",
       "publishing": "closed",
       "name": "АвиаПромСталь",
@@ -6898,17 +5949,14 @@
       "phones": [
         "+7 (3532) 26-04-43"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/55923237279/p/edit/",
-      "companyId": "55923237279",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "60385989366",
+      "tycoonId": "15354598",
+      "permanentId": "60385989366",
       "type": "ordinal",
       "publishing": "closed",
       "name": "АвиаПромСталь",
@@ -6927,17 +5975,14 @@
       "phones": [
         "+7 (3812) 63-31-76"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/60385989366/p/edit/",
-      "companyId": "60385989366",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "83132541002",
+      "tycoonId": "15351701",
+      "permanentId": "83132541002",
       "type": "ordinal",
       "publishing": "closed",
       "name": "АвиаПромСталь",
@@ -6956,17 +6001,14 @@
       "phones": [
         "+7 (843) 216-39-74"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/83132541002/p/edit/",
-      "companyId": "83132541002",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "121058922349",
+      "tycoonId": "15351056",
+      "permanentId": "121058922349",
       "type": "ordinal",
       "publishing": "closed",
       "name": "АвиаПромСталь",
@@ -6983,17 +6025,14 @@
       "phones": [
         "+7 (3852) 25-26-58"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/121058922349/p/edit/",
-      "companyId": "121058922349",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "158302597975",
+      "tycoonId": "15352030",
+      "permanentId": "158302597975",
       "type": "ordinal",
       "publishing": "closed",
       "name": "АвиаПромСталь",
@@ -7012,17 +6051,14 @@
       "phones": [
         "+7 (383) 255-73-36"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/158302597975/p/edit/",
-      "companyId": "158302597975",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "201105717237",
+      "tycoonId": "15355863",
+      "permanentId": "201105717237",
       "type": "ordinal",
       "publishing": "closed",
       "name": "АвиаПромСталь",
@@ -7041,17 +6077,14 @@
       "phones": [
         "+7 (3822) 22-65-08"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/201105717237/p/edit/",
-      "companyId": "201105717237",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "204922049893",
+      "tycoonId": "64696960",
+      "permanentId": "204922049893",
       "type": "ordinal",
       "publishing": "publish",
       "name": "Авиапромсталь",
@@ -7066,26 +6099,21 @@
         "https://belgorod.aviastal.ru/"
       ],
       "social": {
-        "vkontakte": "https://vk.com/aviapromstal",
-        "ok": "https://ok.ru/group/70000048012012"
+        "ok": "https://ok.ru/group/70000048012012",
+        "vkontakte": "https://vk.com/aviapromstal"
       },
       "emails": [],
       "phones": [
         "+7 (473) 251-41-03"
       ],
-      "rubrics": [
-        "Металлоизделия",
-        "Металлообработка",
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/204922049893/p/edit/",
-      "companyId": "204922049893",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "2553692457",
+      "tycoonId": "25638664",
+      "permanentId": "2553692457",
       "type": "ordinal",
       "publishing": "temporarily_closed",
       "name": "АвиаПромСталь",
@@ -7103,9 +6131,9 @@
         "https://kostanay.aviastal.kz/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+77007704963",
-        "telegram": "https://t.me/+7007704963",
         "youtube": "https://www.youtube.com/channel/UCpbMhWfoq7AtnxpGW19_-Xw",
+        "telegram": "https://t.me/+7007704963",
+        "whatsapp": "https://wa.me/+77007704963",
         "vkontakte": "https://vk.ru/public214715361"
       },
       "emails": [
@@ -7115,19 +6143,14 @@
         "+7 (700) 697-16-12",
         "+7 (351) 277-75-35"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 5,
-      "url": "https://yandex.ru/sprav/2553692457/p/edit/",
-      "companyId": "2553692457",
-      "fromCard": true
+      "rating": 5
     },
     {
       "id": "95988052233",
+      "tycoonId": "52752197",
+      "permanentId": "95988052233",
       "type": "ordinal",
       "publishing": "closed",
       "name": "АвиаПромСталь",
@@ -7146,17 +6169,14 @@
       "phones": [
         "+7 (700) 697-16-12"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/95988052233/p/edit/",
-      "companyId": "95988052233",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "186550828034",
+      "tycoonId": "15356407",
+      "permanentId": "186550828034",
       "type": "ordinal",
       "publishing": "closed",
       "name": "АвиаПромСталь",
@@ -7178,17 +6198,14 @@
       "phones": [
         "+7 (351) 216-65-31"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 4.4,
-      "url": "https://yandex.ru/sprav/186550828034/p/edit/",
-      "companyId": "186550828034",
-      "fromCard": true
+      "rating": 4.4
     },
     {
       "id": "189291509100",
+      "tycoonId": "51435862",
+      "permanentId": "189291509100",
       "type": "ordinal",
       "publishing": "closed",
       "name": "Авиапромсталь",
@@ -7214,19 +6231,14 @@
       "phones": [
         "+996 223 96 76 88"
       ],
-      "rubrics": [
-        "Металлоконструкции",
-        "Металлопрокат",
-        "Снабжение строительных объектов"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/189291509100/p/edit/",
-      "companyId": "189291509100",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "223496976072",
+      "tycoonId": "15351965",
+      "permanentId": "223496976072",
       "type": "ordinal",
       "publishing": "closed",
       "name": "АвиаПромСталь",
@@ -7245,17 +6257,14 @@
       "phones": [
         "+7 (3843) 20-99-82"
       ],
-      "rubrics": [
-        "Металлопрокат"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/223496976072/p/edit/",
-      "companyId": "223496976072",
-      "fromCard": true
+      "rating": 0
     },
     {
       "id": "243202761081",
+      "tycoonId": "7661741",
+      "permanentId": "243202761081",
       "type": "ordinal",
       "publishing": "closed",
       "name": "АвиаПромСталь",
@@ -7275,16 +6284,9 @@
       "phones": [
         "+7 (3842) 24-02-57"
       ],
-      "rubrics": [
-        "Металлопрокат",
-        "Металлоконструкции",
-        "Металлоизделия"
-      ],
+      "rubrics": [],
       "noAccess": false,
-      "rating": 0,
-      "url": "https://yandex.ru/sprav/243202761081/p/edit/",
-      "companyId": "243202761081",
-      "fromCard": true
+      "rating": 0
     }
   ]
 }

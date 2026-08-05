@@ -53,6 +53,7 @@ SLOW_WINDOW = 3              # окно детектора «Яндекс тор
 SLOW_THRESHOLD_MS = 60_000
 COOLDOWN_PAUSE_S = 30
 PROTOCOL_FAIL_LIMIT = 3      # столько подряд протокольных падений = браузер завис
+LIMIT_GIVE_UP = 2            # столько отказов Gemini по лимиту подряд = хватит пробовать
 
 # ─── виды прогонов ──────────────────────────────────────────────────
 # Прогоны разных видов идут параллельно, поэтому у каждого свои файлы:
@@ -1114,7 +1115,9 @@ def start_actualize(project_id: str, headless: bool = True, delay_s: float = 2.5
         return True, f"Актуализация запущена: {total} городов{tail}."
 
 
-def _reviews_for_city(project_id: str, page, task: dict, prompt: str) -> dict:
+def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
+                      should_stop=None, budget: dict | None = None,
+                      run_id: str = "") -> dict:
     """
     Шаг по отзывам для одного города: прочитать раздел отзывов, отобрать
     неотвеченные и написать черновики. Ничего не публикует.
@@ -1146,9 +1149,15 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str) -> dict:
         return out
 
     def add(item, status, draft="", note=""):
-        out["items"].append(rv.as_queue_item(
+        # runId помечает, ЧЬИ это отзывы. Без метки страница показывала
+        # разобранное вперемешку со всеми прошлыми прогонами: заказчик только
+        # собрала новые, а видела «3 отправленных» с какого-то прошлого раза.
+        row = rv.as_queue_item(
             item, project_id=project_id, city=city, company_url=company_url,
-            reviews_url=page_url, status=status, draft=draft, note=note))
+            reviews_url=page_url, status=status, draft=draft, note=note)
+        if run_id:
+            row["runId"] = run_id
+        out["items"].append(row)
 
     for item in box["no_text"]:
         pass  # одни звёзды без текста – в очередь не берём (решение заказчика)
@@ -1166,10 +1175,26 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str) -> dict:
             add(item, rv.NO_DRAFT, note="промпт проекта не задан – впишите его в «Настройках»")
             out["noDraft"] += 1
             continue
+        # Остановку слушаем МЕЖДУ ЧЕРНОВИКАМИ, а не только между городами.
+        # Раньше проверка стояла лишь на границе города, и на карточке с
+        # десятком отзывов «Остановить» отзывалось минут через пять: каждый
+        # черновик – до полутора минут. Заказчик так и сказала: «нажала, но
+        # ничего не произошло, как будто надо перезагрузить страницу».
+        if should_stop and should_stop():
+            add(item, rv.NO_DRAFT, note="прогон остановлен – черновик не писали")
+            out["noDraft"] += 1
+            continue
+        # Лимит Gemini уже исчерпан – новую попытку не делаем вовсе. Смысла в
+        # ней нет: ответ будет тот же, а полторы минуты потеряны. Отзыв
+        # остаётся в очереди, черновик допишется кнопкой «Переписать все».
+        if budget and budget.get("giveUp"):
+            add(item, rv.NO_DRAFT, note="лимит Gemini исчерпан – нажмите «Переписать все» позже")
+            out["noDraft"] += 1
+            continue
         try:
             import llm
             t0 = time.time()
-            draft = rv.clean_draft(llm.generate(rv.build_prompt(prompt, item)))
+            draft = rv.clean_draft(llm.generate(rv.build_prompt(prompt, item)), project_id)
             add(item, rv.DRAFTED, draft=draft)
             out["drafted"] += 1
             # Замер в лог: без него «долго генерирует» не отличить от
@@ -1187,10 +1212,24 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str) -> dict:
                             f"(модель {st.get('model') or '?'}, запросов {st.get('calls', 1)}, "
                             f"{keys_note}, темп {st.get('pace', '?')} запросов/мин) – "
                             "ждём своей очереди у Gemini")
+            if budget is not None:
+                budget["limitStreak"] = 0
         except Exception as e:  # noqa: BLE001 – причина уже человеческая
             add(item, rv.NO_DRAFT, note=str(e))
             out["noDraft"] += 1
             _append_log(project_id, "WARN", f"  💬 {city}: черновик не вышел – {e}")
+            # Подряд упёрлись в лимит – дальше не пробуем до конца прогона.
+            # В логе это выглядело так: четыре одинаковых отказа по одному
+            # городу, шесть минут впустую. Заказчик спросила прямо: «какой
+            # смысл?». Смысла нет – квота за минуту сама не появится.
+            if budget is not None and getattr(e, "is_limit", False):
+                budget["limitStreak"] = budget.get("limitStreak", 0) + 1
+                if budget["limitStreak"] >= LIMIT_GIVE_UP and not budget.get("giveUp"):
+                    budget["giveUp"] = True
+                    _append_log(project_id, "WARN",
+                                "  💬 ЛИМИТ · Gemini больше не отвечает по квоте – черновики "
+                                "до конца прогона не пишем, отзывы всё равно собираем. "
+                                "Допишутся кнопкой «Переписать все», когда квота вернётся.")
 
     bits = [f"без ответа {out['found']}"]
     if out["drafted"]:
@@ -1221,6 +1260,10 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
     counters = {"actualized": 0, "notNeeded": 0, "failed": 0}
     review_totals = {"found": 0, "drafted": 0, "needsHuman": 0, "noDraft": 0}
     collected: list[dict] = []
+    # Общий на весь прогон счётчик отказов Gemini по лимиту. Упёрлись дважды
+    # подряд – черновики до конца прогона не пишем: квота за минуту сама не
+    # вернётся, а каждая попытка стоит до полутора минут.
+    review_budget: dict = {"limitStreak": 0, "giveUp": False}
     total = sum(len(cfg.get("tasks") or []) for _, cfg in files)
     stopped = False
     processed = 0
@@ -1239,6 +1282,17 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
         if with_reviews:
             payload["withReviews"] = True
             payload["reviewTotals"] = dict(review_totals)
+            # Сами отзывы кладём в отчёт, а не только их количество. Иначе
+            # выгрузить прогон целиком нельзя: отправка идёт ПОСЛЕ прогона,
+            # и что с каждым ответом стало, знает только очередь. Отчёт
+            # хранит найденное, очередь – случившееся; при выгрузке одно
+            # дополняется другим, и получается общий отчёт с отзывами.
+            payload["reviews"] = [
+                {k: it.get(k) for k in
+                 ("reviewId", "city", "author", "rating", "text", "draft",
+                  "status", "note", "reviewsUrl")}
+                for it in collected
+            ]
         _write_atomic(report_path, json.dumps(payload, ensure_ascii=False, indent=2))
         if state != "in-progress":
             _snapshot_log(project_id, report_path)
@@ -1297,7 +1351,8 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                 # и не должен влиять на её статус, что бы там ни случилось.
                 if with_reviews:
                     try:
-                        rr = _reviews_for_city(project_id, browser.page, task, prompt)
+                        rr = _reviews_for_city(project_id, browser.page, task, prompt,
+                                               should_stop, review_budget, run_id)
                     except Exception as e:  # noqa: BLE001
                         rr = {"items": [], "summary": f"сбой шага отзывов: {e}",
                               "found": 0, "drafted": 0, "needsHuman": 0, "noDraft": 0}

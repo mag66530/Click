@@ -2189,6 +2189,301 @@ def test_review_batch() -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+def test_reviews_limit_and_stop() -> None:
+    """
+    Упёрлись в лимит Gemini – хватит пробовать. И «Остановить» слышно сразу.
+
+    Два живых наблюдения заказчика. Первое: в логе по одному городу подряд
+    четыре одинаковых отказа «Gemini придерживает запросы по лимиту», шесть
+    минут впустую. Вопрос был прямой: «какой смысл?». Смысла нет – квота за
+    минуту сама не вернётся, а каждая попытка стоит до полутора минут.
+
+    Второе: «я остановила прогон, но ничего не произошло, как будто надо
+    перезагрузить страницу». Остановка проверялась только на границе города,
+    а карточка с десятком отзывов обрабатывается минутами.
+
+    Важно: отзывы при этом собираются ВСЕ – теряется только черновик, и он
+    дописывается потом кнопкой «Переписать все».
+    """
+    import llm
+    import runner as r
+    import reviews as rv
+    import yb_playwright as yb
+    print("\n▸ Лимит Gemini и остановка прогона")
+
+    items = [{"id": f"r{n}", "rating": 5, "full_text": "Хороший поставщик, спасибо.",
+              "author": {"user": "Иван"}} for n in range(8)]
+    keep = (llm.generate, yb.read_reviews, yb.build_reviews_url)
+    yb.read_reviews = lambda page, url, navigate=True: {
+        "ok": True, "items": items, "total": len(items), "shown": len(items), "url": url}
+    yb.build_reviews_url = lambda a, b: "https://yandex.ru/sprav/1/p/edit/reviews/"
+    task = {"cityName": "Шымкент", "companyId": "1"}
+
+    try:
+        # ── Лимит: после двух отказов подряд к Gemini больше не ходим ──
+        calls = {"n": 0}
+
+        def limited(prompt):
+            calls["n"] += 1
+            raise llm.LlmError("Gemini придерживает запросы по лимиту.", is_limit=True)
+
+        llm.generate = limited
+        budget = {"limitStreak": 0, "giveUp": False}
+        out = r._reviews_for_city("APS", object(), task, "промпт", None, budget)
+        eq("к Gemini сходили только дважды, а не восемь раз", calls["n"], r.LIMIT_GIVE_UP)
+        check("прогон понял, что дальше бесполезно", budget["giveUp"])
+        eq("но отзывы собраны ВСЕ", out["found"], 8)
+        check("остальным честно сказано, почему черновика нет",
+              "Переписать все" in (out["items"][-1].get("note") or ""),
+              out["items"][-1].get("note"))
+
+        # Сдались на одном городе – на следующем даже не пробуем.
+        calls["n"] = 0
+        out2 = r._reviews_for_city("APS", object(), {"cityName": "Тараз", "companyId": "2"},
+                                   "промпт", None, budget)
+        eq("на следующем городе запросов уже ноль", calls["n"], 0)
+        eq("и его отзывы тоже собраны", out2["found"], 8)
+
+        # Обычная поломка (не лимит) сдаваться не заставляет: мало ли, сеть моргнула.
+        def broken(prompt):
+            calls["n"] += 1
+            raise llm.LlmError("Gemini вернул пустой ответ.")
+
+        llm.generate = broken
+        budget2 = {"limitStreak": 0, "giveUp": False}
+        calls["n"] = 0
+        r._reviews_for_city("APS", object(), task, "промпт", None, budget2)
+        check("не лимит – пробуем каждый отзыв", not budget2["giveUp"])
+        eq("то есть все восемь", calls["n"], 8)
+
+        # ── Остановка слышна между черновиками, а не только между городами ──
+        calls["n"] = 0
+        llm.generate = lambda prompt: "Уважаемый Иван!\n\nСпасибо."
+        stop_after = {"n": 0}
+
+        def should_stop():
+            stop_after["n"] += 1
+            return stop_after["n"] > 3      # на четвёртом отзыве жмут «Остановить»
+
+        out3 = r._reviews_for_city("APS", object(), task, "промпт", should_stop,
+                                   {"limitStreak": 0, "giveUp": False})
+        check("после остановки черновики не пишутся", calls["n"] <= 3, calls["n"])
+        eq("а отзывы всё равно все в очереди", out3["found"], 8)
+        check("и видно, что это была остановка",
+              any("останов" in (i.get("note") or "") for i in out3["items"]))
+    finally:
+        llm.generate, yb.read_reviews, yb.build_reviews_url = keep
+
+
+# ════════════════════════════════════════════════════════════════════
+def test_look_and_order() -> None:
+    """
+    Вид «Актуализации»: сверху прогон, снизу ответы, тема светлая.
+
+    Заказчик: «подвинем эту штуку наверх, а то не видно сколько и что»,
+    «короче всё что на скриншоте 2 подвинуть вниз», «пусть при заходе светлая
+    тема будет, а не тёмная автоматом».
+    """
+    import inspect
+    import streamlit_app as app
+    import ui_theme as T
+    print("\n▸ Порядок блоков и тема")
+
+    src = inspect.getsource(app.tab_actualize)
+    launch = src.find("btn-actualize")
+    queue = src.rfind("reviews_queue_block")
+    check("очередь ответов идёт ПОСЛЕ запуска прогона", 0 < launch < queue,
+          f"запуск {launch}, очередь {queue}")
+
+    # Без входа в Яндекс раздел выходит раньше времени – очередь обязана
+    # показаться и там, иначе готовые черновики просто исчезают с экрана.
+    head = src[:src.find("Сначала войдите в Яндекс")]
+    tail = src[src.find("Сначала войдите в Яндекс"):]
+    check("без входа в Яндекс очередь тоже показывается",
+          "reviews_queue_block" in tail.split("return")[0], tail[:200])
+    check("и это не единственное её место", "reviews_queue_block" in src[len(head):])
+
+    eq("при заходе тема светлая", app.theme(), "light")
+    cfg = Path(".streamlit/config.toml").read_text(encoding="utf-8")
+    check("и Streamlit до нашего CSS рисует светлым", 'base = "light"' in cfg, cfg[:200])
+    check("цвет фона совпадает с палитрой LIGHT",
+          T.LIGHT["bg"] in cfg, f'{T.LIGHT["bg"]} не найден')
+
+    # Плашки сводки – тем же видом, что в отчёте.
+    row = T.stat_row([("Черновик готов", 2, "ok"), ("Вам на ответ", 1, "warn")])
+    check("плашки собраны классами отчёта",
+          'class="report-summary"' in row and 'class="report-stat ok"' in row, row[:120])
+    eq("пустой набор не рисует пустую рамку", T.stat_row([]), "")
+
+    # Лог сворачивается всегда, в том числе пока прогон идёт.
+    live = inspect.getsource(app._render_live_panel)
+    check("лог прогона убирается в раскрывашку",
+          "expander" in live and "expanded=running" in live, "")
+
+
+# ════════════════════════════════════════════════════════════════════
+def test_assortment_verbatim() -> None:
+    """
+    Ассортиментная фраза уходит в Яндекс ДОСЛОВНО.
+
+    Живой случай: один опубликованный ответ ушёл со строкой «трубы, armatura
+    – собираем и отгружаем без задержек». Слово внезапно оказалось латиницей,
+    и в трёх десятках ответов заказчик этого не увидела.
+
+    Сплошной запрет латиницы поставить нельзя – в металлоторговле законно
+    встречаются AISI 304, DIN, A2. Зато фраза известна заранее, поэтому
+    чиним именно её.
+    """
+    import projects_data as pdata
+    import reviews as rv
+    print("\n▸ Ассортиментная фраза")
+
+    for pid, want in pdata.REVIEW_ASSORTMENT.items():
+        check(f"{pid}: фраза есть и в промпте проекта",
+              want[:40] in pdata.REVIEW_PROMPTS.get(pid, ""), want[:40])
+
+    want = pdata.REVIEW_ASSORTMENT["APS"]
+    head, tail = "Уважаемый Бобров!\n\nБлагодарим за отзыв.", "С уважением, команда Авиапромсталь."
+
+    spoiled = want.replace("арматура", "armatura")
+    out = rv.clean_draft(f"{head}\n\n{spoiled}\n\n{tail}", "APS")
+    check("латиница внутри фразы исправлена", want in out and "armatura" not in out)
+
+    # Модель может слегка переписать фразу своими словами – тоже возвращаем эталон.
+    reworded = want.replace("собираем и отгружаем без задержек", "отгружаем без задержек")
+    out = rv.clean_draft(f"{head}\n\n{reworded}\n\n{tail}", "APS")
+    check("слегка переписанная фраза возвращена к эталону", want in out)
+
+    # А посторонние абзацы не трогаем: в них законно бывает латиница.
+    keep = "Уважаемый Иван!\n\nВозим AISI 304 и DIN 933, всё по ГОСТу.\n\nС уважением."
+    eq("посторонний текст не подменяется", rv.clean_draft(keep, "APS"), keep)
+
+    # Абзац, ничем не похожий на фразу, эталоном не становится.
+    other = f"{head}\n\nДоставка по городу бесплатная.\n\n{tail}"
+    check("непохожий абзац остался как был", want not in rv.clean_draft(other, "APS"))
+
+    # Без проекта поведение прежнее – чинить нечего, подменять нечем.
+    eq("без проекта фраза не трогается",
+       rv.clean_draft(f"{head}\n\n{spoiled}\n\n{tail}"), f"{head}\n\n{spoiled}\n\n{tail}")
+
+
+# ════════════════════════════════════════════════════════════════════
+def test_report_with_reviews() -> None:
+    """
+    Общий отчёт об актуализации: города, отзывы и лог одним местом.
+
+    Заказчик просила, чтобы отчёт собирался вместе с отзывами и скачивался.
+    Тонкость в том, что отправка идёт ПОСЛЕ прогона и вручную: отчёт знает,
+    что нашлось, а что с ответом стало – знает очередь. Поэтому выгрузка
+    склеивает одно с другим.
+    """
+    import streamlit_app as app
+    import reviews as rv
+    print("\n▸ Отчёт вместе с отзывами")
+
+    data = {"type": "actualize", "withReviews": True,
+            "reviewTotals": {"found": 2, "drafted": 2, "needsHuman": 0, "noDraft": 0},
+            "reviews": [
+                {"reviewId": "r1", "city": "Ереван", "author": "Захар", "rating": 5,
+                 "text": "Отличные цены.", "draft": "Уважаемый Захар!", "status": rv.DRAFTED},
+                {"reviewId": "r2", "city": "Баку", "author": "Амина", "rating": 5,
+                 "text": "Помогли нам.", "draft": "Уважаемая Амина!", "status": rv.DRAFTED},
+            ]}
+
+    keep = rv.load_queue
+    # Отзыв r1 успели отправить уже после прогона, r2 ещё ждёт.
+    rv.load_queue = lambda pid: [
+        {"reviewId": "r1", "status": rv.ANSWERED, "sentAt": "2026-08-05T10:00:00+00:00",
+         "finalText": "Уважаемый Захар! Спасибо.", "note": "Ответ опубликован"},
+    ]
+    try:
+        rows = app._report_reviews("APS", data)
+        eq("в отчёт попали оба отзыва прогона", len(rows), 2)
+        by_id = {r["reviewId"]: r for r in rows}
+        eq("отправленный показан отправленным", by_id["r1"]["status"], rv.ANSWERED)
+        eq("и с итоговым текстом", by_id["r1"]["finalText"], "Уважаемый Захар! Спасибо.")
+        eq("неотправленный остался ждущим", by_id["r2"]["status"], rv.DRAFTED)
+        check("город из отчёта не потерялся", by_id["r1"]["city"] == "Ереван")
+
+        csv = app._sent_csv(rows).decode("utf-8-sig")
+        head = csv.splitlines()[0]
+        eq("колонки те же, что в выгрузке отправки", head,
+           "Город;Автор;Оценка;Статус;Когда;Отзыв;Ответ;Причина")
+        check("ждущий отзыв назван по-человечески",
+              "черновик ждёт подтверждения" in csv, csv[:400])
+        check("отправленный тоже", "отправлен" in csv)
+
+        # Прогон без отзывов ничего лишнего не показывает.
+        eq("без отзывов выгрузки нет", app._report_reviews("APS", {"type": "actualize"}), [])
+    finally:
+        rv.load_queue = keep
+
+
+# ════════════════════════════════════════════════════════════════════
+def test_queue_resets_between_runs() -> None:
+    """
+    На странице видно разобранное ТОЛЬКО текущего прогона.
+
+    Живой случай: заказчик собрала новые отзывы, а в «Отчёте по отправке»
+    увидела «3 отправленных» с какого-то прошлого раза – «чтобы не было
+    путаницы, на странице сбрасывается». История при этом не теряется: она
+    уходит во вкладку «Отчёт», у каждого прогона свой список и своя выгрузка.
+
+    Ждущие ответа при этом показываются ВСЕ, даже со старых прогонов:
+    черновик написан, никуда не делся, потерять его из виду нельзя.
+    """
+    import streamlit_app as app
+    import reviews as rv
+    import runner as r
+    print("\n▸ Сброс списка между прогонами")
+
+    items = [
+        {"reviewId": "old1", "runId": "run-1", "status": rv.ANSWERED, "city": "Баку"},
+        {"reviewId": "old2", "runId": "run-1", "status": rv.ANSWERED, "city": "Баку"},
+        {"reviewId": "old3", "runId": "run-1", "status": rv.DRAFTED, "city": "Баку",
+         "draft": "старый черновик."},
+        {"reviewId": "new1", "runId": "run-2", "status": rv.ANSWERED, "city": "Тараз"},
+        {"reviewId": "new2", "runId": "run-2", "status": rv.DRAFTED, "city": "Тараз",
+         "draft": "новый черновик."},
+        {"reviewId": "ancient", "status": rv.ANSWERED, "city": "Ереван"},   # до меток
+    ]
+
+    def done_for(run_id: str) -> list[dict]:
+        return [it for it in items
+                if it.get("status") not in rv.OPEN_STATUSES
+                and it.get("runId") == run_id and run_id]
+
+    eq("после нового прогона в списке только его отправленные",
+       [it["reviewId"] for it in done_for("run-2")], ["new1"])
+    eq("прошлый прогон со страницы ушёл", len(done_for("run-1")), 2)
+    check("отзывы без метки (до этой версии) на страницу не лезут",
+          all(it.get("runId") for it in done_for("run-2")))
+
+    # Ждущие – все, независимо от прогона.
+    pending = rv.open_items(items)
+    eq("ждущие показываются со всех прогонов",
+       sorted(it["reviewId"] for it in pending), ["new2", "old3"])
+
+    # А в отчёте прогона – его отзывы, даже если в самом отчёте их не сохраняли.
+    keep = rv.load_queue
+    rv.load_queue = lambda pid: items
+    try:
+        rows = app._report_reviews("APS", {"type": "actualize", "runId": "run-1"})
+        eq("старый отчёт собирается по метке прогона",
+           sorted(r["reviewId"] for r in rows), ["old1", "old2", "old3"])
+        eq("чужой прогон в него не попадает",
+           [r["reviewId"] for r in app._report_reviews("APS", {"runId": "run-2"})
+            if r["reviewId"].startswith("old")], [])
+    finally:
+        rv.load_queue = keep
+
+    # Метку ставит сам прогон – иначе всё вышеописанное не сработает.
+    import inspect
+    src = inspect.getsource(r._reviews_for_city)
+    check("прогон помечает свои отзывы", '"runId"' in src and "run_id" in src)
+
+
+# ════════════════════════════════════════════════════════════════════
 def test_module_attrs_exist() -> None:
     """
     Каждое `модуль.имя`, написанное в коде, обязано существовать.
@@ -2508,6 +2803,11 @@ def main() -> int:
         test_reviews()
         test_gemini_keys()
         test_review_batch()
+        test_reviews_limit_and_stop()
+        test_look_and_order()
+        test_assortment_verbatim()
+        test_report_with_reviews()
+        test_queue_resets_between_runs()
         test_module_attrs_exist()
         test_batch_browser_survives_rerun()
         test_one_build()

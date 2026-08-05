@@ -645,7 +645,10 @@ def get_worker() -> PlaywrightWorker:
 
 
 def theme() -> str:
-    return st.session_state.get("theme", "dark")
+    # Светлая по умолчанию – решение заказчика: тёмная вставала автоматом при
+    # каждом заходе, а работает она днём. Переключатель в шапке остаётся,
+    # выбор держится в сессии.
+    return st.session_state.get("theme", "light")
 
 
 def goto_section(name: str) -> None:
@@ -1005,13 +1008,14 @@ def _render_live_panel(project_id: str, run_kind: str, was_running: bool = False
             if st.button("📊 Посмотреть отчёт", key=f"btn-report-{state.get('runId', '')}"):
                 _open_report(kind, state.get("runId", ""))
 
-    # Пока идёт прогон лог нужен на виду, после – он только мешает: экран
-    # длинный, а под ним отчёт. Сворачиваем.
+    # Лог сворачивается ВСЕГДА – и пока прогон идёт тоже. Он длинный, а под
+    # ним ответы на отзывы, и мотать через него каждый раз неудобно. Во время
+    # прогона раскрыт по умолчанию: там смотреть и надо.
     log_text = runner.read_live_log(project_id, run_kind)
-    if running or not log_text:
+    if not log_text:
         html(T.log_box(log_text))
     else:
-        with st.expander("📄 Показать лог прогона"):
+        with st.expander("📄 Лог прогона", expanded=running):
             html(T.log_box(log_text))
 
     # Рядом идёт ещё один прогон – про него тут же и скажем, чтобы человек не
@@ -1625,7 +1629,7 @@ def _review_regenerate(project_id: str, item: dict) -> None:
     fake = {"text": item.get("text"), "author": item.get("author"),
             "rating": item.get("rating"), "answered": False}
     try:
-        item["draft"] = rv.clean_draft(llm.generate(rv.build_prompt(prompt, fake)))
+        item["draft"] = rv.clean_draft(llm.generate(rv.build_prompt(prompt, fake)), project_id)
         item["status"] = rv.DRAFTED
         item["note"] = ""
     except Exception as e:  # noqa: BLE001
@@ -1863,6 +1867,11 @@ _SENT_LABELS = {
     rv.ALREADY: "⊝ уже был ответ",
     rv.SKIPPED: "⏭ пропущен",
     rv.FAILED: "❌ не отправился",
+    # Эти три – про отзывы, до которых руки ещё не дошли. В отчёте прогона
+    # они тоже нужны: там видно всё найденное, а не только отправленное.
+    rv.DRAFTED: "✍ черновик ждёт подтверждения",
+    rv.NEEDS_HUMAN: "⚠️ отвечаете сами",
+    rv.NO_DRAFT: "— черновика нет",
 }
 
 
@@ -1881,10 +1890,13 @@ def _sent_report_block(project_id: str, done: list[dict], pending: list[dict]) -
     rows = sorted(done, key=lambda it: it.get("sentAt") or it.get("collectedAt") or "",
                   reverse=True)
 
-    with st.expander(f"📋 Отчёт по отправке ({len(done)})", expanded=bool(c["failed"])):
+    with st.expander(f"📋 Отчёт по отправке за этот прогон ({len(done)})",
+                     expanded=bool(c["failed"])):
         st.caption(f"Отправлено {c['answered']} · уже были отвечены "
                    f"{len([r for r in done if r.get('status') == rv.ALREADY])} · "
                    f"пропущено {c['skipped']} · не отправилось {c['failed']}")
+        st.caption("Здесь только текущий прогон. Прошлые – во вкладке «📊 Отчёт»: "
+                   "у каждого прогона свой список отзывов и своя выгрузка.")
         for it in rows:
             when = local_time(it.get("sentAt")) if it.get("sentAt") else ""
             label = _SENT_LABELS.get(it.get("status"), it.get("status") or "")
@@ -1921,6 +1933,58 @@ def _sent_csv(rows: list[dict]) -> bytes:
     return buf.getvalue().encode("utf-8-sig")
 
 
+def _report_reviews(project_id: str, data: dict) -> list[dict]:
+    """
+    Отзывы прогона – с тем, что с ними стало ПОСЛЕ прогона.
+
+    Отчёт знает, какие отзывы нашлись и какие черновики к ним написались.
+    Отправка происходит позже, руками, и её исход живёт в очереди. Поэтому
+    здесь одно дополняется другим: берём строки прогона и подтягиваем к ним
+    свежий статус, время отправки и итоговый текст. Отзыв, разобранный уже
+    после прогона, в выгрузке виден разобранным – как оно и есть.
+    """
+    queue = rv.load_queue(project_id)
+    rows = data.get("reviews") or []
+    if not rows:
+        # Отчёт старый – отзывов в нём не сохраняли. Но у элементов очереди
+        # есть метка прогона, так что список всё равно соберётся.
+        run_id = data.get("runId") or ""
+        rows = [it for it in queue if run_id and it.get("runId") == run_id]
+    if not rows:
+        return []
+    fresh = {it.get("reviewId"): it for it in queue}
+    out = []
+    for r in rows:
+        now = fresh.get(r.get("reviewId")) or {}
+        out.append({**r, **{k: v for k, v in now.items() if v not in (None, "")}})
+    return sorted(out, key=lambda r: ((r.get("city") or ""), (r.get("author") or "")))
+
+
+def _report_reviews_block(rows: list[dict]) -> None:
+    """
+    Отзывы прогона – тем же видом, что и города выше.
+
+    Заказчик просила «общий отчёт об актуализации, если есть отзывы»: чтобы
+    не бегать между вкладкой прогона и очередью, а видеть одним экраном, что
+    нашлось и чем кончилось, и скачать это одним движением.
+    """
+    c = rv.counters(rows)
+    with st.container(border=True):
+        html(f'<div class="report-head">'
+             f'<span class="report-head-title">💬 Отзывы этого прогона</span>'
+             f'<span class="report-head-date">{len(rows)} шт.</span></div>')
+        bits = [f"отвечено {c['answered']}"]
+        for label, key in (("ждут подтверждения", "drafted"), ("негативных", "needsHuman"),
+                           ("без черновика", "noDraft"), ("пропущено", "skipped"),
+                           ("не отправились", "failed")):
+            if c.get(key):
+                bits.append(f"{label} {c[key]}")
+        st.caption(" · ".join(bits))
+        with st.expander(f"Показать отзывы ({len(rows)})", expanded=False):
+            for r in rows:
+                html(T.review_report_row(r))
+
+
 def _send_all_block(project_id: str, pending: list[dict], running: bool) -> None:
     """
     Отправить все готовые ответы разом.
@@ -1944,14 +2008,16 @@ def _send_all_block(project_id: str, pending: list[dict], running: bool) -> None
         tail = (f" Остальные {skipped} останутся в списке: там либо нужен ваш ответ, "
                 "либо черновик не получился." if skipped else "")
         st.caption(f"Готовы к отправке: {len(ready)}.{tail}")
+        # Фиолетовая: это главное действие раздела, а серая кнопка терялась
+        # среди «Переписать все» и прочих.
         if st.button(f"📨 Отправить все ({len(ready)})", key="rv-send-all",
-                     use_container_width=True):
+                     type="primary", use_container_width=True):
             st.session_state["rv-send-all-asked"] = True
             st.rerun()
         return
 
     st.warning(f"Отправить {len(ready)} ответов в Яндекс? Они появятся на карточках "
-               "под именем бренда сразу, отменить это можно будет только вручную.")
+               "под именем бренда, удалить можно будет только вручную.")
     yes, no = st.columns(2)
     if no.button("Отмена", key="rv-send-all-no", use_container_width=True):
         st.session_state.pop("rv-send-all-asked", None)
@@ -1985,11 +2051,32 @@ def reviews_queue_block(project_id: str) -> None:
     # уже выбивало по памяти – третий браузер тут лишний.
     live = runner.running_kinds(project_id)
     running = bool(live)
-    done = [it for it in items if it.get("status") not in rv.OPEN_STATUSES]
+
+    # Разобранное показываем ТОЛЬКО за текущий прогон. Очередь копится дальше –
+    # там лежит вся история, – но на странице от неё была одна путаница:
+    # заказчик только собрала новые отзывы, а видела «3 отправленных» с
+    # какого-то прошлого раза. История прогонов теперь во вкладке «Отчёт»,
+    # у каждого прогона свои отзывы и своя выгрузка.
+    run_id = (runner.read_state(project_id, "actualize") or {}).get("runId") or ""
+    done = [it for it in items
+            if it.get("status") not in rv.OPEN_STATUSES and it.get("runId") == run_id and run_id]
+    # Ждущие ответа показываем ВСЕ, даже со старых прогонов: черновик написан,
+    # никуда не делся, и потерять его из виду нельзя.
+    shown = pending + done
 
     with st.container(border=True):
         html(f'<div class="card-title">💬 Ответы на отзывы – на подтверждении '
              f'({len(pending)})</div>')
+        # Сводка плашками, как в отчёте: сколько готово, сколько разбирать
+        # руками, сколько уже ушло. Раньше это надо было считать глазами по
+        # длинному списку.
+        c = rv.counters(shown)
+        html(T.stat_row([
+            ("Черновик готов", c["drafted"], "ok"),
+            ("Негативные", c["needsHuman"], "warn"),
+            ("Без черновика", c["noDraft"], "noimg"),
+            ("Отправлено", c["answered"], "skip"),
+        ] + ([("Не отправились", c["failed"], "err")] if c["failed"] else [])))
         if running:
             st.info(f"Идёт {', '.join(runner.KIND_RU[k].lower() for k in live)}. Отправлять ответы "
                     "можно будет, когда прогон закончится: страница отзывов тяжёлая, и третий "
@@ -2111,9 +2198,6 @@ def tab_actualize(project_id: str, config: dict) -> None:
         html(T.empty("🏙", "Нет городов", "Добавьте страны и города во вкладке «Города»."))
         return
 
-    # Очередь ответов – первым делом: после прогона именно она и нужна.
-    reviews_queue_block(project_id)
-
     all_ids = [ct["id"] for c in countries for ct in c["cities"]]
     chosen = _act_selected(all_ids)
     selected = [cid for cid in all_ids if cid in chosen]
@@ -2173,6 +2257,10 @@ def tab_actualize(project_id: str, config: dict) -> None:
 
     if not yb.has_saved_session(project_id) and not running:
         st.warning("Сначала войдите в Яндекс в разделе «⚙️ Настройки».")
+        # Очередь ответов показываем и без входа: черновики уже написаны и
+        # никуда не делись, а без этой строки они бы просто исчезли с экрана –
+        # раздел уходил в выход раньше, чем до них доходило дело.
+        reviews_queue_block(project_id)
         return
 
     # value не задаём: у виджета есть key, и Streamlit ругается, если состояние
@@ -2221,6 +2309,12 @@ def tab_actualize(project_id: str, config: dict) -> None:
     if running or state.get("status") not in (None, "idle"):
         with st.container(border=True):
             live_panel(project_id, running, "actualize")
+
+    # Очередь ответов – В КОНЦЕ, под запуском и прогрессом. Раньше она стояла
+    # первой, и во время прогона экран открывался на ней: сколько городов
+    # пройдено и что происходит, видно не было – приходилось листать вниз.
+    # Заказчик попросила поменять местами: сверху сам прогон, ответы под ним.
+    reviews_queue_block(project_id)
 
     # Вторая карточка отчёта убрана: весь отчёт теперь на вкладке «Отчёт»,
     # и туда ведёт кнопка «Посмотреть отчёт» из панели выше.
@@ -2485,7 +2579,7 @@ def _report_notes(data: dict, totals: dict) -> list[str]:
         rt = data.get("reviewTotals") or {}
         notes.append(f'💬 Отзывы: без ответа {rt.get("found", 0)} · '
                      f'черновиков {rt.get("drafted", 0)} · '
-                     f'вам на ответ {rt.get("needsHuman", 0)} · '
+                     f'негативных {rt.get("needsHuman", 0)} · '
                      f'без черновика {rt.get("noDraft", 0)}. '
                      "Ответы ждут подтверждения в «Актуализации».")
     return notes
@@ -2626,17 +2720,30 @@ def tab_report(project_id: str) -> None:
             reader = getattr(runner, "read_run_log", None)
             run_log = reader(project_id, kind, selected) if reader else ""
             base_name = selected.replace(".json", "")
-            d1, d2, _ = st.columns([1, 1, 3])
-            d1.download_button("⬇ Отчёт (CSV)", data=_report_csv(data),
-                               file_name=base_name + ".csv", mime="text/csv",
-                               use_container_width=True, key="btn-csv")
-            d2.download_button("⬇ Лог (.txt)", data=(run_log or "Лог этого прогона не сохранён.")
-                               .encode("utf-8"),
-                               file_name=base_name + ".txt", mime="text/plain",
-                               use_container_width=True, disabled=not run_log, key="btn-log")
+            # Прогон с отзывами скачивается целиком: города, отзывы, лог.
+            review_rows = _report_reviews(project_id, data) if is_act else []
+            cols = st.columns([1, 1, 1, 2] if review_rows else [1, 1, 3])
+            cols[0].download_button("⬇ Города (CSV)", data=_report_csv(data),
+                                    file_name=base_name + ".csv", mime="text/csv",
+                                    use_container_width=True, key="btn-csv")
+            if review_rows:
+                cols[1].download_button(f"⬇ Отзывы ({len(review_rows)})",
+                                        data=_sent_csv(review_rows),
+                                        file_name=base_name + "-отзывы.csv", mime="text/csv",
+                                        use_container_width=True, key="btn-csv-reviews")
+            log_col = cols[2] if review_rows else cols[1]
+            log_col.download_button("⬇ Лог (.txt)",
+                                    data=(run_log or "Лог этого прогона не сохранён.")
+                                    .encode("utf-8"),
+                                    file_name=base_name + ".txt", mime="text/plain",
+                                    use_container_width=True, disabled=not run_log, key="btn-log")
             if not run_log:
                 st.caption("Лог этого прогона не сохранён – он появится у прогонов, "
                            "запущенных начиная с этой версии.")
+
+        # ─── Отзывы того же прогона – отдельным разделом того же отчёта ───
+        if review_rows:
+            _report_reviews_block(review_rows)
 
     _day_logs(project_id)
 
@@ -2781,7 +2888,8 @@ def _reviews_settings_block(project_id: str) -> None:
         with st.spinner("Прошу у Gemini ответ на пробный отзыв…"):
             try:
                 answer = rv.clean_draft(
-                    llm.generate(rv.build_prompt(rv.project_prompt(project_id), sample)))
+                    llm.generate(rv.build_prompt(rv.project_prompt(project_id), sample)),
+                    project_id)
             except Exception as e:  # noqa: BLE001
                 answer = None
                 st.error(str(e))

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import re
+from difflib import SequenceMatcher
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -232,14 +233,46 @@ def build_prompt(prompt_template: str, item: dict) -> str:
     return body.rstrip() + "\n" + pdata.REVIEW_COMMON_RULES
 
 
-def clean_draft(text: str) -> str:
+ASSORTMENT_NEAR = 0.75      # насколько абзац похож на эталон, чтобы счесть его тем самым
+
+
+def fix_assortment(project_id: str, text: str) -> str:
+    """
+    Вернуть ассортиментной фразе эталонный вид.
+
+    Фраза у каждого бренда своя и вставляется ДОСЛОВНО – требование заказчика.
+    Модель соблюдает это не всегда: в боевом прогоне один ответ ушёл в Яндекс
+    со строкой «трубы, armatura – собираем и отгружаем без задержек», слово
+    внезапно оказалось латиницей. В трёх десятках ответов такое глазами не
+    ловится.
+
+    Сплошной запрет латиницы тут не годится: в металлоторговле законно
+    встречаются AISI 304, DIN, A2. Зато сама фраза известна заранее – ищем
+    похожий на неё абзац и заменяем эталоном. Не нашли похожего – не трогаем
+    ничего: это уже другая беда, её ловит looks_broken.
+    """
+    want = (pdata.REVIEW_ASSORTMENT.get(project_id) or "").strip()
+    if not want or not text:
+        return text
+    parts = text.split("\n\n")
+    for i, part in enumerate(parts):
+        p = part.strip()
+        if not p or p == want:
+            continue
+        if SequenceMatcher(None, p.lower(), want.lower()).ratio() >= ASSORTMENT_NEAR:
+            parts[i] = want
+            break
+    return "\n\n".join(parts)
+
+
+def clean_draft(text: str, project_id: str = "") -> str:
     """
     Причесать ответ после модели.
 
     Правила вроде «не используй длинное тире» модель выполняет через раз,
     а замена – работа на одну строку и не ошибается. Заодно убираем
     markdown-звёздочки и кавычки, в которые модель иногда заворачивает
-    весь ответ целиком.
+    весь ответ целиком, и возвращаем эталонный вид ассортиментной фразе.
     """
     t = (text or "").strip()
     if len(t) > 1 and t[0] in "\"«" and t[-1] in "\"»":
@@ -247,8 +280,8 @@ def clean_draft(text: str) -> str:
     t = t.replace("\u2014", "\u2013")          # длинное тире – на короткое
     t = re.sub(r"\*\*(.+?)\*\*", r"\1", t)      # **жирный** markdown
     t = re.sub(r"(?m)^#{1,6}\s*", "", t)        # заголовки решётками
-    t = re.sub(r"\n{3,}", "\n\n", t)            # лишние пустые строки
-    return t.strip()
+    t = re.sub(r"\n{3,}", "\n\n", t).strip()    # лишние пустые строки
+    return fix_assortment(project_id, t) if project_id else t
 
 
 def looks_cut_off(text: str) -> bool:

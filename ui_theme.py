@@ -1181,6 +1181,53 @@ def report_row(item: dict, with_country: bool = False) -> str:
     )
 
 
+# Отзывы в отчёте прогона рисуются теми же строками, что и города, – чтобы
+# «общий отчёт» читался как одно целое, а не как две разные таблицы.
+_REVIEW_ROW_STYLE = {
+    "answered": ("ok", "✅"),
+    "already-answered": ("skip", "⊝"),
+    "skipped": ("skip", "⏭"),
+    "failed": ("err", "🔴"),
+    "drafted": ("warn", "✍"),
+    "needs-human": ("warn", "⚠️"),
+    "no-draft": ("noimg", "🟡"),
+}
+
+
+def stat_row(cells: list[tuple[str, str, str]]) -> str:
+    """
+    Ряд плашек «подпись – число» тем же видом, что в отчёте.
+
+    Нужен там, где плашки НЕ кликаются: в отчёте они работают фильтрами и
+    рисуются кнопками Streamlit, а здесь достаточно показать цифры. Заказчик
+    просила отделять сводку карточками-блоками, «так же как в обычном отчёте».
+
+    cells: [(подпись, значение, цвет)], цвет – ok/warn/err/skip/noimg/dur.
+    """
+    if not cells:
+        return ""
+    boxes = "".join(
+        f'<div class="report-stat {esc(colour)}">'
+        f'<div class="report-stat-label">{esc(label)}</div>'
+        f'<div class="report-stat-value">{esc(str(value))}</div></div>'
+        for label, value, colour in cells
+    )
+    return f'<div class="report-summary">{boxes}</div>'
+
+
+def review_report_row(item: dict) -> str:
+    cls, ico = _REVIEW_ROW_STYLE.get(item.get("status", ""), ("err", "🔴"))
+    stars = "★" * int(item.get("rating") or 0)
+    tail = item.get("note") or (item.get("text") or "")
+    return (
+        f'<div class="report-row {cls}"><span class="report-row-ico">{ico}</span>'
+        f'<span class="report-row-country">{esc(item.get("city") or "–")}</span>'
+        f'<span class="report-row-city">{esc(item.get("author") or "–")}</span>'
+        f'<span class="report-row-reason">{esc(tail)}</span>'
+        f'<span class="report-row-dur">{esc(stars)}</span></div>'
+    )
+
+
 _AUDIT_STYLE = {"найдена": ("ok", "✅"), "несколько": ("warn", "❗"), "нет": ("err", "❌")}
 _VERDICT_CLS = {"совпадает": "audit-same", "совпадает частично": "audit-same",
                 "расходится": "audit-diff", "нет в Яндексе": "audit-diff",

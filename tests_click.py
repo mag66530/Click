@@ -1019,6 +1019,41 @@ def test_login_step_detection() -> None:
             browser.close()
 
 
+def test_actualize_selection() -> None:
+    """
+    Выбор городов для актуализации переживает обновление списка.
+
+    Живой случай: после загрузки городов из КП у них НОВЫЕ id, а в наборе
+    выбранных лежали старые. Новые города оказывались невыбранными молча –
+    «проверяет не все города».
+    """
+    import streamlit as st
+    import streamlit_app as app
+    print("\n▸ Выбор городов для актуализации")
+
+    st.session_state.clear()
+    sel = app._act_selected(["a", "b", "c"])  # noqa: SLF001
+    eq("по умолчанию выбраны все", sel, {"a", "b", "c"})
+
+    sel.discard("b")                                    # человек снял галочку
+    sel = app._act_selected(["a", "b", "c"])  # noqa: SLF001
+    eq("снятая галочка сохраняется", sel, {"a", "c"})
+
+    sel = app._act_selected(["a", "b", "c", "d"])  # noqa: SLF001
+    eq("новый город выбран сразу, снятый остался снятым", sel, {"a", "c", "d"})
+
+    sel = app._act_selected(["a", "d"])  # noqa: SLF001
+    eq("исчезнувшие города уходят из набора", sel, {"a", "d"})
+
+    # Полная замена списка (загрузка из КП: у всех городов новые id).
+    st.session_state.clear()
+    app._act_selected(["old-1", "old-2"])  # noqa: SLF001
+    fresh = app._act_selected(["new-1", "new-2", "new-3"])  # noqa: SLF001
+    eq("после загрузки из КП выбраны ВСЕ новые города",
+       fresh, {"new-1", "new-2", "new-3"})
+    st.session_state.clear()
+
+
 def test_add_post_click_on_real_page() -> None:
     """
     Клик «Добавить пост» в НАСТОЯЩЕМ браузере.
@@ -1711,6 +1746,7 @@ def main() -> int:
         test_yandex_domain()
         test_aps_project()
         test_reviews()
+        test_actualize_selection()
         test_add_post_click_on_real_page()
         test_toast_and_access_on_real_page()
         test_preflight_duplicate_guard()

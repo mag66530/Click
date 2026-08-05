@@ -1756,6 +1756,11 @@ _SLIM_JS = r"""
       .filter(Boolean))];
     return {
       id: String(co.id || co.permanent_id || ''),
+      // Второй номер той же карточки. В КП ссылки записаны старым номером
+      // (yandex.ru/sprav/25755702), а список отдаёт новый – без tycoon_id
+      // сверка считала бы, что ссылка ведёт на чужую карточку.
+      tycoonId: String(co.tycoon_id || ''),
+      permanentId: String(co.permanent_id || ''),
       type: co.type || '',
       publishing: co.publishing_status || '',
       name: co.displayName || names[0] || '',

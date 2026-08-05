@@ -57,7 +57,11 @@ def kp(*rows: list[str]) -> list[list[str]]:
 
 
 def company(cid: str, address: str, site: str = "", phones=(), emails=(), **kw) -> dict:
-    return {"id": cid, "type": kw.get("type", "ordinal"),
+    # tycoonId есть у всего, что собрано начиная с этой версии: в КП ссылки
+    # записаны старым номером карточки, и без него сверка ругалась зря.
+    return {"id": cid, "tycoonId": kw.get("tycoonId", ""),
+            "permanentId": kw.get("permanentId", cid),
+            "type": kw.get("type", "ordinal"),
             "publishing": kw.get("publishing", "publish"),
             "name": kw.get("name", "Авиапромсталь"), "names": [kw.get("name", "Авиапромсталь")],
             "address": address, "site": site, "sites": [site] if site else [],
@@ -283,6 +287,26 @@ def test_compare() -> None:
           any("другую карточку" in n for n in wrong["items"][0]["cmp"]["problems"]),
           str(wrong["items"][0]["cmp"]["problems"]))
 
+    # Старый номер карточки. В КП ссылки записаны им, список организаций
+    # отдаёт новый – это ОДНА карточка, ругаться не на что.
+    old_link = kp(["Россия", "Шахты", "https://shahty.aviastal.ru", "", "", "",
+                   "https://yandex.ru/sprav/25755702/edit/main", ""])
+    same_card = company("10873194809", "Ростовская область, Шахты",
+                        "https://shahty.aviastal.ru/", tycoonId="25755702")
+    old = A.build(old_link, [same_card])
+    eq("старый номер карточки – та же карточка", old["items"][0]["cmp"]["problems"], [])
+    eq("и сопоставили именно по ссылке",
+       old["items"][0]["companies"][0]["matchedBy"], "ссылка из КП")
+
+    # Данные, собранные до появления tycoonId, сравнивать нечем – молчим.
+    legacy = dict(same_card)
+    legacy.pop("tycoonId")
+    legacy["id"] = "999999"
+    quiet = A.build(old_link, [legacy])
+    check("на старых данных ложной тревоги нет",
+          not any("другую карточку" in n for n in quiet["items"][0]["cmp"]["problems"]),
+          str(quiet["items"][0]["cmp"]["problems"]))
+
     # Пустая ссылка в КП – это подсказка, а не ошибка: её сверка и заполняет.
     empty = A.build(kp(["Россия", "Шахты", "https://shahty.aviastal.ru", "", "", "", "", ""]),
                     [company("1", "Ростовская область, Шахты", "https://shahty.aviastal.ru/")])
@@ -292,7 +316,7 @@ def test_compare() -> None:
 
 
 def test_export() -> None:
-    print("\n▸ Выгрузка")
+    print("\n▸ Выгрузка: КП с колонками из Яндекса")
 
     rows = kp(["Россия", "Шахты", "https://shahty.aviastal.ru", "ул. Ленина, 1",
                "shahty@aviastal.ru", "7 (863) 206-68-85", "", ""],
@@ -300,34 +324,124 @@ def test_export() -> None:
     res = A.build(rows, [company("1", "Ростовская область, Шахты", "https://shahty.aviastal.ru/",
                                  phones=["+7 (863) 206-68-85"], emails=["shahty@aviastal.ru"])])
     out = A.to_rows(rows, res)
+    col = {name: len(KP_HEADER) + n for n, name in enumerate(A.EXTRA_HEADERS)}
 
     eq("строк столько же", len(out), len(rows))
     for i, src in enumerate(rows):
         eq(f"строка {i} не тронута", out[i][:len(src)], [str(c) for c in src])
     eq("шапка получила новые колонки", out[1][len(KP_HEADER):], A.EXTRA_HEADERS)
-    eq("статус найденного города", out[2][len(KP_HEADER)], "✅ найдена")
-    eq("статус ненайденного", out[3][len(KP_HEADER)], "❌ нет")
+    eq("статус найденного города", out[2][col["Проверка"]], "✅ найдена")
+    eq("статус ненайденного", out[3][col["Проверка"]], "❌ нет")
     check("ссылка на карточку подставлена",
-          "yandex.ru/sprav/1/p/edit/" in out[2][len(KP_HEADER) + 9], out[2][len(KP_HEADER) + 9])
+          "yandex.ru/sprav/1/p/edit/" in out[2][col["Ссылка на карточку"]],
+          out[2][col["Ссылка на карточку"]])
+    eq("вывод по сайту рядом со статусом", out[2][col["Сайт совпадает?"]], "совпадает")
 
     csv = A.to_csv(out)
     eq("в CSV столько же строк", len(csv.strip().splitlines()), len(rows))
     check("перенос строки внутри ячейки не рвёт CSV", "\n" not in csv.strip().splitlines()[2])
 
-    blob = A.to_xlsx(rows, res, "Лист20")
-    check("xlsx собрался", len(blob) > 2000, str(len(blob)))
+
+def test_report_sheets() -> None:
+    """
+    Отчёт книгой: у каждого вопроса свой лист. Заказчик про прошлый вариант
+    сказала «ничего не понятно» – одна таблица в сорок колонок отвечала сразу
+    на всё.
+    """
+    print("\n▸ Отчёт книгой")
+
+    rows = kp(["Россия", "Шахты", "https://shahty.aviastal.ru", "", "shahty@aviastal.ru",
+               "7 (863) 206-68-85", "", ""],
+              ["Россия", "Мытищи", "https://mytishchi.aviastal.ru", "", "", "", "", ""],
+              ["Россия", "Казань", "https://kazan.aviastal.ru", "", "", "7 (843) 216-39-74", "", ""],
+              ["Россия", "Псков", "https://pskov.aviastal.ru", "", "pskov@aviastal.ru", "", "", ""])
+    cos = [
+        # Шахты: всё сходится
+        company("1", "Ростовская область, городской округ Шахты, Шахты",
+                "https://shahty.aviastal.ru/", phones=["+7 (863) 206-68-85"],
+                emails=["shahty@aviastal.ru"]),
+        # Казань: два дубля
+        company("2", "Республика Татарстан, Казань", "https://kazan.aviastal.ru/",
+                phones=["+7 (843) 216-39-74"]),
+        company("3", "Республика Татарстан, Казань, улица Баумана, 1"),
+        # Псков: сайт и почта расходятся
+        company("4", "Псковская область, городской округ Псков, Псков",
+                "https://old-pskov.ru/", emails=["other@aviastal.ru"]),
+        # Ярославль: в КП такого города нет
+        company("5", "Центральный федеральный округ, Ярославская область, "
+                     "городской округ Ярославль, Ярославль", "https://yaroslavl.aviastal.ru/",
+                phones=["+7 (4852) 66-29-46"], emails=["yaroslavl@aviastal.ru"]),
+    ]
+    res = A.build(rows, cos)
+
+    # ── списки под конкретный вопрос ──
+    extra = A.extra_rows(res)
+    eq("«Нет в КП»: одна организация", len(extra) - 1, 1)
+    eq("город подставлен из адреса", extra[1][0], "Ярославль")
+    check("и ссылка на карточку рядом", extra[1][-1].endswith("/sprav/5/p/edit/"), extra[1][-1])
+
+    doubles = A.double_rows(res)
+    eq("«Дубли»: две строки на один город", len(doubles) - 1, 2)
+    eq("обе про Казань", {r[1] for r in doubles[1:]}, {"Казань"})
+    eq("карточки пронумерованы", [r[2] for r in doubles[1:]], ["1", "2"])
+
+    missing = A.missing_rows(res)
+    eq("«Нет в Яндексе»: один город", len(missing) - 1, 1)
+    eq("это Мытищи", missing[1][1], "Мытищи")
+
+    diffs = A.diff_rows(res)
+    fields = {r[2].split(":")[0] for r in diffs[1:]}
+    check("«Расхождения»: попали сайт и почта Пскова", {"Сайт", "Почта"} <= fields, str(fields))
+    pskov = [r for r in diffs[1:] if r[1] == "Псков" and r[2].startswith("Сайт")][0]
+    eq("слева КП", pskov[3], "https://pskov.aviastal.ru")
+    eq("справа Яндекс", pskov[4], "https://old-pskov.ru/")
+
+    eq("город из адреса", A.guess_city("Центральный федеральный округ, Ярославская область, "
+                                       "городской округ Ярославль, Ярославль"), "Ярославль")
+    eq("город из адреса с улицей",
+       A.guess_city("городской округ Мариуполь, Мариуполь, улица Апатова, 116А"), "Мариуполь")
+
+    # ── книга целиком ──
+    blob = A.to_xlsx(rows, res, "Лист20", collected_at="05.08.2026 12:00")
+    check("xlsx собрался", len(blob) > 5000, str(len(blob)))
     import io
 
     from openpyxl import load_workbook
     wb = load_workbook(io.BytesIO(blob))
-    eq("листы книги", wb.sheetnames, ["Лист20", "Лишние в Яндексе"])
-    ws = wb["Лист20"]
-    eq("колонок стало больше", ws.max_column, len(KP_HEADER) + len(A.EXTRA_HEADERS))
-    eq("город на месте", ws.cell(row=3, column=2).value, "Шахты")
-    eq("плашка статуса", ws.cell(row=3, column=len(KP_HEADER) + 1).value, "✅ найдена")
-    check("ненайденный город закрашен красным",
-          (ws.cell(row=4, column=len(KP_HEADER) + 1).fill.fgColor.rgb or "").endswith(A.FILL_BAD),
-          str(ws.cell(row=4, column=len(KP_HEADER) + 1).fill.fgColor.rgb))
+    eq("листы книги", wb.sheetnames,
+       ["Дашборд", "Как читать", "Нет в КП", "Дубли", "Нет в Яндексе",
+        "Расхождения", "Сверка", "КП с данными"])
+
+    dash = wb["Дашборд"]
+    eq("на дашборде число городов", dash["B6"].value, 4)
+    eq("и число ненайденных", dash["F6"].value, 1)
+    check("на дашборде видно, с какого листа читали",
+          "Лист20" in str(dash["B3"].value), str(dash["B3"].value))
+
+    grid = wb["Сверка"]
+    eq("сетка: строка на город", grid.max_row, 1 + 4)
+    eq("шапка сетки", [c.value for c in grid[1]], A.GRID_HEADERS)
+    by_city = {grid.cell(row=r, column=2).value: r for r in range(2, grid.max_row + 1)}
+    eq("Шахты: карточка на месте", grid.cell(row=by_city["Шахты"], column=3).value, "✓")
+    eq("Шахты: ошибок нет", grid.cell(row=by_city["Шахты"], column=9).value, 0)
+    eq("Казань: дубли помечены", grid.cell(row=by_city["Казань"], column=3).value, "⚠")
+    eq("Мытищи: карточки нет", grid.cell(row=by_city["Мытищи"], column=3).value, "✗")
+    eq("Псков: сайт расходится", grid.cell(row=by_city["Псков"], column=4).value, "✗")
+    check("и подробности висят примечанием",
+          "old-pskov" in (grid.cell(row=by_city["Псков"], column=4).comment.text or ""),
+          str(grid.cell(row=by_city["Псков"], column=4).comment))
+    check("у зелёной ячейки заливки нет",
+          not (grid.cell(row=by_city["Шахты"], column=4).fill.fgColor.rgb or "").endswith(A.C_BUG))
+    check("ссылка на карточку кликабельная",
+          bool(grid.cell(row=by_city["Шахты"], column=8).hyperlink))
+    eq("подпись у ссылки человеческая",
+       grid.cell(row=by_city["Шахты"], column=8).value, "Открыть карточку")
+
+    full = wb["КП с данными"]
+    eq("полное КП на месте: колонок", full.max_column, len(KP_HEADER) + len(A.EXTRA_HEADERS))
+    eq("город не сдвинулся", full.cell(row=3, column=2).value, "Шахты")
+    check("шапка закреплена", bool(full.freeze_panes), str(full.freeze_panes))
+    check("фильтр включён", bool(full.auto_filter.ref), str(full.auto_filter.ref))
     wb.close()
 
 
@@ -444,6 +558,7 @@ def main() -> int:
     test_duplicates()
     test_compare()
     test_export()
+    test_report_sheets()
     test_yandex_pages()
 
     print("\n" + "═" * 60)

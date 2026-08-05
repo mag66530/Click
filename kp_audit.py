@@ -191,6 +191,18 @@ def company_id_from_url(url: str) -> str:
     return m.group(1) if m else ""
 
 
+def company_ids(company: dict) -> set[str]:
+    """
+    Все номера, под которыми Яндекс знает одну и ту же карточку.
+
+    В КП ссылки записаны старым номером (yandex.ru/sprav/25755702), а список
+    организаций отдаёт новый (10873194809). Это одна карточка: старый номер
+    лежит в tycoon_id. Пока сверка сравнивала только новый, почти на каждой
+    строке всплывало «ссылка ведёт на другую карточку» – неправда.
+    """
+    return {str(company.get(k) or "") for k in ("id", "permanentId", "tycoonId")} - {""}
+
+
 # ─── Разбор листа КП ────────────────────────────────────────────────
 
 # Колонки ищем по названию. Названия в КП разных проектов немного разные,
@@ -332,7 +344,7 @@ SCORE_INSIDE = 2        # город лишь встречается в стро
 def match_score(item: dict, company: dict) -> int:
     """Насколько организация похожа на город КП. 0 – не похожа вовсе."""
     kp_id = company_id_from_url(item.get("link", ""))
-    if kp_id and kp_id == str(company.get("id") or ""):
+    if kp_id and kp_id in company_ids(company):
         return SCORE_LINK
 
     # Разные страны – разговор окончен. Иначе армянский Армавир садится на
@@ -463,15 +475,24 @@ def compare(item: dict, companies: list[dict]) -> dict:
         res["status"] = "найдена"
 
     kp_id = company_id_from_url(item.get("link", ""))
-    ya_ids = {str(c.get("id") or "") for c in companies}
-    if kp_id and ya_ids and kp_id not in ya_ids:
+    ya_ids: set[str] = set()
+    for c in companies:
+        ya_ids |= company_ids(c)
+    # Старый сбор организаций не знал про tycoon_id – там сравнивать нечем,
+    # и лучше промолчать, чем пугать ложной тревогой на каждой строке.
+    knows_old_ids = all(("tycoonId" in c) for c in companies)
+    if kp_id and ya_ids and knows_old_ids and kp_id not in ya_ids:
         problems.append(f"ссылка в КП ведёт на другую карточку ({kp_id})")
     if companies and not kp_id:
-        hints.append("в КП нет ссылки на карточку – её можно взять из колонки «Я: ссылка»")
+        hints.append("нет ссылки в КП – возьмите из колонки «Ссылка на карточку»")
 
-    for field, label in (("site", "сайт"), ("phone", "телефон"), ("email", "почта")):
-        if res[field] in BAD_VERDICTS:
-            problems.append(f"{label}: {res[field]}")
+    # Когда карточки нет вовсе, сравнивать не с чем: писать «сайт: нет в
+    # Яндексе, телефон: нет в Яндексе, почта: нет в Яндексе» – это три раза
+    # повторить то же самое и залить строку красным на ровном месте.
+    if companies:
+        for field, label in (("site", "сайт"), ("phone", "телефон"), ("email", "почта")):
+            if res[field] in BAD_VERDICTS:
+                problems.append(f"{label}: {res[field]}")
     for co in companies:
         if co.get("noAccess"):
             problems.append("карточка без доступа")
@@ -489,11 +510,15 @@ def compare(item: dict, companies: list[dict]) -> dict:
 
 STATUS_MARK = {"найдена": "✅ найдена", "несколько": "❗ несколько", "нет": "❌ нет"}
 
-# Колонки, которые дописываем справа к исходному КП.
+# Колонки, которые дописываем справа к исходному КП. Порядок такой, чтобы
+# слева стояло главное: что с карточкой, где она и что проверить. Раньше
+# первыми шли справочные данные Яндекса, и до вывода приходилось листать.
 EXTRA_HEADERS = [
-    "Я: статус", "Я: карточек", "Я: название", "Я: адрес", "Я: сайт",
-    "Я: телефоны", "Я: почта", "Я: соцсети", "Я: рубрики", "Я: ссылка",
-    "Сайт", "Телефон", "Почта", "Что не так",
+    "Проверка", "Карточек", "Ссылка на карточку", "Что проверить",
+    "Сайт совпадает?", "Телефон совпадает?", "Почта совпадает?",
+    "Название в Яндексе", "Адрес в Яндексе", "Сайт в Яндексе",
+    "Телефоны в Яндексе", "Почта в Яндексе", "Соцсети в Яндексе",
+    "Рубрики в Яндексе",
 ]
 
 
@@ -562,6 +587,11 @@ def extra_cells(item: dict) -> list[str]:
     return [
         STATUS_MARK.get(cmp.get("status", ""), cmp.get("status", "")),
         str(len(cos)),
+        _join(card_url(str(c.get("id") or "")) for c in cos),
+        "; ".join(cmp.get("notes") or []),
+        cmp.get("site", ""),
+        cmp.get("phone", ""),
+        cmp.get("email", ""),
         _join(c.get("name", "") for c in cos),
         _join(c.get("address", "") for c in cos),
         _join(cmp.get("yaSites") or []),
@@ -569,11 +599,6 @@ def extra_cells(item: dict) -> list[str]:
         _join(cmp.get("yaEmails") or []),
         _join(f"{k}: {v}" for c in cos for k, v in (c.get("social") or {}).items()),
         _join(r for c in cos for r in (c.get("rubrics") or [])),
-        _join(card_url(str(c.get("id") or "")) for c in cos),
-        cmp.get("site", ""),
-        cmp.get("phone", ""),
-        cmp.get("email", ""),
-        "; ".join(cmp.get("notes") or []),
     ]
 
 
@@ -600,25 +625,108 @@ def to_rows(rows: list[list[str]], result: dict) -> list[list[str]]:
     return out
 
 
-EXTRA_SHEET_HEADERS = ["Название", "Адрес", "Сайт", "Телефоны", "Почта",
-                       "Рубрики", "Публикация", "Ссылка", "Тип"]
+
+
+# ─── Списки под конкретный вопрос ───────────────────────────────────
+# «Ничего не понятно в отчёте» – потому что одна широкая простыня отвечала
+# сразу на все вопросы. Теперь у каждого вопроса свой короткий список.
+
+def guess_city(address: str) -> str:
+    """
+    Город из адреса Яндекса – для организаций, которых в КП нет.
+
+    «Центральный федеральный округ, Ярославская область, городской округ
+    Ярославль, Ярославль» → «Ярославль». Берём последнюю часть, которая
+    похожа на населённый пункт: она же самая точная.
+    """
+    best = ""
+    for raw in str(address or "").split(","):
+        part = raw.strip()
+        if not part or _NOT_A_PLACE_RX.match(part) or _REGION_RX.search(part):
+            continue
+        if re.fullmatch(r"[\d\W]+", part) or re.fullmatch(r"\d+[а-яa-z]?", norm_text(part)):
+            continue
+        best = _PLACE_PREFIX_RX.sub("", part).strip(" .,")
+    return best
+
+
+MISSING_HEADERS = ["Страна", "Город", "Сайт из КП", "Телефон из КП", "Почта из КП",
+                   "Адрес из КП", "Статус в КП"]
+EXTRA_HEADERS_SHEET = ["Город", "Название", "Адрес", "Сайт", "Телефоны", "Почта",
+                       "Рубрики", "Публикация", "Ссылка на карточку"]
+DOUBLE_HEADERS = ["Страна", "Город", "№", "Название", "Адрес", "Сайт", "Телефоны",
+                  "Почта", "Ссылка на карточку"]
+DIFF_HEADERS = ["Страна", "Город", "Что расходится", "В КП", "В Яндексе",
+                "Ссылка на карточку"]
+
+
+def missing_rows(result: dict) -> list[list[str]]:
+    """Города КП, которых в Яндексе нет вовсе. Это список «что завести»."""
+    out = [list(MISSING_HEADERS)]
+    for it in result.get("items") or []:
+        if (it.get("cmp") or {}).get("status") != "нет":
+            continue
+        out.append([it.get("country", ""), it.get("city", ""), it.get("site", ""),
+                    " / ".join(it.get("phones") or []), it.get("email", ""),
+                    it.get("address", ""), it.get("status", "")])
+    return out
 
 
 def extra_rows(result: dict) -> list[list[str]]:
-    """Организации Яндекса, которым в КП города не нашлось (и сетевые карточки)."""
-    out = [list(EXTRA_SHEET_HEADERS)]
+    """
+    Организации Яндекса, которых нет в КП, – со ссылкой на каждую.
+
+    Заказчик просила именно ссылки: по ним видно, что это за карточка и что
+    с ней делать – дописать город в КП или удалить дубль в Яндексе.
+    """
+    out = [list(EXTRA_HEADERS_SHEET)]
     for co in list(result.get("extra") or []) + list(result.get("chains") or []):
         out.append([
+            "сеть (все города)" if co.get("type") == "chain" else guess_city(co.get("address", "")),
             co.get("name", ""),
             co.get("address", ""),
             _join(co.get("sites") or []),
             _join(co.get("phones") or []),
             _join(co.get("emails") or []),
             _join(co.get("rubrics") or []),
-            co.get("publishing", ""),
+            "опубликована" if co.get("publishing") == "publish" else (co.get("publishing") or ""),
             card_url(str(co.get("id") or "")),
-            "сеть" if (co.get("type") == "chain") else "обычная",
         ])
+    return out
+
+
+def double_rows(result: dict) -> list[list[str]]:
+    """Города с несколькими карточками – по строке на карточку, чтобы выбрать лишнюю."""
+    out = [list(DOUBLE_HEADERS)]
+    for it in result.get("items") or []:
+        cos = it.get("companies") or []
+        if len(cos) < 2:
+            continue
+        for n, co in enumerate(cos, 1):
+            out.append([it.get("country", ""), it.get("city", ""), str(n),
+                        co.get("name", ""), co.get("address", ""),
+                        _join(co.get("sites") or []), _join(co.get("phones") or []),
+                        _join(co.get("emails") or []), card_url(str(co.get("id") or ""))])
+    return out
+
+
+def diff_rows(result: dict) -> list[list[str]]:
+    """Расхождения по полям – по строке на поле, рядом оба значения."""
+    out = [list(DIFF_HEADERS)]
+    for it in result.get("items") or []:
+        cmp = it.get("cmp") or {}
+        if cmp.get("status") == "нет":
+            continue
+        link = card_url(str((it.get("companies") or [{}])[0].get("id") or ""))
+        for field, label, kp_value, ya_value in (
+            ("site", "Сайт", it.get("site", ""), " / ".join(cmp.get("yaSites") or [])),
+            ("phone", "Телефон", " / ".join(it.get("phones") or []),
+             " / ".join(cmp.get("yaPhones") or [])),
+            ("email", "Почта", it.get("email", ""), " / ".join(cmp.get("yaEmails") or [])),
+        ):
+            if cmp.get(field) in BAD_VERDICTS:
+                out.append([it.get("country", ""), it.get("city", ""),
+                            f"{label}: {cmp[field]}", kp_value, ya_value, link])
     return out
 
 
@@ -633,54 +741,394 @@ def to_csv(rows: list[list[str]]) -> str:
     return buf.getvalue()
 
 
-# Цвета плашек в Excel: те же, что на экране, чтобы глазами искалось одинаково.
-FILL_OK = "D7F5DD"
-FILL_WARN = "FFF3CD"
-FILL_BAD = "F8D7DA"
 
 
-def to_xlsx(rows: list[list[str]], result: dict, sheet_name: str = "Сверка") -> bytes:
-    """Готовый .xlsx: лист со сверкой и лист с лишними организациями."""
-    import io
+# ─── Excel ──────────────────────────────────────────────────────────
+# Оформление то же, что в отчёте site-checker «Проверка КП»: заказчик его уже
+# читает, и второй документ в другой манере пришлось бы осваивать заново.
+# Оттуда же взяты главные приёмы: в сетке стоят значки ✓ ✗ ⚠ –, а подробности
+# висят примечанием к ячейке; заливка только у проблемных; листы «Дашборд» и
+# «Как читать» идут первыми.
 
-    from openpyxl import Workbook
+SYMBOL = {"ok": "✓", "bug": "✗", "warn": "⚠", "na": "–"}
+COLOR = {"ok": "1E8E3E", "bug": "C62828", "warn": "B26A00", "na": "9E9E9E"}
+
+C_HEAD = "EEF3FB"        # шапка
+C_BUG = "FDE3E3"         # мягкий красный
+C_WARN = "FFF2DA"        # мягкий оранжевый
+C_OK = "E6F4EA"          # мягкий зелёный
+C_LINK = "1155CC"
+C_GREY = "595959"
+C_BORDER = "C9CFDB"
+
+# Как слово из сравнения превращается в значок.
+VERDICT_KIND = {
+    "совпадает": "ok",
+    "совпадает частично": "warn",
+    "нет в КП": "warn",
+    "расходится": "bug",
+    "нет в Яндексе": "bug",
+    "–": "na",
+}
+STATUS_KIND = {"найдена": "ok", "несколько": "warn", "нет": "bug"}
+
+LEGEND = [
+    ("Как читать отчёт", True),
+    ("", False),
+    ("Сверка отвечает на один вопрос: то ли самое заведено в Яндекс.Бизнесе, "
+     "что записано в КП. Организации читаются из раздела «Организации» вашего "
+     "аккаунта – адрес, сайт, телефоны и почту Яндекс отдаёт там сразу.", False),
+    ("", False),
+    ("Значки на листе «Сверка»", True),
+    ("✓  – в КП и в карточке одно и то же (для телефона: номер из КП есть среди "
+     "номеров карточки).", False),
+    ("✗  – расхождение: в карточке другое значение либо его там нет вовсе.", False),
+    ("⚠  – сходится не полностью: в карточке есть лишнее значение, либо в КП "
+     "пусто, а в Яндексе что-то указано.", False),
+    ("–  – сверять нечего: ни в КП, ни в карточке ничего нет.", False),
+    ("Наведите курсор на ячейку со значком – в примечании видно, что в КП и что "
+     "в Яндексе.", False),
+    ("", False),
+    ("Колонка «Карточка»", True),
+    ("✓ – карточка одна, всё в порядке. ⚠ – карточек несколько, это дубли: "
+     "посты и актуализация уходят в одну, вторая живёт своей жизнью. "
+     "✗ – карточки нет вовсе.", False),
+    ("", False),
+    ("Листы отчёта", True),
+    ("Дашборд – сводка цифрами: сколько нашлось, где дубли, где расхождения.", False),
+    ("Нет в КП – организации есть в Яндексе, а города в КП нет. Со ссылкой на "
+     "каждую карточку.", False),
+    ("Дубли – города, где карточек больше одной. По строке на карточку.", False),
+    ("Нет в Яндексе – города из КП, для которых карточки не нашлось.", False),
+    ("Расхождения – каждое расхождение отдельной строкой: слева КП, справа Яндекс.", False),
+    ("Сверка – сетка ✓/✗ по всем городам, одна строка на город.", False),
+    ("КП с данными – ваша таблица без единого изменения плюс колонки из Яндекса "
+     "справа. Нужна, когда хочется видеть всё разом.", False),
+]
+
+
+def _bar(value: int, top: int, width: int = 18) -> str:
+    """Полоска из блоков вместо графика: рисуется везде и без единой зависимости."""
+    if top <= 0 or value <= 0:
+        return ""
+    filled = max(1, round(width * value / top))
+    return "█" * filled
+
+
+def _autosize(ws, first_row: int = 1, cap: int = 46) -> None:
+    from openpyxl.utils import get_column_letter
+
+    for col in range(1, ws.max_column + 1):
+        longest = 0
+        for row in range(first_row, min(ws.max_row, 500) + 1):
+            v = ws.cell(row=row, column=col).value
+            if v is None:
+                continue
+            longest = max(longest, max((len(p) for p in str(v).split("\n")), default=0))
+        ws.column_dimensions[get_column_letter(col)].width = min(max(longest + 2, 9), cap)
+
+
+def _style_head(ws, row: int) -> None:
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    thin = Side(style="thin", color=C_BORDER)
+    for cell in ws[row]:
+        if cell.value is None:
+            continue
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill("solid", fgColor=C_HEAD)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = Border(top=thin, bottom=thin, left=thin, right=thin)
+
+
+def _linkify(ws, col: int, first_row: int, label: str = "") -> None:
+    from openpyxl.styles import Font
+
+    for row in range(first_row, ws.max_row + 1):
+        cell = ws.cell(row=row, column=col)
+        url = str(cell.value or "").strip().split("\n")[0]
+        if not url.startswith("http"):
+            continue
+        if label:
+            cell.value = label
+        cell.hyperlink = url
+        cell.font = Font(color=C_LINK, underline="single")
+
+
+def _list_sheet(wb, title: str, rows: list[list[str]], note: str = "",
+                link_col: int | None = None, link_label: str = "",
+                empty_note: str = "Пусто – и это хорошо.") -> None:
+    """Лист-список: пояснение, шапка, фильтр, закреплённая шапка, ссылки."""
+    from openpyxl.styles import Font
+
+    ws = wb.create_sheet(title[:31])
+    head_row = 1
+    if note:
+        ws.append([note])
+        ws["A1"].font = Font(italic=True, color=C_GREY)
+        ws.append([])
+        head_row = 3
+    for line in rows:
+        ws.append(line)
+    _style_head(ws, head_row)
+    ws.freeze_panes = ws.cell(row=head_row + 1, column=1)
+    if ws.max_row > head_row:
+        last = ws.cell(row=head_row, column=ws.max_column).coordinate
+        ws.auto_filter.ref = f"A{head_row}:{last}"
+    _autosize(ws, first_row=head_row)
+    if link_col:
+        _linkify(ws, link_col, head_row + 1, link_label)
+        if link_label:
+            from openpyxl.utils import get_column_letter
+            ws.column_dimensions[get_column_letter(link_col)].width = max(len(link_label) + 4, 18)
+    if len(rows) <= 1:
+        ws.cell(row=head_row + 1, column=1, value=empty_note)
+
+
+def _dashboard(ws, result: dict, sheet_name: str, when: str) -> None:
+    """Первый лист: цифры крупно, под ними – по какому полю сколько расхождений."""
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    t = result.get("totals") or {}
+    thin = Side(style="thin", color=C_BORDER)
+    border = Border(top=thin, bottom=thin, left=thin, right=thin)
+    ws.sheet_view.showGridLines = False
+
+    ws["B2"] = "Сверка КП с организациями Яндекса"
+    ws["B2"].font = Font(size=16, bold=True, color=C_LINK)
+    ws.merge_cells("B3:H3")
+    ws["B3"] = (f"Лист КП «{sheet_name}»"
+                + (f" · организации прочитаны {when}" if when else "")
+                + f" · организаций в аккаунте: {t.get('companies', 0)}")
+    ws["B3"].font = Font(size=10, color=C_GREY)
+
+    tiles = (
+        ("B5", "Городов в КП", "B6", t.get("rows", 0), C_LINK),
+        ("D5", "Карточка нашлась", "D6", t.get("found", 0), "1E8E3E"),
+        ("F5", "Нет в Яндексе", "F6", t.get("missing", 0), "C62828"),
+        ("H5", "Есть в Яндексе, нет в КП", "H6", t.get("extra", 0), "9C7A00"),
+        ("B8", "Всё сходится", "B9", t.get("clean", 0), "1E8E3E"),
+        ("D8", "Несколько карточек", "D9", t.get("several", 0), "B26A00"),
+        ("F8", "Есть расхождения", "F9", t.get("mismatch", 0), "C62828"),
+        ("H8", "Без ссылки в КП", "H9", t.get("noLink", 0), C_GREY),
+    )
+    for lbl_at, label, val_at, value, colour in tiles:
+        ws[lbl_at] = label
+        ws[lbl_at].font = Font(size=9, color=C_GREY)
+        ws[lbl_at].alignment = Alignment(wrap_text=True, vertical="bottom")
+        ws[val_at] = value
+        ws[val_at].font = Font(size=20, bold=True, color=colour)
+
+    # Что именно расходится – с полоской, чтобы перекос был виден без графика.
+    by_field = {"Сайт": 0, "Телефон": 0, "Почта": 0}
+    for it in result.get("items") or []:
+        cmp = it.get("cmp") or {}
+        for key, label in (("site", "Сайт"), ("phone", "Телефон"), ("email", "Почта")):
+            if cmp.get(key) in BAD_VERDICTS:
+                by_field[label] += 1
+
+    ws.merge_cells("B11:H11")
+    ws["B11"] = "Расхождения по типу данных"
+    ws["B11"].font = Font(size=12, bold=True)
+    for c, title in enumerate(("Что сверяли", "Расхождений", ""), 2):
+        cell = ws.cell(row=12, column=c, value=title)
+        cell.font = Font(size=10, bold=True)
+        cell.fill = PatternFill("solid", fgColor=C_HEAD)
+        cell.border = border
+        cell.alignment = Alignment(horizontal="center")
+    top = max(by_field.values(), default=0)
+    for n, (label, value) in enumerate(by_field.items(), start=13):
+        ws.cell(row=n, column=2, value=label).border = border
+        ws.cell(row=n, column=3, value=value).border = border
+        bar = ws.cell(row=n, column=4, value=_bar(value, top))
+        bar.font = Font(color="C62828" if value else C_GREY)
+
+    ws.append([])
+    row = ws.max_row + 1
+    ws.cell(row=row, column=2, value="Подробности – на листах «Нет в КП», «Дубли», "
+                                     "«Нет в Яндексе» и «Расхождения». Как читать значки – "
+                                     "на листе «Как читать».").font = Font(color=C_GREY)
+
+    for col, width in (("A", 2), ("B", 24), ("C", 13), ("D", 22), ("E", 13),
+                       ("F", 22), ("G", 13), ("H", 24)):
+        ws.column_dimensions[col].width = width
+    ws.row_dimensions[5].height = 26
+    ws.row_dimensions[8].height = 26
+
+
+def _legend_sheet(ws) -> None:
+    from openpyxl.styles import Alignment, Font
+
+    ws.sheet_view.showGridLines = False
+    ws.column_dimensions["A"].width = 104
+    for i, (text, bold) in enumerate(LEGEND, 1):
+        cell = ws.cell(row=i, column=1, value=text)
+        cell.font = Font(bold=bold, size=14 if (bold and i == 1) else 11)
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+
+GRID_HEADERS = ["Страна", "Город", "Карточка", "Сайт", "Телефон", "Почта",
+                "Что проверить", "Ссылка на карточку", "Ошибок (✗)"]
+
+
+def _grid_sheet(wb, result: dict) -> None:
+    """
+    Главный лист: одна строка на город, значки вместо простыней текста.
+
+    Подробности – в примечании к ячейке, как в отчёте site-checker: там это
+    единственное, что делает таблицу на две сотни строк читаемой.
+    """
+    from openpyxl.comments import Comment
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    ws = wb.create_sheet("Сверка")
+    for c, title in enumerate(GRID_HEADERS, 1):
+        ws.cell(row=1, column=c, value=title)
+    _style_head(ws, 1)
+    ws.freeze_panes = "C2"
+    thin = Side(style="thin", color=C_BORDER)
+    border = Border(right=thin)
+
+    def mark(row: int, col: int, kind: str, note: str = "") -> None:
+        cell = ws.cell(row=row, column=col, value=SYMBOL[kind])
+        cell.font = Font(color=COLOR[kind], bold=True)
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = border
+        if kind in ("bug", "warn") and note:
+            cell.fill = PatternFill("solid", fgColor=C_BUG if kind == "bug" else C_WARN)
+        if note:
+            comment = Comment(note[:400], "Click")
+            comment.width, comment.height = 330, 150
+            cell.comment = comment
+
+    r = 1
+    for it in result.get("items") or []:
+        r += 1
+        cmp = it.get("cmp") or {}
+        cos = it.get("companies") or []
+        ws.cell(row=r, column=1, value=it.get("country", ""))
+        ws.cell(row=r, column=2, value=it.get("city", ""))
+
+        status = cmp.get("status", "нет")
+        card_note = {"найдена": "Карточка одна – всё в порядке.",
+                     "несколько": f"Карточек {len(cos)} – это дубли, проверьте лишнюю.",
+                     "нет": "Карточки в Яндексе не нашлось."}.get(status, "")
+        if cos:
+            card_note += "\n\n" + "\n".join(
+                f'{c.get("name", "")} · {c.get("address", "")}'.strip(" ·") for c in cos)
+        mark(r, 3, STATUS_KIND.get(status, "bug"), card_note)
+
+        for n, (key, label, kp_value, ya_value) in enumerate((
+            ("site", "Сайт", it.get("site", ""), " / ".join(cmp.get("yaSites") or [])),
+            ("phone", "Телефон", " / ".join(it.get("phones") or []),
+             " / ".join(cmp.get("yaPhones") or [])),
+            ("email", "Почта", it.get("email", ""), " / ".join(cmp.get("yaEmails") or [])),
+        )):
+            # Карточки нет – сверять не с чем, ставим «–». Иначе строка
+            # ненайденного города краснела четырьмя крестами про одно и то же.
+            verdict = cmp.get(key, "–") if cos else "–"
+            kind = VERDICT_KIND.get(verdict, "na")
+            note = "" if kind == "na" else (f"{label}: {verdict}\n\n"
+                                            f"КП: {kp_value or '–'}\n"
+                                            f"Яндекс: {ya_value or '–'}")
+            mark(r, 4 + n, kind, note)
+
+        ws.cell(row=r, column=7, value="; ".join(cmp.get("problems") or []))
+        ws.cell(row=r, column=8, value=card_url(str(cos[0].get("id"))) if cos else "")
+        errors = len(cmp.get("problems") or [])
+        err = ws.cell(row=r, column=9, value=errors)
+        err.alignment = Alignment(horizontal="center")
+        if errors:
+            err.font = Font(bold=True, color="C62828")
+
+    _linkify(ws, 8, 2, "Открыть карточку")
+    ws.auto_filter.ref = f"A1:{ws.cell(row=1, column=len(GRID_HEADERS)).coordinate}"
+    for col, width in (("A", 14), ("B", 24), ("C", 11), ("D", 9), ("E", 11),
+                       ("F", 9), ("G", 52), ("H", 20), ("I", 11)):
+        ws.column_dimensions[col].width = width
+    if r == 1:
+        ws.cell(row=2, column=1, value="В листе КП не нашлось ни одного города.")
+
+
+def _full_sheet(wb, rows: list[list[str]], result: dict) -> None:
+    """Исходное КП плюс колонки из Яндекса – для тех, кому нужна вся таблица."""
     from openpyxl.styles import Alignment, Font, PatternFill
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = (sheet_name or "Сверка")[:31]
+    ws = wb.create_sheet("КП с данными")
     body = to_rows(rows, result)
     for line in body:
         ws.append(line)
 
     sheet = result.get("sheet") or {}
     header_idx = sheet.get("headerIdx", -1)
-    base_width = sheet.get("width", 0)
-    status_col = base_width + 1                      # «Я: статус», 1-based
-    fills = {"✅ найдена": FILL_OK, "❗ несколько": FILL_WARN, "❌ нет": FILL_BAD}
+    status_col = sheet.get("width", 0) + 1
+    city_col = (sheet.get("columns") or {}).get("city", 0) + 1
+    fills = {"✅ найдена": C_OK, "❗ несколько": C_WARN, "❌ нет": C_BUG}
 
     if header_idx >= 0:
-        for c in range(status_col, status_col + len(EXTRA_HEADERS)):
-            cell = ws.cell(row=header_idx + 1, column=c)
-            cell.font = Font(bold=True)
-            cell.alignment = Alignment(wrap_text=True, vertical="center")
+        _style_head(ws, header_idx + 1)
+        ws.freeze_panes = ws.cell(row=header_idx + 2, column=max(city_col + 1, 2))
+        last = ws.cell(row=header_idx + 1, column=ws.max_column).coordinate
+        ws.auto_filter.ref = f"A{header_idx + 1}:{last}"
 
+    # Красим только саму плашку статуса и разошедшиеся поля: заливка на все
+    # четырнадцать колонок рябила так, что читать было нечем.
+    diff_cols = [status_col + n for n, name in enumerate(EXTRA_HEADERS)
+                 if name.endswith("совпадает?")]
     for i, line in enumerate(body, start=1):
         mark = line[status_col - 1] if status_col - 1 < len(line) else ""
-        colour = fills.get(mark)
-        if not colour:
-            continue
-        fill = PatternFill("solid", fgColor=colour)
-        for c in range(status_col, status_col + len(EXTRA_HEADERS)):
-            ws.cell(row=i, column=c).fill = fill
-    for c in range(status_col, status_col + len(EXTRA_HEADERS)):
-        ws.column_dimensions[ws.cell(row=1, column=c).column_letter].width = 26
+        if mark in fills:
+            cell = ws.cell(row=i, column=status_col)
+            cell.fill = PatternFill("solid", fgColor=fills[mark])
+            cell.font = Font(bold=True)
+        for col in diff_cols:
+            if col - 1 < len(line) and line[col - 1] in BAD_VERDICTS:
+                ws.cell(row=i, column=col).fill = PatternFill("solid", fgColor=C_BUG)
 
-    ws2 = wb.create_sheet("Лишние в Яндексе")
-    for line in extra_rows(result):
-        ws2.append(line)
-    for cell in ws2[1]:
-        cell.font = Font(bold=True)
+    _linkify(ws, status_col + EXTRA_HEADERS.index("Ссылка на карточку"),
+             (header_idx + 2) if header_idx >= 0 else 2, "Открыть карточку")
+    _autosize(ws, first_row=max(header_idx + 1, 1), cap=38)
+    for c in range(status_col, status_col + len(EXTRA_HEADERS)):
+        ws.cell(row=max(header_idx + 1, 1), column=c).alignment = Alignment(
+            wrap_text=True, vertical="center", horizontal="center")
+
+
+def to_xlsx(rows: list[list[str]], result: dict, sheet_name: str = "Сверка",
+            collected_at: str = "") -> bytes:
+    """
+    Отчёт книгой: дашборд, подсказка, три списка под конкретный вопрос,
+    сетка ✓/✗ и полное КП.
+
+    Раньше это была одна таблица в сорок колонок, и заказчик прямо сказала:
+    «ничего не понятно». Один лист – один вопрос; широкая таблица лежит
+    последней, для случаев, когда нужна именно она.
+    """
+    import io
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    _dashboard(wb.active, result, sheet_name, collected_at)
+    wb.active.title = "Дашборд"
+    _legend_sheet(wb.create_sheet("Как читать"))
+
+    _list_sheet(wb, "Нет в КП", extra_rows(result), link_col=9, link_label="Открыть карточку",
+                note="Эти организации заведены в Яндексе, а города в КП нет. "
+                     "Ссылка ведёт прямо в карточку: дописать город в КП или удалить дубль.",
+                empty_note="Все организации разошлись по городам КП.")
+    _list_sheet(wb, "Дубли", double_rows(result), link_col=9, link_label="Открыть карточку",
+                note="Города, где карточек больше одной. Строк столько же, сколько карточек.",
+                empty_note="Дублей нет.")
+    _list_sheet(wb, "Нет в Яндексе", missing_rows(result),
+                note="Города из КП, для которых карточки в Яндексе не нашлось.",
+                empty_note="Все города КП нашлись в Яндексе.")
+    _list_sheet(wb, "Расхождения", diff_rows(result), link_col=6, link_label="Открыть карточку",
+                note="Слева значение из КП, справа – из карточки Яндекса.",
+                empty_note="Расхождений не найдено 🎉")
+
+    _grid_sheet(wb, result)
+    _full_sheet(wb, rows, result)
+    wb.active = 0
 
     buf = io.BytesIO()
     wb.save(buf)

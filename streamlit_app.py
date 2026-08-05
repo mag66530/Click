@@ -45,7 +45,7 @@ from playwright_worker import PlaywrightWorker
 # Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
 # Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
 # ссылкой на старый yb_playwright.
-UI_BUILD = "2026-08-06-kp-sheet-reviews"
+UI_BUILD = "2026-08-06-send-all"
 
 
 def _same_build(mod) -> bool:
@@ -1612,28 +1612,133 @@ def _review_regenerate(project_id: str, item: dict) -> None:
             item["status"] = rv.NO_DRAFT
 
 
-def _review_send(project_id: str, item: dict, text: str) -> tuple[str, str]:
+def _apply_send_result(item: dict, status: str, reason: str) -> None:
+    """Разложить исход отправки по статусам очереди – одинаково для одного и для всех."""
+    item["note"] = reason
+    if status == "answered":
+        item["status"] = rv.ANSWERED
+    elif status == "already":
+        item["status"] = rv.ALREADY
+    else:
+        # И «не подтвердилось» тоже: отзыв остаётся в списке, пока Яндекс
+        # сам не покажет ответ. Молча считать успехом нельзя.
+        item["status"] = rv.FAILED
+
+
+def _review_send_many(project_id: str, jobs: list[tuple[dict, str]],
+                      progress=None) -> dict:
     """
-    Отправка ответа: тот же синхронный канал, что и вход в Яндекс.
-    Свой браузер, поэтому только когда фоновый прогон не идёт – иначе два
-    браузера дерутся за один файл сессии.
+    Отправить пачку подтверждённых ответов за один запуск браузера.
+
+    Браузер поднимается ОДИН раз на всю пачку: запуск занимает секунды, и
+    делать его на каждый ответ – значит превратить отправку двадцати
+    ответов в долгое ожидание.
+
+    Результат по каждому сразу пишется в очередь: оборвётся на середине –
+    уже отправленное не потеряется и не уйдёт повторно.
     """
+    out = {"answered": 0, "already": 0, "failed": 0}
     browser = yb.YbBrowser(project_id, headless=bool(get_settings(project_id)["headless"]))
     worker = PlaywrightWorker()
     try:
         worker.call(browser.start)
-        res = worker.call(yb.publish_review_answer, browser.page, item.get("reviewsUrl"),
-                          item.get("reviewId"), text, item.get("text") or "")
+        for n, (item, text) in enumerate(jobs, 1):
+            if progress:
+                progress(n, len(jobs), item)
+            try:
+                res = worker.call(yb.publish_review_answer, browser.page,
+                                  item.get("reviewsUrl"), item.get("reviewId"),
+                                  text, item.get("text") or "")
+                status, reason = res.get("status", "failed"), res.get("reason", "")
+            except Exception as e:  # noqa: BLE001
+                status, reason = "failed", str(e)
+            item["finalText"] = text
+            _apply_send_result(item, status, reason)
+            out[{"answered": "answered", "already": "already"}.get(status, "failed")] += 1
+            _review_queue_save(project_id, push=False)
         worker.call(browser.save_session)
-        return res.get("status", "failed"), res.get("reason", "")
     except Exception as e:  # noqa: BLE001
-        return "failed", str(e)
+        st.session_state["_store_error"] = str(e)
     finally:
         try:
             worker.call(browser.close)
         except Exception:  # noqa: BLE001
             pass
         worker.stop()
+    _review_queue_save(project_id)
+    return out
+
+
+def _review_send(project_id: str, item: dict, text: str) -> tuple[str, str]:
+    """Отправка одного ответа – та же дорога, что и у пачки."""
+    _review_send_many(project_id, [(item, text)])
+    status = {rv.ANSWERED: "answered", rv.ALREADY: "already"}.get(item.get("status"), "failed")
+    return status, item.get("note") or ""
+
+
+def _send_all_block(project_id: str, pending: list[dict], running: bool) -> None:
+    """
+    Отправить все готовые ответы разом.
+
+    В пачку берём только те, где черновик готов и выглядит целым. Отзывы
+    «отвечаете сами» и неудачные черновики не трогаем: пачкой уходит то,
+    что заведомо можно публиковать, остальное человек разбирает поштучно.
+
+    Отправка публична и необратима – поэтому в два шага, с подтверждением
+    и с числом ответов прямо на кнопке.
+    """
+    ready = [it for it in pending
+             if it.get("status") == rv.DRAFTED
+             and (it.get("draft") or "").strip()
+             and not rv.looks_broken(it.get("draft") or "")]
+    if not ready or running:
+        return
+
+    asked = st.session_state.get("rv-send-all-asked")
+    if not asked:
+        skipped = len(pending) - len(ready)
+        tail = (f" Остальные {skipped} останутся в списке: там либо нужен ваш ответ, "
+                "либо черновик не получился." if skipped else "")
+        st.caption(f"Готовы к отправке: {len(ready)}.{tail}")
+        if st.button(f"📨 Отправить все ({len(ready)})", key="rv-send-all",
+                     use_container_width=True):
+            st.session_state["rv-send-all-asked"] = True
+            st.rerun()
+        return
+
+    st.warning(f"Отправить {len(ready)} ответов в Яндекс? Они появятся на карточках "
+               "под именем бренда сразу, отменить это можно будет только вручную.")
+    yes, no = st.columns(2)
+    if no.button("Отмена", key="rv-send-all-no", use_container_width=True):
+        st.session_state.pop("rv-send-all-asked", None)
+        st.rerun()
+    if yes.button(f"Да, отправить {len(ready)}", key="rv-send-all-yes",
+                  type="primary", use_container_width=True):
+        st.session_state.pop("rv-send-all-asked", None)
+        jobs = []
+        for it in ready:
+            # Правки человека в поле важнее исходного черновика.
+            stamp = hashlib.md5((it.get("draft") or "").encode("utf-8")).hexdigest()[:8]
+            text = st.session_state.get(f"rv-text-{it.get('reviewId')}-{stamp}") or it.get("draft")
+            jobs.append((it, text))
+
+        bar = st.progress(0.0, text="Отправляю…")
+
+        def tick(n: int, total: int, item: dict) -> None:
+            bar.progress((n - 1) / total, text=f"{n} из {total}: {item.get('city') or ''}")
+
+        with st.spinner("Открываю Яндекс и отправляю ответы…"):
+            res = _review_send_many(project_id, jobs, progress=tick)
+        bar.progress(1.0, text="Готово")
+
+        parts = [f"отправлено {res['answered']}"]
+        if res["already"]:
+            parts.append(f"уже были отвечены {res['already']}")
+        if res["failed"]:
+            parts.append(f"не прошло {res['failed']} – остались в списке")
+        (st.success if not res["failed"] else st.warning)(" · ".join(parts))
+        time.sleep(1.2)
+        st.rerun()
 
 
 def reviews_queue_block(project_id: str) -> None:
@@ -1658,12 +1763,12 @@ def reviews_queue_block(project_id: str) -> None:
 
         # Черновики могли остаться от прошлой версии – обрывками на полуслове.
         # Перещёлкивать «Переписать» по каждому вручную дело нудное.
-        # Переписать разом. Нужно не только когда черновик негодный: промпт
+        # Переписать разом. Нужно не только когда черновик неудачный: промпт
         # проекта правится, и после правки прежние ответы устаревают все сразу.
         redo = [it for it in pending if it.get("status") in (rv.DRAFTED, rv.NO_DRAFT)]
         broken = [it for it in redo if rv.looks_broken(it.get("draft") or "")]
         if redo and llm.is_configured() and not running:
-            note = (f"Негодных черновиков: {len(broken)} из {len(redo)}. " if broken
+            note = (f"Неудачных черновиков: {len(broken)} из {len(redo)}. " if broken
                     else "")
             st.caption(note + "Переписать все разом – примерно "
                        f"{max(1, round(len(redo) * llm.MIN_GAP_S / 60))} мин. "
@@ -1673,7 +1778,7 @@ def reviews_queue_block(project_id: str) -> None:
             if c_all.button(f"🔁 Переписать все ({len(redo)})", key="rv-again-all",
                             use_container_width=True):
                 todo = redo
-            if broken and c_bad.button(f"🔁 Только негодные ({len(broken)})",
+            if broken and c_bad.button(f"🔁 Только неудачные ({len(broken)})",
                                        key="rv-again-bad", use_container_width=True):
                 todo = broken
             if todo:
@@ -1683,6 +1788,8 @@ def reviews_queue_block(project_id: str) -> None:
                     bar.progress(n / len(todo), text=f"{n} из {len(todo)}")
                 _review_queue_save(project_id)
                 st.rerun()
+
+        _send_all_block(project_id, pending, running)
 
         for n, item in enumerate(pending):
             label = _REVIEW_LABELS.get(item.get("status"), "—")
@@ -1726,7 +1833,7 @@ def reviews_queue_block(project_id: str) -> None:
                     st.warning("В ответе есть слова, которые промпт запрещает: "
                                + ", ".join(f"«{w}»" for w in bad))
                 if rv.looks_broken(text):
-                    st.warning("Этот черновик негодный – оборван или в нём остались "
+                    st.warning("Черновик не получился – оборван или в нём остались "
                                "служебные заметки модели. Нажмите «Переписать».")
 
                 c1, c2, c3 = st.columns(3)
@@ -1734,24 +1841,15 @@ def reviews_queue_block(project_id: str) -> None:
                              use_container_width=True, disabled=running or not text.strip()):
                     with st.spinner("Открываю карточку и отправляю ответ…"):
                         status, reason = _review_send(project_id, item, text)
-                    item["finalText"] = text
-                    item["note"] = reason
                     if status == "answered":
-                        item["status"] = rv.ANSWERED
                         st.success(reason)
                     elif status == "already":
-                        item["status"] = rv.ALREADY
                         st.info(reason)
-                    elif status == "unknown":
+                    else:
                         # Не подтвердилось – отзыв ОСТАЁТСЯ в списке. Раньше
                         # он отсюда исчезал как отвеченный, а в Яндексе ответа
                         # не было: человек узнавал об этом случайно.
-                        item["status"] = rv.FAILED
-                        st.warning(reason)
-                    else:
-                        item["status"] = rv.FAILED
                         st.error(reason)
-                    _review_queue_save(project_id)
                     time.sleep(0.8)
                     st.rerun()
 

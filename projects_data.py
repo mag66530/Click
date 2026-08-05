@@ -5,7 +5,7 @@ chtoby izbezhat oshibok pri ruchnom perepechatyvanii ~250 gorodov.
 """
 
 # Метка сборки: streamlit_app сверяет её и перезагружает модуль при расхождении.
-BUILD = "2026-08-06-kp-sheet-reviews"
+BUILD = "2026-08-06-send-all"
 
 SMU_CITIES = [
   {

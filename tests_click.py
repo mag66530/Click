@@ -1682,7 +1682,7 @@ def test_reviews() -> None:
        rv.clean_draft("«Уважаемый Иван! Спасибо.»"), "Уважаемый Иван! Спасибо.")
     eq("чистка: лишние пустые строки схлопываются",
        rv.clean_draft("А.\n\n\n\nБ."), "А.\n\nБ.")
-    check("«Уважаемый(ая)» – негодный черновик",
+    check("«Уважаемый(ая)» – неудачный черновик",
           rv.looks_broken("Уважаемый(ая) Michail! Благодарим за отзыв о поставке."))
 
     # Промпт АПС переписан по эталонам заказчика: конкретика из отзыва
@@ -1696,6 +1696,19 @@ def test_reviews() -> None:
     check("АПС: замечание в отзыве отрабатывается",
           "обратную связь" in aps and "оправдываться" in aps)
     check("АПС: закрытие на месте", "С уважением, команда Авиапромсталь." in aps)
+
+    # Раскладка исходов отправки. Отдельно проверяем «не подтвердилось»:
+    # раньше такой ответ считался успехом и уходил из списка, а в Яндексе
+    # его не было.
+    import streamlit_app as _app
+    for status, want in (("answered", rv.ANSWERED), ("already", rv.ALREADY),
+                         ("unknown", rv.FAILED), ("failed", rv.FAILED)):
+        it = {"status": rv.DRAFTED}
+        _app._apply_send_result(it, status, "почему")
+        eq(f"исход отправки «{status}»", it["status"], want)
+    it = {"status": rv.DRAFTED}
+    _app._apply_send_result(it, "unknown", "Яндекс пока не показывает ответ")
+    check("не подтверждённый ответ остаётся в списке", it["status"] in rv.OPEN_STATUSES)
 
     # Длина абзацев: заказчик просила, чтобы первый абзац не был вдвое
     # длиннее ассортиментной фразы.
@@ -1712,13 +1725,13 @@ def test_reviews() -> None:
     # Негодный черновик – не только оборванный. Один из боевых заканчивался
     # точкой и потому считался целым, хотя целиком состоял из размышлений
     # модели о том, как трактовать промпт.
-    check("негодный: пустой", rv.looks_broken(""))
-    check("негодный: оборван", rv.looks_broken("Благодарим за отзыв и"))
-    check("негодный: заметки модели",
+    check("неудачный: пустой", rv.looks_broken(""))
+    check("неудачный: оборван", rv.looks_broken("Благодарим за отзыв и"))
+    check("неудачный: заметки модели",
           rv.looks_broken('" is proper, but let\'s check if the prompt specifies exact string.'))
-    check("негодный: рассуждение про абзацы",
+    check("неудачный: рассуждение про абзацы",
           rv.looks_broken("Salutation a sentence? If every paragraph MUST be 2 sentences."))
-    check("негодный: сплошная латиница", rv.looks_broken("Thank you for your kind feedback!"))
+    check("неудачный: сплошная латиница", rv.looks_broken("Thank you for your kind feedback!"))
     good = ("Уважаемый Святослав!\n\nБлагодарим за оставленный отзыв и обратную связь. "
             "Мы оптимизируем логистику.\n\nС уважением, команда Авиапромсталь.")
     check("годный черновик проходит", not rv.looks_broken(good))

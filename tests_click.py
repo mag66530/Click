@@ -2189,6 +2189,122 @@ def test_review_batch() -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+def test_two_people_at_once(tmp: Path) -> None:
+    """
+    Двое за разными компами не должны ронять приложение.
+
+    Заказчик запустила актуализацию вместе со сверкой КП – и получила
+    «Oh no», а в логе KeyError: 'runner', 'repo_store', 'reviews' прямо на
+    импортах. Спросила заодно: «а если два человека с разных компов, каждый
+    на своём проекте, тоже упадёт?».
+
+    Причин было две, и обе тут проверяются.
+
+    Первая: самодельная перезагрузка модулей. Она шла из пользовательского
+    потока и правила sys.modules, пока соседний поток эти же модули
+    импортировал – импорт и падал. Потоков стало много: два прогона разом,
+    плюс своя вкладка у каждого человека. Перезагрузку убрали совсем: ту же
+    работу Streamlit делает сам и делает безопасно.
+
+    Вторая: потолок в два прогона считался НА ПРОЕКТ. Двое на разных проектах
+    подняли бы по два браузера каждый – четыре разом, а память у облака одна
+    на всех, и один браузер весит около 450 МБ.
+    """
+    import json
+    import runner as r
+    import streamlit_app as app
+    print("\n▸ Двое одновременно")
+
+    # ── Гонки импортов больше нет ──
+    src = (Path(__file__).parent / "streamlit_app.py").read_text(encoding="utf-8")
+    body = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
+    check("модули не перезагружаются вручную", "importlib.reload" not in body)
+    check("sys.modules не правится", "sys.modules[" not in body)
+    check("метка сборки осталась – её показываем", bool(app.UI_BUILD))
+
+    # ── Потолок общий на всё приложение ──
+    saved_root = r.USERS_DATA
+    r.USERS_DATA = tmp
+    try:
+        for pid, kinds in (("IMP", ("publish", "actualize")),):
+            for k in kinds:
+                fp = r.p_lock(pid, k)
+                fp.parent.mkdir(parents=True, exist_ok=True)
+                fp.write_text(json.dumps({"runId": "x", "kind": k, "ownerPid": 10 ** 7}),
+                              encoding="utf-8")
+        eq("видим чужие прогоны во всех проектах",
+           sorted(r.live_runs_everywhere()), [("IMP", "actualize"), ("IMP", "publish")])
+        why = r.busy_reason("APS", "actualize")
+        check("третий прогон в ДРУГОМ проекте не пускаем", bool(why), why)
+        check("и объясняем, почему", "памят" in why.lower() and "IMP" in why, why)
+
+        for k in ("publish", "actualize"):
+            r.p_lock("IMP", k).unlink(missing_ok=True)
+        eq("когда чужие закончились – можно", r.busy_reason("APS", "actualize"), "")
+    finally:
+        r.USERS_DATA = saved_root
+
+
+# ════════════════════════════════════════════════════════════════════
+def test_city_checkbox_survives_collapse() -> None:
+    """
+    Снятая галочка города не теряется, если тут же свернуть страну.
+
+    Заказчик: «снимаю галочку и сворачиваю страну – она всё равно остаётся
+    включённой, снять можно только кнопкой».
+
+    Механика. Снятие запоминается в on_change, а он зовётся только если
+    галочку в этот проход рисуют. Браузер отправляет снятие; ответа ещё нет,
+    человек уже жмёт по стране. Второй запрос приходит с обоими изменениями,
+    страна сворачивается – галочки не рисуются, on_change по ним не зовётся,
+    снятие пропадает. Кнопка «Снять все» пишет напрямую, поэтому работала.
+
+    Лечится чтением значения НАПРЯМУЮ до отрисовки: невидимые виджеты
+    Streamlit вычищает только ПОСЛЕ прогона скрипта (on_script_finished →
+    _remove_stale_widgets), так что присланное значение в этот момент ещё
+    доступно.
+    """
+    import inspect
+    import streamlit as st
+    import streamlit_app as app
+    print("\n▸ Галочка города и сворачивание страны")
+
+    st.session_state.clear()
+    all_ids = ["ct-1", "ct-2", "ct-3"]
+    chosen = app._act_selected(all_ids)
+    eq("сначала выбраны все", len(chosen), 3)
+
+    # Браузер прислал снятие, но страну свернули – on_change не позвали.
+    st.session_state["act-cb-ct-2"] = False
+    check("без подбора значение бы потерялось", "ct-2" in chosen)
+    app._act_sync_widgets(all_ids)
+    check("снятая галочка подобрана", "ct-2" not in chosen, sorted(chosen))
+    eq("остальные не тронуты", sorted(chosen), ["ct-1", "ct-3"])
+
+    # И обратно: галочку вернули – тоже подхватывается.
+    st.session_state["act-cb-ct-2"] = True
+    app._act_sync_widgets(all_ids)
+    check("возврат галочки подхватывается", "ct-2" in chosen, sorted(chosen))
+
+    # Города, про которые браузер ничего не присылал, не трогаем.
+    st.session_state.clear()
+    st.session_state["act-selected"] = {"ct-1"}
+    app._act_sync_widgets(all_ids)
+    eq("про что не спрашивали – то не меняем", sorted(st.session_state["act-selected"]), ["ct-1"])
+
+    # Подбор обязан идти ДО отрисовки галочек, иначе смысла в нём нет.
+    src = inspect.getsource(app.tab_actualize)
+    sync = src.find("_act_sync_widgets")
+    draw = src.find("act-cb-")
+    check("подбор идёт до отрисовки галочек", 0 < sync < draw, f"подбор {sync}, отрисовка {draw}")
+
+    # Галочка отзывов включена по умолчанию.
+    check("«заодно проверить отзывы» включена сразу",
+          'setdefault("act-reviews", True)' in src, "")
+    st.session_state.clear()
+
+
+# ════════════════════════════════════════════════════════════════════
 def test_reviews_limit_and_stop() -> None:
     """
     Упёрлись в лимит Gemini – хватит пробовать. И «Остановить» слышно сразу.
@@ -2696,11 +2812,15 @@ def test_one_build() -> None:
     """
     Метка сборки обязана быть одна на все модули.
 
-    Проверка не косметическая. Если хоть у одного модуля метка своя,
-    условие «все ли из одной сборки» становится ложным НАВСЕГДА, и Click
-    перезагружает все десять модулей на каждое нажатие. Так приложение и
-    выбило по памяти в облаке, причём перезапуск не помогал: следующее же
-    действие всё повторяло.
+    Проверка не косметическая: метка показывается человеку в шапке и служит
+    ключом кэша для CSS. Разъехавшись, она врёт про то, что залито.
+
+    Отдельно следим, что самодельной перезагрузки модулей в приложении нет.
+    Она была и дважды вышла боком: сперва выбила приложение по памяти (метка
+    у одного модуля разъехалась, и перезагружались все десять на каждое
+    нажатие), потом уронила его совсем – KeyError: 'runner' на импорте, когда
+    один поток перезагружал модули, а другой их импортировал. Ту же работу
+    Streamlit делает сам и делает безопасно.
     """
     import build
     import kp_audit
@@ -2735,9 +2855,14 @@ def test_one_build() -> None:
            and re.search(r'^BUILD = "', f.read_text(encoding="utf-8"), re.M)]
     eq("метка задана только в build.py", own, [])
 
-    check("список перезагрузки включает сам build", "build" in app._MODULES)
-    for name in mods:
-        check(f"{name} в списке перезагрузки", name in app._MODULES, app._MODULES)
+    # Самодельной перезагрузки модулей быть не должно ни в каком виде.
+    check("в приложении нет своей перезагрузки модулей",
+          not hasattr(app, "_MODULES") and not hasattr(app, "_same_build"))
+    src = (root / "streamlit_app.py").read_text(encoding="utf-8")
+    body = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
+    check("importlib.reload не зовётся", "importlib.reload" not in body, "")
+    check("sys.modules напрямую не правится",
+          "sys.modules[" not in body and "sys.modules.pop" not in body, "")
 
 
 
@@ -2803,6 +2928,8 @@ def main() -> int:
         test_reviews()
         test_gemini_keys()
         test_review_batch()
+        test_two_people_at_once(tmp)
+        test_city_checkbox_survives_collapse()
         test_reviews_limit_and_stop()
         test_look_and_order()
         test_assortment_verbatim()

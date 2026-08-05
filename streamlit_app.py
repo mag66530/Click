@@ -38,50 +38,30 @@ import yb_playwright as yb
 import playwright_worker
 from playwright_worker import PlaywrightWorker
 
-# ВСЕ модули обязаны быть из одной сборки. Облако умеет обновить главный
-# скрипт «на лету», оставив соседние модули в памяти прежними – и тогда новая
-# страница зовёт функцию, которой в старом модуле ещё нет. Сначала это ловили
-# только для ui_theme (разъезжались вёрстка и CSS), потом ровно так же
-# посыпались отзывы: страница уже знала про looks_cut_off, а reviews в памяти –
-# нет, и вкладка падала с AttributeError.
+# Метка сборки. Показывается человеку и служит ключом кэша для CSS.
 #
-# Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
-# Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
-# ссылкой на старый yb_playwright.
+# ЗДЕСЬ БОЛЬШЕ НЕТ САМОДЕЛЬНОЙ ПЕРЕЗАГРУЗКИ МОДУЛЕЙ, и это важно.
+#
+# Раньше тут стояло: «не совпала метка – перезагружаем модуль сами» через
+# importlib.reload. Задумка была честная: облако умеет обновить главный скрипт,
+# оставив соседние модули в памяти прежними, и тогда страница зовёт функцию,
+# которой в старом модуле ещё нет.
+#
+# Но это оказалось лечением несуществующей болезни ценой настоящей. Streamlit
+# делает ровно ту же работу сам: следит за локальными модулями и выселяет
+# изменённые из sys.modules – причём аккуратно, откладывая выселение так, чтобы
+# «never mutate sys.modules while user code is running» (его local_sources_watcher).
+#
+# А наша перезагрузка шла из пользовательского потока, без всякой оглядки на
+# соседей. Пока один поток перезагружал модули, другой их импортировал – и
+# импорт падал на ровном месте: KeyError: 'runner', KeyError: 'repo_store',
+# KeyError: 'reviews'. Приложение умирало целиком. Потоков же стало много:
+# два прогона разом, плюс каждая открытая вкладка – это свой поток. Заказчик
+# получила это, запустив актуализацию вместе со сверкой КП; и на вопрос «а если
+# два человека с разных компов?» ответ был бы такой же – упало бы.
+#
+# Поэтому: модули не трогаем, метку только показываем.
 from build import BUILD as UI_BUILD
-
-
-def _same_build(mod) -> bool:
-    return getattr(mod, "BUILD", "") == UI_BUILD
-
-
-# Список ПОЛНЫЙ: любой модуль, оставшийся в памяти старым, ломает своё. Так
-# заказчик перезагрузила города из таблицы, а Click опять взял старый лист –
-# kp_sheet в списке не было, и правка просто не работала.
-_MODULES = ("build", "paths", "repo_store", "projects_data", "kp_sheet", "kp_audit",
-            "playwright_worker", "ui_theme", "yb_playwright", "reviews", "llm", "runner")
-
-if not all(_same_build(m) for m in (paths, repo_store, pdata, kp_sheet, kp_audit,
-                                    playwright_worker, T, yb, rv, llm, runner)):
-    import importlib
-
-    for _name in _MODULES:                # порядок: зависимости раньше зависимых
-        try:
-            importlib.reload(sys.modules[_name])
-        except Exception:  # noqa: BLE001 – без перезагрузки хуже, но падать нельзя
-            pass
-    import kp_audit  # noqa: F811
-    import playwright_worker  # noqa: F811
-    import kp_sheet  # noqa: F811
-    import llm  # noqa: F811
-    import paths  # noqa: F811
-    import projects_data as pdata  # noqa: F811
-    import repo_store  # noqa: F811
-    import reviews as rv  # noqa: F811
-    import runner  # noqa: F811
-    import ui_theme as T  # noqa: F811
-    import yb_playwright as yb  # noqa: F811
-    from playwright_worker import PlaywrightWorker  # noqa: F811
 
 ROOT = Path(__file__).parent
 USERS_DATA = paths.data_root()
@@ -1616,6 +1596,30 @@ def _act_toggle(city_id: str, widget_key: str) -> None:
         sel.discard(city_id)
 
 
+def _act_sync_widgets(all_ids: list[str]) -> None:
+    """
+    Подобрать значения галочек, которые браузер прислал, а отрисовать их уже
+    не успели.
+
+    Зачем. Снятая галочка запоминается в on_change, а он срабатывает только
+    если галочку в этот раз рисуют. Живой случай заказчика: снять галочку и
+    тут же свернуть страну – город оставался выбранным, «снять можно только
+    кнопкой». Гонка: браузер отправляет снятие, но ответ ещё не пришёл, а
+    человек уже жмёт по стране. Второй запрос приходит с обоими изменениями
+    сразу, страна сворачивается – и галочки в этот проход не рисуются, значит
+    on_change по ним не зовётся, и снятие пропадает. Локально это почти не
+    ловится, в облаке с его задержками – запросто.
+
+    Лечится тем, что значение галочки читается НАПРЯМУЮ, до отрисовки: к
+    моменту запуска скрипта Streamlit уже положил присланное в session_state.
+    """
+    sel = st.session_state.setdefault("act-selected", set())
+    for cid in all_ids:
+        key = f"act-cb-{cid}"
+        if key in st.session_state:
+            sel.add(cid) if st.session_state[key] else sel.discard(cid)
+
+
 # ════════════════════════════════════════════════════════════════════
 #  Очередь ответов на отзывы
 # ════════════════════════════════════════════════════════════════════
@@ -2240,6 +2244,9 @@ def tab_actualize(project_id: str, config: dict) -> None:
 
     all_ids = [ct["id"] for c in countries for ct in c["cities"]]
     chosen = _act_selected(all_ids)
+    # Значения галочек читаем ДО отрисовки: те, что браузер прислал, а
+    # нарисовать в этот проход не успеем (страну свернули), иначе пропали бы.
+    _act_sync_widgets(all_ids)
     selected = [cid for cid in all_ids if cid in chosen]
 
     state = runner.read_state(project_id, "actualize")
@@ -2303,8 +2310,10 @@ def tab_actualize(project_id: str, config: dict) -> None:
         reviews_queue_block(project_id)
         return
 
-    # value не задаём: у виджета есть key, и Streamlit ругается, если состояние
-    # приходит и из session_state, и из value одновременно.
+    # По умолчанию ВКЛЮЧЕНА – прогон почти всегда делают вместе с отзывами.
+    # Ставим через session_state, а не через value: у виджета есть key, и
+    # Streamlit ругается, когда состояние приходит из обоих мест сразу.
+    st.session_state.setdefault("act-reviews", True)
     with_reviews = st.checkbox(
         "💬 Заодно проверить отзывы и подготовить ответы", key="act-reviews",
         help="Click зайдёт в раздел «Отзывы» каждой карточки, найдёт отзывы без ответа "

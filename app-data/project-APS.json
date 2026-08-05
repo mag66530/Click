@@ -1,357 +1,50 @@
 {
   "countries": [
     {
-      "id": "c-APS-россия-1785841210",
-      "name": "Россия",
-      "cities": [
-        {
-          "id": "ct-барнаул-1785841237412-0",
-          "name": "Барнаул",
-          "url": "https://yandex.ru/sprav/21461411/edit/"
-        },
-        {
-          "id": "ct-волгоград-1785841237412-1",
-          "name": "Волгоград",
-          "url": "https://yandex.ru/business/companies/company/70210624498/"
-        },
-        {
-          "id": "ct-воронеж-1785841237412-2",
-          "name": "Воронеж",
-          "url": "https://yandex.ru/sprav/21715667/edit/main"
-        },
-        {
-          "id": "ct-донецк-1785841237412-3",
-          "name": "Донецк",
-          "url": "https://yandex.ru/sprav/25755100/edit/"
-        },
-        {
-          "id": "ct-екатеринбург-1785841237412-4",
-          "name": "Екатеринбург",
-          "url": "https://yandex.ru/sprav/21873032/edit/main"
-        },
-        {
-          "id": "ct-ижевск-1785841237412-5",
-          "name": "Ижевск",
-          "url": "https://yandex.ru/business/companies/company/149054142964"
-        },
-        {
-          "id": "ct-иркутск-1785841237412-6",
-          "name": "Иркутск",
-          "url": "https://yandex.ru/sprav/15351553/edit/main"
-        },
-        {
-          "id": "ct-казань-1785841237412-7",
-          "name": "Казань",
-          "url": "https://yandex.ru/sprav/31831052/edit"
-        },
-        {
-          "id": "ct-кемерово-1785841237412-8",
-          "name": "Кемерово",
-          "url": "https://yandex.ru/sprav/21144078/edit/main"
-        },
-        {
-          "id": "ct-краснодар-1785841237412-9",
-          "name": "Краснодар",
-          "url": "https://yandex.ru/sprav/7661756/edit/main"
-        },
-        {
-          "id": "ct-красноярск-1785841237412-10",
-          "name": "Красноярск",
-          "url": "https://yandex.ru/business/companies/company/72177026477/"
-        },
-        {
-          "id": "ct-луганск-1785841237412-11",
-          "name": "Луганск",
-          "url": "https://yandex.ru/sprav/25755305/edit/main"
-        },
-        {
-          "id": "ct-мариуполь-1785841237412-12",
-          "name": "Мариуполь",
-          "url": "https://yandex.ru/sprav/25755702/edit"
-        },
-        {
-          "id": "ct-мелитополь-1785841237412-13",
-          "name": "Мелитополь",
-          "url": "https://yandex.ru/sprav/25755984/edit"
-        },
-        {
-          "id": "ct-москва-1785841237412-14",
-          "name": "Москва",
-          "url": "https://yandex.ru/sprav/21643318/edit/main"
-        },
-        {
-          "id": "ct-нижневартовск-1785841237412-15",
-          "name": "Нижневартовск",
-          "url": "https://yandex.ru/sprav/23021185/edit/main"
-        },
-        {
-          "id": "ct-нижний-новгород-1785841237412-16",
-          "name": "Нижний Новгород",
-          "url": "https://yandex.ru/sprav/15351827/edit/main"
-        },
-        {
-          "id": "ct-новокузнецк-1785841237412-17",
-          "name": "Новокузнецк",
-          "url": "https://yandex.ru/sprav/22126255/edit/main"
-        },
-        {
-          "id": "ct-новосибирск-1785841237412-18",
-          "name": "Новосибирск",
-          "url": "https://yandex.ru/sprav/7661809/edit/main"
-        },
-        {
-          "id": "ct-омск-1785841237412-19",
-          "name": "Омск",
-          "url": "https://yandex.ru/sprav/22069504/edit/main"
-        },
-        {
-          "id": "ct-оренбург-1785841237412-20",
-          "name": "Оренбург",
-          "url": "https://yandex.ru/sprav/22070291/edit/main"
-        },
-        {
-          "id": "ct-пермь-1785841237412-21",
-          "name": "Пермь",
-          "url": "https://yandex.ru/sprav/7661863/edit/main"
-        },
-        {
-          "id": "ct-ростов-на-дону-1785841237412-22",
-          "name": "Ростов-на-Дону",
-          "url": "https://yandex.ru/sprav/15355204/edit/main/"
-        },
-        {
-          "id": "ct-самара-1785841237412-23",
-          "name": "Самара",
-          "url": "https://yandex.ru/sprav/22421831/edit/main"
-        },
-        {
-          "id": "ct-санкт-петербург-1785841237412-24",
-          "name": "Санкт-Петербург",
-          "url": "https://yandex.ru/sprav/22885340/edit"
-        },
-        {
-          "id": "ct-саратов-1785841237412-25",
-          "name": "Саратов",
-          "url": "https://yandex.ru/sprav/19855714/edit/main"
-        },
-        {
-          "id": "ct-сургут-1785841237412-26",
-          "name": "Сургут",
-          "url": "https://yandex.ru/sprav/23666081/edit/"
-        },
-        {
-          "id": "ct-тольятти-1785841237412-27",
-          "name": "Тольятти",
-          "url": "https://yandex.ru/sprav/23369127/edit/main"
-        },
-        {
-          "id": "ct-томск-1785841237412-28",
-          "name": "Томск",
-          "url": "https://yandex.ru/sprav/23771439/edit/main"
-        },
-        {
-          "id": "ct-тула-1785841237412-29",
-          "name": "Тула",
-          "url": "https://yandex.ru/sprav/23691050/edit"
-        },
-        {
-          "id": "ct-тюмень-1785841237413-30",
-          "name": "Тюмень",
-          "url": "https://yandex.ru/sprav/16677943/edit/main"
-        },
-        {
-          "id": "ct-уфа-1785841237413-31",
-          "name": "Уфа",
-          "url": "https://yandex.ru/sprav/23867544/edit/main"
-        },
-        {
-          "id": "ct-хабаровск-1785841237413-32",
-          "name": "Хабаровск",
-          "url": "https://yandex.ru/sprav/23397644/edit/main"
-        },
-        {
-          "id": "ct-херсон-1785841237413-33",
-          "name": "Херсон",
-          "url": "https://yandex.ru/sprav/25756934/edit"
-        },
-        {
-          "id": "ct-челябинск-1785841237413-34",
-          "name": "Челябинск",
-          "url": "https://yandex.ru/sprav/24494360/edit/main"
-        },
-        {
-          "id": "ct-ярославль-1785841237413-35",
-          "name": "Ярославль",
-          "url": "https://yandex.ru/sprav/24213964/edit/main"
-        }
-      ]
-    },
-    {
-      "id": "c-APS-киргизия-1785841282",
-      "name": "Киргизия",
-      "cities": [
-        {
-          "id": "ct-бишкек-1785841309500-0",
-          "name": "Бишкек",
-          "url": "https://yandex.ru/sprav/31565270/edit"
-        },
-        {
-          "id": "ct-ош-1785841309500-1",
-          "name": "Ош",
-          "url": "https://yandex.ru/sprav/33891281/edit/main"
-        }
-      ]
-    },
-    {
-      "id": "c-APS-казахстан-1785841334",
-      "name": "Казахстан",
-      "cities": [
-        {
-          "id": "ct-актау-1785841350940-0",
-          "name": "Актау",
-          "url": "https://yandex.ru/sprav/25637563/edit"
-        },
-        {
-          "id": "ct-актобе-1785841350940-1",
-          "name": "Актобе",
-          "url": "https://yandex.ru/sprav/21047040/edit"
-        },
-        {
-          "id": "ct-алматы-1785841350940-2",
-          "name": "Алматы",
-          "url": "https://yandex.ru/sprav/15350818/edit/main/"
-        },
-        {
-          "id": "ct-астана-нур-султан-1785841350940-3",
-          "name": "Астана/Нур-Султан",
-          "url": "https://yandex.ru/sprav/25279047/edit"
-        },
-        {
-          "id": "ct-атырау-1785841350940-4",
-          "name": "Атырау",
-          "url": "https://yandex.ru/sprav/21046316/edit/"
-        },
-        {
-          "id": "ct-караганда-1785841350940-5",
-          "name": "Караганда",
-          "url": "https://yandex.ru/sprav/21045811/edit/main"
-        },
-        {
-          "id": "ct-костанай-1785841350940-6",
-          "name": "Костанай",
-          "url": "https://yandex.ru/sprav/25638664/edit/main"
-        },
-        {
-          "id": "ct-кызылорда-1785841350940-7",
-          "name": "Кызылорда",
-          "url": "https://yandex.ru/sprav/25639288/edit"
-        },
-        {
-          "id": "ct-павлодар-1785841350940-8",
-          "name": "Павлодар",
-          "url": "https://yandex.ru/sprav/28010789/edit"
-        },
-        {
-          "id": "ct-петропавловск-1785841350940-9",
-          "name": "Петропавловск",
-          "url": "https://yandex.ru/sprav/25639595/edit"
-        },
-        {
-          "id": "ct-семей-1785841350940-10",
-          "name": "Семей",
-          "url": "https://yandex.ru/sprav/25640364/edit"
-        },
-        {
-          "id": "ct-тараз-1785841350940-11",
-          "name": "Тараз",
-          "url": "https://yandex.ru/sprav/25640819/edit"
-        },
-        {
-          "id": "ct-уральск-1785841350940-12",
-          "name": "Уральск",
-          "url": "https://yandex.ru/sprav/25640923/edit"
-        },
-        {
-          "id": "ct-усть-каменогорск-1785841350940-13",
-          "name": "Усть-Каменогорск",
-          "url": "https://yandex.ru/sprav/21045395/edit/main"
-        },
-        {
-          "id": "ct-шымкент-1785841350940-14",
-          "name": "Шымкент",
-          "url": "https://yandex.ru/sprav/21056226/edit/main"
-        }
-      ]
-    },
-    {
-      "id": "c-APS-беларусь-1785841362",
-      "name": "Беларусь",
-      "cities": [
-        {
-          "id": "ct-брест-1785841377035-0",
-          "name": "Брест",
-          "url": "https://yandex.ru/sprav/22190783/edit/main"
-        },
-        {
-          "id": "ct-витебск-1785841377035-1",
-          "name": "Витебск",
-          "url": "https://yandex.ru/sprav/22191489/edit/main"
-        },
-        {
-          "id": "ct-гомель-1785841377035-2",
-          "name": "Гомель",
-          "url": "https://yandex.ru/sprav/22192555/edit/main"
-        },
-        {
-          "id": "ct-гродно-1785841377035-3",
-          "name": "Гродно",
-          "url": "https://yandex.ru/sprav/22192672/edit/main"
-        },
-        {
-          "id": "ct-минск-1785841377035-4",
-          "name": "Минск",
-          "url": "https://yandex.ru/sprav/22121268/edit/main"
-        },
-        {
-          "id": "ct-могилев-1785841377035-5",
-          "name": "Могилев",
-          "url": "https://yandex.ru/sprav/22192790/edit/main"
-        }
-      ]
-    },
-    {
-      "id": "c-APS-армения-1785841387",
+      "id": "c-APS-0-армения",
       "name": "Армения",
       "cities": [
         {
-          "id": "ct-ереван-1785841422925-0",
+          "id": "ct-APS-0-0-ереван",
           "name": "Ереван",
-          "url": "https://yandex.ru/sprav/31564993/edit"
+          "url": "https://yandex.ru/sprav/31458099/edit"
         }
       ]
     },
     {
-      "id": "c-APS-азербайджан-1785841434",
+      "id": "c-APS-1-азербайджан",
       "name": "Азербайджан",
       "cities": [
         {
-          "id": "ct-баку-1785848245185",
+          "id": "ct-APS-1-0-баку",
           "name": "Баку",
-          "url": "https://yandex.ru/sprav/161554714522/p/edit/"
+          "url": "https://yandex.ru/sprav/31508443/edit"
         }
       ]
     },
     {
-      "id": "c-APS-узбекистан-1785841456",
+      "id": "c-APS-2-узбекистан",
       "name": "Узбекистан",
       "cities": [
         {
-          "id": "ct-ташкент-1785841467920-0",
+          "id": "ct-APS-2-0-ташкент",
           "name": "Ташкент",
-          "url": "https://yandex.ru/sprav/31565459/edit/main"
+          "url": "https://yandex.ru/sprav/31535847/edit"
+        }
+      ]
+    },
+    {
+      "id": "c-APS-3-киргизия",
+      "name": "Киргизия",
+      "cities": [
+        {
+          "id": "ct-APS-3-0-бишкек",
+          "name": "Бишкек",
+          "url": "https://yandex.ru/sprav/31512804/edit"
         }
       ]
     }
   ],
-  "email": "aviastalru@yandex.ru"
+  "email": "aviastalru@yandex.ru",
+  "kpSyncedAt": "2026-08-05T08:08:06.105090+00:00"
 }

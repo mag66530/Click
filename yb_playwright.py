@@ -48,7 +48,7 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-05-reviews-fix"
+BUILD = "2026-08-05-reviews-send"
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -1991,22 +1991,61 @@ _FIND_ANSWER_FIELD_JS = r"""
 }
 """
 
+# Кнопка отправки ответа – КРУЖОК СО СТРЕЛКОЙ, без единой буквы внутри.
+# Первая версия искала кнопку по тексту («Отправить», «Ответить») и,
+# понятно, не находила ничего: жала Ctrl+Enter, Яндекс её игнорировал, а
+# Click рапортовал «отправлено». Ответы не уходили.
+#
+# Ищем иначе и надёжнее: перед вводом текста помечаем ВСЕ кнопки страницы
+# как уже виденные. Стрелка появляется только после ввода – значит, это
+# кнопка без пометки. Из непомеченных отбрасываем «Отменить редактирование»
+# и берём ближайшую к полю ответа.
+
+_MARK_SEEN_BUTTONS_JS = r"""
+() => {
+  let n = 0;
+  document.querySelectorAll('button, [role="button"], input[type="submit"]').forEach(b => {
+    b.setAttribute('data-click-seen', '1');
+    n++;
+  });
+  document.querySelectorAll('[data-click-answer-send]').forEach(
+    b => b.removeAttribute('data-click-answer-send'));
+  return n;
+}
+"""
+
 _FIND_SEND_BUTTON_JS = r"""
 () => {
-  const box = document.querySelector('[data-click-answer-box="1"]') || document;
-  for (const b of box.querySelectorAll('button, [role="button"]')) {
-    const t = (b.textContent || '').trim().toLowerCase();
-    if (!t || t.length > 40) continue;
-    if (/^(отправить|ответить|опубликовать|сохранить)$/.test(t)) {
-      const r = b.getBoundingClientRect();
-      if (r.width > 10 && r.height > 10 && !b.disabled) {
-        b.setAttribute('data-click-answer-send', '1');
-        return t;
-      }
-    }
-  }
-  return null;
+  const field = document.querySelector('[data-click-answer="1"]');
+  const fr = field ? field.getBoundingClientRect() : null;
+
+  const fresh = [];
+  document.querySelectorAll('button, [role="button"], input[type="submit"]').forEach(b => {
+    if (b.getAttribute('data-click-seen')) return;          // была до ввода – не она
+    const r = b.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8) return;                // невидимая
+    if (b.disabled || b.getAttribute('aria-disabled') === 'true') return;
+    const label = ((b.textContent || '') + ' ' +
+                   (b.getAttribute('aria-label') || '') + ' ' +
+                   (b.getAttribute('title') || '')).replace(/\s+/g, ' ').trim();
+    if (/отмен|cancel|удал|delete/i.test(label)) return;     // «Отменить редактирование»
+    const dist = fr ? Math.abs(r.top - fr.bottom) + Math.abs(r.left - fr.left) : 0;
+    fresh.push({ el: b, label: label.slice(0, 40),
+                 submit: b.getAttribute('type') === 'submit', dist });
+  });
+  if (!fresh.length) return null;
+
+  // Явный submit важнее; иначе – ближайшая к полю ответа.
+  fresh.sort((a, b) => (b.submit - a.submit) || (a.dist - b.dist));
+  fresh[0].el.setAttribute('data-click-answer-send', '1');
+  return fresh[0].label || '→';
 }
+"""
+
+# Зелёное уведомление «Ответ отправлен» в правом верхнем углу – первый
+# признак успеха, ещё до перезагрузки страницы.
+_ANSWER_TOAST_JS = r"""
+() => /ответ\s+(отправлен|добавлен|опубликован)/i.test(document.body.innerText || '')
 """
 
 
@@ -2015,10 +2054,14 @@ def publish_review_answer(page: Page, url: str, review_id: str, text: str,
     """
     Опубликовать подтверждённый человеком ответ на конкретный отзыв.
 
-    Перед отправкой ещё раз читаем состояние отзыва: если ответ там уже
-    появился – не публикуем. Возвращаем {'status', 'reason'}, статусы те
-    же по смыслу, что у публикации постов: 'answered' / 'already' /
-    'unknown' («клик был, подтверждения нет») / 'failed'.
+    Порядок ровно тот, что человек делает руками: вписать текст в поле
+    «Ответ компании» → нажать кружок со стрелкой справа → дождаться, пока
+    Яндекс покажет ответ.
+
+    Возвращаем {'status', 'reason'}. 'answered' – ТОЛЬКО когда Яндекс сам
+    показал ответ на перечитанной странице. Раньше «клик был, подтверждения
+    нет» уходило как успех, отзыв исчезал из очереди, а в Яндексе ничего не
+    появлялось – хуже этого только опубликовать не то.
     """
     body = (text or "").strip()
     if not body:
@@ -2058,6 +2101,13 @@ def publish_review_answer(page: Page, url: str, review_id: str, text: str,
     except Exception:  # noqa: BLE001
         pass
 
+    # Помечаем кнопки ДО ввода: стрелка отправки появится только после него,
+    # и отличить её от остальных получится только так.
+    try:
+        page.evaluate(_MARK_SEEN_BUTTONS_JS)
+    except Exception:  # noqa: BLE001
+        pass
+
     try:
         target.click(timeout=8_000)
         if field.get("contentEditable") and field.get("tag") not in ("textarea", "input"):
@@ -2069,7 +2119,7 @@ def publish_review_answer(page: Page, url: str, review_id: str, text: str,
 
     # Кнопка отправки появляется только после ввода текста.
     label = None
-    deadline = time.time() + 6
+    deadline = time.time() + 8
     while time.time() < deadline:
         try:
             label = page.evaluate(_FIND_SEND_BUTTON_JS)
@@ -2077,29 +2127,45 @@ def publish_review_answer(page: Page, url: str, review_id: str, text: str,
             label = None
         if label:
             break
-        page.wait_for_timeout(300)
+        page.wait_for_timeout(400)
 
-    if label:
-        try:
-            page.locator('[data-click-answer-send="1"]').first.click(timeout=8_000)
-            info(f"  🔘 Ответ отправлен кнопкой «{label}»")
-        except Exception as e:  # noqa: BLE001
-            return {"status": "failed", "reason": f"Кнопка отправки не нажалась: {_short_error(e)}"}
-    else:
-        # Запасной путь: у Яндекса поле отправляется и с клавиатуры.
-        try:
-            page.keyboard.press("Control+Enter")
-            info("  🔘 Кнопки отправки не нашли – отправили Ctrl+Enter")
-        except Exception as e:  # noqa: BLE001
-            return {"status": "failed", "reason": f"Отправить ответ не удалось: {_short_error(e)}"}
+    if not label:
+        return {"status": "failed",
+                "reason": "Текст вписали, но кнопка отправки рядом с полем не появилась"}
 
-    # Проверяем результат по тому же состоянию страницы, а не по виду формы.
-    page.wait_for_timeout(2_500)
-    after = review_state(page, url, review_id)
-    if after["ok"] and after["answered"]:
-        return {"status": "answered", "reason": "Ответ опубликован"}
-    return {"status": "unknown",
-            "reason": "Отправили, но Яндекс ещё не показывает ответ – проверьте карточку"}
+    try:
+        page.locator('[data-click-answer-send="1"]').first.click(timeout=8_000)
+        info(f"  🔘 Ответ отправлен кнопкой «{label}»")
+    except Exception as e:  # noqa: BLE001
+        return {"status": "failed", "reason": f"Кнопка отправки не нажалась: {_short_error(e)}"}
+
+    # Зелёное «Ответ отправлен» – быстрый признак успеха.
+    toast = False
+    deadline = time.time() + 6
+    while time.time() < deadline:
+        try:
+            toast = bool(page.evaluate(_ANSWER_TOAST_JS))
+        except Exception:  # noqa: BLE001
+            toast = False
+        if toast:
+            break
+        page.wait_for_timeout(400)
+
+    # Но верим только состоянию страницы: перечитываем и смотрим, появился
+    # ли ответ. Уведомление могло быть и от чего-то другого.
+    for _ in range(3):
+        page.wait_for_timeout(2_000)
+        after = review_state(page, url, review_id)
+        if after["ok"] and after["answered"]:
+            return {"status": "answered", "reason": "Ответ опубликован – Яндекс его показывает"}
+
+    if toast:
+        return {"status": "unknown",
+                "reason": "Яндекс сказал «Ответ отправлен», но пока его не показывает – "
+                          "проверьте карточку через минуту"}
+    return {"status": "failed",
+            "reason": "Кнопку нажали, но ответ на карточке не появился. "
+                      "Ответьте вручную по ссылке из списка"}
 
 
 # ════════════════════════════════════════════════════════════════════

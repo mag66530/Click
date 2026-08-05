@@ -45,7 +45,7 @@ from playwright_worker import PlaywrightWorker
 # Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
 # Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
 # ссылкой на старый yb_playwright.
-UI_BUILD = "2026-08-05-reviews-fix"
+UI_BUILD = "2026-08-05-reviews-send"
 
 
 def _same_build(mod) -> bool:
@@ -1625,6 +1625,25 @@ def reviews_queue_block(project_id: str) -> None:
                  'Проверьте текст, при желании поправьте прямо здесь и нажмите '
                  '«Отправить».</div>')
 
+        # Черновики могли остаться от прошлой версии – обрывками на полуслове.
+        # Перещёлкивать «Переписать» по каждому вручную дело нудное.
+        stale = [it for it in pending
+                 if it.get("status") in (rv.DRAFTED, rv.NO_DRAFT)
+                 and (rv.looks_cut_off(it.get("draft") or "") or not (it.get("draft") or "").strip())]
+        if stale and llm.is_configured() and not running:
+            st.caption(f"Оборванных или пустых черновиков: {len(stale)}. "
+                       "Их можно переписать разом – примерно "
+                       f"{max(1, round(len(stale) * llm.MIN_GAP_S / 60))} мин.")
+            if st.button(f"🔁 Переписать все ({len(stale)})", key="rv-again-all",
+                         use_container_width=True):
+                bar = st.progress(0.0, text="Прошу новые варианты…")
+                for n, it in enumerate(stale, 1):
+                    _review_regenerate(project_id, it)
+                    st.session_state.pop(f"rv-text-{it.get('reviewId')}", None)
+                    bar.progress(n / len(stale), text=f"{n} из {len(stale)}")
+                _review_queue_save(project_id)
+                st.rerun()
+
         for n, item in enumerate(pending):
             label = _REVIEW_LABELS.get(item.get("status"), "—")
             stars = "★" * int(item.get("rating") or 0)
@@ -1677,7 +1696,10 @@ def reviews_queue_block(project_id: str) -> None:
                         item["status"] = rv.ALREADY
                         st.info(reason)
                     elif status == "unknown":
-                        item["status"] = rv.ANSWERED
+                        # Не подтвердилось – отзыв ОСТАЁТСЯ в списке. Раньше
+                        # он отсюда исчезал как отвеченный, а в Яндексе ответа
+                        # не было: человек узнавал об этом случайно.
+                        item["status"] = rv.FAILED
                         st.warning(reason)
                     else:
                         item["status"] = rv.FAILED

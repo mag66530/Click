@@ -85,7 +85,18 @@ _no_thinking: set = set()
 
 
 class LlmError(RuntimeError):
-    """Понятная человеку причина, почему черновика нет."""
+    """
+    Понятная человеку причина, почему черновика нет.
+
+    is_limit говорит, что дело именно в лимите Gemini, а не в сети или в
+    самом ответе. Прогону это важно: упёршись в лимит, долбить его дальше
+    смысла нет – каждая попытка съедает до полутора минут и всё равно
+    возвращает то же самое.
+    """
+
+    def __init__(self, message: str, is_limit: bool = False):
+        super().__init__(message)
+        self.is_limit = is_limit
 
 
 # ─── Ключи ──────────────────────────────────────────────────────────
@@ -492,7 +503,7 @@ def generate(prompt: str) -> str:
     last_stats.update(model=None, seconds=round(time.time() - started, 1),
                       calls=calls, keys=len(keys), shared=_shared_quota,
                       pace=current_pace(), error=last)
-    raise LlmError(last)
+    raise LlmError(last, is_limit=bool(limited_all or limited))
 
 
 def model_in_use() -> str | None:

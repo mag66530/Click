@@ -2189,6 +2189,139 @@ def test_review_batch() -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+def test_reviews_limit_and_stop() -> None:
+    """
+    Упёрлись в лимит Gemini – хватит пробовать. И «Остановить» слышно сразу.
+
+    Два живых наблюдения заказчика. Первое: в логе по одному городу подряд
+    четыре одинаковых отказа «Gemini придерживает запросы по лимиту», шесть
+    минут впустую. Вопрос был прямой: «какой смысл?». Смысла нет – квота за
+    минуту сама не вернётся, а каждая попытка стоит до полутора минут.
+
+    Второе: «я остановила прогон, но ничего не произошло, как будто надо
+    перезагрузить страницу». Остановка проверялась только на границе города,
+    а карточка с десятком отзывов обрабатывается минутами.
+
+    Важно: отзывы при этом собираются ВСЕ – теряется только черновик, и он
+    дописывается потом кнопкой «Переписать все».
+    """
+    import llm
+    import runner as r
+    import reviews as rv
+    import yb_playwright as yb
+    print("\n▸ Лимит Gemini и остановка прогона")
+
+    items = [{"id": f"r{n}", "rating": 5, "full_text": "Хороший поставщик, спасибо.",
+              "author": {"user": "Иван"}} for n in range(8)]
+    keep = (llm.generate, yb.read_reviews, yb.build_reviews_url)
+    yb.read_reviews = lambda page, url, navigate=True: {
+        "ok": True, "items": items, "total": len(items), "shown": len(items), "url": url}
+    yb.build_reviews_url = lambda a, b: "https://yandex.ru/sprav/1/p/edit/reviews/"
+    task = {"cityName": "Шымкент", "companyId": "1"}
+
+    try:
+        # ── Лимит: после двух отказов подряд к Gemini больше не ходим ──
+        calls = {"n": 0}
+
+        def limited(prompt):
+            calls["n"] += 1
+            raise llm.LlmError("Gemini придерживает запросы по лимиту.", is_limit=True)
+
+        llm.generate = limited
+        budget = {"limitStreak": 0, "giveUp": False}
+        out = r._reviews_for_city("APS", object(), task, "промпт", None, budget)
+        eq("к Gemini сходили только дважды, а не восемь раз", calls["n"], r.LIMIT_GIVE_UP)
+        check("прогон понял, что дальше бесполезно", budget["giveUp"])
+        eq("но отзывы собраны ВСЕ", out["found"], 8)
+        check("остальным честно сказано, почему черновика нет",
+              "Переписать все" in (out["items"][-1].get("note") or ""),
+              out["items"][-1].get("note"))
+
+        # Сдались на одном городе – на следующем даже не пробуем.
+        calls["n"] = 0
+        out2 = r._reviews_for_city("APS", object(), {"cityName": "Тараз", "companyId": "2"},
+                                   "промпт", None, budget)
+        eq("на следующем городе запросов уже ноль", calls["n"], 0)
+        eq("и его отзывы тоже собраны", out2["found"], 8)
+
+        # Обычная поломка (не лимит) сдаваться не заставляет: мало ли, сеть моргнула.
+        def broken(prompt):
+            calls["n"] += 1
+            raise llm.LlmError("Gemini вернул пустой ответ.")
+
+        llm.generate = broken
+        budget2 = {"limitStreak": 0, "giveUp": False}
+        calls["n"] = 0
+        r._reviews_for_city("APS", object(), task, "промпт", None, budget2)
+        check("не лимит – пробуем каждый отзыв", not budget2["giveUp"])
+        eq("то есть все восемь", calls["n"], 8)
+
+        # ── Остановка слышна между черновиками, а не только между городами ──
+        calls["n"] = 0
+        llm.generate = lambda prompt: "Уважаемый Иван!\n\nСпасибо."
+        stop_after = {"n": 0}
+
+        def should_stop():
+            stop_after["n"] += 1
+            return stop_after["n"] > 3      # на четвёртом отзыве жмут «Остановить»
+
+        out3 = r._reviews_for_city("APS", object(), task, "промпт", should_stop,
+                                   {"limitStreak": 0, "giveUp": False})
+        check("после остановки черновики не пишутся", calls["n"] <= 3, calls["n"])
+        eq("а отзывы всё равно все в очереди", out3["found"], 8)
+        check("и видно, что это была остановка",
+              any("останов" in (i.get("note") or "") for i in out3["items"]))
+    finally:
+        llm.generate, yb.read_reviews, yb.build_reviews_url = keep
+
+
+# ════════════════════════════════════════════════════════════════════
+def test_look_and_order() -> None:
+    """
+    Вид «Актуализации»: сверху прогон, снизу ответы, тема светлая.
+
+    Заказчик: «подвинем эту штуку наверх, а то не видно сколько и что»,
+    «короче всё что на скриншоте 2 подвинуть вниз», «пусть при заходе светлая
+    тема будет, а не тёмная автоматом».
+    """
+    import inspect
+    import streamlit_app as app
+    import ui_theme as T
+    print("\n▸ Порядок блоков и тема")
+
+    src = inspect.getsource(app.tab_actualize)
+    launch = src.find("btn-actualize")
+    queue = src.rfind("reviews_queue_block")
+    check("очередь ответов идёт ПОСЛЕ запуска прогона", 0 < launch < queue,
+          f"запуск {launch}, очередь {queue}")
+
+    # Без входа в Яндекс раздел выходит раньше времени – очередь обязана
+    # показаться и там, иначе готовые черновики просто исчезают с экрана.
+    head = src[:src.find("Сначала войдите в Яндекс")]
+    tail = src[src.find("Сначала войдите в Яндекс"):]
+    check("без входа в Яндекс очередь тоже показывается",
+          "reviews_queue_block" in tail.split("return")[0], tail[:200])
+    check("и это не единственное её место", "reviews_queue_block" in src[len(head):])
+
+    eq("при заходе тема светлая", app.theme(), "light")
+    cfg = Path(".streamlit/config.toml").read_text(encoding="utf-8")
+    check("и Streamlit до нашего CSS рисует светлым", 'base = "light"' in cfg, cfg[:200])
+    check("цвет фона совпадает с палитрой LIGHT",
+          T.LIGHT["bg"] in cfg, f'{T.LIGHT["bg"]} не найден')
+
+    # Плашки сводки – тем же видом, что в отчёте.
+    row = T.stat_row([("Черновик готов", 2, "ok"), ("Вам на ответ", 1, "warn")])
+    check("плашки собраны классами отчёта",
+          'class="report-summary"' in row and 'class="report-stat ok"' in row, row[:120])
+    eq("пустой набор не рисует пустую рамку", T.stat_row([]), "")
+
+    # Лог сворачивается всегда, в том числе пока прогон идёт.
+    live = inspect.getsource(app._render_live_panel)
+    check("лог прогона убирается в раскрывашку",
+          "expander" in live and "expanded=running" in live, "")
+
+
+# ════════════════════════════════════════════════════════════════════
 def test_assortment_verbatim() -> None:
     """
     Ассортиментная фраза уходит в Яндекс ДОСЛОВНО.
@@ -2606,6 +2739,8 @@ def main() -> int:
         test_reviews()
         test_gemini_keys()
         test_review_batch()
+        test_reviews_limit_and_stop()
+        test_look_and_order()
         test_assortment_verbatim()
         test_report_with_reviews()
         test_module_attrs_exist()

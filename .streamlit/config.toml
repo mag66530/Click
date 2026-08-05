@@ -1,12 +1,17 @@
-# Базовая тема Streamlit подогнана под палитру оригинального Click (_ui.js).
-# Точный вид задаёт ui_theme.py — здесь только то, что Streamlit рисует до нашего CSS
-# (чтобы не мигало светлым при загрузке).
+# Базовая тема Streamlit подогнана под палитру Click (ui_theme.py, словарь LIGHT).
+# Здесь только то, что Streamlit рисует ДО нашего CSS – чтобы при загрузке не
+# мигало чужим цветом.
+#
+# Светлая, а не тёмная: тёмная вставала автоматом при каждом заходе, а работают
+# с Click днём. Переключатель в шапке остаётся, выбор держится в сессии.
+# Менять этот файл нужно ВМЕСТЕ с умолчанием в streamlit_app.theme() – иначе
+# страница мигнёт одним цветом и перекрасится в другой.
 [theme]
-base = "dark"
+base = "light"
 primaryColor = "#5b7cfa"
-backgroundColor = "#0a0c14"
-secondaryBackgroundColor = "#10131d"
-textColor = "#e8eaf3"
+backgroundColor = "#f7f8fb"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#141824"
 font = "sans serif"
 
 [server]

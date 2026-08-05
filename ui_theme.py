@@ -1181,6 +1181,27 @@ _REVIEW_ROW_STYLE = {
 }
 
 
+def stat_row(cells: list[tuple[str, str, str]]) -> str:
+    """
+    Ряд плашек «подпись – число» тем же видом, что в отчёте.
+
+    Нужен там, где плашки НЕ кликаются: в отчёте они работают фильтрами и
+    рисуются кнопками Streamlit, а здесь достаточно показать цифры. Заказчик
+    просила отделять сводку карточками-блоками, «так же как в обычном отчёте».
+
+    cells: [(подпись, значение, цвет)], цвет – ok/warn/err/skip/noimg/dur.
+    """
+    if not cells:
+        return ""
+    boxes = "".join(
+        f'<div class="report-stat {esc(colour)}">'
+        f'<div class="report-stat-label">{esc(label)}</div>'
+        f'<div class="report-stat-value">{esc(str(value))}</div></div>'
+        for label, value, colour in cells
+    )
+    return f'<div class="report-summary">{boxes}</div>'
+
+
 def review_report_row(item: dict) -> str:
     cls, ico = _REVIEW_ROW_STYLE.get(item.get("status", ""), ("err", "🔴"))
     stars = "★" * int(item.get("rating") or 0)

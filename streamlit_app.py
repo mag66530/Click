@@ -645,7 +645,10 @@ def get_worker() -> PlaywrightWorker:
 
 
 def theme() -> str:
-    return st.session_state.get("theme", "dark")
+    # Светлая по умолчанию – решение заказчика: тёмная вставала автоматом при
+    # каждом заходе, а работает она днём. Переключатель в шапке остаётся,
+    # выбор держится в сессии.
+    return st.session_state.get("theme", "light")
 
 
 def goto_section(name: str) -> None:
@@ -1005,13 +1008,14 @@ def _render_live_panel(project_id: str, run_kind: str, was_running: bool = False
             if st.button("📊 Посмотреть отчёт", key=f"btn-report-{state.get('runId', '')}"):
                 _open_report(kind, state.get("runId", ""))
 
-    # Пока идёт прогон лог нужен на виду, после – он только мешает: экран
-    # длинный, а под ним отчёт. Сворачиваем.
+    # Лог сворачивается ВСЕГДА – и пока прогон идёт тоже. Он длинный, а под
+    # ним ответы на отзывы, и мотать через него каждый раз неудобно. Во время
+    # прогона раскрыт по умолчанию: там смотреть и надо.
     log_text = runner.read_live_log(project_id, run_kind)
-    if running or not log_text:
+    if not log_text:
         html(T.log_box(log_text))
     else:
-        with st.expander("📄 Показать лог прогона"):
+        with st.expander("📄 Лог прогона", expanded=running):
             html(T.log_box(log_text))
 
     # Рядом идёт ещё один прогон – про него тут же и скажем, чтобы человек не
@@ -2041,6 +2045,16 @@ def reviews_queue_block(project_id: str) -> None:
     with st.container(border=True):
         html(f'<div class="card-title">💬 Ответы на отзывы – на подтверждении '
              f'({len(pending)})</div>')
+        # Сводка плашками, как в отчёте: сколько готово, сколько разбирать
+        # руками, сколько уже ушло. Раньше это надо было считать глазами по
+        # длинному списку.
+        c = rv.counters(items)
+        html(T.stat_row([
+            ("Черновик готов", c["drafted"], "ok"),
+            ("Вам на ответ", c["needsHuman"], "warn"),
+            ("Без черновика", c["noDraft"], "noimg"),
+            ("Отправлено", c["answered"], "skip"),
+        ] + ([("Не отправились", c["failed"], "err")] if c["failed"] else [])))
         if running:
             st.info(f"Идёт {', '.join(runner.KIND_RU[k].lower() for k in live)}. Отправлять ответы "
                     "можно будет, когда прогон закончится: страница отзывов тяжёлая, и третий "
@@ -2162,9 +2176,6 @@ def tab_actualize(project_id: str, config: dict) -> None:
         html(T.empty("🏙", "Нет городов", "Добавьте страны и города во вкладке «Города»."))
         return
 
-    # Очередь ответов – первым делом: после прогона именно она и нужна.
-    reviews_queue_block(project_id)
-
     all_ids = [ct["id"] for c in countries for ct in c["cities"]]
     chosen = _act_selected(all_ids)
     selected = [cid for cid in all_ids if cid in chosen]
@@ -2224,6 +2235,10 @@ def tab_actualize(project_id: str, config: dict) -> None:
 
     if not yb.has_saved_session(project_id) and not running:
         st.warning("Сначала войдите в Яндекс в разделе «⚙️ Настройки».")
+        # Очередь ответов показываем и без входа: черновики уже написаны и
+        # никуда не делись, а без этой строки они бы просто исчезли с экрана –
+        # раздел уходил в выход раньше, чем до них доходило дело.
+        reviews_queue_block(project_id)
         return
 
     # value не задаём: у виджета есть key, и Streamlit ругается, если состояние
@@ -2272,6 +2287,12 @@ def tab_actualize(project_id: str, config: dict) -> None:
     if running or state.get("status") not in (None, "idle"):
         with st.container(border=True):
             live_panel(project_id, running, "actualize")
+
+    # Очередь ответов – В КОНЦЕ, под запуском и прогрессом. Раньше она стояла
+    # первой, и во время прогона экран открывался на ней: сколько городов
+    # пройдено и что происходит, видно не было – приходилось листать вниз.
+    # Заказчик попросила поменять местами: сверху сам прогон, ответы под ним.
+    reviews_queue_block(project_id)
 
     # Вторая карточка отчёта убрана: весь отчёт теперь на вкладке «Отчёт»,
     # и туда ведёт кнопка «Посмотреть отчёт» из панели выше.

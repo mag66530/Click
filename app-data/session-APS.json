@@ -245,7 +245,7 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817458319,
+      "expires": 1817458391,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -545,7 +545,7 @@
       "value": "1",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817458317,
+      "expires": 1817458389,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -555,7 +555,7 @@
       "value": "0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817458319,
+      "expires": 1817458391,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -565,17 +565,17 @@
       "value": "b",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1785924119,
+      "expires": 1785924191,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "cycada",
-      "value": "LIlfuE2CchdBWAyjp8271yfA5hjy39BWIgnQZ/gtJxs=",
+      "value": "tgDCoHogNnkNz99i7hi54CfA5hjy39BWIgnQZ/gtJxs=",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1787131927.109,
+      "expires": 1787131993.626,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -647,7 +647,7 @@
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "124"
+          "value": "126"
         },
         {
           "name": "_ym85710618_lastHit",
@@ -731,7 +731,7 @@
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "1035"
+          "value": "1047"
         },
         {
           "name": "_ym87015792:0_reqNum",
@@ -987,7 +987,7 @@
         },
         {
           "name": "_ym46231566:0_reqNum",
-          "value": "304"
+          "value": "307"
         },
         {
           "name": "_ym86525359:0_reqNum",
@@ -995,7 +995,7 @@
         },
         {
           "name": "_ym56213845:0_reqNum",
-          "value": "981"
+          "value": "993"
         },
         {
           "name": "_ym99908298:0_reqNum",
@@ -1121,10 +1121,6 @@
           "value": "{\"1785846949018298-14412930841387011385-balancer-l7leveler-kubr-yp-sas-106-BAL\":162}"
         },
         {
-          "name": "_ym86931758:0_reqNum",
-          "value": "1"
-        },
-        {
           "name": "_ym86737736_lsid",
           "value": "1340620946161"
         },
@@ -1149,6 +1145,10 @@
           "value": "1422382975428"
         },
         {
+          "name": "_ym_wasSynced",
+          "value": "{\"time\":1785846296570,\"params\":{\"sbp\":{\"a\":\"Yl9y24z7VjoHwS+oUGgRT2u87yryrQS3AVrGxXxLNxCo0HOMlTQ1pJWmI8AUhqXX\",\"b\":\"eCuvcezNv7z1O7CNwW963rM4Xu6zb6dspe+cjOmyo9yjZ3KYk5z3Q346JnZAUAkP\"},\"eu\":2,\"region\":\"US\",\"hittoken\":\"1785846296_5791056dbe8b71791bae6f55a51d56772139d87fce1a791346c7b1c2b3e45ce6\",\"oauth\":1,\"wstoken\":\"11107.08gQhLIYTK88SjK7Tj1kDaSS0RNp8BSf2dqW5QYNp61K_VL9ACzWC7lCy4p7Lom8tG-pXzMUhprkFaSN3UUxe1yA9XkTemZxx90pBgBM9ZY,.faRZZ1hZ6IUr_KNuMkxUQZP0N3w,\",\"ev\":{\"pvt\":1785846296},\"hidv2\":\"4450968260536172791\",\"ymclid\":\"4450968260536172791\"}}"
+        },
+        {
           "name": "_ym24367924_lastHit",
           "value": "1785846539683"
         },
@@ -1169,8 +1169,8 @@
           "value": "1"
         },
         {
-          "name": "_ym_wasSynced",
-          "value": "{\"time\":1785846296570,\"params\":{\"sbp\":{\"a\":\"Yl9y24z7VjoHwS+oUGgRT2u87yryrQS3AVrGxXxLNxCo0HOMlTQ1pJWmI8AUhqXX\",\"b\":\"eCuvcezNv7z1O7CNwW963rM4Xu6zb6dspe+cjOmyo9yjZ3KYk5z3Q346JnZAUAkP\"},\"eu\":2,\"region\":\"US\",\"hittoken\":\"1785846296_5791056dbe8b71791bae6f55a51d56772139d87fce1a791346c7b1c2b3e45ce6\",\"oauth\":1,\"wstoken\":\"11107.08gQhLIYTK88SjK7Tj1kDaSS0RNp8BSf2dqW5QYNp61K_VL9ACzWC7lCy4p7Lom8tG-pXzMUhprkFaSN3UUxe1yA9XkTemZxx90pBgBM9ZY,.faRZZ1hZ6IUr_KNuMkxUQZP0N3w,\",\"ev\":{\"pvt\":1785846296},\"hidv2\":\"4450968260536172791\",\"ymclid\":\"4450968260536172791\"}}"
+          "name": "_ym86931758:0_reqNum",
+          "value": "1"
         },
         {
           "name": "_ym87649676:0_reqNum",

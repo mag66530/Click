@@ -1,0 +1,553 @@
+{
+  "collectedAt": "2026-08-05T15:23:20.521353+00:00",
+  "count": 16,
+  "withCards": true,
+  "companies": [
+    {
+      "id": "17723927044",
+      "tycoonId": "2081263",
+      "permanentId": "17723927044",
+      "type": "chain",
+      "publishing": "publish",
+      "name": "Стальметурал",
+      "names": [
+        "Стальметурал",
+        "Staljmetural"
+      ],
+      "address": "Земля",
+      "regionCode": "",
+      "geoId": 10000,
+      "site": "http://stalmetural.ru/",
+      "sites": [
+        "http://stalmetural.ru/"
+      ],
+      "social": {},
+      "emails": [],
+      "phones": [
+        "8 (800) 555-23-83"
+      ],
+      "rubrics": [],
+      "noAccess": false,
+      "rating": null,
+      "fromDom": true,
+      "url": "https://yandex.ru/sprav/17723927044/p/edit/",
+      "companyId": "17723927044",
+      "fromCard": true
+    },
+    {
+      "id": "139485713133",
+      "tycoonId": "40724969",
+      "permanentId": "139485713133",
+      "type": "chain",
+      "publishing": "publish",
+      "name": "Стальметгрупп",
+      "names": [
+        "Стальметгрупп",
+        "Stal'metgrupp"
+      ],
+      "address": "Земля",
+      "regionCode": "",
+      "geoId": 10000,
+      "site": "https://stalmetural.kz/",
+      "sites": [
+        "https://stalmetural.kz/"
+      ],
+      "social": {},
+      "emails": [],
+      "phones": [],
+      "rubrics": [],
+      "noAccess": false,
+      "rating": null,
+      "fromDom": true,
+      "url": "https://yandex.ru/sprav/139485713133/p/edit/",
+      "companyId": "139485713133",
+      "fromCard": true
+    },
+    {
+      "id": "75168663328",
+      "tycoonId": "40474765",
+      "permanentId": "75168663328",
+      "type": "chain",
+      "publishing": "publish",
+      "name": "Стальметгрупп",
+      "names": [
+        "Стальметгрупп",
+        "Stal'metgrupp"
+      ],
+      "address": "Земля",
+      "regionCode": "",
+      "geoId": 10000,
+      "site": "https://stalmetural.by/",
+      "sites": [
+        "https://stalmetural.by/"
+      ],
+      "social": {},
+      "emails": [],
+      "phones": [
+        "+375 44 766-62-58"
+      ],
+      "rubrics": [],
+      "noAccess": false,
+      "rating": null,
+      "fromDom": true,
+      "url": "https://yandex.ru/sprav/75168663328/p/edit/",
+      "companyId": "75168663328",
+      "fromCard": true
+    },
+    {
+      "id": "87191752451",
+      "tycoonId": "41555350",
+      "permanentId": "87191752451",
+      "type": "chain",
+      "publishing": "publish",
+      "name": "Стальметгрупп",
+      "names": [
+        "Стальметгрупп",
+        "Stal'metgrupp"
+      ],
+      "address": "Земля",
+      "regionCode": "",
+      "geoId": 10000,
+      "site": "https://stalmetural.kg/",
+      "sites": [
+        "https://stalmetural.kg/"
+      ],
+      "social": {},
+      "emails": [],
+      "phones": [
+        "+996 221 31 88 82"
+      ],
+      "rubrics": [],
+      "noAccess": false,
+      "rating": null,
+      "fromDom": true,
+      "url": "https://yandex.ru/sprav/87191752451/p/edit/",
+      "companyId": "87191752451",
+      "fromCard": true
+    },
+    {
+      "id": "14383733692",
+      "tycoonId": "41555320",
+      "permanentId": "14383733692",
+      "type": "chain",
+      "publishing": "publish",
+      "name": "Стальметгрупп",
+      "names": [
+        "Стальметгрупп",
+        "Stal'metgrupp"
+      ],
+      "address": "Земля",
+      "regionCode": "",
+      "geoId": 10000,
+      "site": "https://stalmetural.am/",
+      "sites": [
+        "https://stalmetural.am/"
+      ],
+      "social": {},
+      "emails": [],
+      "phones": [
+        "+7 (963) 449-99-68"
+      ],
+      "rubrics": [],
+      "noAccess": false,
+      "rating": null,
+      "fromDom": true,
+      "url": "https://yandex.ru/sprav/14383733692/p/edit/",
+      "companyId": "14383733692",
+      "fromCard": true
+    },
+    {
+      "id": "26691539636",
+      "tycoonId": "41596158",
+      "permanentId": "26691539636",
+      "type": "chain",
+      "publishing": "publish",
+      "name": "Стальметгрупп",
+      "names": [
+        "Стальметгрупп",
+        "Stal’metgrupp"
+      ],
+      "address": "Земля",
+      "regionCode": "",
+      "geoId": 10000,
+      "site": "https://stalmetural.uz/",
+      "sites": [
+        "https://stalmetural.uz/"
+      ],
+      "social": {},
+      "emails": [],
+      "phones": [
+        "+998 90 011 26 88"
+      ],
+      "rubrics": [],
+      "noAccess": false,
+      "rating": null,
+      "fromDom": true,
+      "url": "https://yandex.ru/sprav/26691539636/p/edit/",
+      "companyId": "26691539636",
+      "fromCard": true
+    },
+    {
+      "id": "196651060466",
+      "tycoonId": "41322038",
+      "permanentId": "196651060466",
+      "type": "chain",
+      "publishing": "publish",
+      "name": "Стальметгрупп",
+      "names": [
+        "Стальметгрупп",
+        "Stal'metgrupp"
+      ],
+      "address": "Земля",
+      "regionCode": "",
+      "geoId": 10000,
+      "site": "https://smg.az/",
+      "sites": [
+        "https://smg.az/"
+      ],
+      "social": {},
+      "emails": [],
+      "phones": [],
+      "rubrics": [],
+      "noAccess": false,
+      "rating": null,
+      "fromDom": true,
+      "url": "https://yandex.ru/sprav/196651060466/p/edit/",
+      "companyId": "196651060466",
+      "fromCard": true
+    },
+    {
+      "id": "39275955631",
+      "tycoonId": "34671242",
+      "permanentId": "39275955631",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "Стальметурал",
+      "names": [
+        "Стальметурал",
+        "Stalmetural"
+      ],
+      "address": "Мариупольская городская община, Мариуполь, проспект Мира, 38",
+      "regionCode": "UA",
+      "geoId": 10366,
+      "site": "https://mariupol.stalmetural.ru/",
+      "sites": [
+        "https://mariupol.stalmetural.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.com/stalmetural",
+        "youtube": "https://www.youtube.com/channel/UCG3u9Y9FwfGxMLbgwtkzDzg",
+        "ok": "https://ok.ru/group/70000004574376",
+        "telegram": "https://t.me/smu_manager",
+        "whatsapp": "https://wa.me/79030846889"
+      },
+      "emails": [
+        "stalmetural19@yandex.ru"
+      ],
+      "phones": [
+        "+7 (903) 411-80-66"
+      ],
+      "rubrics": [
+        "Трубы и комплектующие",
+        "Строительная арматура",
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/39275955631/p/edit/",
+      "companyId": "39275955631",
+      "fromCard": true
+    },
+    {
+      "id": "66340602240",
+      "tycoonId": "40372274",
+      "permanentId": "66340602240",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "Стальметурал",
+      "names": [
+        "Стальметурал",
+        "Stalmetural"
+      ],
+      "address": "Донецкий городской совет, Донецк, проспект Мира, 17",
+      "regionCode": "UA",
+      "geoId": 142,
+      "site": "https://donetsk.stalmetural.ru/",
+      "sites": [
+        "https://donetsk.stalmetural.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.com/stalmetural",
+        "youtube": "https://www.youtube.com/channel/UCG3u9Y9FwfGxMLbgwtkzDzg",
+        "ok": "https://ok.ru/group/70000004574376",
+        "telegram": "https://t.me/smu_manager",
+        "whatsapp": "https://wa.me/79030846889"
+      },
+      "emails": [
+        "stalmetural19@yandex.ru"
+      ],
+      "phones": [
+        "+7 (902) 449-78-76"
+      ],
+      "rubrics": [
+        "Строительная арматура",
+        "Трубы и комплектующие",
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/66340602240/p/edit/",
+      "companyId": "66340602240",
+      "fromCard": true
+    },
+    {
+      "id": "107163064076",
+      "tycoonId": "40216047",
+      "permanentId": "107163064076",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "Стальметурал",
+      "names": [
+        "Стальметурал",
+        "Stalmetural"
+      ],
+      "address": "Мелитопольский район, Мелитопольская городская община, Мелитополь, улица Михаила Грушевского, 13",
+      "regionCode": "UA",
+      "geoId": 10367,
+      "site": "https://melitopol.stalmetural.ru/",
+      "sites": [
+        "https://melitopol.stalmetural.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.com/stalmetural",
+        "youtube": "https://www.youtube.com/channel/UCG3u9Y9FwfGxMLbgwtkzDzg",
+        "ok": "https://ok.ru/group/70000004574376",
+        "telegram": "https://t.me/smu_manager",
+        "whatsapp": "https://wa.me/79030846889"
+      },
+      "emails": [
+        "stalmetural19@yandex.ru"
+      ],
+      "phones": [
+        "+7 (902) 449-78-76"
+      ],
+      "rubrics": [
+        "Строительная арматура",
+        "Трубы и комплектующие",
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/107163064076/p/edit/",
+      "companyId": "107163064076",
+      "fromCard": true
+    },
+    {
+      "id": "169256502699",
+      "tycoonId": "40372410",
+      "permanentId": "169256502699",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "Стальметурал",
+      "names": [
+        "Стальметурал",
+        "Stalmetural"
+      ],
+      "address": "Луганский городской совет, Луганск, улица Королёва, 33",
+      "regionCode": "UA",
+      "geoId": 222,
+      "site": "https://lugansk.stalmetural.ru/",
+      "sites": [
+        "https://lugansk.stalmetural.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.com/stalmetural",
+        "youtube": "https://www.youtube.com/channel/UCG3u9Y9FwfGxMLbgwtkzDzg",
+        "ok": "https://ok.ru/group/70000004574376",
+        "telegram": "https://t.me/smu_manager",
+        "whatsapp": "https://wa.me/79030846889"
+      },
+      "emails": [
+        "stalmetural19@yandex.ru"
+      ],
+      "phones": [
+        "+7 (903) 411-80-66"
+      ],
+      "rubrics": [
+        "Строительная арматура",
+        "Трубы и комплектующие",
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/169256502699/p/edit/",
+      "companyId": "169256502699",
+      "fromCard": true
+    },
+    {
+      "id": "46405996822",
+      "tycoonId": "68579236",
+      "permanentId": "46405996822",
+      "type": "ordinal",
+      "publishing": "closed",
+      "name": "Инметпром",
+      "names": [
+        "Инметпром"
+      ],
+      "address": "Южный федеральный округ, Краснодарский край, городской округ Армавир, Армавир, улица Лавриненко, 100",
+      "regionCode": "RU",
+      "geoId": 10987,
+      "site": "https://armavir.inmetprom.ru/",
+      "sites": [
+        "https://armavir.inmetprom.ru/"
+      ],
+      "social": {},
+      "emails": [
+        "inmetprom77@yandex.ru"
+      ],
+      "phones": [
+        "+7 (912) 281-43-72"
+      ],
+      "rubrics": [
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/46405996822/p/edit/",
+      "companyId": "46405996822",
+      "fromCard": true
+    },
+    {
+      "id": "64108415647",
+      "tycoonId": "68578361",
+      "permanentId": "64108415647",
+      "type": "ordinal",
+      "publishing": "closed",
+      "name": "Инметпром",
+      "names": [
+        "Инметпром"
+      ],
+      "address": "Центральный федеральный округ, Ярославская область, городской округ Рыбинск, Рыбинск, проспект Ленина, 156А",
+      "regionCode": "RU",
+      "geoId": 10839,
+      "site": "https://rybinsk.inmetprom.ru/",
+      "sites": [
+        "https://rybinsk.inmetprom.ru/"
+      ],
+      "social": {},
+      "emails": [
+        "inmetprom77@yandex.ru"
+      ],
+      "phones": [
+        "+7 (912) 281-43-72"
+      ],
+      "rubrics": [
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/64108415647/p/edit/",
+      "companyId": "64108415647",
+      "fromCard": true
+    },
+    {
+      "id": "211084797470",
+      "tycoonId": "68579121",
+      "permanentId": "211084797470",
+      "type": "ordinal",
+      "publishing": "closed",
+      "name": "Инметпром",
+      "names": [
+        "Инметпром"
+      ],
+      "address": "Приволжский федеральный округ, Саратовская область, Балаковский район, муниципальное образование Балаково, Балаково, улица Академика Жук, 10А",
+      "regionCode": "RU",
+      "geoId": 11143,
+      "site": "https://balakovo.inmetprom.ru/",
+      "sites": [
+        "https://balakovo.inmetprom.ru/"
+      ],
+      "social": {},
+      "emails": [
+        "inmetprom77@yandex.ru"
+      ],
+      "phones": [
+        "+7 (912) 281-43-72"
+      ],
+      "rubrics": [
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/211084797470/p/edit/",
+      "companyId": "211084797470",
+      "fromCard": true
+    },
+    {
+      "id": "230598794088",
+      "tycoonId": "68579178",
+      "permanentId": "230598794088",
+      "type": "ordinal",
+      "publishing": "closed",
+      "name": "Инметпром",
+      "names": [
+        "Инметпром"
+      ],
+      "address": "Северо-Западный федеральный округ, Архангельская область, муниципальный округ Северодвинск, Северодвинск, улица Плюснина, 11",
+      "regionCode": "RU",
+      "geoId": 10849,
+      "site": "https://severodvinsk.inmetprom.ru/",
+      "sites": [
+        "https://severodvinsk.inmetprom.ru/"
+      ],
+      "social": {},
+      "emails": [
+        "inmetprom77@yandex.ru"
+      ],
+      "phones": [
+        "+7 (912) 281-43-72"
+      ],
+      "rubrics": [
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/230598794088/p/edit/",
+      "companyId": "230598794088",
+      "fromCard": true
+    },
+    {
+      "id": "238965125800",
+      "tycoonId": "68578269",
+      "permanentId": "238965125800",
+      "type": "ordinal",
+      "publishing": "closed",
+      "name": "Инметпром",
+      "names": [
+        "Инметпром"
+      ],
+      "address": "Приволжский федеральный округ, Саратовская область, Энгельсский район, муниципальное образование Энгельс, Энгельс, проспект Фридриха Энгельса, 11А",
+      "regionCode": "RU",
+      "geoId": 11147,
+      "site": "https://engels.inmetprom.ru/",
+      "sites": [
+        "https://engels.inmetprom.ru/"
+      ],
+      "social": {},
+      "emails": [
+        "inmetprom77@yandex.ru"
+      ],
+      "phones": [
+        "+7 (912) 281-43-72"
+      ],
+      "rubrics": [
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/238965125800/p/edit/",
+      "companyId": "238965125800",
+      "fromCard": true
+    }
+  ]
+}

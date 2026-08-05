@@ -71,26 +71,6 @@
       "sameSite": "None"
     },
     {
-      "name": "yp",
-      "value": "1801609620.sz.1366x768x1#1785940688.nlc.0",
-      "domain": ".ya.ru",
-      "path": "/",
-      "expires": 1820500088.095,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "my",
-      "value": "YwA=",
-      "domain": ".ya.ru",
-      "path": "/",
-      "expires": 1820500088.095,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "_yasc",
       "value": "aYm0+YrdbViq+/reWOljbI8ucCbFd/RZgqD1lHIuV29/ebHYzBa7uzQWZcn5kZbPssm2",
       "domain": ".ya.ru",
@@ -101,11 +81,31 @@
       "sameSite": "None"
     },
     {
-      "name": "bh",
-      "value": "YPeQzdMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "name": "yp",
+      "value": "1801609620.sz.1366x768x1#1785941324.nlc.0",
       "domain": ".ya.ru",
       "path": "/",
-      "expires": 1820500087.095,
+      "expires": 1820500723.846,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "my",
+      "value": "YwA=",
+      "domain": ".ya.ru",
+      "path": "/",
+      "expires": 1820500723.846,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "bh",
+      "value": "YPOVzdMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "domain": ".ya.ru",
+      "path": "/",
+      "expires": 1820500723.846,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -245,7 +245,7 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817476578,
+      "expires": 1817476723,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -451,28 +451,8 @@
       "sameSite": "None"
     },
     {
-      "name": "my",
-      "value": "YwA=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1820500087.453,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "_ym_uid",
       "value": "1785841533317968761",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1817476091,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_ym_d",
-      "value": "1785940092",
       "domain": ".yandex.ru",
       "path": "/",
       "expires": 1817476091,
@@ -491,18 +471,8 @@
       "sameSite": "None"
     },
     {
-      "name": "yandex_expboxes",
-      "value": "681842%2C0%2C54%3B1608725%2C0%2C4%3B1641184%2C0%2C3%3B1585213%2C0%2C12%3B1644512%2C0%2C53%3B1642299%2C0%2C63%3B663874%2C0%2C20%3B663859%2C0%2C25%3B1645816%2C0%2C1",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": -1,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
       "name": "ys",
-      "value": "udn.cDrQkNCy0LjQsNC%2F0YDQvtC80YHRgtCw0LvRjA%3D%3D#wprid.1785940576416228-2740604399235338826-balancer-l7leveler-kubr-yp-klg-27-BAL",
+      "value": "udn.cDrQkNCy0LjQsNC%2F0YDQvtC80YHRgtCw0LvRjA%3D%3D#wprid.1785940718238660-10889680294848032186-balancer-l7leveler-kubr-yp-sas-204-BAL",
       "domain": ".yandex.ru",
       "path": "/",
       "expires": -1,
@@ -512,50 +482,20 @@
     },
     {
       "name": "yp",
-      "value": "2101201582.udn.cDrQkNCy0LjQsNC%2F0YDQvtC80YHRgtCw0LvRjA%3D%3D#1786705616.dlp.2#1788433616.gph.225_84#1788520018.hdrc.0#1801609619.sz.1366x768x1#2101300577.pcs.0#1786446432.szm.1%3A1366x768%3A0x0%3A0#1785940687.nlc.0",
+      "value": "2101201582.udn.cDrQkNCy0LjQsNC/0YDQvtC80YHRgtCw0LvRjA%3D%3D#1786705616.dlp.2#1788433616.gph.225_84#1788520018.hdrc.0#1801609619.sz.1366x768x1#2101300719.pcs.0#1786446432.szm.1:1366x768:0x0:0#1785941323.nlc.0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1820500577.16,
+      "expires": 1820500723.047,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
-      "name": "maps_session_id",
-      "value": "1785940576805806-14381125707062506793-balancer-l7leveler-kubr-yp-klg-27-BAL",
+      "name": "my",
+      "value": "YwA=",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": -1,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "_ym_visorc",
-      "value": "w",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1785942379,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "bh",
-      "value": "YOaUzdMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1820500582,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "cycada",
-      "value": "wQaWymenGTbj6jTbHFsvuSfA5hjy39BWIgnQZ/gtJxs=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1787150183.481,
+      "expires": 1820500723.047,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -565,8 +505,18 @@
       "value": "1",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817476585,
+      "expires": 1817476723,
       "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "bh",
+      "value": "YPOVzdMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1820500723,
+      "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
@@ -575,7 +525,27 @@
       "value": "0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817476585,
+      "expires": 1817476723,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ym_visorc",
+      "value": "w",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1785942523,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "cycada",
+      "value": "Bq84Qsw56NIfKB2yHmLfzifA5hjy39BWIgnQZ/gtJxs=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1787150325.103,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -627,11 +597,11 @@
         },
         {
           "name": "maps_analytics_event_index",
-          "value": "{\"1785940576805806-14381125707062506793-balancer-l7leveler-kubr-yp-klg-27-BAL\":134}"
+          "value": "{\"1785940719160772-13439539141792405739-balancer-l7leveler-kubr-yp-sas-204-BAL\":126}"
         },
         {
           "name": "_ym22555771:0_reqNum",
-          "value": "100"
+          "value": "101"
         },
         {
           "name": "_ym86879039_lsid",
@@ -651,7 +621,7 @@
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "581"
+          "value": "582"
         },
         {
           "name": "_ym85710618_lastHit",
@@ -691,7 +661,7 @@
         },
         {
           "name": "_mt__data",
-          "value": "{\"1785940549460761-14474065069688481322-balancer-l7leveler-kubr-yp-klg-27-BAL\":[[108,0,50,0,12,49,95,103,49,54,121,119,48,48,50,0,0,0,0,0,0,49,95,103,49,54,121,119,48,48,51,0,0,0,0,0,0,50,95,103,49,54,121,119,48,48,53,0,0,0,0,0,0,50,95,103,49,54,121,119,48,48,54,0,0,0,0,0,0,50,95,103,49,54,121,119,48,48,55,0,0,0,0,0,0,50,95,103,49,54,121,119,48,48,56,0,0,0,0,0,0,50,95,103,49,54,121,119,48,48,57,0,0,0,0,0,0,50,95,103,49,54,121,119,48,48,97,0,0,0,0,0,0,50,95,103,49,54,121,119,48,48,98,0,0,0,0,0,0,50,95,103,49,54,121,119,48,48,99,0,0,0,0,0,0,50,95,103,49,54,121,119,48,48,100,0,0,0,0,0,0,50,95,103,49,54,121,119,48,48,101,0,0,0,0,0,0,103,0,0,0,0,0,105,60,105,121],1785940556918,0],\"1785940562788121-17321949982798235086-balancer-l7leveler-kubr-yp-klg-27-BAL\":[[108,0,50,0,12,49,95,55,121,49,52,119,48,48,50,0,0,0,0,0,0,49,95,55,121,49,52,119,48,48,51,0,0,0,0,0,0,50,95,55,121,49,52,119,48,48,53,0,0,0,0,0,0,50,95,55,121,49,52,119,48,48,54,0,0,0,0,0,0,50,95,55,121,49,52,119,48,48,55,0,0,0,0,0,0,50,95,55,121,49,52,119,48,48,56,0,0,0,0,0,0,50,95,55,121,49,52,119,48,48,57,0,0,0,0,0,0,50,95,55,121,49,52,119,48,48,97,0,0,0,0,0,0,50,95,55,121,49,52,119,48,48,98,0,0,0,0,0,0,50,95,55,121,49,52,119,48,48,99,0,0,0,0,0,0,50,95,55,121,49,52,119,48,48,100,0,0,0,0,0,0,50,95,55,121,49,52,119,48,48,101,0,0,0,0,0,0,103,0,0,0,0,0,105,60,105,120],1785940570061,0],\"1785940576416228-2740604399235338826-balancer-l7leveler-kubr-yp-klg-27-BAL\":[[108,0,50,0,12,49,95,54,54,117,106,119,48,48,50,0,0,0,0,0,0,49,95,54,54,117,106,119,48,48,51,0,0,0,0,0,0,50,95,54,54,117,106,119,48,48,53,0,0,0,0,0,0,50,95,54,54,117,106,119,48,48,54,0,0,0,0,0,0,50,95,54,54,117,106,119,48,48,55,0,0,0,0,0,0,50,95,54,54,117,106,119,48,48,56,0,0,0,0,0,0,50,95,54,54,117,106,119,48,48,57,0,0,0,0,0,0,50,95,54,54,117,106,119,48,48,97,0,0,0,0,0,0,50,95,54,54,117,106,119,48,48,98,0,0,0,0,0,0,50,95,54,54,117,106,119,48,48,99,0,0,0,0,0,0,50,95,54,54,117,106,119,48,48,100,0,0,0,0,0,0,50,95,54,54,117,106,119,48,48,101,0,0,0,0,0,0,103,0,0,0,0,0,105,60,105,120],1785940583869,0]}"
+          "value": "{\"1785940718238660-10889680294848032186-balancer-l7leveler-kubr-yp-sas-204-BAL\":[[108,0,50,0,12,49,95,56,54,49,57,119,48,48,50,0,0,0,0,0,0,49,95,56,54,49,57,119,48,48,51,0,0,0,0,0,0,50,95,56,54,49,57,119,48,48,53,0,0,0,0,0,0,50,95,56,54,49,57,119,48,48,54,0,0,0,0,0,0,50,95,56,54,49,57,119,48,48,55,0,0,0,0,0,0,50,95,56,54,49,57,119,48,48,56,0,0,0,0,0,0,50,95,56,54,49,57,119,48,48,57,0,0,0,0,0,0,50,95,56,54,49,57,119,48,48,97,0,0,0,0,0,0,50,95,56,54,49,57,119,48,48,98,0,0,0,0,0,0,50,95,56,54,49,57,119,48,48,99,0,0,0,0,0,0,50,95,56,54,49,57,119,48,48,100,0,0,0,0,0,0,50,95,56,54,49,57,119,48,48,101,0,0,0,0,0,0,103,0,0,0,0,0,105,60],1785940723874,0]}"
         },
         {
           "name": "_ym94294428:0_reqNum",
@@ -711,7 +681,7 @@
         },
         {
           "name": "_ym24367924:0_reqNum",
-          "value": "309"
+          "value": "312"
         },
         {
           "name": "_ym87649676_lsid",
@@ -739,7 +709,7 @@
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "5011"
+          "value": "5018"
         },
         {
           "name": "_ym87015792:0_reqNum",
@@ -799,11 +769,11 @@
         },
         {
           "name": "_ym106251136:0_reqNum",
-          "value": "2"
+          "value": "3"
         },
         {
           "name": "_ym_retryReqs",
-          "value": "{\"1\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/39321485\",\"time\":1785940585665,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/237240426416/p/edit/reviews\",\"charset\":\"utf-8\",\"exp\":\"9FCGqINccppkfWUWO2m08A,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":1,\"dp\":0,\"ls\":1404211136050,\"hid\":224329140,\"z\":0,\"i\":\"20260805143625\",\"et\":1785940586,\"c\":1,\"rn\":560853515,\"rqn\":5011,\"u\":\"1785841533317968761\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1664,\"wv\":2,\"ds\":\"0,0,780,0,544,539,1,345,1,,,,2072\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1785940583481,\"t\":\"Отзывы\",\"adb\":\"2\",\"rqnl\":1,\"st\":1785940586},\"counterId\":39321485,\"ghid\":224329140,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"2902687631785841527\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}},\"2\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/56213845\",\"time\":1785940585665,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/237240426416/p/edit/reviews\",\"charset\":\"utf-8\",\"exp\":\"9FCGqINccppkfWUWO2m08A,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":1691197175121,\"hid\":224329140,\"z\":0,\"i\":\"20260805143625\",\"et\":1785940586,\"c\":1,\"rn\":235634979,\"rqn\":4689,\"u\":\"1785841533317968761\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1664,\"wv\":2,\"ds\":\"0,0,780,0,544,539,1,345,1,,,,2072\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1785940583481,\"t\":\"Отзывы\",\"adb\":\"2\",\"rqnl\":1,\"st\":1785940586},\"counterId\":56213845,\"ghid\":224329140,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"p-1\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"2902687631785841527\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}},\"3\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/46231566\",\"time\":1785940585665,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/237240426416/p/edit/reviews\",\"charset\":\"utf-8\",\"exp\":\"9FCGqINccppkfWUWO2m08A,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":3,\"dp\":0,\"ls\":391174080352,\"hid\":224329140,\"z\":0,\"i\":\"20260805143625\",\"et\":1785940586,\"c\":1,\"rn\":847396977,\"rqn\":1275,\"u\":\"1785841533317968761\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1664,\"wv\":2,\"ds\":\"0,0,780,0,544,539,1,345,1,,,,2072\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1785940583481,\"np\":\"TGludXggeDg2XzY0\",\"t\":\"Отзывы\",\"adb\":\"2\",\"rqnl\":1,\"st\":1785940586},\"counterId\":46231566,\"ghid\":224329140,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"p-2\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"2902687631785841527\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}}}"
+          "value": "{}"
         },
         {
           "name": "_ym86226515_lsid",
@@ -1011,7 +981,7 @@
         },
         {
           "name": "_ym46231566:0_reqNum",
-          "value": "1275"
+          "value": "1277"
         },
         {
           "name": "_ym86525359:0_reqNum",
@@ -1019,7 +989,7 @@
         },
         {
           "name": "_ym56213845:0_reqNum",
-          "value": "4689"
+          "value": "4696"
         },
         {
           "name": "_ym99908298:0_reqNum",
@@ -1153,14 +1123,6 @@
           "value": "{\"1785940550077670-7724618699266686154-balancer-l7leveler-kubr-yp-klg-27-BAL\":143}"
         },
         {
-          "name": "_ym87015792_lsid",
-          "value": "1759457914609"
-        },
-        {
-          "name": "_ym_retryReqs",
-          "value": "{}"
-        },
-        {
           "name": "_ym86737736_lsid",
           "value": "1340620946161"
         },
@@ -1169,16 +1131,16 @@
           "value": "1"
         },
         {
-          "name": "_ym_uid",
-          "value": "\"1785846296759244775\""
+          "name": "_ym24367924:0_reqNum",
+          "value": "34"
         },
         {
           "name": "_ym87649676_lsid",
           "value": "676636869895"
         },
         {
-          "name": "_ym96285125_lsid",
-          "value": "407692594982"
+          "name": "_ym87015792_lsid",
+          "value": "1759457914609"
         },
         {
           "name": "_ym87015792:0_reqNum",
@@ -1189,16 +1151,12 @@
           "value": "1263519518749"
         },
         {
-          "name": "_ym87015013_lsid",
-          "value": "789056466880"
-        },
-        {
           "name": "_ym86748357_lsid",
           "value": "1707844233019"
         },
         {
-          "name": "_ym86737736:0_reqNum",
-          "value": "1"
+          "name": "_ym_retryReqs",
+          "value": "{}"
         },
         {
           "name": "_ym86931758_lsid",
@@ -1213,8 +1171,8 @@
           "value": "1785846539683"
         },
         {
-          "name": "_ym24367924:0_reqNum",
-          "value": "34"
+          "name": "_ym_uid",
+          "value": "\"1785846296759244775\""
         },
         {
           "name": "beerka",
@@ -1225,11 +1183,15 @@
           "value": "529445026329"
         },
         {
-          "name": "_ym86931758:0_reqNum",
-          "value": "1"
+          "name": "_ym87015013_lsid",
+          "value": "789056466880"
         },
         {
           "name": "_ym86420123:0_reqNum",
+          "value": "1"
+        },
+        {
+          "name": "_ym86737736:0_reqNum",
           "value": "1"
         },
         {
@@ -1249,6 +1211,10 @@
           "value": "2"
         },
         {
+          "name": "_ym96285125_lsid",
+          "value": "407692594982"
+        },
+        {
           "name": "_ym87015712:0_reqNum",
           "value": "1"
         },
@@ -1259,6 +1225,10 @@
         {
           "name": "_ym3:0_reqNum",
           "value": "12"
+        },
+        {
+          "name": "_ym86931758:0_reqNum",
+          "value": "1"
         },
         {
           "name": "maps_fonts_by_family",

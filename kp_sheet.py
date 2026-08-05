@@ -49,7 +49,7 @@ import re
 from typing import Any
 
 # Метка сборки: streamlit_app сверяет её и перезагружает модуль при расхождении.
-BUILD = "2026-08-06-kp-sheet-pick"
+BUILD = "2026-08-06-kp-sheet-reviews"
 
 # Права нужны на оба API: у нативной таблицы значения читает Sheets API, а
 # залитый .xlsx приходится качать файлом через Drive API.

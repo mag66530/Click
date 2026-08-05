@@ -2117,6 +2117,148 @@ def test_review_batch() -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+def test_batch_browser_survives_rerun() -> None:
+    """
+    Один браузер на всю пачку отправки, а не по браузеру на ответ.
+
+    Так приложение падало во второй раз. Заказчик: «попросила массово
+    опубликовать, он еле как 6 штук сделал и сломался», в логе облака –
+    тишина и мёртвый сервер, без единой питоновской ошибки.
+
+    Причина в том, как устроен сам Streamlit: на каждую перерисовку он
+    создаёт для главного скрипта НОВЫЙ модуль (`self._new_module("__main__")`)
+    и выполняет файл заново. Значит любое `_X = {}` на верхнем уровне после
+    каждого шага снова пустое. Ручка открытого браузера лежала именно там, а
+    пачка обрабатывает по одному ответу за перерисовку – и ссылка терялась
+    ровно между ответами. Старый Chromium никто не закрывал, на следующий
+    ответ поднимался ещё один. Шесть ответов – шесть браузеров, и облако
+    убивало приложение по памяти. Счётчик «перезапускать каждые пять» не
+    спасал: он обнулялся тем же способом.
+
+    Симптомов было три, причина одна. Не срабатывало «карточка этого города уже
+    открыта» – каждый ответ грузил её заново, хотя пять отзывов Еревану должны
+    уходить на одну страницу. Не доживал до пяти счётчик перезапуска. И старый
+    браузер никто не закрывал.
+
+    Поэтому проверяем не заплатку, а нужное поведение целиком: один браузер на
+    пачку, одна загрузка карточки на город, новая вкладка на смене города – и
+    ручка живёт в session_state, а не в переменной модуля.
+    """
+    import streamlit as st
+    import streamlit_app as app
+    import reviews as rv
+    import yb_playwright as yb
+    print("\n▸ Браузер пачки переживает перерисовку")
+
+    made = {"browsers": 0, "closed": 0, "workers": 0, "tabs": 0, "loads": []}
+
+    class FakeBrowser:
+        def __init__(self, project_id, headless=True):
+            self.page = object()
+            made["browsers"] += 1
+
+        def start(self):
+            return None
+
+        def new_page(self):
+            made["tabs"] += 1
+            self.page = object()
+            return self.page
+
+        def save_session(self):
+            return None
+
+        def close(self):
+            made["closed"] += 1
+
+    class FakeWorker:
+        def __init__(self):
+            made["workers"] += 1
+            self._alive = True
+
+        def alive(self):
+            return self._alive
+
+        def call(self, func, *a, **k):
+            return func(*a, **k)
+
+        def stop(self):
+            self._alive = False
+
+    def fake_publish(page, url, review_id, text, original, navigate):
+        if navigate:
+            made["loads"].append(url)      # сколько раз реально грузили карточку
+        return {"status": "answered", "reason": ""}
+
+    keep = (app.PlaywrightWorker, yb.YbBrowser, yb.publish_review_answer,
+            app.get_settings, app._review_queue_save)
+    app.PlaywrightWorker = FakeWorker
+    yb.YbBrowser = FakeBrowser
+    yb.publish_review_answer = fake_publish
+    app.get_settings = lambda pid: {"headless": True}
+    app._review_queue_save = lambda *a, **k: None
+
+    try:
+        st.session_state.clear()
+        # Пять отзывов Еревану и два Баку – ровно тот расклад, про который
+        # спросила заказчик: «зачем каждый раз открывать одну и ту же карточку».
+        plan = [("Ереван", "https://yandex.ru/sprav/1/p/edit/reviews/")] * 5 \
+             + [("Баку", "https://yandex.ru/sprav/2/p/edit/reviews/")] * 2
+        items = [{"reviewId": f"s{n}", "status": rv.DRAFTED, "draft": "готовый ответ.",
+                  "city": city, "author": "Иван", "text": "отзыв", "reviewsUrl": url}
+                 for n, (city, url) in enumerate(plan)]
+
+        def in_module_globals() -> list[str]:
+            """
+            Где ещё, кроме session_state, лежат браузер и его поток.
+
+            Это и есть проверка на ту самую поломку: всё, что найдётся здесь,
+            в облаке обнулится на следующей же перерисовке, а живой Chromium
+            останется висеть в памяти.
+            """
+            found = []
+            for name, val in list(vars(app).items()):
+                if name.startswith("__"):
+                    continue
+                seen = [val] if not isinstance(val, dict) else list(val.values())
+                for v in seen:
+                    parts = v if isinstance(v, tuple) else (v,)
+                    if any(isinstance(x, (FakeBrowser, FakeWorker)) for x in parts):
+                        found.append(name)
+                        break
+            return found
+
+        # Шесть ответов подряд – ровно тот случай, на котором всё легло.
+        for n, it in enumerate(items, 1):
+            app._send_one("APS", it, it["draft"])
+            stale = in_module_globals()
+            check(f"ответ {n}: браузер не осел в переменных модуля",
+                  not stale, f"нашёлся в {stale}")
+
+        eq("на всю пачку один браузер", made["browsers"], 1)
+        eq("карточка грузится раз на город, а не на каждый ответ",
+           made["loads"], ["https://yandex.ru/sprav/1/p/edit/reviews/",
+                           "https://yandex.ru/sprav/2/p/edit/reviews/"])
+        eq("вкладка пересоздаётся на смене города", made["tabs"], 2)
+        eq("все семь ответов ушли",
+           [i.get("status") for i in items], [rv.ANSWERED] * 7)
+
+        # Ручка обязана лежать в session_state: только оно переживает
+        # перерисовку. Ровно этого и не было.
+        box = st.session_state.get(app._BROWSER_BOX) or {}
+        check("ручка браузера живёт в session_state", "APS" in box, list(box))
+
+        app._batch_browser_close("APS")
+        eq("после пачки браузер закрыт", made["closed"], 1)
+        check("и ручка убрана из session_state",
+              not (st.session_state.get(app._BROWSER_BOX) or {}).get("APS"))
+    finally:
+        (app.PlaywrightWorker, yb.YbBrowser, yb.publish_review_answer,
+         app.get_settings, app._review_queue_save) = keep
+        st.session_state.clear()
+
+
+# ════════════════════════════════════════════════════════════════════
 def test_one_build() -> None:
     """
     Метка сборки обязана быть одна на все модули.
@@ -2227,6 +2369,7 @@ def main() -> int:
         test_reviews()
         test_gemini_keys()
         test_review_batch()
+        test_batch_browser_survives_rerun()
         test_one_build()
         test_actualize_selection()
         test_add_post_click_on_real_page()

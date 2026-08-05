@@ -1649,25 +1649,53 @@ def _apply_send_result(item: dict, status: str, reason: str) -> None:
 # Браузер для отправки держим открытым между перерисовками – поднимать его
 # заново на каждый ответ значит вернуть те самые минуты ожидания.
 
-_BATCH_BROWSER: dict[str, tuple] = {}
+# ВНИМАНИЕ: держать браузер в переменной модуля НЕЛЬЗЯ. Streamlit на каждую
+# перерисовку создаёт для главного скрипта НОВЫЙ модуль (в его исходниках –
+# `module = self._new_module("__main__")`) и выполняет файл заново. Любое
+# `_X = {}` на верхнем уровне после каждого шага снова становится пустым.
+#
+# Именно на этом приложение и падало. Пачка обрабатывает ПО ОДНОМУ ответу за
+# перерисовку – значит ссылка на открытый браузер терялась ровно между
+# ответами. Старый Chromium никто не закрывал, он оставался жить, а на
+# следующий ответ поднимался ещё один. Шесть ответов – шесть браузеров, и
+# облако убивало приложение по памяти: заказчик видела «еле как 6 штук
+# сделал и сломался», а в логе – тишину и мёртвый сервер, без единой
+# питоновской ошибки. Счётчик «перезапускать браузер каждые пять» не
+# срабатывал по той же причине: он тоже обнулялся каждый шаг.
+#
+# Всё, что должно пережить перерисовку, живёт в st.session_state.
+_BROWSER_BOX = "rv-batch-browser"    # {project_id: (worker, browser)}
+_URL_BOX = "rv-batch-url"            # {project_id: какой город сейчас открыт}
+
+
+def _batch_box(name: str) -> dict:
+    """Словарь, переживающий перерисовку. Только через session_state."""
+    box = st.session_state.get(name)
+    if not isinstance(box, dict):
+        box = {}
+        st.session_state[name] = box
+    return box
 
 
 def _batch_browser(project_id: str):
     """Браузер и поток для пачки отправки. Открывается один раз на пачку."""
-    have = _BATCH_BROWSER.get(project_id)
-    if have:
+    have = _batch_box(_BROWSER_BOX).get(project_id)
+    if have and have[0].alive():
         return have
+    if have:
+        # Поток воркера умер, а браузер мог остаться – убираем за собой,
+        # иначе получаем ровно ту утечку, из-за которой всё и падало.
+        _batch_browser_close(project_id)
     browser = yb.YbBrowser(project_id, headless=bool(get_settings(project_id)["headless"]))
     worker = PlaywrightWorker()
     worker.call(browser.start)
-    _BATCH_BROWSER[project_id] = (worker, browser)
+    _batch_box(_BROWSER_BOX)[project_id] = (worker, browser)
     return worker, browser
 
 
 def _batch_browser_close(project_id: str) -> None:
-    _BATCH_URL.pop(project_id, None)
-    _BATCH_COUNT.pop(project_id, None)
-    have = _BATCH_BROWSER.pop(project_id, None)
+    _batch_box(_URL_BOX).pop(project_id, None)
+    have = _batch_box(_BROWSER_BOX).pop(project_id, None)
     if not have:
         return
     worker, browser = have
@@ -1685,30 +1713,40 @@ def _batch_browser_close(project_id: str) -> None:
 # Через столько ответов браузер перезапускается. Страница отзывов тяжёлая, и
 # на четырнадцати подряд Streamlit Cloud выбило по памяти: «This app has gone
 # over its resource limits». Перезапуск занимает пару секунд и отдаёт память.
-SEND_RESTART_EVERY = 5
-
-_BATCH_URL: dict[str, str] = {}      # какой город сейчас открыт
-_BATCH_COUNT: dict[str, int] = {}    # сколько ответов ушло с этого запуска браузера
-
-
 def _send_one(project_id: str, item: dict, text: str) -> None:
-    """Отправить один ответ через браузер пачки и записать исход."""
+    """
+    Отправить один ответ и записать исход.
+
+    Один браузер на всю пачку, одна вкладка на город. Ответы отсортированы по
+    городам, поэтому пять ответов Еревану уходят на ОДНУ открытую страницу –
+    карточка грузится один раз, а не пять. Сменился город – закрываем вкладку
+    и открываем новую: страница отзывов тяжёлая, и так память освобождается
+    сама, ровно по границе города. Вход при этом не теряется – вкладка новая,
+    а сессия браузера та же.
+
+    Раньше здесь стоял перезапуск всего браузера каждые пять ответов. Это была
+    затычка поверх настоящей причины: ручки браузера и текущего города лежали
+    в переменных модуля, которые Streamlit обнуляет на каждой перерисовке.
+    Из-за этого «страница уже открыта» не срабатывало НИКОГДА (каждый ответ
+    грузил карточку заново), счётчик до пяти не доживал, а старый браузер
+    никто не закрывал – он просто оставался висеть. Причина одна, симптомов
+    было три; чинить их по отдельности смысла нет.
+    """
     url = item.get("reviewsUrl")
     try:
-        if _BATCH_COUNT.get(project_id, 0) >= SEND_RESTART_EVERY:
-            _batch_browser_close(project_id)          # отдаём память
         worker, browser = _batch_browser(project_id)
-        # Страница этого города уже открыта – грузить заново незачем.
-        same = _BATCH_URL.get(project_id) == url
+        urls = _batch_box(_URL_BOX)
+        same = urls.get(project_id) == url
+        if not same:
+            worker.call(browser.new_page)     # новый город – новая вкладка
         res = worker.call(yb.publish_review_answer, browser.page, url,
                           item.get("reviewId"), text, item.get("text") or "",
                           not same)
-        _BATCH_URL[project_id] = url
-        _BATCH_COUNT[project_id] = _BATCH_COUNT.get(project_id, 0) + 1
+        urls[project_id] = url
         status, reason = res.get("status", "failed"), res.get("reason", "")
     except Exception as e:  # noqa: BLE001
         status, reason = "failed", str(e)
-        _BATCH_URL.pop(project_id, None)
+        _batch_box(_URL_BOX).pop(project_id, None)
     item["finalText"] = text
     item["sentAt"] = datetime.now(timezone.utc).isoformat()
     _apply_send_result(item, status, reason)

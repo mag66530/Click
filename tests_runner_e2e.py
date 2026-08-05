@@ -539,6 +539,62 @@ def scenario_reviews_page_broken(pid: str) -> None:
     eq("в очередь ничего не добавилось", rv.load_queue(pid), [])
 
 
+def scenario_collect(pid: str) -> None:
+    """
+    Сбор организаций для сверки: список читается, результат сохраняется,
+    карточки открываются только по просьбе.
+    """
+    print("\n▸ Сбор организаций для сверки")
+
+    listed = [
+        {"id": "1", "type": "ordinal", "publishing": "publish", "name": "Авиапромсталь",
+         "address": "Ростовская область, городской округ Шахты, Шахты",
+         "site": "https://shahty.aviastal.ru/", "sites": ["https://shahty.aviastal.ru/"],
+         "social": {}, "emails": [], "phones": ["+7 (863) 206-68-85"], "rubrics": [], "noAccess": False},
+        {"id": "2", "type": "chain", "publishing": "publish", "name": "АвиаПромСталь",
+         "address": "Земля", "site": "", "sites": [], "social": {}, "emails": [],
+         "phones": [], "rubrics": [], "noAccess": False},
+    ]
+    opened: list[str] = []
+    yb.collect_companies = lambda page, log_every=0, page_limit=50: [dict(c) for c in listed]  # type: ignore
+    yb.read_company_card = (lambda page, url: opened.append(url) or  # type: ignore
+                            {"emails": ["shahty@aviastal.ru"]})
+
+    ok, msg = runner.start_collect(pid, headless=True)
+    check("сбор стартовал", ok, msg)
+    state = wait_done(pid); settle(pid)
+    eq("сбор завершился", state.get("status"), "done")
+    eq("карточки без просьбы не открывались", opened, [])
+
+    saved = runner.load_companies(pid)
+    eq("организации сохранились", len(saved.get("companies") or []), 2)
+    eq("сохранилось то же, что прочитали",
+       [c["id"] for c in saved["companies"]], ["1", "2"])
+    check("отметка времени есть", bool(saved.get("collectedAt")), str(saved)[:120])
+    log = runner.read_live_log(pid)
+    check("в логе видно, сколько собрано", "организаций: 2" in log, log[-200:])
+
+    # С галочкой «открывать карточки» – обходим каждую и дополняем данными.
+    ok, msg = runner.start_collect(pid, headless=True, with_cards=True)
+    check("сбор с карточками стартовал", ok, msg)
+    wait_done(pid); settle(pid)
+    eq("открыли обе карточки", len(opened), 2)
+    check("адрес карточки – это /p/edit/", all(u.endswith("/p/edit/") for u in opened), str(opened))
+    saved = runner.load_companies(pid)
+    eq("почта из карточки попала в данные", saved["companies"][0]["emails"], ["shahty@aviastal.ru"])
+
+    # Сессия кончилась – прогон падает понятно, а не молча отдаёт пустой список.
+    def boom(page, log_every=0, page_limit=50):
+        raise RuntimeError("Яндекс открыл страницу входа – сессия закончилась.")
+
+    yb.collect_companies = boom  # type: ignore
+    runner.start_collect(pid, headless=True)
+    state = wait_done(pid); settle(pid)
+    eq("прогон честно сломался", state.get("status"), "error")
+    check("в ошибке сказано про вход", "сессия" in (state.get("error") or ""), str(state.get("error")))
+    eq("прошлые данные не затёрты", len(runner.load_companies(pid).get("companies") or []), 2)
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="click-e2e-"))
     runner.USERS_DATA = tmp
@@ -563,6 +619,7 @@ def main() -> int:
         scenario_actualize_reviews_off(pid)
         scenario_reviews_llm_down(pid)
         scenario_reviews_page_broken(pid)
+        scenario_collect(pid)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

@@ -586,6 +586,28 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
   .report-row-dur {{ display: none; }}
 }}
 
+/* ─── Сверка с Яндексом ────────────────────────────────────────── */
+.audit-row {{
+  display: block; padding: 9px 13px; border-radius: var(--r-sm);
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-left: 3px solid var(--border); margin-bottom: 6px;
+}}
+.audit-row.ok {{ border-left-color: var(--grn); }}
+.audit-row.warn {{ border-left-color: var(--yel); }}
+.audit-row.err {{ border-left-color: var(--red); }}
+.audit-row.skip {{ border-left-color: var(--acc); }}
+.audit-head {{ display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }}
+.audit-city {{ font-size: 13px; font-weight: 700; color: var(--text); }}
+.audit-country {{ font-size: 11px; color: var(--dim); }}
+.audit-note {{ margin-left: auto; font-size: 12px; color: var(--yel); }}
+.audit-fields {{ margin-top: 5px; font-size: 12.5px; color: var(--text-2); line-height: 1.65; }}
+.audit-key {{ color: var(--dim); }}
+.audit-same {{ color: var(--grn); }}
+.audit-diff {{ color: var(--red); }}
+.audit-none {{ color: var(--dim); }}
+.audit-link a {{ color: var(--acc); text-decoration: none; font-family: var(--mono); font-size: 11.5px; }}
+.audit-link a:hover {{ text-decoration: underline; }}
+
 /* ─── Пустое состояние ─────────────────────────────────────────── */
 .empty {{ text-align: center; padding: 40px 20px; color: var(--muted); }}
 .empty-icon {{ font-size: 42px; opacity: .35; margin-bottom: 12px; }}
@@ -1142,6 +1164,73 @@ def report_row(item: dict, with_country: bool = False) -> str:
         f'<span class="report-row-city">{esc(item.get("cityName", "–"))}</span>'
         f'<span class="report-row-reason">{esc(reason)}</span>'
         f'<span class="report-row-dur">{esc(dur)}</span></div>'
+    )
+
+
+_AUDIT_STYLE = {"найдена": ("ok", "✅"), "несколько": ("warn", "❗"), "нет": ("err", "❌")}
+_VERDICT_CLS = {"совпадает": "audit-same", "совпадает частично": "audit-same",
+                "расходится": "audit-diff", "нет в Яндексе": "audit-diff",
+                "нет в КП": "audit-none", "–": "audit-none"}
+
+
+def audit_row(item: dict) -> str:
+    """
+    Строка сверки: город, что нашлось в Яндексе, где расходится с КП.
+
+    Показываем ОБА значения – из КП и из Яндекса: «расходится» без цифр
+    заставляет лезть в таблицу, а так сразу видно, кто из них прав.
+    """
+    cmp = item.get("cmp") or {}
+    cls, ico = _AUDIT_STYLE.get(cmp.get("status", ""), ("skip", "•"))
+    if cmp.get("status") == "найдена" and cmp.get("problems"):
+        cls = "warn"
+
+    def line(label: str, kp: str, ya: str, verdict: str) -> str:
+        if not kp and not ya:
+            return ""
+        vcls = _VERDICT_CLS.get(verdict, "audit-none")
+        return (f'<div><span class="audit-key">{esc(label)}:</span> '
+                f'КП <b>{esc(kp or "–")}</b> · Яндекс <b>{esc(ya or "–")}</b> '
+                f'<span class="{vcls}">{esc(verdict)}</span></div>')
+
+    cos = item.get("companies") or []
+    fields = "".join([
+        line("Сайт", item.get("site", ""), " / ".join(cmp.get("yaSites") or []), cmp.get("site", "–")),
+        line("Телефон", " / ".join(item.get("phones") or []),
+             " / ".join(cmp.get("yaPhones") or []), cmp.get("phone", "–")),
+        line("Почта", item.get("email", ""), " / ".join(cmp.get("yaEmails") or []), cmp.get("email", "–")),
+    ])
+    if cos:
+        links = " · ".join(
+            f'<a href="https://yandex.ru/sprav/{esc(c.get("id"))}/p/edit/" target="_blank">'
+            f'{esc(c.get("name") or c.get("id"))}</a>' for c in cos)
+        addr = "; ".join(c.get("address", "") for c in cos if c.get("address"))
+        fields += (f'<div class="audit-link">{links}</div>'
+                   f'<div><span class="audit-key">Адрес в Яндексе:</span> {esc(addr)}</div>')
+
+    notes = "; ".join(cmp.get("notes") or [])
+    return (
+        f'<div class="audit-row {cls}">'
+        f'<div class="audit-head"><span>{ico}</span>'
+        f'<span class="audit-city">{esc(item.get("city", "–"))}</span>'
+        f'<span class="audit-country">{esc(item.get("country", ""))}</span>'
+        f'<span class="audit-note">{esc(notes)}</span></div>'
+        f'<div class="audit-fields">{fields}</div></div>'
+    )
+
+
+def audit_extra_row(co: dict) -> str:
+    """Организация Яндекса, которой не нашлось города в КП."""
+    bits = [co.get("address", ""), " / ".join(co.get("sites") or []),
+            " / ".join(co.get("phones") or []), " / ".join(co.get("emails") or [])]
+    return (
+        f'<div class="audit-row skip">'
+        f'<div class="audit-head"><span>➕</span>'
+        f'<span class="audit-city">{esc(co.get("name") or co.get("id"))}</span>'
+        f'<span class="audit-country">{"сеть" if co.get("type") == "chain" else ""}</span></div>'
+        f'<div class="audit-fields">{esc(" · ".join(b for b in bits if b))}'
+        f'<div class="audit-link"><a href="https://yandex.ru/sprav/{esc(co.get("id"))}/p/edit/" '
+        f'target="_blank">открыть карточку</a></div></div></div>'
     )
 
 

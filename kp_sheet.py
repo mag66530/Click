@@ -253,17 +253,28 @@ def _read_uploaded_xlsx(file_id: str, headers: dict) -> dict[str, list[list[str]
     return out
 
 
-def _read_values(file_id: str, sa_info: dict, gid: str = "") -> list[list[str]]:
-    """Значения таблицы. Нативную читаем через Sheets API, залитый .xlsx – качаем."""
+def open_book(file_id: str, sa_info: dict, gid: str = "") -> tuple[list[str], Any, str]:
+    """
+    Открыть таблицу: (названия листов, читалка одного листа, лист по gid).
+
+    Одно место на всех: список городов, сверка с Яндексом и всё, что появится
+    дальше. Нативную таблицу читает Sheets API, залитый на Диск Excel
+    приходится качать файлом – снаружи разницы не видно.
+    """
     import requests
 
     headers = _auth_headers(sa_info)
     base = f"https://sheets.googleapis.com/v4/spreadsheets/{file_id}"
 
+    def as_xlsx() -> tuple[list[str], Any, str]:
+        sheets = _read_uploaded_xlsx(file_id, headers)
+        # У залитого файла gid из ссылки – это внутренний номер листа Excel,
+        # сопоставить его с названием нечем. Лист выбирается по названию.
+        return list(sheets), (lambda t: sheets[t]), ""
+
     # Залитый Excel Sheets API не осилит – сразу идём в Drive.
     if _file_mime(file_id, headers) not in (GOOGLE_SHEET_MIME, ""):
-        sheets = _read_uploaded_xlsx(file_id, headers)
-        return _pick_sheet(list(sheets), lambda t: sheets[t])
+        return as_xlsx()
 
     meta = requests.get(base, params={"fields": "sheets.properties(sheetId,title)"},
                         headers=headers, timeout=30)
@@ -276,15 +287,14 @@ def _read_values(file_id: str, sa_info: dict, gid: str = "") -> list[list[str]]:
         # Тип файла определить не удалось, а Sheets API упёрся в Office-файл –
         # значит это всё-таки залитый Excel, качаем его напрямую.
         if "must not be an Office file" in (meta.text or ""):
-            sheets = _read_uploaded_xlsx(file_id, headers)
-            return _pick_sheet(list(sheets), lambda t: sheets[t])
+            return as_xlsx()
         raise RuntimeError(f"Sheets API вернул HTTP {meta.status_code}: {meta.text[:160]}")
 
     props = [sh.get("properties", {}) for sh in (meta.json() or {}).get("sheets", [])]
     titles = [p.get("title", "") for p in props if p.get("title")]
     if not titles:
         raise RuntimeError("В таблице нет листов")
-    # Ссылка с gid указывает на конкретный лист – начинаем с него.
+    # Ссылка с gid указывает на конкретный лист – это самое точное указание.
     prefer = next((p.get("title", "") for p in props
                    if gid and str(p.get("sheetId")) == str(gid)), "")
 
@@ -297,7 +307,52 @@ def _read_values(file_id: str, sa_info: dict, gid: str = "") -> list[list[str]]:
             raise RuntimeError(f"Не удалось прочитать лист «{title}»: HTTP {r.status_code}")
         return [[("" if v is None else str(v)) for v in row] for row in (r.json() or {}).get("values", [])]
 
+    return titles, read, prefer
+
+
+def _read_values(file_id: str, sa_info: dict, gid: str = "") -> list[list[str]]:
+    """Значения таблицы. Нативную читаем через Sheets API, залитый .xlsx – качаем."""
+    titles, read, prefer = open_book(file_id, sa_info, gid)
     return _pick_sheet(titles, read, prefer)
+
+
+def _book(project_id: str, from_config: str = "") -> tuple[list[str], Any, str]:
+    """Открыть КП проекта по настроенной ссылке."""
+    url = sheet_url(project_id, from_config)
+    fid = sheet_id(url)
+    if not fid:
+        raise RuntimeError("Не задана ссылка на Google-таблицу КП для этого проекта.")
+    sa = service_account_info()
+    if sa is None:
+        raise RuntimeError(
+            "Не найден ключ сервисного аккаунта Google. Добавьте в секреты приложения "
+            "gcp_service_account_b64 (весь JSON-ключ в base64) или секцию [gcp_service_account]."
+        )
+    return open_book(fid, sa, sheet_gid(url))
+
+
+def sheet_titles(project_id: str, from_config: str = "") -> tuple[list[str], str]:
+    """Названия листов КП и тот, на который указывает ссылка (может быть пустым)."""
+    titles, _read, prefer = _book(project_id, from_config)
+    return titles, prefer
+
+
+def read_sheet(project_id: str, title: str, from_config: str = "") -> list[list[str]]:
+    """
+    Строки одного листа КП как есть – без отбора городов и без правок.
+
+    Нужно сверке: она возвращает то же КП, только с добавленными колонками,
+    поэтому исходную таблицу трогать нельзя.
+    """
+    titles, read, prefer = _book(project_id, from_config)
+    want = title or prefer or ""
+    if want not in titles:
+        # Название могло прийти с лишними пробелами или в другом регистре.
+        low = {t.strip().lower(): t for t in titles}
+        want = low.get((want or "").strip().lower(), "")
+    if not want:
+        raise RuntimeError(f"В таблице нет листа «{title}». Есть: {', '.join(titles[:20])}")
+    return read(want)
 
 
 def _pick_sheet(titles: list[str], read, prefer: str = "") -> list[list[str]]:

@@ -24,6 +24,7 @@ from pathlib import Path
 
 import streamlit as st
 
+import kp_audit
 import kp_sheet
 import llm
 import paths
@@ -55,10 +56,10 @@ def _same_build(mod) -> bool:
 # Список ПОЛНЫЙ: любой модуль, оставшийся в памяти старым, ломает своё. Так
 # заказчик перезагрузила города из таблицы, а Click опять взял старый лист –
 # kp_sheet в списке не было, и правка просто не работала.
-_MODULES = ("paths", "repo_store", "projects_data", "kp_sheet",
+_MODULES = ("paths", "repo_store", "projects_data", "kp_sheet", "kp_audit",
             "ui_theme", "yb_playwright", "reviews", "llm", "runner")
 
-if not all(_same_build(m) for m in (paths, repo_store, pdata, kp_sheet, T, yb, rv, llm, runner)):
+if not all(_same_build(m) for m in (paths, repo_store, pdata, kp_sheet, kp_audit, T, yb, rv, llm, runner)):
     import importlib
 
     for _name in _MODULES:                # порядок: зависимости раньше зависимых
@@ -66,6 +67,7 @@ if not all(_same_build(m) for m in (paths, repo_store, pdata, kp_sheet, T, yb, r
             importlib.reload(sys.modules[_name])
         except Exception:  # noqa: BLE001 – без перезагрузки хуже, но падать нельзя
             pass
+    import kp_audit  # noqa: F811
     import kp_sheet  # noqa: F811
     import llm  # noqa: F811
     import paths  # noqa: F811
@@ -82,7 +84,8 @@ USERS_DATA = paths.data_root()
 st.set_page_config(page_title="Click – публикация постов", page_icon="📮", layout="wide")
 
 SALT = "click-salt-v1-2026"
-SECTIONS = ["🚀 Запуск", "📤 Публикация", "🔄 Актуализация", "🏙 Города", "📊 Отчёт", "⚙️ Настройки"]
+SECTIONS = ["🚀 Запуск", "📤 Публикация", "🔄 Актуализация", "🏙 Города", "📊 Отчёт",
+            "⚙️ Настройки", "🔎 Сверка"]
 
 
 def _hash(password: str) -> str:
@@ -953,8 +956,9 @@ def _open_report(kind: str, run_id: str = "") -> None:
 def _render_live_panel(project_id: str, was_running: bool = False) -> None:
     state = runner.read_state(project_id)
     status = state.get("status")
-    kind = "publish" if state.get("action") == "publish" else "actualize"
-    action_ru = "Публикация" if kind == "publish" else "Актуализация"
+    action = state.get("action")
+    kind = "publish" if action == "publish" else "actualize"
+    action_ru = {"publish": "Публикация", "collect": "Чтение организаций"}.get(action, "Актуализация")
     running = status == "running"
 
     # Прогон только что закончился – перерисовываем страницу целиком, чтобы
@@ -977,7 +981,8 @@ def _render_live_panel(project_id: str, was_running: bool = False) -> None:
         ))
         st.progress(min(1.0, current / total))
     elif status == "done":
-        st.success(f"{action_ru} завершена.")
+        st.success(f"{action_ru} завершена." if action != "collect"
+                   else "Организации прочитаны.")
     elif status == "stopped":
         st.warning(f"{action_ru} остановлена. Сделанное сохранено в отчёте.")
     elif status == "error":
@@ -987,7 +992,8 @@ def _render_live_panel(project_id: str, was_running: bool = False) -> None:
 
     # Прогон закончился – к отчёту. Кнопка нужна и после ОСТАНОВКИ: там тоже
     # есть что смотреть, а раньше она показывалась только после «done».
-    if status in ("done", "stopped", "error", "interrupted"):
+    # У чтения организаций отчёта нет – результат виден тут же, на «Сверке».
+    if action != "collect" and status in ("done", "stopped", "error", "interrupted"):
         with st.container(key="go-report"):
             if st.button("📊 Посмотреть отчёт", key=f"btn-report-{state.get('runId', '')}"):
                 _open_report(kind, state.get("runId", ""))
@@ -1961,7 +1967,7 @@ def reviews_queue_block(project_id: str) -> None:
         _send_all_block(project_id, pending, running)
 
         for n, item in enumerate(pending):
-            label = _REVIEW_LABELS.get(item.get("status"), "—")
+            label = _REVIEW_LABELS.get(item.get("status"), "–")
             stars = "★" * int(item.get("rating") or 0)
             with st.container(border=True):
                 head, badge = st.columns([4, 1])
@@ -3092,6 +3098,237 @@ def _finish_login(project_id: str, worker, flow) -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+#  РАЗДЕЛ: СВЕРКА С ЯНДЕКСОМ
+# ════════════════════════════════════════════════════════════════════
+
+# Плашки сверки – они же фильтры, как в отчёте.
+_AUDIT_TILES = [
+    {"key": "found",    "filter": "found",    "label": "Найдено",       "colour": "ok"},
+    {"key": "several",  "filter": "several",  "label": "Несколько",     "colour": "warn"},
+    {"key": "missing",  "filter": "missing",  "label": "Нет в Яндексе", "colour": "err"},
+    {"key": "mismatch", "filter": "mismatch", "label": "Расхождения",   "colour": "noimg"},
+    {"key": "extra",    "filter": "extra",    "label": "Лишние",        "colour": "skip"},
+]
+
+
+def _audit_cache(key: str, make):
+    """
+    Ответ Google держим в памяти вкладки.
+
+    Streamlit перерисовывает страницу на каждый клик, а один только список
+    листов – это три запроса к Google. Без кэша нажатие любой плашки лезло бы
+    в сеть и упиралось в квоту.
+    """
+    cache = st.session_state.get("audit-cache") or {}
+    if key not in cache:
+        cache[key] = make()
+        st.session_state["audit-cache"] = cache
+    return cache[key]
+
+
+def _audit_forget() -> None:
+    st.session_state.pop("audit-cache", None)
+
+
+def _audit_sheet_rows(project_id: str, config: dict, title: str) -> list[list[str]]:
+    return _audit_cache(
+        f"rows|{project_id}|{title}",
+        lambda: kp_sheet.read_sheet(project_id, title, (config.get("kpSheetUrl") or "").strip()))
+
+
+def _audit_pick_sheet(titles: list[str], prefer: str) -> str:
+    """Какой лист предлагать: указанный ссылкой, потом «Лист20», потом «кп»."""
+    saved = st.session_state.get("audit-sheet")
+    if saved in titles:
+        return saved
+    for want in ("лист20", "лист 20"):
+        for t in titles:
+            if kp_audit.norm_text(t).replace(" ", "") == want.replace(" ", ""):
+                return t
+    if prefer in titles:
+        return prefer
+    for t in titles:
+        if kp_audit.norm_text(t) in ("кп", "карта присутствия", "карта присутсвия"):
+            return t
+    return titles[0] if titles else ""
+
+
+def tab_audit(project_id: str, config: dict) -> None:
+    state = runner.read_state(project_id)
+    running = state.get("status") == "running"
+    stored = runner.load_companies(project_id)
+    companies = stored.get("companies") or []
+
+    with st.container(border=True):
+        html('<div class="card-title">🔎 Сверка КП с организациями Яндекса</div>')
+        html('<div class="hint" style="margin-bottom:12px">Click читает список организаций аккаунта, '
+             'раскладывает их по городам КП и сравнивает <b>сайт, телефоны и почту</b> с таблицей. '
+             'Города, где карточек несколько, помечаются отдельно – это дубли, из-за них посты '
+             'уходят в одну карточку, а вторая живёт своей жизнью. На выходе – то же самое КП, '
+             'только с колонками из Яндекса.</div>')
+
+        c1, c2 = st.columns([2, 3])
+        collected_at = local_time(stored.get("collectedAt")) if stored.get("collectedAt") else ""
+        if c1.button("🔄 Прочитать организации в Яндексе", type="primary", key="audit-collect",
+                     disabled=running or not yb.has_saved_session(project_id),
+                     use_container_width=True):
+            ok, msg = runner.start_collect(project_id,
+                                           headless=bool(get_settings(project_id)["headless"]),
+                                           with_cards=bool(st.session_state.get("audit-cards")))
+            (st.toast if ok else st.error)(msg)
+            time.sleep(0.6)
+            st.rerun()
+        c2.caption(f"Собрано организаций: **{len(companies)}**, {collected_at}" if companies
+                   else "Организации ещё не читались.")
+        st.checkbox("Открывать карточку каждой организации (дольше, но наверняка)",
+                    key="audit-cards",
+                    help="Список организаций и так отдаёт сайт, телефоны и почту. Открывать "
+                         "карточки нужно, только если в списке чего-то не хватает: это "
+                         "3-4 секунды на каждую из сотен карточек.")
+        if not yb.has_saved_session(project_id):
+            st.warning("Сначала войдите в Яндекс в разделе «⚙️ Настройки».")
+
+    if running or runner.read_state(project_id).get("status") not in (None, "idle"):
+        with st.container(border=True):
+            live_panel(project_id, running)
+
+    # ─── Лист КП ───
+    saved_url = (config.get("kpSheetUrl") or "").strip()
+    if not kp_sheet.is_configured(project_id, saved_url):
+        st.info("Не настроена таблица КП. Ссылка и ключ доступа задаются во вкладке "
+                "«🏙 Города» → «Источник городов».")
+        return
+
+    try:
+        titles, prefer = _audit_cache(f"titles|{project_id}|{saved_url}",
+                                      lambda: kp_sheet.sheet_titles(project_id, saved_url))
+    except Exception as e:  # noqa: BLE001
+        st.error(str(e))
+        return
+    if not titles:
+        st.error("В таблице КП нет ни одного листа.")
+        return
+
+    with st.container(border=True):
+        html('<div class="card-title">📄 Лист КП</div>')
+        # Лист из прошлого раза мог пропасть (переименовали, сменили таблицу) –
+        # тогда Streamlit упал бы на значении, которого нет в списке.
+        if st.session_state.get("audit-sheet") not in titles:
+            st.session_state.pop("audit-sheet", None)
+        pick = _audit_pick_sheet(titles, prefer)
+        title = st.selectbox("Лист таблицы", titles, index=titles.index(pick) if pick in titles else 0,
+                             key="audit-sheet", label_visibility="collapsed")
+        if st.button("↻ Перечитать таблицу", key="audit-reread"):
+            _audit_forget()
+            st.rerun()
+        try:
+            rows = _audit_sheet_rows(project_id, config, title)
+        except Exception as e:  # noqa: BLE001
+            st.error(str(e))
+            return
+        if not any(any(str(c).strip() for c in r) for r in rows):
+            # «Лист20» заказчик только собирается заполнить – пока он пустой,
+            # предлагаем открыть рабочий лист в один клик, а не искать в списке.
+            st.warning(f"Лист «{title}» пустой – сверять нечего.")
+            others = [t for t in titles
+                      if t != title and kp_audit.norm_text(t) in
+                      ("кп", "карта присутствия", "карта присутсвия", "выгрузка", "целевая")]
+            for n, other in enumerate(others[:3]):
+                st.button(f"Открыть лист «{other}»", key=f"audit-goto-{n}",
+                          on_click=lambda t=other: st.session_state.__setitem__("audit-sheet", t))
+            return
+
+    if not companies:
+        html(T.empty("🔎", "Организации ещё не прочитаны",
+                     "Нажмите «Прочитать организации в Яндексе» – это займёт около минуты."))
+        return
+
+    result = kp_audit.build(rows, companies)
+    if result.get("error"):
+        st.error(result["error"] + f" (лист «{title}»)")
+        return
+    totals = result["totals"]
+
+    with st.container(border=True):
+        html(f'<div class="report-head"><span class="report-head-title">📋 Сверка · лист «{T.esc(title)}»'
+             f'</span><span class="report-head-date">{T.esc(collected_at)}</span></div>')
+
+        current = st.session_state.get("audit-filter", "all")
+        html(T.tile_css([
+            (f"tile-audit-{n}", {
+                "--val": T.css_text(str(totals.get(t["key"], 0))),
+                "--stat-c": _STAT_COLOUR[t["colour"]][0],
+                "--stat-bg": _STAT_COLOUR[t["colour"]][1],
+                "--stat-bd": _STAT_COLOUR[t["colour"]][2],
+            }) for n, t in enumerate(_AUDIT_TILES)
+        ]))
+        cols = st.columns(len(_AUDIT_TILES))
+        for n, (col, t) in enumerate(zip(cols, _AUDIT_TILES)):
+            with col, st.container(key=f"tile-audit-{n}"):
+                picked = current == t["filter"]
+                if st.button(t["label"], key=f"audit-tile-{t['key']}", use_container_width=True,
+                             type="primary" if picked else "secondary"):
+                    st.session_state["audit-filter"] = "all" if picked else t["filter"]
+                    st.rerun()
+
+        st.caption(f"Городов в листе: {totals['rows']} · организаций в Яндексе: {totals['companies']}"
+                   + (f" · сетевых карточек: {totals['chains']}" if totals.get("chains") else "")
+                   + (f" · без ссылки в КП: {totals['noLink']}" if totals.get("noLink") else ""))
+
+        _audit_details(result, current, title, rows)
+
+
+def _audit_details(result: dict, current: str, title: str, rows: list[list[str]]) -> None:
+    items = result["items"]
+    picks = {
+        "found":    [i for i in items if i["cmp"]["status"] != "нет"],
+        "several":  [i for i in items if i["cmp"]["status"] == "несколько"],
+        "missing":  [i for i in items if i["cmp"]["status"] == "нет"],
+        "mismatch": [i for i in items if i["cmp"]["status"] != "нет" and i["cmp"]["problems"]],
+    }
+    shown = items if current == "all" else picks.get(current, [])
+    label = next((t["label"] for t in _AUDIT_TILES if t["filter"] == current), "")
+
+    if current == "extra":
+        with st.expander(f"Лишние в Яндексе: {len(result['extra'])} – показать", expanded=True):
+            st.caption("Организации аккаунта, которым не нашлось города в КП. "
+                       "Обычно это города, которых в таблице нет, или карточка-дубль "
+                       "с непохожим адресом. Сетевые карточки показаны отдельно.")
+            for co in result["extra"] + result["chains"]:
+                html(T.audit_extra_row(co))
+            if not result["extra"] and not result["chains"]:
+                st.caption("Все организации разошлись по городам КП.")
+    else:
+        head = (f"Показать детали ({cities_word(len(shown))})" if current == "all"
+                else f"{label}: {cities_word(len(shown))} – показать")
+        with st.expander(head, expanded=current != "all"):
+            if not shown:
+                st.caption("Ничего не подошло под выбранную плашку.")
+            for it in shown[:400]:
+                html(T.audit_row(it))
+            if len(shown) > 400:
+                st.caption(f"Показаны первые 400 из {len(shown)}. Остальное – в выгрузке.")
+
+    st.markdown("**Выгрузка**")
+    d1, d2, _ = st.columns([1, 1, 3])
+    stamp = datetime.now().strftime("%Y-%m-%d")
+    try:
+        blob = kp_audit.to_xlsx(rows, result, title)
+        d1.download_button("⬇ КП с данными Яндекса (.xlsx)", data=blob,
+                           file_name=f"КП-сверка-{stamp}.xlsx", use_container_width=True,
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           key="audit-xlsx")
+    except Exception as e:  # noqa: BLE001
+        d1.error(f"Excel не собрался: {e}")
+    d2.download_button("⬇ То же в CSV", data=kp_audit.to_csv(kp_audit.to_rows(rows, result)).encode("utf-8-sig"),
+                       file_name=f"КП-сверка-{stamp}.csv", mime="text/csv",
+                       use_container_width=True, key="audit-csv")
+    st.caption("В файле ваша таблица без изменений плюс колонки «Я: …» справа и лист "
+               "«Лишние в Яндексе». Города с несколькими карточками закрашены жёлтым, "
+               "ненайденные – красным.")
+
+
+# ════════════════════════════════════════════════════════════════════
 #  ГЛАВНЫЙ ЭКРАН
 # ════════════════════════════════════════════════════════════════════
 
@@ -3160,8 +3397,10 @@ def show_main(project_id: str) -> None:
         tab_cities(project_id, config)
     elif section == SECTIONS[4]:
         tab_report(project_id)
-    else:
+    elif section == SECTIONS[5]:
         tab_settings(project_id, config)
+    else:
+        tab_audit(project_id, config)
 
 
 def main() -> None:

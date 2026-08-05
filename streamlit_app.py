@@ -45,7 +45,7 @@ from playwright_worker import PlaywrightWorker
 # Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
 # Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
 # ссылкой на старый yb_playwright.
-UI_BUILD = "2026-08-06-kp-xlsx-reviews"
+UI_BUILD = "2026-08-06-reviews-fast"
 
 
 def _same_build(mod) -> bool:
@@ -2439,9 +2439,11 @@ def _reviews_settings_block(project_id: str) -> None:
                 answer = None
                 st.error(str(e))
         if answer:
+            stats = getattr(llm, "last_stats", {}) or {}
             st.caption(f"Отзыв: «{sample['full_text']}» · автор Павел Филиппов "
                        f"(в обращении – {rv.name_for_prompt('Павел Филиппов')}) · "
-                       f"модель {llm.model_in_use() or '—'}")
+                       f"модель {stats.get('model') or llm.model_in_use() or '–'} · "
+                       f"{stats.get('seconds', '?')} сек, запросов {stats.get('calls', 1)}")
             html(T.preview_box(answer))
             if rv.looks_cut_off(answer):
                 st.warning("Ответ оборван на середине – напишите мне, покажу, куда смотреть.")

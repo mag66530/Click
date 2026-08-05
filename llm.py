@@ -26,7 +26,7 @@ API = "https://generativelanguage.googleapis.com/v1beta/models"
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-06-kp-xlsx-reviews"
+BUILD = "2026-08-06-reviews-fast"
 
 # По убыванию свежести. Свежая может быть недоступна на бесплатном
 # тарифе – тогда молча берём следующую.
@@ -46,13 +46,25 @@ MIN_GAP_S = 1.5             # с чего начинаем
 MAX_GAP_S = 20.0            # куда упираемся после отказов
 GAP_DECAY = 0.8             # после удачного ответа пауза потихоньку тает
 
-RETRIES = 4                 # на лимит запросов и сетевые сбои
-RETRY_PAUSE = (5, 20, 45, 60)
-MAX_RETRY_WAIT = 90         # дольше ждать по подсказке Google не станем
+# Сколько всего готовы ждать один черновик. Раньше ограничения не было:
+# на отказ «слишком часто» шло четыре повтора с паузами 5+20+45+60 секунд,
+# и так по каждой из трёх моделей – один отзыв мог занять минуты. Заказчик
+# это и увидела: «генерирует 4 минуты».
+#
+# Теперь иначе: упёрлись в лимит – СРАЗУ пробуем следующую модель, у неё
+# своя квота. Только если отказали все, ждём один раз и делаем второй круг.
+TOTAL_BUDGET_S = 75         # дольше не мучаем – отдаём отзыв на ручной ввод
+ROUNDS = 2                  # кругов по всем моделям
+ROUND_PAUSE_S = 12          # пауза между кругами, если отказали все
+MAX_RETRY_WAIT = 30         # дольше по подсказке Google тоже не ждём
 
 _working_model: str | None = None
 _last_call_at: float = 0.0
 _gap: float = MIN_GAP_S
+
+# Последний замер – чтобы в логе было видно, где именно уходит время.
+last_stats: dict = {}
+_no_thinking: set = set()
 
 
 class LlmError(RuntimeError):
@@ -194,76 +206,76 @@ def generate(prompt: str) -> str:
     """
     Текст черновика по готовому промпту. Бросает LlmError с причиной,
     понятной человеку – её показываем прямо в очереди на подтверждение.
+
+    Стратегия: один запрос на модель, по кругу. Отказ по лимиту – сразу
+    следующая модель, а не четыре повтора в одну и ту же. Общее время
+    ограничено TOTAL_BUDGET_S: лучше отдать отзыв на ручной ввод, чем
+    держать человека в ожидании минутами.
     """
+    global _working_model
     key = api_key()
     if not key:
         raise LlmError("Ключ Gemini не задан – добавьте секрет gemini_api_key.")
 
-    global _working_model
-    # Даже если модель уже выбрана, держим остальные про запас: у каждой
-    # модели своя квота, и упёршись в лимит одной, имеет смысл доработать
-    # прогон на другой, а не оставлять половину отзывов без черновика.
-    models = ([_working_model] + [m for m in MODELS if m != _working_model]
-              if _working_model else list(MODELS))
+    started = time.time()
+    # Запомненная модель идёт первой, остальные – про запас: у каждой своя квота.
+    order = ([_working_model] + [m for m in MODELS if m != _working_model]
+             if _working_model else list(MODELS))
+    dead: set[str] = set()          # моделей нет вовсе – больше не трогаем
     last = "не удалось связаться с Gemini"
+    calls = 0
 
-    for model in models:
-        thinking = True
-        for attempt in range(RETRIES):
+    for rnd in range(ROUNDS):
+        limited = False
+        for model in order:
+            if model in dead:
+                continue
+            if time.time() - started > TOTAL_BUDGET_S:
+                last = "Gemini отвечает слишком долго – черновик не дождались."
+                break
+            calls += 1
             try:
-                r = _post(model, prompt, key, thinking=thinking)
+                r = _post(model, prompt, key, thinking=(model not in _no_thinking))
             except Exception as e:  # noqa: BLE001 – сеть
                 last = f"Сеть не пустила запрос к Gemini: {e}"
-                if attempt < RETRIES - 1:
-                    time.sleep(RETRY_PAUSE[attempt])
-                    continue
-                break
+                continue
 
             if r.status_code == 200:
                 text, finish = _text_from(r.json() or {})
                 if text and finish != "MAX_TOKENS":
                     _working_model = model
                     _faster()
+                    last_stats.update(model=model, seconds=round(time.time() - started, 1),
+                                      calls=calls, gap=round(_gap, 1))
                     return text
-                if finish == "MAX_TOKENS":
-                    # Обрезанный ответ не отдаём: половина фразы под именем
-                    # бренда хуже, чем честное «черновика нет».
-                    last = "Gemini не уложился в ответ и оборвал его на середине."
-                    break
-                last = "Gemini вернул пустой ответ."
-                break
-
-            # Модель не знает про thinkingConfig – повторяем без него.
-            if r.status_code == 400 and thinking and "thinking" in r.text.lower():
-                thinking = False
+                last = ("Gemini не уложился в ответ и оборвал его на середине."
+                        if finish == "MAX_TOKENS" else "Gemini вернул пустой ответ.")
                 continue
 
-            # 404 – такой модели нет: пробуем следующую из списка.
             if r.status_code == 404:
+                dead.add(model)
                 last = f"Модель {model} недоступна."
-                break
+                continue
+
+            # Модель не знает про thinkingConfig – запомним и повторим без него.
+            if r.status_code == 400 and model not in _no_thinking and "thinking" in r.text.lower():
+                _no_thinking.add(model)
+                continue
 
             last = _explain(r.status_code, r.text)
-            # Лимит и серверные сбои имеет смысл переждать, остальное – нет.
-            if r.status_code == 429 or r.status_code >= 500:
-                if r.status_code == 429:
-                    _slower()
-                if attempt < RETRIES - 1:
-                    try:
-                        asked = _retry_after(r.json() or {})
-                    except Exception:  # noqa: BLE001 – тело может быть не JSON
-                        asked = 0.0
-                    time.sleep(max(asked, RETRY_PAUSE[attempt]))
-                    continue
-                # Ждать дальше бессмысленно – пробуем следующую модель,
-                # у неё своя квота.
-                if model == _working_model:
-                    _working_model = None
-                break
-            break
+            if r.status_code == 429:
+                _slower()
+                limited = True
 
-    # Ни одна модель не ответила – в следующий раз перебираем заново.
+        # Все модели отказали по лимиту – переждём один раз и зайдём заново.
+        if limited and rnd < ROUNDS - 1 and time.time() - started < TOTAL_BUDGET_S:
+            time.sleep(min(ROUND_PAUSE_S, max(0.0, TOTAL_BUDGET_S - (time.time() - started))))
+            continue
+        break
+
     _working_model = None
+    last_stats.update(model=None, seconds=round(time.time() - started, 1),
+                      calls=calls, gap=round(_gap, 1), error=last)
     raise LlmError(last)
 
 

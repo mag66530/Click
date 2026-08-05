@@ -1624,6 +1624,18 @@ def test_reviews() -> None:
           "обратную связь" in aps and "оправдываться" in aps)
     check("АПС: закрытие на месте", "С уважением, команда Авиапромсталь." in aps)
 
+    # Длина абзацев: заказчик просила, чтобы первый абзац не был вдвое
+    # длиннее ассортиментной фразы.
+    check("АПС: задана длина абзаца благодарности", "150-230 знаков" in aps)
+    check("АПС: ровно три предложения в благодарности", "РОВНО ТРИ" in aps)
+    import re as _re
+    for body in _re.findall(r"Ответ:\n(.+?)(?=\n\nОтзыв:|$)", aps, _re.S):
+        paras = [x.strip() for x in body.strip().split("\n\n") if x.strip()]
+        if len(paras) >= 3:
+            check(f"эталон: абзацы соразмерны ({len(paras[1])} и {len(paras[2])})",
+                  len(paras[1]) <= len(paras[2]) * 1.9,
+                  f"{len(paras[1])} против {len(paras[2])}")
+
     # Негодный черновик – не только оборванный. Один из боевых заканчивался
     # точкой и потому считался целым, хотя целиком состоял из размышлений
     # модели о том, как трактовать промпт.
@@ -1667,6 +1679,8 @@ def test_reviews() -> None:
     eq("Gemini: слушаем подсказку retryDelay",
        llm._retry_after({"error": {"details": [{"retryDelay": "27s"}]}}), 27.0)
     eq("Gemini: без подсказки – ноль", llm._retry_after({"error": {}}), 0.0)
+    check("общее время на один черновик ограничено", llm.TOTAL_BUDGET_S <= 120, llm.TOTAL_BUDGET_S)
+    check("кругов по моделям немного", llm.ROUNDS <= 3, llm.ROUNDS)
     was = llm.current_gap()
     llm._slower()
     check("после отказа Gemini пауза растёт", llm.current_gap() > was, llm.current_gap())

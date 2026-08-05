@@ -18,6 +18,7 @@ tests_ui_click.py – проверка, что по кнопкам действ�
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import time
@@ -174,6 +175,80 @@ def main() -> int:
                 """() => document.querySelector('[class*="st-key-tile-pt-"] button[kind=primary]')
                      ?.innerText.trim().split('\\n')[0] || ''""")
             check("клик мимо плиток ничего не переключает", before == after, f"{before} → {after}")
+
+            # ── Прикреплённые файлы не вылезают за рамку карточки ──
+            # Заказчик: «немного выходят за пределы». У зоны загрузки была
+            # жёсткая высота 118px – ровно по полю со ссылками слева. Список
+            # файлов в неё не влезал: на четырёх файлах последняя плитка
+            # уходила на 14 пикселей ниже рамки, а кнопка «+» – на 54.
+            print("\n▸ Прикреплённые файлы держатся внутри карточки")
+            page.locator('[class*="st-key-tile-pt-shipment"] button').first.click()
+            page.wait_for_timeout(3000)
+
+            import tempfile as _tf
+            _dir = Path(_tf.mkdtemp(prefix="click-upl-"))
+            _png = bytes.fromhex(
+                "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753"
+                "de0000000c4944415408d7636060600000000400012734270a0000000049454e44ae426082")
+            _names = ["отгрузка АПС.jpg", "отгрузка АПС 2.jpg", "отгрузка АПС 3.jpg",
+                      "отгрузка АПС на объект Северный комплект номер четыре.jpg"]
+            _files = []
+            for _n in _names:
+                _fp = _dir / _n
+                _fp.write_bytes(_png)
+                _files.append(str(_fp))
+
+            # Пустая зона обязана остаться вровень с полем слева – ради этого
+            # высота и задавалась. Меряем ДО загрузки файлов.
+            _empty = page.evaluate("""() => {
+              const dz = document.querySelector('.st-key-img-row [data-testid="stFileUploaderDropzone"]');
+              const ta = document.querySelector('.st-key-img-row textarea');
+              return dz && ta ? {dz: Math.round(dz.getBoundingClientRect().height),
+                                 ta: Math.round(ta.getBoundingClientRect().height)} : null;
+            }""")
+            check("пустая зона загрузки вровень с полем ссылок",
+                  bool(_empty) and abs(_empty["dz"] - _empty["ta"]) <= 2, str(_empty))
+
+            _inputs = page.locator('input[type="file"]')
+            check("загрузчиков на «Отгрузке» два", _inputs.count() == 2, str(_inputs.count()))
+            for _i in range(_inputs.count()):
+                _inputs.nth(_i).set_input_files(_files)
+                page.wait_for_timeout(2500)
+            page.wait_for_timeout(1500)
+
+            _over = page.evaluate("""() => {
+              const bad = [];
+              document.querySelectorAll('[data-testid="stFileUploader"]').forEach((up, i) => {
+                const card = up.closest('[data-testid="stVerticalBlockBorderWrapper"]')
+                          || up.closest('.stVerticalBlock');
+                if (!card) return;
+                const cr = card.getBoundingClientRect();
+                const parts = [...up.querySelectorAll('[data-testid="stFileChip"]')];
+                const plus = up.querySelector('[aria-label="Add files"]');
+                if (plus) parts.push(plus);
+                parts.forEach(el => {
+                  const b = el.getBoundingClientRect();
+                  const down = Math.round(b.bottom - cr.bottom);
+                  const right = Math.round(b.right - cr.right);
+                  if (down > 0 || right > 0)
+                    bad.push(`загрузчик ${i}: ${el.getAttribute('aria-label') || '+'} `
+                             + `ниже на ${down}, правее на ${right}`);
+                });
+              });
+              return bad;
+            }""")
+            check("ни один файл и «+» не вылезли за рамку карточки",
+                  not _over, "; ".join(_over[:4]))
+
+            _grew = page.evaluate("""() => {
+              const dz = document.querySelector('.st-key-img-row [data-testid="stFileUploaderDropzone"]');
+              return dz ? Math.round(dz.getBoundingClientRect().height) : 0;
+            }""")
+            check("зона загрузки растянулась под список файлов", _grew > 118 + 40, f"высота {_grew}")
+
+            shutil.rmtree(_dir, ignore_errors=True)
+            page.locator('[class*="st-key-tile-pt-arrival"] button').first.click()
+            page.wait_for_timeout(2500)
 
             print("\n▸ Актуализация: строки стран")
             page.get_by_text("🔄 Актуализация", exact=True).first.click()

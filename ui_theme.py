@@ -917,11 +917,24 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
   background: var(--gradient) !important; border-color: transparent !important;
 }}
 
-/* Загрузчик файлов ровно по высоте соседнего поля со ссылками */
+/* Загрузчик файлов ровно по высоте соседнего поля со ссылками – но ТОЛЬКО
+   пока он пуст. Высота была жёсткой (118px), и список прикреплённых файлов
+   в неё не влезал: на четырёх файлах последняя плитка и кнопка «+» вылезали
+   на 14 и 54 пикселя ниже рамки карточки. Теперь 118px – это минимум, а
+   дальше зона растёт под содержимое. */
 .st-key-img-row [data-testid="stFileUploaderDropzone"],
 .st-key-goods-row [data-testid="stFileUploaderDropzone"] {{
-  height: 118px; min-height: 118px; padding: 8px 12px;
+  min-height: 118px; height: auto; padding: 8px 12px;
   align-items: center; justify-content: center; flex-direction: column; gap: 6px;
+}}
+/* Плитка файла не должна вылезать вбок при длинном имени: имя ужимается
+   с многоточием, а крестик остаётся на месте. Без min-width:0 длинное имя
+   распирает плитку изнутри – flex-элемент по умолчанию не ужимается меньше
+   своего содержимого. */
+[data-testid="stFileChip"] {{ min-width: 0 !important; max-width: 100%; }}
+[data-testid="stFileChip"] > div {{ min-width: 0 !important; }}
+[data-testid="stFileChipName"] {{
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }}
 /* Подпись поля слева занимает место – у загрузчика подписи нет, компенсируем,
    чтобы обе рамки начинались и заканчивались на одной высоте. */

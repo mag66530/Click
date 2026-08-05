@@ -48,7 +48,7 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-06-reviews-fast"
+BUILD = "2026-08-06-kp-sheet-reviews"
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())

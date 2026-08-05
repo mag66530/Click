@@ -87,6 +87,21 @@ def normalize_country(name: str) -> str:
 
 
 # ─── Ссылка на таблицу ──────────────────────────────────────────────
+def sheet_gid(url: str) -> str:
+    """
+    Номер листа из ссылки (`…/edit?gid=1223548196#gid=1223548196`).
+
+    Заказчик присылает ссылку ИМЕННО на нужный лист – это самое точное
+    указание, какое вообще бывает. Раньше мы его игнорировали и выбирали лист
+    по названию: в таблице нашёлся старый «карта присутсвия Аэросталь (OLD» с
+    четырьмя городами, и Click читал его вместо «кп», где городов 101.
+    """
+    if not url:
+        return ""
+    m = re.search(r"[?&#]gid=(\d+)", url)
+    return m.group(1) if m else ""
+
+
 def sheet_id(url: str) -> str:
     """ID таблицы из ссылки (или сам ID, если передали голым)."""
     if not url:
@@ -235,7 +250,7 @@ def _read_uploaded_xlsx(file_id: str, headers: dict) -> dict[str, list[list[str]
     return out
 
 
-def _read_values(file_id: str, sa_info: dict) -> list[list[str]]:
+def _read_values(file_id: str, sa_info: dict, gid: str = "") -> list[list[str]]:
     """Значения таблицы. Нативную читаем через Sheets API, залитый .xlsx – качаем."""
     import requests
 
@@ -247,7 +262,7 @@ def _read_values(file_id: str, sa_info: dict) -> list[list[str]]:
         sheets = _read_uploaded_xlsx(file_id, headers)
         return _pick_sheet(list(sheets), lambda t: sheets[t])
 
-    meta = requests.get(base, params={"fields": "sheets.properties.title"},
+    meta = requests.get(base, params={"fields": "sheets.properties(sheetId,title)"},
                         headers=headers, timeout=30)
     if meta.status_code == 403:
         raise RuntimeError(
@@ -262,10 +277,13 @@ def _read_values(file_id: str, sa_info: dict) -> list[list[str]]:
             return _pick_sheet(list(sheets), lambda t: sheets[t])
         raise RuntimeError(f"Sheets API вернул HTTP {meta.status_code}: {meta.text[:160]}")
 
-    titles = [s.get("properties", {}).get("title", "") for s in (meta.json() or {}).get("sheets", [])]
-    titles = [t for t in titles if t]
+    props = [sh.get("properties", {}) for sh in (meta.json() or {}).get("sheets", [])]
+    titles = [p.get("title", "") for p in props if p.get("title")]
     if not titles:
         raise RuntimeError("В таблице нет листов")
+    # Ссылка с gid указывает на конкретный лист – начинаем с него.
+    prefer = next((p.get("title", "") for p in props
+                   if gid and str(p.get("sheetId")) == str(gid)), "")
 
     def read(title: str) -> list[list[str]]:
         rng = requests.utils.quote(f"'{title}'")
@@ -276,15 +294,15 @@ def _read_values(file_id: str, sa_info: dict) -> list[list[str]]:
             raise RuntimeError(f"Не удалось прочитать лист «{title}»: HTTP {r.status_code}")
         return [[("" if v is None else str(v)) for v in row] for row in (r.json() or {}).get("values", [])]
 
-    return _pick_sheet(titles, read)
+    return _pick_sheet(titles, read, prefer)
 
 
-def _pick_sheet(titles: list[str], read) -> list[list[str]]:
+def _pick_sheet(titles: list[str], read, prefer: str = "") -> list[list[str]]:
     """Первый лист, на котором нашлись города со ссылками на Яндекс.Бизнес."""
     if not titles:
         raise RuntimeError("В таблице нет листов")
     tried = []
-    for title in _sheet_order(titles):
+    for title in _sheet_order(titles, prefer):
         try:
             rows = read(title)
         except Exception as e:  # noqa: BLE001
@@ -298,21 +316,33 @@ def _pick_sheet(titles: list[str], read) -> list[list[str]]:
                        "на Яндекс.Бизнес. Проверено – " + "; ".join(tried[:6]))
 
 
-def _sheet_order(titles: list[str]) -> list[str]:
+# Листы-двойники: старые копии, оригиналы «не трогать», архивы. Названия у них
+# похожи на рабочие, поэтому по имени их легко перепутать – отправляем в конец.
+_OLD_SHEET_RX = re.compile(r"\bold\b|ориг|архив|копия|старая|старый|backup|не\s*трогать", re.I)
+
+
+def _sheet_order(titles: list[str], prefer: str = "") -> list[str]:
     """
-    Порядок обхода листов. Первым идёт «Карта присутствия» – в КП именно на нём
-    города. Название сверяем без пробелов и с допуском на опечатку: в реальном
-    файле лист называется «Карта присутсвия».
+    Порядок обхода листов. Первым идёт лист, на который прямо указали ссылкой
+    (gid), затем «КП» и «Карта присутствия» – в таблице города именно там.
+    Название сверяем без пробелов и с допуском на опечатку: в реальном файле
+    лист называется «Карта присутсвия».
     """
     def key(t: str) -> tuple[int, int]:
-        n = re.sub(r"[^а-яё]", "", (t or "").lower())
+        raw = (t or "").lower()
+        n = re.sub(r"[^а-яё]", "", raw)
+        old = 10 if _OLD_SHEET_RX.search(raw) else 0
+        if prefer and t == prefer:
+            return (-1, 0)                 # указан ссылкой – важнее всего
+        if n in {"кп", "кпшка"}:
+            return (old + 0, 1)
         if n.startswith("картаприсут"):
-            return (0, 0)
+            return (old + 0, 2)
         if "присут" in n or "город" in n:
-            return (1, 0)
+            return (old + 1, 0)
         if n in {"сводка", "нетрогать", "приоритеты"}:
-            return (3, 0)
-        return (2, 0)
+            return (old + 3, 0)
+        return (old + 2, 0)
 
     return sorted(titles, key=key)
 
@@ -435,7 +465,7 @@ def load_cities(project_id: str, from_config: str = "") -> tuple[list[dict], dic
             "Не найден ключ сервисного аккаунта Google. Добавьте в секреты приложения "
             "gcp_service_account_b64 (весь JSON-ключ в base64) или секцию [gcp_service_account]."
         )
-    return parse_rows(_read_values(fid, sa))
+    return parse_rows(_read_values(fid, sa, sheet_gid(url)))
 
 
 def to_countries(cities: list[dict], project_id: str) -> list[dict]:

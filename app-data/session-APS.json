@@ -275,7 +275,7 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817472531,
+      "expires": 1817472590,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -575,7 +575,7 @@
       "value": "1",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817472530,
+      "expires": 1817472588,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -585,7 +585,7 @@
       "value": "0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817472531,
+      "expires": 1817472590,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -595,17 +595,17 @@
       "value": "b",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1785938331,
+      "expires": 1785938390,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "cycada",
-      "value": "JgLpTeQSRJpx3o/BdhPsDCfA5hjy39BWIgnQZ/gtJxs=",
+      "value": "qoHUKrfwVGxLSdCi52SmoyfA5hjy39BWIgnQZ/gtJxs=",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1787146143.681,
+      "expires": 1787146202.057,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -681,7 +681,7 @@
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "464"
+          "value": "466"
         },
         {
           "name": "_ym85710618_lastHit",
@@ -769,7 +769,7 @@
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "4286"
+          "value": "4299"
         },
         {
           "name": "_ym87015792:0_reqNum",
@@ -1041,7 +1041,7 @@
         },
         {
           "name": "_ym46231566:0_reqNum",
-          "value": "1060"
+          "value": "1063"
         },
         {
           "name": "_ym86525359:0_reqNum",
@@ -1049,7 +1049,7 @@
         },
         {
           "name": "_ym56213845:0_reqNum",
-          "value": "4002"
+          "value": "4014"
         },
         {
           "name": "_ym99908298:0_reqNum",

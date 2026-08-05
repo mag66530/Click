@@ -246,6 +246,27 @@ def main() -> int:
             }""")
             check("зона загрузки растянулась под список файлов", _grew > 118 + 40, f"высота {_grew}")
 
+            # Растёт правый блок – левый обязан идти следом, иначе слева дыра
+            # высотой в весь список файлов.
+            _pairs = page.evaluate("""() => {
+              const out = [];
+              ['img-row', 'goods-row'].forEach(k => {
+                const row = document.querySelector('.st-key-' + k);
+                if (!row) return;
+                const ta = row.querySelector('textarea');
+                const dz = row.querySelector('[data-testid="stFileUploaderDropzone"]');
+                if (!ta || !dz) return;
+                out.push({row: k,
+                          diff: Math.round(ta.getBoundingClientRect().bottom
+                                         - dz.getBoundingClientRect().bottom)});
+              });
+              return out;
+            }""")
+            _skew = [x for x in _pairs if abs(x["diff"]) > 4]
+            check("поле ссылок и загрузчик кончаются на одной высоте",
+                  bool(_pairs) and not _skew,
+                  "; ".join(f'{x["row"]}: разница {x["diff"]}px' for x in _skew) or "рядов не нашлось")
+
             shutil.rmtree(_dir, ignore_errors=True)
             page.locator('[class*="st-key-tile-pt-arrival"] button').first.click()
             page.wait_for_timeout(2500)
@@ -271,6 +292,42 @@ def main() -> int:
                 """() => [...new Set([...document.querySelectorAll('.st-key-city-grid label')]
                      .map(l => Math.round(l.getBoundingClientRect().width)))]""")
             check("рамки городов одной ширины", len(widths) == 1, str(widths))
+
+            # ── Оформление не пропадает во время перерисовки ──
+            # Заказчик: «при нажатии «Выбрать все в стране» всё растягивается,
+            # секунду, потом возвращается». Наш <style> лежал среди обычных
+            # элементов, а Streamlit при перерисовке их пересобирает: стиля не
+            # было на странице ~450 мс, и всё это время экран показывал голую
+            # вёрстку Streamlit. Следим не за тегом, а за тем, ДЕЙСТВУЕТ ли CSS:
+            # переменную --acc объявляют только наши правила.
+            print("\n▸ Оформление не мигает при перерисовке")
+            page.evaluate("""() => {
+              window.__css = [];
+              const on = () => !!getComputedStyle(document.documentElement)
+                  .getPropertyValue('--acc').trim();
+              let last = null;
+              window.__t0 = performance.now();
+              window.__timer = setInterval(() => {
+                const now = on();
+                if (now !== last) {
+                  window.__css.push({t: Math.round(performance.now() - window.__t0), on: now});
+                  last = now;
+                }
+              }, 20);
+            }""")
+            _toggle = page.get_by_role("button", name="Выбрать все в стране").first
+            if _toggle.count() == 0:
+                _toggle = page.get_by_role("button", name="Снять все в стране").first
+            check("кнопка «выбрать/снять все в стране» на месте", _toggle.count() > 0)
+            _toggle.click()
+            page.wait_for_timeout(4000)
+            _log = page.evaluate("() => { clearInterval(window.__timer); return window.__css; }")
+            _gone = [e for e in _log if not e["on"]]
+            check("CSS не пропадал при «выбрать все в стране»",
+                  not _gone, f"пропадал на {[e['t'] for e in _gone]} мс от клика")
+            check("стиль продублирован в <head> – его перерисовка не трогает",
+                  page.evaluate(
+                      """() => !!document.head.querySelector('style[data-click-css]')"""))
 
             print("\n▸ Города: строки стран")
             page.get_by_text("🏙 Города", exact=True).first.click()

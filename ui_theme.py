@@ -917,6 +917,13 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
   background: var(--gradient) !important; border-color: transparent !important;
 }}
 
+/* Рамка, через которую CSS попадает в <head> (см. _persist_css). Своего вида
+   у неё нет и быть не должно: пустая рамка нулевой высоты всё равно тянула бы
+   за собой отступ между элементами. */
+[data-testid="stIFrame"], [data-testid="stCustomComponentV1"] {{
+  display: none !important; height: 0 !important;
+}}
+
 /* Загрузчик файлов ровно по высоте соседнего поля со ссылками – но ТОЛЬКО
    пока он пуст. Высота была жёсткой (118px), и список прикреплённых файлов
    в неё не влезал: на четырёх файлах последняя плитка и кнопка «+» вылезали
@@ -940,8 +947,23 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
    чтобы обе рамки начинались и заканчивались на одной высоте. */
 .st-key-img-row [data-testid="stFileUploader"],
 .st-key-goods-row [data-testid="stFileUploader"] {{ margin-top: 30px; }}
+
+/* Поле со ссылками тянется вслед за загрузчиком: тот растёт под список файлов,
+   и без этого слева оставалась пустая дыра высотой в этот список. Колонки
+   Streamlit и так одной высоты (align-items: stretch), поэтому тянуть надо всю
+   цепочку до самой textarea – каждое звено по отдельности высоту не наследует. */
+.st-key-img-row [data-testid="stColumn"] > [data-testid="stVerticalBlock"],
+.st-key-goods-row [data-testid="stColumn"] > [data-testid="stVerticalBlock"],
+.st-key-img-row [data-testid="stColumn"] [data-testid="stElementContainer"]:has(.stTextArea),
+.st-key-goods-row [data-testid="stColumn"] [data-testid="stElementContainer"]:has(.stTextArea) {{
+  height: 100%;
+}}
+.st-key-img-row .stTextArea,
+.st-key-goods-row .stTextArea {{ height: 100%; display: flex; flex-direction: column; }}
+.st-key-img-row [data-testid="stTextAreaRootElement"],
+.st-key-goods-row [data-testid="stTextAreaRootElement"] {{ flex: 1 1 auto; }}
 .st-key-img-row .stTextArea textarea,
-.st-key-goods-row .stTextArea textarea {{ height: 118px !important; }}
+.st-key-goods-row .stTextArea textarea {{ height: 100% !important; min-height: 118px; }}
 
 /* ─── Превью текста поста ──────────────────────────────────────── */
 .preview-box {{

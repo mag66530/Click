@@ -3112,7 +3112,7 @@ _AUDIT_TILES = [
     {"key": "several",  "filter": "several",  "label": "Несколько",     "colour": "warn"},
     {"key": "missing",  "filter": "missing",  "label": "Нет в Яндексе", "colour": "err"},
     {"key": "mismatch", "filter": "mismatch", "label": "Расхождения",   "colour": "noimg"},
-    {"key": "extra",    "filter": "extra",    "label": "Лишние",        "colour": "skip"},
+    {"key": "extra",    "filter": "extra",    "label": "Нет в КП",      "colour": "skip"},
 ]
 
 
@@ -3280,10 +3280,11 @@ def tab_audit(project_id: str, config: dict) -> None:
                    + (f" · сетевых карточек: {totals['chains']}" if totals.get("chains") else "")
                    + (f" · без ссылки в КП: {totals['noLink']}" if totals.get("noLink") else ""))
 
-        _audit_details(result, current, title, rows)
+        _audit_details(result, current, title, rows, collected_at)
 
 
-def _audit_details(result: dict, current: str, title: str, rows: list[list[str]]) -> None:
+def _audit_details(result: dict, current: str, title: str, rows: list[list[str]],
+                   collected_at: str = "") -> None:
     items = result["items"]
     picks = {
         "found":    [i for i in items if i["cmp"]["status"] != "нет"],
@@ -3295,10 +3296,11 @@ def _audit_details(result: dict, current: str, title: str, rows: list[list[str]]
     label = next((t["label"] for t in _AUDIT_TILES if t["filter"] == current), "")
 
     if current == "extra":
-        with st.expander(f"Лишние в Яндексе: {len(result['extra'])} – показать", expanded=True):
+        with st.expander(f"Есть в Яндексе, нет в КП: {len(result['extra'])} – показать",
+                         expanded=True):
             st.caption("Организации аккаунта, которым не нашлось города в КП. "
-                       "Обычно это города, которых в таблице нет, или карточка-дубль "
-                       "с непохожим адресом. Сетевые карточки показаны отдельно.")
+                       "У каждой – ссылка на карточку: по ней видно, дописать город "
+                       "в КП или удалить дубль. Сетевые карточки показаны отдельно.")
             for co in result["extra"] + result["chains"]:
                 html(T.audit_extra_row(co))
             if not result["extra"] and not result["chains"]:
@@ -3318,19 +3320,22 @@ def _audit_details(result: dict, current: str, title: str, rows: list[list[str]]
     d1, d2, _ = st.columns([1, 1, 3])
     stamp = datetime.now().strftime("%Y-%m-%d")
     try:
-        blob = kp_audit.to_xlsx(rows, result, title)
-        d1.download_button("⬇ КП с данными Яндекса (.xlsx)", data=blob,
+        blob = kp_audit.to_xlsx(rows, result, title, collected_at=collected_at)
+        d1.download_button("⬇ Отчёт (.xlsx)", data=blob,
                            file_name=f"КП-сверка-{stamp}.xlsx", use_container_width=True,
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                            key="audit-xlsx")
     except Exception as e:  # noqa: BLE001
         d1.error(f"Excel не собрался: {e}")
-    d2.download_button("⬇ То же в CSV", data=kp_audit.to_csv(kp_audit.to_rows(rows, result)).encode("utf-8-sig"),
+    d2.download_button("⬇ Только таблица (CSV)",
+                       data=kp_audit.to_csv(kp_audit.to_rows(rows, result)).encode("utf-8-sig"),
                        file_name=f"КП-сверка-{stamp}.csv", mime="text/csv",
                        use_container_width=True, key="audit-csv")
-    st.caption("В файле ваша таблица без изменений плюс колонки «Я: …» справа и лист "
-               "«Лишние в Яндексе». Города с несколькими карточками закрашены жёлтым, "
-               "ненайденные – красным.")
+    st.caption("В файле восемь листов, у каждого своя задача: «Дашборд» – цифрами, "
+               "«Нет в КП», «Дубли», «Нет в Яндексе» и «Расхождения» – короткие списки "
+               "со ссылками, «Сверка» – сетка ✓/✗ по всем городам, «КП с данными» – "
+               "ваша таблица без изменений плюс колонки из Яндекса. Как читать значки – "
+               "на листе «Как читать».")
 
 
 # ════════════════════════════════════════════════════════════════════

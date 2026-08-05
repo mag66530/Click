@@ -1046,7 +1046,7 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str) -> dict:
         try:
             import llm
             t0 = time.time()
-            draft = rv.clean_draft(llm.generate(rv.build_prompt(prompt, item)))
+            draft = rv.clean_draft(llm.generate(rv.build_prompt(prompt, item)), project_id)
             add(item, rv.DRAFTED, draft=draft)
             out["drafted"] += 1
             # Замер в лог: без него «долго генерирует» не отличить от
@@ -1115,6 +1115,17 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
         if with_reviews:
             payload["withReviews"] = True
             payload["reviewTotals"] = dict(review_totals)
+            # Сами отзывы кладём в отчёт, а не только их количество. Иначе
+            # выгрузить прогон целиком нельзя: отправка идёт ПОСЛЕ прогона,
+            # и что с каждым ответом стало, знает только очередь. Отчёт
+            # хранит найденное, очередь – случившееся; при выгрузке одно
+            # дополняется другим, и получается общий отчёт с отзывами.
+            payload["reviews"] = [
+                {k: it.get(k) for k in
+                 ("reviewId", "city", "author", "rating", "text", "draft",
+                  "status", "note", "reviewsUrl")}
+                for it in collected
+            ]
         _write_atomic(report_path, json.dumps(payload, ensure_ascii=False, indent=2))
         if state != "in-progress":
             _snapshot_log(project_id, report_path)

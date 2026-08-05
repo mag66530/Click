@@ -1613,7 +1613,7 @@ def _review_regenerate(project_id: str, item: dict) -> None:
     fake = {"text": item.get("text"), "author": item.get("author"),
             "rating": item.get("rating"), "answered": False}
     try:
-        item["draft"] = rv.clean_draft(llm.generate(rv.build_prompt(prompt, fake)))
+        item["draft"] = rv.clean_draft(llm.generate(rv.build_prompt(prompt, fake)), project_id)
         item["status"] = rv.DRAFTED
         item["note"] = ""
     except Exception as e:  # noqa: BLE001
@@ -1851,6 +1851,11 @@ _SENT_LABELS = {
     rv.ALREADY: "⊝ уже был ответ",
     rv.SKIPPED: "⏭ пропущен",
     rv.FAILED: "❌ не отправился",
+    # Эти три – про отзывы, до которых руки ещё не дошли. В отчёте прогона
+    # они тоже нужны: там видно всё найденное, а не только отправленное.
+    rv.DRAFTED: "✍ черновик ждёт подтверждения",
+    rv.NEEDS_HUMAN: "⚠️ отвечаете сами",
+    rv.NO_DRAFT: "— черновика нет",
 }
 
 
@@ -1907,6 +1912,52 @@ def _sent_csv(rows: list[dict]) -> bytes:
                     (it.get("finalText") or it.get("draft") or "").replace("\n", " "),
                     it.get("note") or ""])
     return buf.getvalue().encode("utf-8-sig")
+
+
+def _report_reviews(project_id: str, data: dict) -> list[dict]:
+    """
+    Отзывы прогона – с тем, что с ними стало ПОСЛЕ прогона.
+
+    Отчёт знает, какие отзывы нашлись и какие черновики к ним написались.
+    Отправка происходит позже, руками, и её исход живёт в очереди. Поэтому
+    здесь одно дополняется другим: берём строки прогона и подтягиваем к ним
+    свежий статус, время отправки и итоговый текст. Отзыв, разобранный уже
+    после прогона, в выгрузке виден разобранным – как оно и есть.
+    """
+    rows = data.get("reviews") or []
+    if not rows:
+        return []
+    fresh = {it.get("reviewId"): it for it in rv.load_queue(project_id)}
+    out = []
+    for r in rows:
+        now = fresh.get(r.get("reviewId")) or {}
+        out.append({**r, **{k: v for k, v in now.items() if v not in (None, "")}})
+    return sorted(out, key=lambda r: ((r.get("city") or ""), (r.get("author") or "")))
+
+
+def _report_reviews_block(rows: list[dict]) -> None:
+    """
+    Отзывы прогона – тем же видом, что и города выше.
+
+    Заказчик просила «общий отчёт об актуализации, если есть отзывы»: чтобы
+    не бегать между вкладкой прогона и очередью, а видеть одним экраном, что
+    нашлось и чем кончилось, и скачать это одним движением.
+    """
+    c = rv.counters(rows)
+    with st.container(border=True):
+        html(f'<div class="report-head">'
+             f'<span class="report-head-title">💬 Отзывы этого прогона</span>'
+             f'<span class="report-head-date">{len(rows)} шт.</span></div>')
+        bits = [f"отвечено {c['answered']}"]
+        for label, key in (("ждут подтверждения", "drafted"), ("вам на ответ", "needsHuman"),
+                           ("без черновика", "noDraft"), ("пропущено", "skipped"),
+                           ("не отправились", "failed")):
+            if c.get(key):
+                bits.append(f"{label} {c[key]}")
+        st.caption(" · ".join(bits))
+        with st.expander(f"Показать отзывы ({len(rows)})", expanded=False):
+            for r in rows:
+                html(T.review_report_row(r))
 
 
 def _send_all_block(project_id: str, pending: list[dict], running: bool) -> None:
@@ -2602,17 +2653,30 @@ def tab_report(project_id: str) -> None:
             reader = getattr(runner, "read_run_log", None)
             run_log = reader(project_id, kind, selected) if reader else ""
             base_name = selected.replace(".json", "")
-            d1, d2, _ = st.columns([1, 1, 3])
-            d1.download_button("⬇ Отчёт (CSV)", data=_report_csv(data),
-                               file_name=base_name + ".csv", mime="text/csv",
-                               use_container_width=True, key="btn-csv")
-            d2.download_button("⬇ Лог (.txt)", data=(run_log or "Лог этого прогона не сохранён.")
-                               .encode("utf-8"),
-                               file_name=base_name + ".txt", mime="text/plain",
-                               use_container_width=True, disabled=not run_log, key="btn-log")
+            # Прогон с отзывами скачивается целиком: города, отзывы, лог.
+            review_rows = _report_reviews(project_id, data) if is_act else []
+            cols = st.columns([1, 1, 1, 2] if review_rows else [1, 1, 3])
+            cols[0].download_button("⬇ Города (CSV)", data=_report_csv(data),
+                                    file_name=base_name + ".csv", mime="text/csv",
+                                    use_container_width=True, key="btn-csv")
+            if review_rows:
+                cols[1].download_button(f"⬇ Отзывы ({len(review_rows)})",
+                                        data=_sent_csv(review_rows),
+                                        file_name=base_name + "-отзывы.csv", mime="text/csv",
+                                        use_container_width=True, key="btn-csv-reviews")
+            log_col = cols[2] if review_rows else cols[1]
+            log_col.download_button("⬇ Лог (.txt)",
+                                    data=(run_log or "Лог этого прогона не сохранён.")
+                                    .encode("utf-8"),
+                                    file_name=base_name + ".txt", mime="text/plain",
+                                    use_container_width=True, disabled=not run_log, key="btn-log")
             if not run_log:
                 st.caption("Лог этого прогона не сохранён – он появится у прогонов, "
                            "запущенных начиная с этой версии.")
+
+        # ─── Отзывы того же прогона – отдельным разделом того же отчёта ───
+        if review_rows:
+            _report_reviews_block(review_rows)
 
     _day_logs(project_id)
 
@@ -2757,7 +2821,8 @@ def _reviews_settings_block(project_id: str) -> None:
         with st.spinner("Прошу у Gemini ответ на пробный отзыв…"):
             try:
                 answer = rv.clean_draft(
-                    llm.generate(rv.build_prompt(rv.project_prompt(project_id), sample)))
+                    llm.generate(rv.build_prompt(rv.project_prompt(project_id), sample)),
+                    project_id)
             except Exception as e:  # noqa: BLE001
                 answer = None
                 st.error(str(e))

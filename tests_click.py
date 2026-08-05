@@ -2117,6 +2117,104 @@ def test_review_batch() -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+def test_assortment_verbatim() -> None:
+    """
+    Ассортиментная фраза уходит в Яндекс ДОСЛОВНО.
+
+    Живой случай: один опубликованный ответ ушёл со строкой «трубы, armatura
+    – собираем и отгружаем без задержек». Слово внезапно оказалось латиницей,
+    и в трёх десятках ответов заказчик этого не увидела.
+
+    Сплошной запрет латиницы поставить нельзя – в металлоторговле законно
+    встречаются AISI 304, DIN, A2. Зато фраза известна заранее, поэтому
+    чиним именно её.
+    """
+    import projects_data as pdata
+    import reviews as rv
+    print("\n▸ Ассортиментная фраза")
+
+    for pid, want in pdata.REVIEW_ASSORTMENT.items():
+        check(f"{pid}: фраза есть и в промпте проекта",
+              want[:40] in pdata.REVIEW_PROMPTS.get(pid, ""), want[:40])
+
+    want = pdata.REVIEW_ASSORTMENT["APS"]
+    head, tail = "Уважаемый Бобров!\n\nБлагодарим за отзыв.", "С уважением, команда Авиапромсталь."
+
+    spoiled = want.replace("арматура", "armatura")
+    out = rv.clean_draft(f"{head}\n\n{spoiled}\n\n{tail}", "APS")
+    check("латиница внутри фразы исправлена", want in out and "armatura" not in out)
+
+    # Модель может слегка переписать фразу своими словами – тоже возвращаем эталон.
+    reworded = want.replace("собираем и отгружаем без задержек", "отгружаем без задержек")
+    out = rv.clean_draft(f"{head}\n\n{reworded}\n\n{tail}", "APS")
+    check("слегка переписанная фраза возвращена к эталону", want in out)
+
+    # А посторонние абзацы не трогаем: в них законно бывает латиница.
+    keep = "Уважаемый Иван!\n\nВозим AISI 304 и DIN 933, всё по ГОСТу.\n\nС уважением."
+    eq("посторонний текст не подменяется", rv.clean_draft(keep, "APS"), keep)
+
+    # Абзац, ничем не похожий на фразу, эталоном не становится.
+    other = f"{head}\n\nДоставка по городу бесплатная.\n\n{tail}"
+    check("непохожий абзац остался как был", want not in rv.clean_draft(other, "APS"))
+
+    # Без проекта поведение прежнее – чинить нечего, подменять нечем.
+    eq("без проекта фраза не трогается",
+       rv.clean_draft(f"{head}\n\n{spoiled}\n\n{tail}"), f"{head}\n\n{spoiled}\n\n{tail}")
+
+
+# ════════════════════════════════════════════════════════════════════
+def test_report_with_reviews() -> None:
+    """
+    Общий отчёт об актуализации: города, отзывы и лог одним местом.
+
+    Заказчик просила, чтобы отчёт собирался вместе с отзывами и скачивался.
+    Тонкость в том, что отправка идёт ПОСЛЕ прогона и вручную: отчёт знает,
+    что нашлось, а что с ответом стало – знает очередь. Поэтому выгрузка
+    склеивает одно с другим.
+    """
+    import streamlit_app as app
+    import reviews as rv
+    print("\n▸ Отчёт вместе с отзывами")
+
+    data = {"type": "actualize", "withReviews": True,
+            "reviewTotals": {"found": 2, "drafted": 2, "needsHuman": 0, "noDraft": 0},
+            "reviews": [
+                {"reviewId": "r1", "city": "Ереван", "author": "Захар", "rating": 5,
+                 "text": "Отличные цены.", "draft": "Уважаемый Захар!", "status": rv.DRAFTED},
+                {"reviewId": "r2", "city": "Баку", "author": "Амина", "rating": 5,
+                 "text": "Помогли нам.", "draft": "Уважаемая Амина!", "status": rv.DRAFTED},
+            ]}
+
+    keep = rv.load_queue
+    # Отзыв r1 успели отправить уже после прогона, r2 ещё ждёт.
+    rv.load_queue = lambda pid: [
+        {"reviewId": "r1", "status": rv.ANSWERED, "sentAt": "2026-08-05T10:00:00+00:00",
+         "finalText": "Уважаемый Захар! Спасибо.", "note": "Ответ опубликован"},
+    ]
+    try:
+        rows = app._report_reviews("APS", data)
+        eq("в отчёт попали оба отзыва прогона", len(rows), 2)
+        by_id = {r["reviewId"]: r for r in rows}
+        eq("отправленный показан отправленным", by_id["r1"]["status"], rv.ANSWERED)
+        eq("и с итоговым текстом", by_id["r1"]["finalText"], "Уважаемый Захар! Спасибо.")
+        eq("неотправленный остался ждущим", by_id["r2"]["status"], rv.DRAFTED)
+        check("город из отчёта не потерялся", by_id["r1"]["city"] == "Ереван")
+
+        csv = app._sent_csv(rows).decode("utf-8-sig")
+        head = csv.splitlines()[0]
+        eq("колонки те же, что в выгрузке отправки", head,
+           "Город;Автор;Оценка;Статус;Когда;Отзыв;Ответ;Причина")
+        check("ждущий отзыв назван по-человечески",
+              "черновик ждёт подтверждения" in csv, csv[:400])
+        check("отправленный тоже", "отправлен" in csv)
+
+        # Прогон без отзывов ничего лишнего не показывает.
+        eq("без отзывов выгрузки нет", app._report_reviews("APS", {"type": "actualize"}), [])
+    finally:
+        rv.load_queue = keep
+
+
+# ════════════════════════════════════════════════════════════════════
 def test_module_attrs_exist() -> None:
     """
     Каждое `модуль.имя`, написанное в коде, обязано существовать.
@@ -2435,6 +2533,8 @@ def main() -> int:
         test_reviews()
         test_gemini_keys()
         test_review_batch()
+        test_assortment_verbatim()
+        test_report_with_reviews()
         test_module_attrs_exist()
         test_batch_browser_survives_rerun()
         test_one_build()

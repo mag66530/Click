@@ -1892,16 +1892,10 @@ def test_reviews() -> None:
         eq("ключи собираются из всех секретов", llm.api_keys(), ["k1", "k2", "k3"])
         check("несколько ключей видно в описании", "3" in llm.where(), llm.where())
 
-        llm._key_cool.clear(); llm._key_last.clear()
-        key, wait = llm._pick_key(llm.api_keys())
-        eq("свободный ключ берётся сразу", (key, wait == 0), ("k1", True))
-        llm._cool("k1")
-        key, _ = llm._pick_key(llm.api_keys())
-        eq("отказавший ключ откладывается", key, "k2")
-        llm._cool("k2"); llm._cool("k3")
-        _, wait = llm._pick_key(llm.api_keys())
-        check("когда все в остывании – ждём, а не долбим", wait > 1, wait)
-        llm._key_cool.clear(); llm._key_last.clear()
+        llm._hits_by = {}; llm._next_key = 0; llm._rpm_cap = llm.START_RPM
+        got = [llm._pick_key(llm.api_keys(), "gemini-3.6-flash")[0] for _ in range(3)]
+        eq("собранные из секретов ключи чередуются по кругу", got, ["k1", "k2", "k3"])
+        llm._hits_by = {}; llm._next_key = 0
 
         _os.environ.pop("gemini_api_key_2"); _os.environ.pop("gemini_api_keys")
         eq("один ключ – тоже рабочий случай", llm.api_keys(), ["k1"])
@@ -1916,14 +1910,6 @@ def test_reviews() -> None:
 
     check("общее время на один черновик ограничено", llm.TOTAL_BUDGET_S <= 120, llm.TOTAL_BUDGET_S)
     check("кругов по моделям немного", llm.ROUNDS <= 3, llm.ROUNDS)
-    was = llm.current_gap()
-    llm._slower()
-    check("после отказа Gemini пауза растёт", llm.current_gap() > was, llm.current_gap())
-    for _ in range(20):
-        llm._faster()
-    eq("после серии удач пауза возвращается к минимальной",
-       round(llm.current_gap(), 2), round(llm.MIN_GAP_S, 2))
-    check("пауза между запросами вообще есть", llm.MIN_GAP_S > 0)
 
     # Потолок должен вмещать реальную карточку: в Ереване было 12 неотвеченных.
     many12 = [{"id": f"y{n}", "rating": 5, "full_text": "текст", "author": {"user": "Егор"}}
@@ -1935,6 +1921,135 @@ def test_reviews() -> None:
     eq("очередь: разобранное уходит из открытых", len(rv.open_items([answered])), 0)
     c = rv.counters([answered])
     eq("очередь: счётчик отвеченных", c["answered"], 1)
+# ════════════════════════════════════════════════════════════════════
+def test_gemini_keys() -> None:
+    """
+    Ключи Gemini: чередование по кругу и темп вместо гадания паузами.
+
+    Два живых наблюдения заказчика, оба верные.
+
+    Первое: «мы один ключик до конца выжимаем и идём выжимать второй». Так и
+    было. Раньше брался первый ключ, которым можно слать ПРЯМО СЕЙЧАС, а
+    первым в списке всегда идёт первый ключ – пока пауза мала, он успевал
+    освободиться к следующему отзыву, и до второго очередь не доходила.
+
+    Второе: «если падаем по лимиту, нет смысла дальше просить». Тоже так.
+    Отвергнутый запрос черновика не даёт, а время съедает. Поэтому теперь
+    считаем запросы за минуту и ждём заранее, а планку темпа узнаём по
+    первому же отказу и дальше держим сами.
+
+    И общее для обоих: лимит Google считается НА ПРОЕКТ, а не на ключ
+    («Rate limits are applied per project, not per API key»). Ключи из одного
+    проекта делят одну квоту – это Click распознаёт и говорит вслух.
+    """
+    import llm
+    print("\n▸ Ключи Gemini: круг и темп")
+
+    def reset() -> None:
+        llm._shared_quota = False
+        llm._hits_by = {}
+        llm._next_key = 0
+        llm._rpm_cap = llm.START_RPM
+        llm._calm = 0
+
+    keys, model = ["k1", "k2", "k3"], "gemini-3.6-flash"
+
+    # ── Чередование ──────────────────────────────────────────────────
+    # Все ключи свободны – значит идём строго по кругу, а не липнем к первому.
+    reset()
+    picked = []
+    for _ in range(6):
+        k, wait = llm._pick_key(keys, model)
+        picked.append(k)
+        eq("свободный ключ берётся без ожидания", round(wait), 0)
+    eq("ключи идут по кругу, а не один за всех", picked, ["k1", "k2", "k3"] * 2)
+
+    # Именно этого не было раньше: ключ, которым только что слали, не должен
+    # получать следующий запрос, пока остальные простаивают.
+    reset()
+    first, _ = llm._pick_key(keys, model)
+    llm._note_use(first, model)
+    second, _ = llm._pick_key(keys, model)
+    check("подряд один и тот же ключ не берётся", first != second, f"{first} → {second}")
+
+    # ── Темп ─────────────────────────────────────────────────────────
+    # Пока за минуту запросов меньше планки – ждать нечего.
+    reset()
+    llm._rpm_cap = 5
+    now = time.time()
+    llm._hits_by = {("k1", model): [now - 1, now - 2]}
+    eq("не добрали до планки – шлём сразу", round(llm._wait_for("k1", model)), 0)
+
+    # Добрали – ждём, пока самый старый запрос выпадет из минутного окна.
+    llm._hits_by = {("k1", model): [now - 50, now - 40, now - 30, now - 20, now - 10]}
+    wait = llm._wait_for("k1", model)
+    check("добрали планку – ждём освобождения окна", 8 < wait < 12, f"ждём {wait:.1f} сек")
+
+    # Квота у Google считается и на модель тоже: занятость одной модели не
+    # мешает другой. На этом и держится перебор моделей при отказе.
+    eq("у другой модели своя квота", round(llm._wait_for("k1", "gemini-2.5-flash")), 0)
+
+    # Отказ по лимиту опускает планку ниже темпа, на котором нас остановили,
+    # – и дальше держим её сами, не дожидаясь новых отказов.
+    reset()
+    llm._hits_by = {("k1", model): [now - i for i in range(9)]}
+    llm._slower("k1", model)
+    check("после отказа планка темпа опускается", llm.current_pace() < llm.START_RPM,
+          llm.current_pace())
+    check("но не в ноль – иначе прогон встанет", llm.current_pace() >= llm.MIN_RPM,
+          llm.current_pace())
+
+    was = llm.current_pace()
+    for _ in range(llm.CALM_STREAK):
+        llm._faster()
+    check("после серии спокойных ответов планка растёт обратно",
+          llm.current_pace() > was, llm.current_pace())
+    check("выше потолка не разгоняемся", llm.current_pace() <= llm.MAX_RPM)
+
+    # ── Общая квота ──────────────────────────────────────────────────
+    # Ключ отказал, наработав запросы сам – всё честно, квота своя.
+    reset()
+    llm._hits_by = {("k1", model): [now - i for i in range(8)]}
+    llm._note_limit("k1", keys)
+    check("свой лимит выработал сам ключ – квоту общей не считаем", not llm.shared_quota())
+
+    # А тут отказ получил ключ, которым почти не пользовались: свою минутную
+    # квоту он выбрать не мог – значит проект у ключей один.
+    reset()
+    llm._hits_by = {("k1", model): [now - i for i in range(8)], ("k2", model): [now]}
+    llm._note_limit("k2", keys)
+    check("отказ отдохнувшему ключу – квота общая", llm.shared_quota())
+
+    # С одним ключом делить квоту не с кем – выдумывать нечего.
+    reset()
+    llm._hits_by = {("k1", model): [now]}
+    llm._note_limit("k1", ["k1"])
+    check("с одним ключом общая квота не выдумывается", not llm.shared_quota())
+
+    # При общей квоте запросы всех ключей считаются вместе – иначе тремя
+    # ключами мы выбираем одну и ту же квоту втрое быстрее.
+    reset()
+    llm._shared_quota = True
+    llm._rpm_cap = 5
+    llm._hits_by = {("k1", model): [now - 50, now - 40, now - 30],
+                    ("k2", model): [now - 20, now - 10]}
+    wait = llm._wait_for("k3", model)
+    check("общая квота: чужие запросы тоже в счёт", wait > 5, f"ждём {wait:.1f} сек")
+
+    # Человеку это надо сказать словами, а не оставить в жёлтых строках лога.
+    reset()
+    llm._shared_quota = True
+    saved = llm.api_keys
+    llm.api_keys = lambda: keys
+    try:
+        text = llm.where()
+    finally:
+        llm.api_keys = saved
+    check("в «Настройках» сказано про общий лимит", "ОБЩИЙ" in text, text)
+    check("и сказано, что делать – новый проект", "НОВОМ проекте" in text, text)
+    reset()
+
+
 # ════════════════════════════════════════════════════════════════════
 def test_review_batch() -> None:
     """
@@ -2110,6 +2225,7 @@ def main() -> int:
         test_yandex_domain()
         test_aps_project()
         test_reviews()
+        test_gemini_keys()
         test_review_batch()
         test_one_build()
         test_actualize_selection()

@@ -1054,10 +1054,16 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str) -> dict:
             st = getattr(llm, "last_stats", {}) or {}
             slow = time.time() - t0
             if slow > 8:
+                # Сколько ключей в деле – без этого «несколько ключей не помогают»
+                # не проверить: в логе видно только паузу, а не причину.
+                keys_note = f"ключей {st.get('keys', '?')}"
+                if st.get("shared"):
+                    keys_note += " с ОБЩИМ лимитом (один проект Google)"
                 _append_log(project_id, "WARN",
                             f"  💬 {city}: черновик за {slow:.0f} сек "
                             f"(модель {st.get('model') or '?'}, запросов {st.get('calls', 1)}, "
-                            f"пауза {st.get('gap', '?')} сек) – Gemini придерживает по лимиту")
+                            f"{keys_note}, темп {st.get('pace', '?')} запросов/мин) – "
+                            "ждём своей очереди у Gemini")
         except Exception as e:  # noqa: BLE001 – причина уже человеческая
             add(item, rv.NO_DRAFT, note=str(e))
             out["noDraft"] += 1
@@ -1206,6 +1212,19 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                         f"черновиков {review_totals['drafted']} · "
                         f"человеку {review_totals['needsHuman']} · "
                         f"без черновика {review_totals['noDraft']}")
+            # Отдельной строкой, крупно: если ключи сидят на одной квоте, все
+            # жёлтые предупреждения выше лечатся не паузами в коде, а новым
+            # ключом в НОВОМ проекте Google. Без этой строки не догадаться.
+            try:
+                import llm
+                if llm.shared_quota():
+                    _append_log(project_id, "WARN",
+                                "КЛЮЧИ · лимит у ключей Gemini общий – они созданы в одном "
+                                "проекте Google, а лимит считается на проект, а не на ключ. "
+                                "Скорости такие ключи не добавляют: новый ключ нужно "
+                                "создавать в НОВОМ проекте.")
+            except Exception:  # noqa: BLE001 – диагностика не должна ронять прогон
+                pass
             # Один раз наружу, в конце: в облаке файлы не переживают
             # перезапуск, а коммитить на каждый город – это 140 коммитов.
             if collected:

@@ -2727,7 +2727,8 @@ def _reviews_settings_block(project_id: str) -> None:
                        f"(в обращении – {rv.name_for_prompt('Павел Филиппов')}) · "
                        f"модель {stats.get('model') or llm.model_in_use() or '–'} · "
                        f"{stats.get('seconds', '?')} сек, запросов {stats.get('calls', 1)}, "
-                       f"ключей {stats.get('keys', len(keys))}")
+                       f"ключей {stats.get('keys', len(keys))}, "
+                       f"темп {stats.get('pace', '?')} запросов/мин")
             html(T.preview_box(answer))
             if rv.looks_cut_off(answer):
                 st.warning("Ответ оборван на середине – напишите мне, покажу, куда смотреть.")

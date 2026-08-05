@@ -45,7 +45,7 @@ from playwright_worker import PlaywrightWorker
 # Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
 # Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
 # ссылкой на старый yb_playwright.
-UI_BUILD = "2026-08-06-reviews-rules"
+UI_BUILD = "2026-08-06-batch-stop"
 
 
 def _same_build(mod) -> bool:
@@ -1625,55 +1625,152 @@ def _apply_send_result(item: dict, status: str, reason: str) -> None:
         item["status"] = rv.FAILED
 
 
-def _review_send_many(project_id: str, jobs: list[tuple[dict, str]],
-                      progress=None) -> dict:
-    """
-    Отправить пачку подтверждённых ответов за один запуск браузера.
+# ─── Пачки: «Переписать все» и «Отправить все» ──────────────────────
+#
+# Пачка обрабатывается ПО ОДНОЙ штуке за перерисовку, а не циклом внутри
+# одного прогона скрипта. Цикл выглядел проще, но на время работы страница
+# замирала: заказчик видела «2 из 16», рядом «Упёрлись в лимит Gemini» – и
+# остановить это было нечем, оставалось ждать или закрывать вкладку.
+#
+# Теперь после каждой штуки страница перерисовывается: кнопка «Остановить»
+# живая, прогресс настоящий, а состояние пачки лежит в session_state и
+# переживает перерисовку.
+#
+# Браузер для отправки держим открытым между перерисовками – поднимать его
+# заново на каждый ответ значит вернуть те самые минуты ожидания.
 
-    Браузер поднимается ОДИН раз на всю пачку: запуск занимает секунды, и
-    делать его на каждый ответ – значит превратить отправку двадцати
-    ответов в долгое ожидание.
+_BATCH_BROWSER: dict[str, tuple] = {}
 
-    Результат по каждому сразу пишется в очередь: оборвётся на середине –
-    уже отправленное не потеряется и не уйдёт повторно.
-    """
-    out = {"answered": 0, "already": 0, "failed": 0}
+
+def _batch_browser(project_id: str):
+    """Браузер и поток для пачки отправки. Открывается один раз на пачку."""
+    have = _BATCH_BROWSER.get(project_id)
+    if have:
+        return have
     browser = yb.YbBrowser(project_id, headless=bool(get_settings(project_id)["headless"]))
     worker = PlaywrightWorker()
+    worker.call(browser.start)
+    _BATCH_BROWSER[project_id] = (worker, browser)
+    return worker, browser
+
+
+def _batch_browser_close(project_id: str) -> None:
+    have = _BATCH_BROWSER.pop(project_id, None)
+    if not have:
+        return
+    worker, browser = have
     try:
-        worker.call(browser.start)
-        for n, (item, text) in enumerate(jobs, 1):
-            if progress:
-                progress(n, len(jobs), item)
-            try:
-                res = worker.call(yb.publish_review_answer, browser.page,
-                                  item.get("reviewsUrl"), item.get("reviewId"),
-                                  text, item.get("text") or "")
-                status, reason = res.get("status", "failed"), res.get("reason", "")
-            except Exception as e:  # noqa: BLE001
-                status, reason = "failed", str(e)
-            item["finalText"] = text
-            _apply_send_result(item, status, reason)
-            out[{"answered": "answered", "already": "already"}.get(status, "failed")] += 1
-            _review_queue_save(project_id, push=False)
         worker.call(browser.save_session)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        worker.call(browser.close)
+    except Exception:  # noqa: BLE001
+        pass
+    worker.stop()
+
+
+def _send_one(project_id: str, item: dict, text: str) -> None:
+    """Отправить один ответ через браузер пачки и записать исход."""
+    try:
+        worker, browser = _batch_browser(project_id)
+        res = worker.call(yb.publish_review_answer, browser.page, item.get("reviewsUrl"),
+                          item.get("reviewId"), text, item.get("text") or "")
+        status, reason = res.get("status", "failed"), res.get("reason", "")
     except Exception as e:  # noqa: BLE001
-        st.session_state["_store_error"] = str(e)
-    finally:
-        try:
-            worker.call(browser.close)
-        except Exception:  # noqa: BLE001
-            pass
-        worker.stop()
-    _review_queue_save(project_id)
-    return out
+        status, reason = "failed", str(e)
+    item["finalText"] = text
+    _apply_send_result(item, status, reason)
 
 
 def _review_send(project_id: str, item: dict, text: str) -> tuple[str, str]:
-    """Отправка одного ответа – та же дорога, что и у пачки."""
-    _review_send_many(project_id, [(item, text)])
+    """Отправка одного ответа кнопкой – та же дорога, что и у пачки."""
+    try:
+        _send_one(project_id, item, text)
+    finally:
+        _batch_browser_close(project_id)
+    _review_queue_save(project_id)
     status = {rv.ANSWERED: "answered", rv.ALREADY: "already"}.get(item.get("status"), "failed")
     return status, item.get("note") or ""
+
+
+def _batch_start(kind: str, items: list[dict], project_id: str) -> None:
+    st.session_state["rv-batch"] = {
+        "kind": kind, "project": project_id,
+        "ids": [it.get("reviewId") for it in items],
+        "done": 0, "total": len(items), "stop": False,
+        "answered": 0, "already": 0, "failed": 0,
+    }
+
+
+def _batch_stop() -> None:
+    batch = st.session_state.get("rv-batch")
+    if batch:
+        batch["stop"] = True
+
+
+def _batch_finish(project_id: str, batch: dict) -> None:
+    _batch_browser_close(project_id)
+    _review_queue_save(project_id)
+    st.session_state.pop("rv-batch", None)
+    left = batch["total"] - batch["done"]
+    if batch["kind"] == "send":
+        parts = [f"отправлено {batch['answered']}"]
+        if batch["already"]:
+            parts.append(f"уже были отвечены {batch['already']}")
+        if batch["failed"]:
+            parts.append(f"не прошло {batch['failed']} – остались в списке")
+        note = " · ".join(parts)
+    else:
+        note = f"переписано {batch['done']}"
+    if left > 0:
+        note += f" · остановлено, осталось {left}"
+    st.session_state["rv-batch-note"] = note
+
+
+def _batch_block(project_id: str, items: list[dict]) -> bool:
+    """
+    Один шаг пачки. Возвращает True, если пачка идёт – тогда остальной
+    список рисовать не надо, человек и так смотрит на прогресс.
+    """
+    note = st.session_state.pop("rv-batch-note", None)
+    if note:
+        st.success(note)
+
+    batch = st.session_state.get("rv-batch")
+    if not batch or batch.get("project") != project_id:
+        return False
+
+    if batch["stop"] or batch["done"] >= batch["total"]:
+        _batch_finish(project_id, batch)
+        st.rerun()
+
+    title = ("Переписываю черновики" if batch["kind"] == "redo" else "Отправляю ответы")
+    st.progress(batch["done"] / batch["total"],
+                text=f"{title}: {batch['done']} из {batch['total']}")
+    st.button("⏹ Остановить", key="rv-batch-stop", use_container_width=True,
+              on_click=_batch_stop)
+
+    by_id = {it.get("reviewId"): it for it in items}
+    item = by_id.get(batch["ids"][batch["done"]])
+    if item is None:                       # отзыв исчез из очереди – просто идём дальше
+        batch["done"] += 1
+        st.rerun()
+
+    st.caption(f'{item.get("city") or ""} · {item.get("author") or ""}')
+    if batch["kind"] == "redo":
+        _review_regenerate(project_id, item)
+    else:
+        stamp = hashlib.md5((item.get("draft") or "").encode("utf-8")).hexdigest()[:8]
+        text = st.session_state.get(f"rv-text-{item.get('reviewId')}-{stamp}") or item.get("draft")
+        _send_one(project_id, item, text)
+        key = {rv.ANSWERED: "answered", rv.ALREADY: "already"}.get(item.get("status"), "failed")
+        batch[key] += 1
+
+    batch["done"] += 1
+    _review_queue_save(project_id, push=False)     # наружу – один раз в конце
+    st.rerun()
+    return True
 
 
 def _send_all_block(project_id: str, pending: list[dict], running: bool) -> None:
@@ -1694,8 +1791,7 @@ def _send_all_block(project_id: str, pending: list[dict], running: bool) -> None
     if not ready or running:
         return
 
-    asked = st.session_state.get("rv-send-all-asked")
-    if not asked:
+    if not st.session_state.get("rv-send-all-asked"):
         skipped = len(pending) - len(ready)
         tail = (f" Остальные {skipped} останутся в списке: там либо нужен ваш ответ, "
                 "либо черновик не получился." if skipped else "")
@@ -1715,35 +1811,24 @@ def _send_all_block(project_id: str, pending: list[dict], running: bool) -> None
     if yes.button(f"Да, отправить {len(ready)}", key="rv-send-all-yes",
                   type="primary", use_container_width=True):
         st.session_state.pop("rv-send-all-asked", None)
-        jobs = []
-        for it in ready:
-            # Правки человека в поле важнее исходного черновика.
-            stamp = hashlib.md5((it.get("draft") or "").encode("utf-8")).hexdigest()[:8]
-            text = st.session_state.get(f"rv-text-{it.get('reviewId')}-{stamp}") or it.get("draft")
-            jobs.append((it, text))
-
-        bar = st.progress(0.0, text="Отправляю…")
-
-        def tick(n: int, total: int, item: dict) -> None:
-            bar.progress((n - 1) / total, text=f"{n} из {total}: {item.get('city') or ''}")
-
-        with st.spinner("Открываю Яндекс и отправляю ответы…"):
-            res = _review_send_many(project_id, jobs, progress=tick)
-        bar.progress(1.0, text="Готово")
-
-        parts = [f"отправлено {res['answered']}"]
-        if res["already"]:
-            parts.append(f"уже были отвечены {res['already']}")
-        if res["failed"]:
-            parts.append(f"не прошло {res['failed']} – остались в списке")
-        (st.success if not res["failed"] else st.warning)(" · ".join(parts))
-        time.sleep(1.2)
+        _batch_start("send", ready, project_id)
         st.rerun()
 
 
 def reviews_queue_block(project_id: str) -> None:
     items = _review_queue_state(project_id)
     pending = rv.open_items(items)
+
+    # Пачку разбираем ДО проверки «список пуст»: отправив всё, список
+    # опустеет, и пачка осталась бы недоделанной, а браузер – открытым.
+    if st.session_state.get("rv-batch") or st.session_state.get("rv-batch-note"):
+        with st.container(border=True):
+            html('<div class="card-title">💬 Ответы на отзывы</div>')
+            if _batch_block(project_id, items):
+                return
+        if not pending:
+            return
+
     if not pending:
         return
 
@@ -1782,11 +1867,7 @@ def reviews_queue_block(project_id: str) -> None:
                                        key="rv-again-bad", use_container_width=True):
                 todo = broken
             if todo:
-                bar = st.progress(0.0, text="Прошу новые варианты…")
-                for n, it in enumerate(todo, 1):
-                    _review_regenerate(project_id, it)
-                    bar.progress(n / len(todo), text=f"{n} из {len(todo)}")
-                _review_queue_save(project_id)
+                _batch_start("redo", todo, project_id)
                 st.rerun()
 
         _send_all_block(project_id, pending, running)

@@ -1798,6 +1798,71 @@ def test_reviews() -> None:
     eq("очередь: разобранное уходит из открытых", len(rv.open_items([answered])), 0)
     c = rv.counters([answered])
     eq("очередь: счётчик отвеченных", c["answered"], 1)
+# ════════════════════════════════════════════════════════════════════
+def test_review_batch() -> None:
+    """
+    Пачка «Переписать все» / «Отправить все» идёт по одной штуке за
+    перерисовку – только так работает кнопка «Остановить». Блокирующий
+    цикл её не давал: страница замирала, и прервать было нечем.
+    """
+    import streamlit as st
+    import streamlit_app as app
+    import reviews as rv
+    print("\n▸ Пачка ответов с остановкой")
+
+    class Rerun(Exception):
+        pass
+
+    keep = (st.rerun, st.progress, st.button, st.caption, st.success,
+            app._review_queue_save, app._review_regenerate)
+    st.rerun = lambda *a, **k: (_ for _ in ()).throw(Rerun())
+    st.progress = st.caption = st.success = lambda *a, **k: None
+    st.button = lambda *a, **k: False
+    app._review_queue_save = lambda *a, **k: None
+    app._review_regenerate = lambda pid, it: it.update(draft="переписано.", status=rv.DRAFTED)
+
+    def step(items):
+        try:
+            app._batch_block("APS", items)
+        except Rerun:
+            pass
+
+    try:
+        st.session_state.clear()
+        items = [{"reviewId": f"r{n}", "status": rv.DRAFTED, "draft": "старое",
+                  "city": "Гродно", "author": "Иван", "text": "отзыв"} for n in range(4)]
+        app._batch_start("redo", items, "APS")
+        eq("пачка знает свой объём", st.session_state["rv-batch"]["total"], 4)
+
+        step(items)
+        eq("за перерисовку обрабатывается ровно одна штука",
+           st.session_state["rv-batch"]["done"], 1)
+        eq("первый черновик переписан", items[0]["draft"], "переписано.")
+        eq("второй пока не тронут", items[1]["draft"], "старое")
+
+        app._batch_stop()
+        check("остановка запомнена", st.session_state["rv-batch"]["stop"])
+        step(items)
+        check("после остановки пачки нет", "rv-batch" not in st.session_state)
+        note = st.session_state.get("rv-batch-note") or ""
+        check("в итоге сказано, сколько осталось", "осталось 3" in note, note)
+        eq("остальные черновики не тронуты", items[3]["draft"], "старое")
+
+        # Пачка доходит до конца сама, если не останавливать.
+        st.session_state.clear()
+        items = [{"reviewId": f"x{n}", "status": rv.DRAFTED, "draft": "старое",
+                  "city": "Баку", "author": "Пётр", "text": "отзыв"} for n in range(3)]
+        app._batch_start("redo", items, "APS")
+        for _ in range(4):
+            step(items)
+        check("пачка сама завершилась", "rv-batch" not in st.session_state)
+        eq("переписаны все", [i["draft"] for i in items], ["переписано."] * 3)
+    finally:
+        (st.rerun, st.progress, st.button, st.caption, st.success,
+         app._review_queue_save, app._review_regenerate) = keep
+        st.session_state.clear()
+
+
 
 def test_yandex_domain() -> None:
     """
@@ -1858,6 +1923,7 @@ def main() -> int:
         test_yandex_domain()
         test_aps_project()
         test_reviews()
+        test_review_batch()
         test_actualize_selection()
         test_add_post_click_on_real_page()
         test_toast_and_access_on_real_page()

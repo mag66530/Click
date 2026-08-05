@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 # Метка сборки: streamlit_app сверяет её и перезагружает модуль при расхождении.
-BUILD = "2026-08-06-reviews-rules"
+BUILD = "2026-08-06-batch-stop"
 
 PROJECT_ROOT = Path(__file__).parent
 

@@ -45,7 +45,7 @@ from playwright_worker import PlaywrightWorker
 # Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
 # Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
 # ссылкой на старый yb_playwright.
-UI_BUILD = "2026-08-05-reviews-view"
+UI_BUILD = "2026-08-05-reviews-style"
 
 
 def _same_build(mod) -> bool:
@@ -1627,20 +1627,29 @@ def reviews_queue_block(project_id: str) -> None:
 
         # Черновики могли остаться от прошлой версии – обрывками на полуслове.
         # Перещёлкивать «Переписать» по каждому вручную дело нудное.
-        stale = [it for it in pending
-                 if it.get("status") in (rv.DRAFTED, rv.NO_DRAFT)
-                 and rv.looks_broken(it.get("draft") or "")]
-        if stale and llm.is_configured() and not running:
-            st.caption(f"Негодных черновиков (пустых, оборванных или с заметками "
-                       f"модели): {len(stale)}. "
-                       "Их можно переписать разом – примерно "
-                       f"{max(1, round(len(stale) * llm.MIN_GAP_S / 60))} мин.")
-            if st.button(f"🔁 Переписать все ({len(stale)})", key="rv-again-all",
-                         use_container_width=True):
+        # Переписать разом. Нужно не только когда черновик негодный: промпт
+        # проекта правится, и после правки прежние ответы устаревают все сразу.
+        redo = [it for it in pending if it.get("status") in (rv.DRAFTED, rv.NO_DRAFT)]
+        broken = [it for it in redo if rv.looks_broken(it.get("draft") or "")]
+        if redo and llm.is_configured() and not running:
+            note = (f"Негодных черновиков: {len(broken)} из {len(redo)}. " if broken
+                    else "")
+            st.caption(note + "Переписать все разом – примерно "
+                       f"{max(1, round(len(redo) * llm.MIN_GAP_S / 60))} мин. "
+                       "Пригодится после правки промпта в «Настройках».")
+            c_all, c_bad = st.columns(2)
+            todo = None
+            if c_all.button(f"🔁 Переписать все ({len(redo)})", key="rv-again-all",
+                            use_container_width=True):
+                todo = redo
+            if broken and c_bad.button(f"🔁 Только негодные ({len(broken)})",
+                                       key="rv-again-bad", use_container_width=True):
+                todo = broken
+            if todo:
                 bar = st.progress(0.0, text="Прошу новые варианты…")
-                for n, it in enumerate(stale, 1):
+                for n, it in enumerate(todo, 1):
                     _review_regenerate(project_id, it)
-                    bar.progress(n / len(stale), text=f"{n} из {len(stale)}")
+                    bar.progress(n / len(todo), text=f"{n} из {len(todo)}")
                 _review_queue_save(project_id)
                 st.rerun()
 

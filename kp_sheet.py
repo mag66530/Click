@@ -48,7 +48,11 @@ import os
 import re
 from typing import Any
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+# Права нужны на оба API: у нативной таблицы значения читает Sheets API, а
+# залитый .xlsx приходится качать файлом через Drive API.
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly",
+          "https://www.googleapis.com/auth/drive.readonly"]
+GOOGLE_SHEET_MIME = "application/vnd.google-apps.spreadsheet"
 
 SPRAV_RX = re.compile(r"yandex\.[a-z.]+/sprav/\d+", re.I)
 
@@ -182,16 +186,66 @@ def is_configured(project_id: str, from_config: str = "") -> bool:
 
 
 # ─── Чтение таблицы ─────────────────────────────────────────────────
-def _read_values(file_id: str, sa_info: dict) -> list[list[str]]:
-    """Значения первого листа таблицы. Именно values.get, а не экспорт файла."""
-    import requests
+def _auth_headers(sa_info: dict) -> dict:
     from google.auth.transport.requests import Request as GARequest
     from google.oauth2 import service_account
 
     creds = service_account.Credentials.from_service_account_info(sa_info, scopes=SCOPES)
     creds.refresh(GARequest())
-    headers = {"Authorization": f"Bearer {creds.token}"}
+    return {"Authorization": f"Bearer {creds.token}"}
+
+
+def _file_mime(file_id: str, headers: dict) -> str:
+    """Что это за файл на Диске: нативная таблица или залитый Excel."""
+    import requests
+    r = requests.get(f"https://www.googleapis.com/drive/v3/files/{file_id}",
+                     params={"fields": "mimeType,name", "supportsAllDrives": "true"},
+                     headers=headers, timeout=30)
+    if r.status_code != 200:
+        return ""          # не смогли определить – попробуем как обычную таблицу
+    return (r.json() or {}).get("mimeType", "")
+
+
+def _read_uploaded_xlsx(file_id: str, headers: dict) -> dict[str, list[list[str]]]:
+    """
+    Листы Excel-файла, ЗАЛИТОГО на Google Диск.
+
+    Такой файл открывается в Google Таблицах и по ссылке неотличим от обычной
+    таблицы, но Sheets API его не читает («must not be an Office file»).
+    Скачиваем сам файл через Drive API и разбираем – ровно как это давно
+    делает site-checker, поэтому у него такие КП и читались.
+    """
+    import io
+
+    import requests
+    from openpyxl import load_workbook
+
+    r = requests.get(f"https://www.googleapis.com/drive/v3/files/{file_id}",
+                     params={"alt": "media", "supportsAllDrives": "true"},
+                     headers=headers, timeout=90)
+    if r.status_code != 200:
+        raise RuntimeError(f"Drive API вернул HTTP {r.status_code}: {r.text[:160]} "
+                           "(расшарена ли таблица на сервисный аккаунт? включён ли Drive API?)")
+    wb = load_workbook(io.BytesIO(r.content), data_only=True, read_only=True)
+    out: dict[str, list[list[str]]] = {}
+    for ws in wb.worksheets:
+        out[ws.title] = [[("" if c.value is None else str(c.value)) for c in row]
+                         for row in ws.iter_rows()]
+    wb.close()
+    return out
+
+
+def _read_values(file_id: str, sa_info: dict) -> list[list[str]]:
+    """Значения таблицы. Нативную читаем через Sheets API, залитый .xlsx – качаем."""
+    import requests
+
+    headers = _auth_headers(sa_info)
     base = f"https://sheets.googleapis.com/v4/spreadsheets/{file_id}"
+
+    # Залитый Excel Sheets API не осилит – сразу идём в Drive.
+    if _file_mime(file_id, headers) not in (GOOGLE_SHEET_MIME, ""):
+        sheets = _read_uploaded_xlsx(file_id, headers)
+        return _pick_sheet(list(sheets), lambda t: sheets[t])
 
     meta = requests.get(base, params={"fields": "sheets.properties.title"},
                         headers=headers, timeout=30)
@@ -201,18 +255,11 @@ def _read_values(file_id: str, sa_info: dict) -> list[list[str]]:
             "как Читатель и включён ли Google Sheets API в проекте?"
         )
     if meta.status_code != 200:
-        # Самый частый случай: файл Excel просто ЗАЛИТ на Google Диск и
-        # открывается в просмотрщике таблиц. Ссылка выглядит как у обычной
-        # Google-таблицы, но Sheets API такие файлы не читает. Говорим не
-        # кодом ошибки, а что именно сделать.
+        # Тип файла определить не удалось, а Sheets API упёрся в Office-файл –
+        # значит это всё-таки залитый Excel, качаем его напрямую.
         if "must not be an Office file" in (meta.text or ""):
-            raise RuntimeError(
-                "Это не Google-таблица, а файл Excel, залитый на Google Диск – "
-                "такие Click читать не умеет (ограничение самого Google). "
-                "Откройте таблицу и выберите «Файл» → «Сохранить как таблицу Google», "
-                "затем вставьте сюда ссылку на новую таблицу и не забудьте расшарить "
-                "её на сервисный аккаунт как Читателя."
-            )
+            sheets = _read_uploaded_xlsx(file_id, headers)
+            return _pick_sheet(list(sheets), lambda t: sheets[t])
         raise RuntimeError(f"Sheets API вернул HTTP {meta.status_code}: {meta.text[:160]}")
 
     titles = [s.get("properties", {}).get("title", "") for s in (meta.json() or {}).get("sheets", [])]
@@ -229,12 +276,22 @@ def _read_values(file_id: str, sa_info: dict) -> list[list[str]]:
             raise RuntimeError(f"Не удалось прочитать лист «{title}»: HTTP {r.status_code}")
         return [[("" if v is None else str(v)) for v in row] for row in (r.json() or {}).get("values", [])]
 
+    return _pick_sheet(titles, read)
+
+
+def _pick_sheet(titles: list[str], read) -> list[list[str]]:
+    """Первый лист, на котором нашлись города со ссылками на Яндекс.Бизнес."""
+    if not titles:
+        raise RuntimeError("В таблице нет листов")
     tried = []
     for title in _sheet_order(titles):
-        rows = read(title)
+        try:
+            rows = read(title)
+        except Exception as e:  # noqa: BLE001
+            tried.append(f"«{title}»: {e}")
+            continue
         cities, diag = parse_rows(rows)
         if cities:
-            diag["sheet"] = title
             return rows
         tried.append(f"«{title}»: {diag.get('error') or 'городов не нашлось'}")
     raise RuntimeError("Ни на одном листе не нашлось таблицы с городами и ссылками "

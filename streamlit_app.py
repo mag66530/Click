@@ -45,7 +45,7 @@ from playwright_worker import PlaywrightWorker
 # Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
 # Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
 # ссылкой на старый yb_playwright.
-UI_BUILD = "2026-08-05-reviews-style"
+UI_BUILD = "2026-08-05-kp-xlsx"
 
 
 def _same_build(mod) -> bool:
@@ -1492,10 +1492,31 @@ def row_vars(country: dict, chosen: set[str] | None, action: str) -> dict[str, s
 
 
 def _act_selected(all_ids: list[str]) -> set[str]:
+    """
+    Какие города отмечены для актуализации.
+
+    Набор надо СВЕРЯТЬ с текущим списком городов. После загрузки из КП
+    (да и после ручного добавления) у городов новые id, а в наборе лежали
+    старые: новые города оказывались невыбранными молча – отсюда «проверяет
+    не все города». Правило простое, как в оригинале: город, которого раньше
+    не было, считается выбранным; снятые вручную галочки сохраняются;
+    исчезнувшие города из набора уходят.
+    """
+    ids = set(all_ids)
     sel = st.session_state.get("act-selected")
     if sel is None:
-        sel = set(all_ids)                     # по умолчанию выбраны все, как в оригинале
-        st.session_state["act-selected"] = sel
+        st.session_state["act-selected"] = set(ids)
+        st.session_state["act-known"] = set(ids)
+        return st.session_state["act-selected"]
+
+    known = st.session_state.get("act-known")
+    if known is None:
+        known = set(sel)
+    fresh = (sel & ids) | (ids - known)        # новые города – сразу выбраны
+    if fresh != sel:
+        sel.clear()
+        sel.update(fresh)
+    st.session_state["act-known"] = ids
     return sel
 
 

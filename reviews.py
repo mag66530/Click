@@ -36,7 +36,7 @@ import projects_data as pdata
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-05-reviews-send"
+BUILD = "2026-08-05-reviews-view"
 
 # ─── Статусы элемента очереди ───────────────────────────────────────
 DRAFTED = "drafted"                  # черновик готов, ждём человека
@@ -199,6 +199,39 @@ def looks_cut_off(text: str) -> bool:
     """
     t = (text or "").strip()
     return bool(t) and not t.endswith((".", "!", "?", "…", ")", "»", ":"))
+
+
+# Следы «мыслей вслух» модели: она рассуждает по-английски о структуре
+# ответа, и куски этих рассуждений попадали прямо в черновик – например
+# «Salutation a sentence? If P1 is ... MUST be 2 sentences».
+_THINKING_TRACE = re.compile(
+    r"(sentence|paragraph|prompt says|line\s*\d|let'?s\s|must be|is proper|"
+    r"\bP\d\b|check if|structure)", re.I)
+
+
+def looks_broken(text: str) -> bool:
+    """
+    Черновик негодный: пустой, оборванный или с рассуждениями модели вместо
+    ответа. Такие надо переписать, а не отправлять.
+
+    Одного признака «оборван» мало: один черновик заканчивался точкой и
+    поэтому считался целым, хотя целиком состоял из размышлений –
+    «...Prompt says: «Обращение: Уважаемый(ая) Эрик Айрапетян!»».
+    """
+    t = (text or "").strip()
+    if not t:
+        return True
+    if looks_cut_off(t):
+        return True
+    if _THINKING_TRACE.search(t):
+        return True
+    # Ответ на русском, а тут сплошная латиница – значит, это не ответ.
+    letters = [c for c in t if c.isalpha()]
+    if letters:
+        latin = sum(1 for c in letters if "a" <= c.lower() <= "z")
+        if latin / len(letters) > 0.25:
+            return True
+    return False
 
 
 def banned_words(text: str) -> list[str]:

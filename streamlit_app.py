@@ -45,7 +45,7 @@ from playwright_worker import PlaywrightWorker
 # Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
 # Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
 # ссылкой на старый yb_playwright.
-UI_BUILD = "2026-08-05-reviews-send"
+UI_BUILD = "2026-08-05-reviews-view"
 
 
 def _same_build(mod) -> bool:
@@ -1629,9 +1629,10 @@ def reviews_queue_block(project_id: str) -> None:
         # Перещёлкивать «Переписать» по каждому вручную дело нудное.
         stale = [it for it in pending
                  if it.get("status") in (rv.DRAFTED, rv.NO_DRAFT)
-                 and (rv.looks_cut_off(it.get("draft") or "") or not (it.get("draft") or "").strip())]
+                 and rv.looks_broken(it.get("draft") or "")]
         if stale and llm.is_configured() and not running:
-            st.caption(f"Оборванных или пустых черновиков: {len(stale)}. "
+            st.caption(f"Негодных черновиков (пустых, оборванных или с заметками "
+                       f"модели): {len(stale)}. "
                        "Их можно переписать разом – примерно "
                        f"{max(1, round(len(stale) * llm.MIN_GAP_S / 60))} мин.")
             if st.button(f"🔁 Переписать все ({len(stale)})", key="rv-again-all",
@@ -1639,7 +1640,6 @@ def reviews_queue_block(project_id: str) -> None:
                 bar = st.progress(0.0, text="Прошу новые варианты…")
                 for n, it in enumerate(stale, 1):
                     _review_regenerate(project_id, it)
-                    st.session_state.pop(f"rv-text-{it.get('reviewId')}", None)
                     bar.progress(n / len(stale), text=f"{n} из {len(stale)}")
                 _review_queue_save(project_id)
                 st.rerun()
@@ -1671,16 +1671,23 @@ def reviews_queue_block(project_id: str) -> None:
                         st.rerun()
                     continue
 
-                text = st.text_area("Ответ компании", value=item.get("draft") or "",
-                                    key=f"rv-text-{item.get('reviewId')}", height=160,
-                                    disabled=running)
+                # Ключ поля включает отпечаток черновика. Иначе Streamlit
+                # держится за первое, что человек увидел: черновик в файле уже
+                # переписан, а на экране остаётся прежний текст – ровно это и
+                # выглядело как «нажала „Переписать“, и ничего не происходит».
+                # Меняется черновик – меняется ключ – поле берёт новое значение.
+                draft = item.get("draft") or ""
+                stamp = hashlib.md5(draft.encode("utf-8")).hexdigest()[:8]
+                text = st.text_area("Ответ компании", value=draft,
+                                    key=f"rv-text-{item.get('reviewId')}-{stamp}",
+                                    height=160, disabled=running)
                 bad = rv.banned_words(text)
                 if bad:
                     st.warning("В ответе есть слова, которые промпт запрещает: "
                                + ", ".join(f"«{w}»" for w in bad))
-                if rv.looks_cut_off(text):
-                    st.warning("Похоже, ответ оборван на середине фразы. "
-                               "Нажмите «Переписать» – или допишите сами.")
+                if rv.looks_broken(text):
+                    st.warning("Этот черновик негодный – оборван или в нём остались "
+                               "служебные заметки модели. Нажмите «Переписать».")
 
                 c1, c2, c3 = st.columns(3)
                 if c1.button("✅ Отправить", key=f"rv-send-{n}", type="primary",
@@ -1712,8 +1719,6 @@ def reviews_queue_block(project_id: str) -> None:
                              disabled=not llm.is_configured()):
                     with st.spinner("Прошу новый вариант…"):
                         _review_regenerate(project_id, item)
-                    # Поле держит прежний текст, пока не сбросим его ключ.
-                    st.session_state.pop(f"rv-text-{item.get('reviewId')}", None)
                     _review_queue_save(project_id, push=False)
                     st.rerun()
 

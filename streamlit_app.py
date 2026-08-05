@@ -1890,10 +1890,13 @@ def _sent_report_block(project_id: str, done: list[dict], pending: list[dict]) -
     rows = sorted(done, key=lambda it: it.get("sentAt") or it.get("collectedAt") or "",
                   reverse=True)
 
-    with st.expander(f"📋 Отчёт по отправке ({len(done)})", expanded=bool(c["failed"])):
+    with st.expander(f"📋 Отчёт по отправке за этот прогон ({len(done)})",
+                     expanded=bool(c["failed"])):
         st.caption(f"Отправлено {c['answered']} · уже были отвечены "
                    f"{len([r for r in done if r.get('status') == rv.ALREADY])} · "
                    f"пропущено {c['skipped']} · не отправилось {c['failed']}")
+        st.caption("Здесь только текущий прогон. Прошлые – во вкладке «📊 Отчёт»: "
+                   "у каждого прогона свой список отзывов и своя выгрузка.")
         for it in rows:
             when = local_time(it.get("sentAt")) if it.get("sentAt") else ""
             label = _SENT_LABELS.get(it.get("status"), it.get("status") or "")
@@ -1940,10 +1943,16 @@ def _report_reviews(project_id: str, data: dict) -> list[dict]:
     свежий статус, время отправки и итоговый текст. Отзыв, разобранный уже
     после прогона, в выгрузке виден разобранным – как оно и есть.
     """
+    queue = rv.load_queue(project_id)
     rows = data.get("reviews") or []
     if not rows:
+        # Отчёт старый – отзывов в нём не сохраняли. Но у элементов очереди
+        # есть метка прогона, так что список всё равно соберётся.
+        run_id = data.get("runId") or ""
+        rows = [it for it in queue if run_id and it.get("runId") == run_id]
+    if not rows:
         return []
-    fresh = {it.get("reviewId"): it for it in rv.load_queue(project_id)}
+    fresh = {it.get("reviewId"): it for it in queue}
     out = []
     for r in rows:
         now = fresh.get(r.get("reviewId")) or {}
@@ -1965,7 +1974,7 @@ def _report_reviews_block(rows: list[dict]) -> None:
              f'<span class="report-head-title">💬 Отзывы этого прогона</span>'
              f'<span class="report-head-date">{len(rows)} шт.</span></div>')
         bits = [f"отвечено {c['answered']}"]
-        for label, key in (("ждут подтверждения", "drafted"), ("вам на ответ", "needsHuman"),
+        for label, key in (("ждут подтверждения", "drafted"), ("негативных", "needsHuman"),
                            ("без черновика", "noDraft"), ("пропущено", "skipped"),
                            ("не отправились", "failed")):
             if c.get(key):
@@ -2040,7 +2049,18 @@ def reviews_queue_block(project_id: str) -> None:
     # уже выбивало по памяти – третий браузер тут лишний.
     live = runner.running_kinds(project_id)
     running = bool(live)
-    done = [it for it in items if it.get("status") not in rv.OPEN_STATUSES]
+
+    # Разобранное показываем ТОЛЬКО за текущий прогон. Очередь копится дальше –
+    # там лежит вся история, – но на странице от неё была одна путаница:
+    # заказчик только собрала новые отзывы, а видела «3 отправленных» с
+    # какого-то прошлого раза. История прогонов теперь во вкладке «Отчёт»,
+    # у каждого прогона свои отзывы и своя выгрузка.
+    run_id = (runner.read_state(project_id, "actualize") or {}).get("runId") or ""
+    done = [it for it in items
+            if it.get("status") not in rv.OPEN_STATUSES and it.get("runId") == run_id and run_id]
+    # Ждущие ответа показываем ВСЕ, даже со старых прогонов: черновик написан,
+    # никуда не делся, и потерять его из виду нельзя.
+    shown = pending + done
 
     with st.container(border=True):
         html(f'<div class="card-title">💬 Ответы на отзывы – на подтверждении '
@@ -2048,10 +2068,10 @@ def reviews_queue_block(project_id: str) -> None:
         # Сводка плашками, как в отчёте: сколько готово, сколько разбирать
         # руками, сколько уже ушло. Раньше это надо было считать глазами по
         # длинному списку.
-        c = rv.counters(items)
+        c = rv.counters(shown)
         html(T.stat_row([
             ("Черновик готов", c["drafted"], "ok"),
-            ("Вам на ответ", c["needsHuman"], "warn"),
+            ("Негативные", c["needsHuman"], "warn"),
             ("Без черновика", c["noDraft"], "noimg"),
             ("Отправлено", c["answered"], "skip"),
         ] + ([("Не отправились", c["failed"], "err")] if c["failed"] else [])))
@@ -2557,7 +2577,7 @@ def _report_notes(data: dict, totals: dict) -> list[str]:
         rt = data.get("reviewTotals") or {}
         notes.append(f'💬 Отзывы: без ответа {rt.get("found", 0)} · '
                      f'черновиков {rt.get("drafted", 0)} · '
-                     f'вам на ответ {rt.get("needsHuman", 0)} · '
+                     f'негативных {rt.get("needsHuman", 0)} · '
                      f'без черновика {rt.get("noDraft", 0)}. '
                      "Ответы ждут подтверждения в «Актуализации».")
     return notes

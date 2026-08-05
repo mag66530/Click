@@ -1116,7 +1116,8 @@ def start_actualize(project_id: str, headless: bool = True, delay_s: float = 2.5
 
 
 def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
-                      should_stop=None, budget: dict | None = None) -> dict:
+                      should_stop=None, budget: dict | None = None,
+                      run_id: str = "") -> dict:
     """
     Шаг по отзывам для одного города: прочитать раздел отзывов, отобрать
     неотвеченные и написать черновики. Ничего не публикует.
@@ -1148,9 +1149,15 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
         return out
 
     def add(item, status, draft="", note=""):
-        out["items"].append(rv.as_queue_item(
+        # runId помечает, ЧЬИ это отзывы. Без метки страница показывала
+        # разобранное вперемешку со всеми прошлыми прогонами: заказчик только
+        # собрала новые, а видела «3 отправленных» с какого-то прошлого раза.
+        row = rv.as_queue_item(
             item, project_id=project_id, city=city, company_url=company_url,
-            reviews_url=page_url, status=status, draft=draft, note=note))
+            reviews_url=page_url, status=status, draft=draft, note=note)
+        if run_id:
+            row["runId"] = run_id
+        out["items"].append(row)
 
     for item in box["no_text"]:
         pass  # одни звёзды без текста – в очередь не берём (решение заказчика)
@@ -1345,7 +1352,7 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                 if with_reviews:
                     try:
                         rr = _reviews_for_city(project_id, browser.page, task, prompt,
-                                               should_stop, review_budget)
+                                               should_stop, review_budget, run_id)
                     except Exception as e:  # noqa: BLE001
                         rr = {"items": [], "summary": f"сбой шага отзывов: {e}",
                               "found": 0, "drafted": 0, "needsHuman": 0, "noDraft": 0}

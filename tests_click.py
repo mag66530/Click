@@ -2420,6 +2420,70 @@ def test_report_with_reviews() -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+def test_queue_resets_between_runs() -> None:
+    """
+    На странице видно разобранное ТОЛЬКО текущего прогона.
+
+    Живой случай: заказчик собрала новые отзывы, а в «Отчёте по отправке»
+    увидела «3 отправленных» с какого-то прошлого раза – «чтобы не было
+    путаницы, на странице сбрасывается». История при этом не теряется: она
+    уходит во вкладку «Отчёт», у каждого прогона свой список и своя выгрузка.
+
+    Ждущие ответа при этом показываются ВСЕ, даже со старых прогонов:
+    черновик написан, никуда не делся, потерять его из виду нельзя.
+    """
+    import streamlit_app as app
+    import reviews as rv
+    import runner as r
+    print("\n▸ Сброс списка между прогонами")
+
+    items = [
+        {"reviewId": "old1", "runId": "run-1", "status": rv.ANSWERED, "city": "Баку"},
+        {"reviewId": "old2", "runId": "run-1", "status": rv.ANSWERED, "city": "Баку"},
+        {"reviewId": "old3", "runId": "run-1", "status": rv.DRAFTED, "city": "Баку",
+         "draft": "старый черновик."},
+        {"reviewId": "new1", "runId": "run-2", "status": rv.ANSWERED, "city": "Тараз"},
+        {"reviewId": "new2", "runId": "run-2", "status": rv.DRAFTED, "city": "Тараз",
+         "draft": "новый черновик."},
+        {"reviewId": "ancient", "status": rv.ANSWERED, "city": "Ереван"},   # до меток
+    ]
+
+    def done_for(run_id: str) -> list[dict]:
+        return [it for it in items
+                if it.get("status") not in rv.OPEN_STATUSES
+                and it.get("runId") == run_id and run_id]
+
+    eq("после нового прогона в списке только его отправленные",
+       [it["reviewId"] for it in done_for("run-2")], ["new1"])
+    eq("прошлый прогон со страницы ушёл", len(done_for("run-1")), 2)
+    check("отзывы без метки (до этой версии) на страницу не лезут",
+          all(it.get("runId") for it in done_for("run-2")))
+
+    # Ждущие – все, независимо от прогона.
+    pending = rv.open_items(items)
+    eq("ждущие показываются со всех прогонов",
+       sorted(it["reviewId"] for it in pending), ["new2", "old3"])
+
+    # А в отчёте прогона – его отзывы, даже если в самом отчёте их не сохраняли.
+    keep = rv.load_queue
+    rv.load_queue = lambda pid: items
+    try:
+        rows = app._report_reviews("APS", {"type": "actualize", "runId": "run-1"})
+        eq("старый отчёт собирается по метке прогона",
+           sorted(r["reviewId"] for r in rows), ["old1", "old2", "old3"])
+        eq("чужой прогон в него не попадает",
+           [r["reviewId"] for r in app._report_reviews("APS", {"runId": "run-2"})
+            if r["reviewId"].startswith("old")], [])
+    finally:
+        rv.load_queue = keep
+
+    # Метку ставит сам прогон – иначе всё вышеописанное не сработает.
+    import inspect
+    src = inspect.getsource(r._reviews_for_city)
+    check("прогон помечает свои отзывы", '"runId"' in src and "run_id" in src)
+
+
+# ════════════════════════════════════════════════════════════════════
 def test_module_attrs_exist() -> None:
     """
     Каждое `модуль.имя`, написанное в коде, обязано существовать.
@@ -2743,6 +2807,7 @@ def main() -> int:
         test_look_and_order()
         test_assortment_verbatim()
         test_report_with_reviews()
+        test_queue_resets_between_runs()
         test_module_attrs_exist()
         test_batch_browser_survives_rerun()
         test_one_build()

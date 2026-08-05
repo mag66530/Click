@@ -1498,7 +1498,8 @@ def test_reviews() -> None:
     eq("остальные помечены как сверх потолка", len(box["over_limit"]), 3)
 
     # ─── имя автора ───
-    eq("имя: обычное берём как есть", rv.nice_name("Егор Севастьянов"), "Егор Севастьянов")
+    eq("имя: из «Имя Фамилия» берём только имя", rv.nice_name("Егор Севастьянов"), "Егор")
+    eq("имя: «Павел Филиппов» → «Павел»", rv.nice_name("Павел Филиппов"), "Павел")
     eq("имя: инициал отбрасываем", rv.nice_name("Надежда Х."), "Надежда")
     eq("имя: одно слово", rv.nice_name("Денис"), "Денис")
     eq("имя: двойное через дефис", rv.nice_name("Анна-Мария"), "Анна-Мария")
@@ -1521,6 +1522,10 @@ def test_reviews() -> None:
     built = rv.build_prompt(rv.default_prompt("APS"), item)
     check("промпт: текст отзыва подставлен", "Хороший ассортимент" in built)
     check("промпт: имя подставлено без инициала", "Надежда" in built and "Надежда Х." not in built)
+    only_name = rv.build_prompt(rv.default_prompt("APS"),
+                                {"full_text": "хорошо", "author": {"user": "Павел Филиппов"}, "rating": 5})
+    check("промпт: фамилия в обращение не идёт",
+          "Павел" in only_name and "Филиппов" not in only_name)
     check("промпт: маркеров не осталось",
           pdata.REVIEW_TEXT_MARK not in built and pdata.REVIEW_NAME_MARK not in built)
 

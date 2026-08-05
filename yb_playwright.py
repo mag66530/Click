@@ -44,6 +44,12 @@ from typing import Any, Callable, Iterable
 
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
+# Метка сборки. Одна на все модули Click: облако умеет обновить главный
+# скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
+# функцию, которой тут ещё нет. streamlit_app сверяет метку и при
+# расхождении перезагружает модуль сам.
+BUILD = "2026-08-05-reviews-fix"
+
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 

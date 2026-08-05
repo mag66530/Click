@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,16 +35,36 @@ import ui_theme as T
 import yb_playwright as yb
 from playwright_worker import PlaywrightWorker
 
-# Стиль и разметка обязаны быть из одной сборки. Если Streamlit перезапустил
-# скрипт, но оставил в памяти прежний ui_theme (так бывает в облаке при
-# обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
-# и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
-# она не совпала, перезагружаем модуль сами.
+# ВСЕ модули обязаны быть из одной сборки. Облако умеет обновить главный
+# скрипт «на лету», оставив соседние модули в памяти прежними – и тогда новая
+# страница зовёт функцию, которой в старом модуле ещё нет. Сначала это ловили
+# только для ui_theme (разъезжались вёрстка и CSS), потом ровно так же
+# посыпались отзывы: страница уже знала про looks_cut_off, а reviews в памяти –
+# нет, и вкладка падала с AttributeError.
+#
+# Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
+# Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
+# ссылкой на старый yb_playwright.
 UI_BUILD = "2026-08-05-reviews-fix"
-if getattr(T, "BUILD", "") != UI_BUILD:
+
+
+def _same_build(mod) -> bool:
+    return getattr(mod, "BUILD", "") == UI_BUILD
+
+
+if not all(_same_build(m) for m in (T, yb, rv, llm, runner)):
     import importlib
 
-    T = importlib.reload(T)
+    for _name in ("ui_theme", "yb_playwright", "reviews", "llm", "runner"):
+        try:
+            importlib.reload(sys.modules[_name])
+        except Exception:  # noqa: BLE001 – без перезагрузки хуже, но падать нельзя
+            pass
+    import llm  # noqa: F811
+    import reviews as rv  # noqa: F811
+    import runner  # noqa: F811
+    import ui_theme as T  # noqa: F811
+    import yb_playwright as yb  # noqa: F811
 
 ROOT = Path(__file__).parent
 USERS_DATA = paths.data_root()
@@ -2346,6 +2367,28 @@ def _reviews_settings_block(project_id: str) -> None:
     st.caption(f"Черновик пишется только на отзывы в {rv.GOOD_RATING} звёзд и не больше "
                f"{rv.MAX_DRAFTS_PER_CITY} на город. Отзывы с оценкой ниже попадают в список "
                "без черновика – их вы отвечаете сами. Отзывы без текста пропускаются.")
+
+    # Проверка на месте: прогонять 60 городов ради того, чтобы понять, жив ли
+    # Gemini и не обрывается ли ответ, – слишком дорогое удовольствие.
+    if st.button("Проверить генерацию на примере", key=f"rv-try-{project_id}",
+                 disabled=not llm.is_configured()):
+        sample = {"full_text": "Продукция отличного качества, все отлично! Поставка без задержек.",
+                  "author": {"user": "Павел Филиппов"}, "rating": 5}
+        with st.spinner("Прошу у Gemini ответ на пробный отзыв…"):
+            try:
+                answer = llm.generate(rv.build_prompt(rv.project_prompt(project_id), sample))
+            except Exception as e:  # noqa: BLE001
+                answer = None
+                st.error(str(e))
+        if answer:
+            st.caption(f"Отзыв: «{sample['full_text']}» · автор Павел Филиппов "
+                       f"(в обращении – {rv.name_for_prompt('Павел Филиппов')}) · "
+                       f"модель {llm.model_in_use() or '—'}")
+            html(T.preview_box(answer))
+            if rv.looks_cut_off(answer):
+                st.warning("Ответ оборван на середине – напишите мне, покажу, куда смотреть.")
+            else:
+                st.success("Ответ пришёл целиком.")
 
 
 def _browser_error(exc: Exception) -> None:

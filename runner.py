@@ -38,6 +38,12 @@ from typing import Any, Callable
 import paths
 import yb_playwright as yb
 
+# Метка сборки. Одна на все модули Click: облако умеет обновить главный
+# скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
+# функцию, которой тут ещё нет. streamlit_app сверяет метку и при
+# расхождении перезагружает модуль сам.
+BUILD = "2026-08-05-reviews-fix"
+
 ROOT = Path(__file__).parent
 USERS_DATA = paths.data_root()
 

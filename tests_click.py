@@ -2189,6 +2189,65 @@ def test_review_batch() -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+def test_city_checkbox_survives_collapse() -> None:
+    """
+    Снятая галочка города не теряется, если тут же свернуть страну.
+
+    Заказчик: «снимаю галочку и сворачиваю страну – она всё равно остаётся
+    включённой, снять можно только кнопкой».
+
+    Механика. Снятие запоминается в on_change, а он зовётся только если
+    галочку в этот проход рисуют. Браузер отправляет снятие; ответа ещё нет,
+    человек уже жмёт по стране. Второй запрос приходит с обоими изменениями,
+    страна сворачивается – галочки не рисуются, on_change по ним не зовётся,
+    снятие пропадает. Кнопка «Снять все» пишет напрямую, поэтому работала.
+
+    Лечится чтением значения НАПРЯМУЮ до отрисовки: невидимые виджеты
+    Streamlit вычищает только ПОСЛЕ прогона скрипта (on_script_finished →
+    _remove_stale_widgets), так что присланное значение в этот момент ещё
+    доступно.
+    """
+    import inspect
+    import streamlit as st
+    import streamlit_app as app
+    print("\n▸ Галочка города и сворачивание страны")
+
+    st.session_state.clear()
+    all_ids = ["ct-1", "ct-2", "ct-3"]
+    chosen = app._act_selected(all_ids)
+    eq("сначала выбраны все", len(chosen), 3)
+
+    # Браузер прислал снятие, но страну свернули – on_change не позвали.
+    st.session_state["act-cb-ct-2"] = False
+    check("без подбора значение бы потерялось", "ct-2" in chosen)
+    app._act_sync_widgets(all_ids)
+    check("снятая галочка подобрана", "ct-2" not in chosen, sorted(chosen))
+    eq("остальные не тронуты", sorted(chosen), ["ct-1", "ct-3"])
+
+    # И обратно: галочку вернули – тоже подхватывается.
+    st.session_state["act-cb-ct-2"] = True
+    app._act_sync_widgets(all_ids)
+    check("возврат галочки подхватывается", "ct-2" in chosen, sorted(chosen))
+
+    # Города, про которые браузер ничего не присылал, не трогаем.
+    st.session_state.clear()
+    st.session_state["act-selected"] = {"ct-1"}
+    app._act_sync_widgets(all_ids)
+    eq("про что не спрашивали – то не меняем", sorted(st.session_state["act-selected"]), ["ct-1"])
+
+    # Подбор обязан идти ДО отрисовки галочек, иначе смысла в нём нет.
+    src = inspect.getsource(app.tab_actualize)
+    sync = src.find("_act_sync_widgets")
+    draw = src.find("act-cb-")
+    check("подбор идёт до отрисовки галочек", 0 < sync < draw, f"подбор {sync}, отрисовка {draw}")
+
+    # Галочка отзывов включена по умолчанию.
+    check("«заодно проверить отзывы» включена сразу",
+          'setdefault("act-reviews", True)' in src, "")
+    st.session_state.clear()
+
+
+# ════════════════════════════════════════════════════════════════════
 def test_reviews_limit_and_stop() -> None:
     """
     Упёрлись в лимит Gemini – хватит пробовать. И «Остановить» слышно сразу.
@@ -2803,6 +2862,7 @@ def main() -> int:
         test_reviews()
         test_gemini_keys()
         test_review_batch()
+        test_city_checkbox_survives_collapse()
         test_reviews_limit_and_stop()
         test_look_and_order()
         test_assortment_verbatim()

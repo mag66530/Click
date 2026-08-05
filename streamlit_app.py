@@ -1576,6 +1576,30 @@ def _act_toggle(city_id: str, widget_key: str) -> None:
         sel.discard(city_id)
 
 
+def _act_sync_widgets(all_ids: list[str]) -> None:
+    """
+    Подобрать значения галочек, которые браузер прислал, а отрисовать их уже
+    не успели.
+
+    Зачем. Снятая галочка запоминается в on_change, а он срабатывает только
+    если галочку в этот раз рисуют. Живой случай заказчика: снять галочку и
+    тут же свернуть страну – город оставался выбранным, «снять можно только
+    кнопкой». Гонка: браузер отправляет снятие, но ответ ещё не пришёл, а
+    человек уже жмёт по стране. Второй запрос приходит с обоими изменениями
+    сразу, страна сворачивается – и галочки в этот проход не рисуются, значит
+    on_change по ним не зовётся, и снятие пропадает. Локально это почти не
+    ловится, в облаке с его задержками – запросто.
+
+    Лечится тем, что значение галочки читается НАПРЯМУЮ, до отрисовки: к
+    моменту запуска скрипта Streamlit уже положил присланное в session_state.
+    """
+    sel = st.session_state.setdefault("act-selected", set())
+    for cid in all_ids:
+        key = f"act-cb-{cid}"
+        if key in st.session_state:
+            sel.add(cid) if st.session_state[key] else sel.discard(cid)
+
+
 # ════════════════════════════════════════════════════════════════════
 #  Очередь ответов на отзывы
 # ════════════════════════════════════════════════════════════════════
@@ -2200,6 +2224,9 @@ def tab_actualize(project_id: str, config: dict) -> None:
 
     all_ids = [ct["id"] for c in countries for ct in c["cities"]]
     chosen = _act_selected(all_ids)
+    # Значения галочек читаем ДО отрисовки: те, что браузер прислал, а
+    # нарисовать в этот проход не успеем (страну свернули), иначе пропали бы.
+    _act_sync_widgets(all_ids)
     selected = [cid for cid in all_ids if cid in chosen]
 
     state = runner.read_state(project_id, "actualize")
@@ -2263,8 +2290,10 @@ def tab_actualize(project_id: str, config: dict) -> None:
         reviews_queue_block(project_id)
         return
 
-    # value не задаём: у виджета есть key, и Streamlit ругается, если состояние
-    # приходит и из session_state, и из value одновременно.
+    # По умолчанию ВКЛЮЧЕНА – прогон почти всегда делают вместе с отзывами.
+    # Ставим через session_state, а не через value: у виджета есть key, и
+    # Streamlit ругается, когда состояние приходит из обоих мест сразу.
+    st.session_state.setdefault("act-reviews", True)
     with_reviews = st.checkbox(
         "💬 Заодно проверить отзывы и подготовить ответы", key="act-reviews",
         help="Click зайдёт в раздел «Отзывы» каждой карточки, найдёт отзывы без ответа "

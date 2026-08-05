@@ -1964,16 +1964,10 @@ def test_reviews() -> None:
         eq("ключи собираются из всех секретов", llm.api_keys(), ["k1", "k2", "k3"])
         check("несколько ключей видно в описании", "3" in llm.where(), llm.where())
 
-        llm._key_cool.clear(); llm._key_last.clear()
-        key, wait = llm._pick_key(llm.api_keys())
-        eq("свободный ключ берётся сразу", (key, wait == 0), ("k1", True))
-        llm._cool("k1")
-        key, _ = llm._pick_key(llm.api_keys())
-        eq("отказавший ключ откладывается", key, "k2")
-        llm._cool("k2"); llm._cool("k3")
-        _, wait = llm._pick_key(llm.api_keys())
-        check("когда все в остывании – ждём, а не долбим", wait > 1, wait)
-        llm._key_cool.clear(); llm._key_last.clear()
+        llm._hits_by = {}; llm._next_key = 0; llm._rpm_cap = llm.START_RPM
+        got = [llm._pick_key(llm.api_keys(), "gemini-3.6-flash")[0] for _ in range(3)]
+        eq("собранные из секретов ключи чередуются по кругу", got, ["k1", "k2", "k3"])
+        llm._hits_by = {}; llm._next_key = 0
 
         _os.environ.pop("gemini_api_key_2"); _os.environ.pop("gemini_api_keys")
         eq("один ключ – тоже рабочий случай", llm.api_keys(), ["k1"])
@@ -1988,14 +1982,6 @@ def test_reviews() -> None:
 
     check("общее время на один черновик ограничено", llm.TOTAL_BUDGET_S <= 120, llm.TOTAL_BUDGET_S)
     check("кругов по моделям немного", llm.ROUNDS <= 3, llm.ROUNDS)
-    was = llm.current_gap()
-    llm._slower()
-    check("после отказа Gemini пауза растёт", llm.current_gap() > was, llm.current_gap())
-    for _ in range(20):
-        llm._faster()
-    eq("после серии удач пауза возвращается к минимальной",
-       round(llm.current_gap(), 2), round(llm.MIN_GAP_S, 2))
-    check("пауза между запросами вообще есть", llm.MIN_GAP_S > 0)
 
     # Потолок должен вмещать реальную карточку: в Ереване было 12 неотвеченных.
     many12 = [{"id": f"y{n}", "rating": 5, "full_text": "текст", "author": {"user": "Егор"}}
@@ -2007,6 +1993,135 @@ def test_reviews() -> None:
     eq("очередь: разобранное уходит из открытых", len(rv.open_items([answered])), 0)
     c = rv.counters([answered])
     eq("очередь: счётчик отвеченных", c["answered"], 1)
+# ════════════════════════════════════════════════════════════════════
+def test_gemini_keys() -> None:
+    """
+    Ключи Gemini: чередование по кругу и темп вместо гадания паузами.
+
+    Два живых наблюдения заказчика, оба верные.
+
+    Первое: «мы один ключик до конца выжимаем и идём выжимать второй». Так и
+    было. Раньше брался первый ключ, которым можно слать ПРЯМО СЕЙЧАС, а
+    первым в списке всегда идёт первый ключ – пока пауза мала, он успевал
+    освободиться к следующему отзыву, и до второго очередь не доходила.
+
+    Второе: «если падаем по лимиту, нет смысла дальше просить». Тоже так.
+    Отвергнутый запрос черновика не даёт, а время съедает. Поэтому теперь
+    считаем запросы за минуту и ждём заранее, а планку темпа узнаём по
+    первому же отказу и дальше держим сами.
+
+    И общее для обоих: лимит Google считается НА ПРОЕКТ, а не на ключ
+    («Rate limits are applied per project, not per API key»). Ключи из одного
+    проекта делят одну квоту – это Click распознаёт и говорит вслух.
+    """
+    import llm
+    print("\n▸ Ключи Gemini: круг и темп")
+
+    def reset() -> None:
+        llm._shared_quota = False
+        llm._hits_by = {}
+        llm._next_key = 0
+        llm._rpm_cap = llm.START_RPM
+        llm._calm = 0
+
+    keys, model = ["k1", "k2", "k3"], "gemini-3.6-flash"
+
+    # ── Чередование ──────────────────────────────────────────────────
+    # Все ключи свободны – значит идём строго по кругу, а не липнем к первому.
+    reset()
+    picked = []
+    for _ in range(6):
+        k, wait = llm._pick_key(keys, model)
+        picked.append(k)
+        eq("свободный ключ берётся без ожидания", round(wait), 0)
+    eq("ключи идут по кругу, а не один за всех", picked, ["k1", "k2", "k3"] * 2)
+
+    # Именно этого не было раньше: ключ, которым только что слали, не должен
+    # получать следующий запрос, пока остальные простаивают.
+    reset()
+    first, _ = llm._pick_key(keys, model)
+    llm._note_use(first, model)
+    second, _ = llm._pick_key(keys, model)
+    check("подряд один и тот же ключ не берётся", first != second, f"{first} → {second}")
+
+    # ── Темп ─────────────────────────────────────────────────────────
+    # Пока за минуту запросов меньше планки – ждать нечего.
+    reset()
+    llm._rpm_cap = 5
+    now = time.time()
+    llm._hits_by = {("k1", model): [now - 1, now - 2]}
+    eq("не добрали до планки – шлём сразу", round(llm._wait_for("k1", model)), 0)
+
+    # Добрали – ждём, пока самый старый запрос выпадет из минутного окна.
+    llm._hits_by = {("k1", model): [now - 50, now - 40, now - 30, now - 20, now - 10]}
+    wait = llm._wait_for("k1", model)
+    check("добрали планку – ждём освобождения окна", 8 < wait < 12, f"ждём {wait:.1f} сек")
+
+    # Квота у Google считается и на модель тоже: занятость одной модели не
+    # мешает другой. На этом и держится перебор моделей при отказе.
+    eq("у другой модели своя квота", round(llm._wait_for("k1", "gemini-2.5-flash")), 0)
+
+    # Отказ по лимиту опускает планку ниже темпа, на котором нас остановили,
+    # – и дальше держим её сами, не дожидаясь новых отказов.
+    reset()
+    llm._hits_by = {("k1", model): [now - i for i in range(9)]}
+    llm._slower("k1", model)
+    check("после отказа планка темпа опускается", llm.current_pace() < llm.START_RPM,
+          llm.current_pace())
+    check("но не в ноль – иначе прогон встанет", llm.current_pace() >= llm.MIN_RPM,
+          llm.current_pace())
+
+    was = llm.current_pace()
+    for _ in range(llm.CALM_STREAK):
+        llm._faster()
+    check("после серии спокойных ответов планка растёт обратно",
+          llm.current_pace() > was, llm.current_pace())
+    check("выше потолка не разгоняемся", llm.current_pace() <= llm.MAX_RPM)
+
+    # ── Общая квота ──────────────────────────────────────────────────
+    # Ключ отказал, наработав запросы сам – всё честно, квота своя.
+    reset()
+    llm._hits_by = {("k1", model): [now - i for i in range(8)]}
+    llm._note_limit("k1", keys)
+    check("свой лимит выработал сам ключ – квоту общей не считаем", not llm.shared_quota())
+
+    # А тут отказ получил ключ, которым почти не пользовались: свою минутную
+    # квоту он выбрать не мог – значит проект у ключей один.
+    reset()
+    llm._hits_by = {("k1", model): [now - i for i in range(8)], ("k2", model): [now]}
+    llm._note_limit("k2", keys)
+    check("отказ отдохнувшему ключу – квота общая", llm.shared_quota())
+
+    # С одним ключом делить квоту не с кем – выдумывать нечего.
+    reset()
+    llm._hits_by = {("k1", model): [now]}
+    llm._note_limit("k1", ["k1"])
+    check("с одним ключом общая квота не выдумывается", not llm.shared_quota())
+
+    # При общей квоте запросы всех ключей считаются вместе – иначе тремя
+    # ключами мы выбираем одну и ту же квоту втрое быстрее.
+    reset()
+    llm._shared_quota = True
+    llm._rpm_cap = 5
+    llm._hits_by = {("k1", model): [now - 50, now - 40, now - 30],
+                    ("k2", model): [now - 20, now - 10]}
+    wait = llm._wait_for("k3", model)
+    check("общая квота: чужие запросы тоже в счёт", wait > 5, f"ждём {wait:.1f} сек")
+
+    # Человеку это надо сказать словами, а не оставить в жёлтых строках лога.
+    reset()
+    llm._shared_quota = True
+    saved = llm.api_keys
+    llm.api_keys = lambda: keys
+    try:
+        text = llm.where()
+    finally:
+        llm.api_keys = saved
+    check("в «Настройках» сказано про общий лимит", "ОБЩИЙ" in text, text)
+    check("и сказано, что делать – новый проект", "НОВОМ проекте" in text, text)
+    reset()
+
+
 # ════════════════════════════════════════════════════════════════════
 def test_review_batch() -> None:
     """
@@ -2071,6 +2186,214 @@ def test_review_batch() -> None:
          app._review_queue_save, app._review_regenerate) = keep
         st.session_state.clear()
 
+
+
+# ════════════════════════════════════════════════════════════════════
+def test_module_attrs_exist() -> None:
+    """
+    Каждое `модуль.имя`, написанное в коде, обязано существовать.
+
+    Живой случай, из-за которого вкладка «Актуализация» падала на глазах у
+    заказчика: в llm.py убрали константу MIN_GAP_S (пауза уступила место
+    подсчёту запросов в минуту), а в интерфейсе на неё осталась ссылка в
+    оценке «переписать все – примерно N мин». Обычным поиском промах не
+    поймался: искали `_gap`, а имя написано прописными.
+
+    Питон такие вещи не проверяет заранее – ошибка вылезает только когда до
+    строки дойдёт выполнение. Здесь проверяем разом и заранее.
+    """
+    import ast
+    import importlib
+    print("\n▸ Обращения к модулям")
+
+    watched = ("llm", "reviews", "yb_playwright", "runner", "repo_store",
+               "projects_data", "ui_theme", "paths", "build", "kp_audit",
+               "kp_sheet", "playwright_worker")
+    mods = {}
+    for name in watched:
+        try:
+            mods[name] = importlib.import_module(name)
+        except Exception:  # noqa: BLE001 – чего нет, того не проверяем
+            pass
+
+    # Разбираем именно КОД, а не текст: иначе «build.py» из комментария
+    # выглядит как обращение build.py и даёт ложную тревогу.
+    bad: list[str] = []
+    for src in sorted(Path(".").glob("*.py")):
+        if src.name.startswith("tests_"):
+            continue
+        tree = ast.parse(src.read_text(encoding="utf-8"), filename=src.name)
+
+        # Под какими именами модули зовут ИМЕННО В ЭТОМ файле: `import llm`,
+        # `import reviews as rv`. Гадать по общему списку нельзя – в
+        # yb_playwright есть своя переменная paths, и это не модуль.
+        alias_of: dict[str, str] = {}
+        assigned: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    if a.name in mods:
+                        alias_of[a.asname or a.name] = a.name
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+                assigned.add(node.id)
+            elif isinstance(node, ast.arg):
+                assigned.add(node.arg)
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Attribute) or not isinstance(node.value, ast.Name):
+                continue
+            name = node.value.id
+            if name in assigned:          # это своя переменная, а не модуль
+                continue
+            target = mods.get(alias_of.get(name, ""))
+            if target is None or hasattr(target, node.attr):
+                continue
+            bad.append(f"{src.name}:{node.lineno} – {name}.{node.attr}")
+
+    check("в коде нет обращений к несуществующим именам модулей",
+          not bad, "; ".join(sorted(set(bad))[:8]))
+
+
+# ════════════════════════════════════════════════════════════════════
+def test_batch_browser_survives_rerun() -> None:
+    """
+    Один браузер на всю пачку отправки, а не по браузеру на ответ.
+
+    Так приложение падало во второй раз. Заказчик: «попросила массово
+    опубликовать, он еле как 6 штук сделал и сломался», в логе облака –
+    тишина и мёртвый сервер, без единой питоновской ошибки.
+
+    Причина в том, как устроен сам Streamlit: на каждую перерисовку он
+    создаёт для главного скрипта НОВЫЙ модуль (`self._new_module("__main__")`)
+    и выполняет файл заново. Значит любое `_X = {}` на верхнем уровне после
+    каждого шага снова пустое. Ручка открытого браузера лежала именно там, а
+    пачка обрабатывает по одному ответу за перерисовку – и ссылка терялась
+    ровно между ответами. Старый Chromium никто не закрывал, на следующий
+    ответ поднимался ещё один. Шесть ответов – шесть браузеров, и облако
+    убивало приложение по памяти. Счётчик «перезапускать каждые пять» не
+    спасал: он обнулялся тем же способом.
+
+    Симптомов было три, причина одна. Не срабатывало «карточка этого города уже
+    открыта» – каждый ответ грузил её заново, хотя пять отзывов Еревану должны
+    уходить на одну страницу. Не доживал до пяти счётчик перезапуска. И старый
+    браузер никто не закрывал.
+
+    Поэтому проверяем не заплатку, а нужное поведение целиком: один браузер на
+    пачку, одна загрузка карточки на город, новая вкладка на смене города – и
+    ручка живёт в session_state, а не в переменной модуля.
+    """
+    import streamlit as st
+    import streamlit_app as app
+    import reviews as rv
+    import yb_playwright as yb
+    print("\n▸ Браузер пачки переживает перерисовку")
+
+    made = {"browsers": 0, "closed": 0, "workers": 0, "tabs": 0, "loads": []}
+
+    class FakeBrowser:
+        def __init__(self, project_id, headless=True):
+            self.page = object()
+            made["browsers"] += 1
+
+        def start(self):
+            return None
+
+        def new_page(self):
+            made["tabs"] += 1
+            self.page = object()
+            return self.page
+
+        def save_session(self):
+            return None
+
+        def close(self):
+            made["closed"] += 1
+
+    class FakeWorker:
+        def __init__(self):
+            made["workers"] += 1
+            self._alive = True
+
+        def alive(self):
+            return self._alive
+
+        def call(self, func, *a, **k):
+            return func(*a, **k)
+
+        def stop(self):
+            self._alive = False
+
+    def fake_publish(page, url, review_id, text, original, navigate):
+        if navigate:
+            made["loads"].append(url)      # сколько раз реально грузили карточку
+        return {"status": "answered", "reason": ""}
+
+    keep = (app.PlaywrightWorker, yb.YbBrowser, yb.publish_review_answer,
+            app.get_settings, app._review_queue_save)
+    app.PlaywrightWorker = FakeWorker
+    yb.YbBrowser = FakeBrowser
+    yb.publish_review_answer = fake_publish
+    app.get_settings = lambda pid: {"headless": True}
+    app._review_queue_save = lambda *a, **k: None
+
+    try:
+        st.session_state.clear()
+        # Пять отзывов Еревану и два Баку – ровно тот расклад, про который
+        # спросила заказчик: «зачем каждый раз открывать одну и ту же карточку».
+        plan = [("Ереван", "https://yandex.ru/sprav/1/p/edit/reviews/")] * 5 \
+             + [("Баку", "https://yandex.ru/sprav/2/p/edit/reviews/")] * 2
+        items = [{"reviewId": f"s{n}", "status": rv.DRAFTED, "draft": "готовый ответ.",
+                  "city": city, "author": "Иван", "text": "отзыв", "reviewsUrl": url}
+                 for n, (city, url) in enumerate(plan)]
+
+        def in_module_globals() -> list[str]:
+            """
+            Где ещё, кроме session_state, лежат браузер и его поток.
+
+            Это и есть проверка на ту самую поломку: всё, что найдётся здесь,
+            в облаке обнулится на следующей же перерисовке, а живой Chromium
+            останется висеть в памяти.
+            """
+            found = []
+            for name, val in list(vars(app).items()):
+                if name.startswith("__"):
+                    continue
+                seen = [val] if not isinstance(val, dict) else list(val.values())
+                for v in seen:
+                    parts = v if isinstance(v, tuple) else (v,)
+                    if any(isinstance(x, (FakeBrowser, FakeWorker)) for x in parts):
+                        found.append(name)
+                        break
+            return found
+
+        # Шесть ответов подряд – ровно тот случай, на котором всё легло.
+        for n, it in enumerate(items, 1):
+            app._send_one("APS", it, it["draft"])
+            stale = in_module_globals()
+            check(f"ответ {n}: браузер не осел в переменных модуля",
+                  not stale, f"нашёлся в {stale}")
+
+        eq("на всю пачку один браузер", made["browsers"], 1)
+        eq("карточка грузится раз на город, а не на каждый ответ",
+           made["loads"], ["https://yandex.ru/sprav/1/p/edit/reviews/",
+                           "https://yandex.ru/sprav/2/p/edit/reviews/"])
+        eq("вкладка пересоздаётся на смене города", made["tabs"], 2)
+        eq("все семь ответов ушли",
+           [i.get("status") for i in items], [rv.ANSWERED] * 7)
+
+        # Ручка обязана лежать в session_state: только оно переживает
+        # перерисовку. Ровно этого и не было.
+        box = st.session_state.get(app._BROWSER_BOX) or {}
+        check("ручка браузера живёт в session_state", "APS" in box, list(box))
+
+        app._batch_browser_close("APS")
+        eq("после пачки браузер закрыт", made["closed"], 1)
+        check("и ручка убрана из session_state",
+              not (st.session_state.get(app._BROWSER_BOX) or {}).get("APS"))
+    finally:
+        (app.PlaywrightWorker, yb.YbBrowser, yb.publish_review_answer,
+         app.get_settings, app._review_queue_save) = keep
+        st.session_state.clear()
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -2183,7 +2506,10 @@ def main() -> int:
         test_yandex_domain()
         test_aps_project()
         test_reviews()
+        test_gemini_keys()
         test_review_batch()
+        test_module_attrs_exist()
+        test_batch_browser_survives_rerun()
         test_one_build()
         test_actualize_selection()
         test_add_post_click_on_real_page()

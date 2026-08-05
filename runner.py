@@ -42,7 +42,7 @@ import yb_playwright as yb
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-06-kp-sheet-pick"
+BUILD = "2026-08-06-kp-audit"
 
 ROOT = Path(__file__).parent
 USERS_DATA = paths.data_root()
@@ -1216,6 +1216,139 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
         _append_log(project_id, "ERROR", f"💥 Критическая ошибка: {e}")
         save_report("crashed")
         push_state("error", "", str(e))
+    finally:
+        try:
+            browser.close()
+        except Exception:
+            pass
+        p_stop(project_id).unlink(missing_ok=True)
+        _release_lock(project_id)
+        yb.set_logger(None)
+
+
+# ════════════════════════════════════════════════════════════════════
+#  СБОР ОРГАНИЗАЦИЙ (для сверки с КП)
+# ════════════════════════════════════════════════════════════════════
+
+def _store_key_companies(project_id: str) -> str:
+    return f"companies-{project_id}"
+
+
+def load_companies(project_id: str) -> dict:
+    """
+    Последний собранный список организаций аккаунта.
+
+    Хранится снаружи (репозиторий данных), поэтому переживает перезапуск
+    облака: собирать 200 карточек заново из-за перезагрузки контейнера –
+    впустую потраченные десять минут.
+    """
+    try:
+        import repo_store
+        data = repo_store.load(_store_key_companies(project_id))
+    except Exception:  # noqa: BLE001
+        data = None
+    return data or {}
+
+
+def _save_companies(project_id: str, payload: dict) -> str:
+    try:
+        import repo_store
+        return repo_store.save(_store_key_companies(project_id), payload,
+                               f"Click: организации {project_id}")
+    except Exception as e:  # noqa: BLE001
+        return f"сохранить наружу не вышло: {e}"
+
+
+def start_collect(project_id: str, headless: bool = True, with_cards: bool = False,
+                  card_ids: list[str] | None = None) -> tuple[bool, str]:
+    """
+    Собрать организации аккаунта из раздела «Организации».
+
+    with_cards – заодно открыть карточки: список отдаёт те же поля, но если
+    Яндекс что-то в нём придержит, карточка покажет всё наверняка.
+    card_ids – открыть только эти карточки (например, только спорные).
+    """
+    with _lock:
+        if is_running(project_id):
+            return False, "Уже идёт другой прогон."
+        thread = _threads.get(project_id)
+        if thread and thread.is_alive():
+            return False, "Предыдущий прогон ещё не завершился."
+
+        run_id = f"col-{int(time.time() * 1000)}"
+        if not _acquire_lock(project_id, run_id):
+            return False, ("Прогон уже идёт – запущен другим окном или другой копией Click. "
+                           "Если та копия закрыта, подождите пару минут: лок освободится сам.")
+
+        p_stop(project_id).unlink(missing_ok=True)
+        p_live_log(project_id).write_text("", encoding="utf-8")
+        _LOG_KIND[project_id] = "collect"
+        _write_state(project_id, {
+            "runId": run_id, "action": "collect", "status": "running",
+            "ownerPid": os.getpid(), "startedAt": _now_iso(), "finishedAt": None,
+            "total": 0, "current": 0, "currentCity": "", "reportName": None,
+            "totals": {}, "error": None,
+        })
+        t = threading.Thread(target=_collect_worker,
+                             args=(project_id, run_id, headless, with_cards, list(card_ids or [])),
+                             daemon=True, name=f"click-collect-{project_id}")
+        _threads[project_id] = t
+        t.start()
+        return True, "Читаю организации в Яндексе…"
+
+
+def _collect_worker(project_id: str, run_id: str, headless: bool,
+                    with_cards: bool, card_ids: list[str]) -> None:
+    yb.set_logger(lambda level, msg: _append_log(project_id, level, msg))
+    started_at = _now_iso()
+    start_ts = time.time()
+    companies: list[dict] = []
+
+    def push_state(status: str, current: int = 0, total: int = 0,
+                   what: str = "", err: str | None = None) -> None:
+        _write_state(project_id, {
+            "runId": run_id, "action": "collect", "status": status, "ownerPid": os.getpid(),
+            "startedAt": started_at, "finishedAt": None if status == "running" else _now_iso(),
+            "total": total, "current": current, "currentCity": what, "reportName": None,
+            "totals": {"companies": len(companies)}, "error": err,
+        })
+
+    browser = yb.YbBrowser(project_id, headless=headless)
+    try:
+        _append_log(project_id, "INFO", "СБОР ОРГАНИЗАЦИЙ · читаю раздел «Организации»")
+        browser.start()
+        page = browser.page
+        companies = yb.collect_companies(page, log_every=1)
+        _append_log(project_id, "INFO", f"СОБРАНО · организаций: {len(companies)}")
+        push_state("running", len(companies), len(companies), "")
+
+        # Карточки открываем по просьбе – это долго, по 3-4 секунды на каждую.
+        wanted = [c for c in companies
+                  if not card_ids or str(c.get("id")) in set(card_ids)] if (with_cards or card_ids) else []
+        for n, co in enumerate(wanted, 1):
+            if p_stop(project_id).exists():
+                _append_log(project_id, "WARN", "⏹ Остановлено человеком")
+                break
+            card = yb.read_company_card(page, f"https://yandex.ru/sprav/{co.get('id')}/p/edit/")
+            if card.get("error"):
+                _append_log(project_id, "WARN", f"  🟡 {co.get('name')} · {card['error']}")
+            else:
+                co.update({k: v for k, v in card.items() if v not in ("", [], {}, None)})
+                co["fromCard"] = True
+            _append_log(project_id, "INFO",
+                        f"  📇 {n}/{len(wanted)} · {co.get('name', '')} · {co.get('address', '')[:60]}")
+            push_state("running", n, len(wanted), co.get("name", ""))
+            _sleep_interruptible(0.4, lambda: p_stop(project_id).exists())
+
+        payload = {"collectedAt": _now_iso(), "count": len(companies),
+                   "withCards": bool(wanted), "companies": companies}
+        where = _save_companies(project_id, payload)
+        _append_log(project_id, "INFO", f"ИТОГИ · организаций {len(companies)} · {where}")
+        browser.save_session()
+        push_state("done", len(companies), len(companies), "")
+    except Exception as e:  # noqa: BLE001
+        _append_log(project_id, "ERROR", f"💥 Не собралось: {e}")
+        push_state("error", 0, 0, "", str(e))
     finally:
         try:
             browser.close()

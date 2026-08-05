@@ -394,6 +394,30 @@ def main() -> int:
             check("детали не разбиты по странам – один список",
                   page.get_by_text("успешно", exact=False).count() == 0)
 
+            # ── Сверка с Яндексом ──
+            # Вкладка ходит и в Google, и в Яндекс; на тестовой машине нет ни
+            # ключа таблицы, ни сессии. Проверяем, что она из-за этого не падает,
+            # а честно объясняет, чего не хватает.
+            print("\n▸ Сверка: вкладка открывается")
+            page.get_by_text("🔎 Сверка", exact=True).first.click()
+            page.wait_for_timeout(4000)
+            check("вкладка «Сверка» не упала",
+                  page.get_by_text("Traceback", exact=False).count() == 0
+                  and page.get_by_text("StreamlitAPIException", exact=False).count() == 0)
+            check("заголовок сверки на месте",
+                  page.get_by_text("Сверка КП с организациями Яндекса", exact=False).count() > 0)
+            check("кнопка чтения организаций есть",
+                  page.get_by_role("button", name="Прочитать организации", exact=False).count() > 0)
+            check("без таблицы КП сказано, где её настроить",
+                  page.get_by_text("Источник городов", exact=False).count() > 0
+                  or page.get_by_text("Лист КП", exact=False).count() > 0)
+            check("раздел «Сверка» идёт после «Настроек»",
+                  page.evaluate("""() => {
+                      const t = [...document.querySelectorAll('.st-key-click-tabs label')]
+                        .map(l => l.innerText.trim());
+                      return t.indexOf('🔎 Сверка') === t.length - 1;
+                  }"""))
+
             browser.close()
     finally:
         if proc is not None:

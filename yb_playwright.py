@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import re
 import subprocess
@@ -48,7 +49,7 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-06-kp-sheet-pick"
+BUILD = "2026-08-06-kp-audit"
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -1725,6 +1726,182 @@ def upload_product_photos(page: Page, task: dict, photo_urls: list[str], temp_di
         warn(f"  🟡 Подтверждение неполное: счётчик вырос на {max(delta, 0)}/{len(local)}. Проверьте вручную.")
 
     return result
+
+
+# ════════════════════════════════════════════════════════════════════
+#  СВЕРКА КАРТОЧЕК С КП
+# ════════════════════════════════════════════════════════════════════
+
+COMPANIES_URL = "https://yandex.ru/sprav/companies/"
+
+# Яндекс кладёт готовые данные страницы в window.__PRELOAD_DATA: там и список
+# организаций, и карточка целиком – название, адрес, телефоны, почта, сайты.
+# Это ровно то, что рисуется на экране, только без разбора вёрстки: строки
+# списка дорисовываются скриптом и в разметке их нет, а классы у Яндекса
+# меняются от сборки к сборке. Из огромного объекта забираем нужное прямо в
+# браузере – тащить наружу мегабайт настроек пользователя незачем.
+_SLIM_JS = r"""
+  const one = (co) => {
+    const addr = co.address || {};
+    const fmt = (addr.formatted || {}).value || '';
+    const urls = co.urls || [];
+    const main = urls.filter(u => u && u.type === 'main').map(u => u.value).filter(Boolean);
+    const social = {};
+    for (const u of urls) {
+      if (u && u.type === 'social' && u.social_network) social[u.social_network] = u.value || '';
+    }
+    // Название повторяется по одному на язык – в списке оно нужно один раз.
+    const names = [...new Set((co.names || [])
+      .map(n => ((n || {}).value || {}).value || '')
+      .filter(Boolean))];
+    return {
+      id: String(co.id || co.permanent_id || ''),
+      type: co.type || '',
+      publishing: co.publishing_status || '',
+      name: co.displayName || names[0] || '',
+      names: names,
+      address: fmt,
+      regionCode: addr.region_code || '',
+      geoId: addr.geo_id || 0,
+      site: main[0] || '',
+      sites: main,
+      social: social,
+      emails: (co.emails || []).filter(Boolean),
+      phones: (co.phones || []).filter(p => p && !p.hide)
+                               .map(p => p.formatted || p.number || '').filter(Boolean),
+      rubrics: (co.rubrics || []).map(r => r.name || '').filter(Boolean),
+      noAccess: !!co.noAccess,
+      rating: co.rating === undefined ? null : co.rating,
+    };
+  };
+"""
+
+_COMPANIES_JS = r"""
+() => {
+  __SLIM__
+  const st = ((window.__PRELOAD_DATA || {}).initialState) || {};
+  const cl = st.companiesList;
+  if (!cl || !Array.isArray(cl.listCompanies)) return null;
+  return {
+    page: cl.page || 1,
+    limit: cl.limit || 0,
+    total: cl.total || 0,
+    items: cl.listCompanies.map(one),
+  };
+}
+""".replace("__SLIM__", _SLIM_JS)
+
+_CARD_JS = r"""
+() => {
+  __SLIM__
+  const st = ((window.__PRELOAD_DATA || {}).initialState) || {};
+  const co = ((st.edit || {}).info || {}).company;
+  if (!co) return null;
+  return one(co);
+}
+""".replace("__SLIM__", _SLIM_JS)
+
+# Запасной разбор карточки по вёрстке – на случай, если Яндекс перестанет
+# отдавать __PRELOAD_DATA. Поля подписаны: «Веб-сайт», «Телефон», «Электронная
+# почта». Регулярки только по русским буквам: \w в JS кириллицу не ловит.
+_CARD_DOM_JS = r"""
+() => {
+  const clean = (t) => (t || '').replace(/\s+/g, ' ').trim();
+  const out = { phones: [], names: [], site: '', sites: [], emails: [], social: {},
+                address: '', name: '', rubrics: [], id: '', type: '', publishing: '',
+                noAccess: false, rating: null };
+  for (const label of document.querySelectorAll('.ya-business-input__label')) {
+    const wrap = label.closest('.ya-business-input') || label.parentElement?.parentElement;
+    if (!wrap) continue;
+    const field = wrap.querySelector('input, textarea');
+    if (!field) continue;
+    const name = clean(label.textContent);
+    const value = clean(field.value);
+    if (!value) continue;
+    if (/^веб-?сайт$/i.test(name)) { if (!out.site) out.site = value; out.sites.push(value); }
+    else if (/^телефон$/i.test(name)) out.phones.push(value);
+    else if (/почт/i.test(name)) out.emails.push(value);
+    else if (/название/i.test(name)) out.names.push(value);
+    else if (/^(вконтакте|telegram|whatsapp|youtube|одноклассники)$/i.test(name))
+      out.social[name.toLowerCase()] = value;
+  }
+  out.names = [...new Set(out.names)];
+  out.name = out.names[0] || '';
+  const addr = document.querySelector('.InfoAddress input, [class*="Address"] input');
+  if (addr) out.address = clean(addr.value);
+  return out;
+}
+"""
+
+
+def _companies_page(page: Page, num: int, limit: int) -> dict | None:
+    """Одна страница списка организаций. None – Яндекс не отдал данные."""
+    url = f"{COMPANIES_URL}?no_redirect=1&page={num}&limit={limit}"
+    page.goto(url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT)
+    wait_ui_ready(page)
+    if looks_like_login_page(page):
+        raise RuntimeError("Яндекс открыл страницу входа – сессия закончилась. "
+                           "Зайдите заново в «Настройки» → «Вход в Яндекс».")
+    return page.evaluate(_COMPANIES_JS)
+
+
+def collect_companies(page: Page, log_every: int = 0, page_limit: int = 50) -> list[dict]:
+    """
+    Все организации аккаунта из раздела «Организации».
+
+    Список постраничный. Сколько страниц – Яндекс говорит сам (total и limit),
+    поэтому не гадаем: читаем первую, считаем страницы, добираем остальные.
+    Размер страницы Яндекс может урезать до своего – берём тот, что вернулся,
+    иначе на limit=50 при фактических 10 мы потеряли бы четыре пятых списка.
+    """
+    first = _companies_page(page, 1, page_limit)
+    if first is None:
+        raise RuntimeError("Раздел «Организации» не отдал список. "
+                           "Проверьте вход в Яндекс: возможно, сессия закончилась.")
+
+    items: list[dict] = list(first.get("items") or [])
+    total = int(first.get("total") or len(items))
+    limit = int(first.get("limit") or len(items) or page_limit)
+    pages = max(1, math.ceil(total / limit)) if limit else 1
+    if log_every:
+        info(f"  📃 Организаций в аккаунте: {total} · страниц: {pages}")
+
+    seen = {c.get("id") for c in items}
+    for num in range(2, pages + 1):
+        chunk = _companies_page(page, num, limit)
+        got = (chunk or {}).get("items") or []
+        if not got:
+            warn(f"  🟡 Страница {num} списка организаций пришла пустой – останавливаемся")
+            break
+        for co in got:
+            if co.get("id") in seen:
+                continue
+            seen.add(co.get("id"))
+            items.append(co)
+        if log_every:
+            info(f"  📃 Прочитано {len(items)} из {total}…")
+    if len(items) < total:
+        warn(f"  🟡 Прочитано {len(items)} организаций из {total}, которые обещал Яндекс")
+    return items
+
+
+def read_company_card(page: Page, company_url: str) -> dict:
+    """Название, адрес, сайт, телефоны и почта одной карточки."""
+    url = build_edit_url(company_url) or company_url
+    page.goto(url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT)
+    wait_ui_ready(page)
+    if is_404(page):
+        return {"error": "Страница карточки не найдена (404)", "url": url}
+    if looks_like_login_page(page):
+        return {"error": "Открылась страница входа – сессия не активна", "url": url}
+    data = page.evaluate(_CARD_JS)
+    if not data:
+        page.wait_for_timeout(1500)
+        data = page.evaluate(_CARD_DOM_JS) or {}
+        data["fromDom"] = True
+    data["url"] = url
+    data["companyId"] = data.get("id") or extract_company_id(url)
+    return data
 
 
 # ════════════════════════════════════════════════════════════════════

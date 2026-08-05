@@ -1991,8 +1991,10 @@ def reviews_queue_block(project_id: str) -> None:
         if redo and llm.is_configured() and not running:
             note = (f"Неудачных черновиков: {len(broken)} из {len(redo)}. " if broken
                     else "")
+            # Оценка считается по текущему темпу Gemini (запросов в минуту) –
+            # это и есть то, что определяет время: черновик на запрос.
             st.caption(note + "Переписать все разом – примерно "
-                       f"{max(1, round(len(redo) * llm.MIN_GAP_S / 60))} мин. "
+                       f"{max(1, round(len(redo) / max(1.0, llm.current_pace())))} мин. "
                        "Пригодится после правки промпта в «Настройках».")
             c_all, c_bad = st.columns(2)
             todo = None

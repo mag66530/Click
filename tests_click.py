@@ -2117,6 +2117,72 @@ def test_review_batch() -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+def test_module_attrs_exist() -> None:
+    """
+    Каждое `модуль.имя`, написанное в коде, обязано существовать.
+
+    Живой случай, из-за которого вкладка «Актуализация» падала на глазах у
+    заказчика: в llm.py убрали константу MIN_GAP_S (пауза уступила место
+    подсчёту запросов в минуту), а в интерфейсе на неё осталась ссылка в
+    оценке «переписать все – примерно N мин». Обычным поиском промах не
+    поймался: искали `_gap`, а имя написано прописными.
+
+    Питон такие вещи не проверяет заранее – ошибка вылезает только когда до
+    строки дойдёт выполнение. Здесь проверяем разом и заранее.
+    """
+    import ast
+    import importlib
+    print("\n▸ Обращения к модулям")
+
+    watched = ("llm", "reviews", "yb_playwright", "runner", "repo_store",
+               "projects_data", "ui_theme", "paths", "build", "kp_audit",
+               "kp_sheet", "playwright_worker")
+    mods = {}
+    for name in watched:
+        try:
+            mods[name] = importlib.import_module(name)
+        except Exception:  # noqa: BLE001 – чего нет, того не проверяем
+            pass
+
+    # Разбираем именно КОД, а не текст: иначе «build.py» из комментария
+    # выглядит как обращение build.py и даёт ложную тревогу.
+    bad: list[str] = []
+    for src in sorted(Path(".").glob("*.py")):
+        if src.name.startswith("tests_"):
+            continue
+        tree = ast.parse(src.read_text(encoding="utf-8"), filename=src.name)
+
+        # Под какими именами модули зовут ИМЕННО В ЭТОМ файле: `import llm`,
+        # `import reviews as rv`. Гадать по общему списку нельзя – в
+        # yb_playwright есть своя переменная paths, и это не модуль.
+        alias_of: dict[str, str] = {}
+        assigned: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    if a.name in mods:
+                        alias_of[a.asname or a.name] = a.name
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+                assigned.add(node.id)
+            elif isinstance(node, ast.arg):
+                assigned.add(node.arg)
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Attribute) or not isinstance(node.value, ast.Name):
+                continue
+            name = node.value.id
+            if name in assigned:          # это своя переменная, а не модуль
+                continue
+            target = mods.get(alias_of.get(name, ""))
+            if target is None or hasattr(target, node.attr):
+                continue
+            bad.append(f"{src.name}:{node.lineno} – {name}.{node.attr}")
+
+    check("в коде нет обращений к несуществующим именам модулей",
+          not bad, "; ".join(sorted(set(bad))[:8]))
+
+
+# ════════════════════════════════════════════════════════════════════
 def test_batch_browser_survives_rerun() -> None:
     """
     Один браузер на всю пачку отправки, а не по браузеру на ответ.
@@ -2369,6 +2435,7 @@ def main() -> int:
         test_reviews()
         test_gemini_keys()
         test_review_batch()
+        test_module_attrs_exist()
         test_batch_browser_survives_rerun()
         test_one_build()
         test_actualize_selection()

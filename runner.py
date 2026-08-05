@@ -1179,8 +1179,9 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                 _archive(fp)
 
         browser.save_session()
-        save_report("finished")
-        push_state("stopped" if stopped else "done", "")
+        # Итоги пишем ДО сохранения отчёта: отчёт забирает с собой снимок лога,
+        # и раньше последние строки (ИТОГИ, ОТЗЫВЫ, ОЧЕРЕДЬ) в скачанный лог
+        # не попадали – заказчик открывала файл и не находила там концовки.
         _append_log(project_id, "INFO",
                     f"ИТОГИ · ✅ {counters['actualized']} · ⊝ {counters['notNeeded']} · ❌ {counters['failed']}")
         if with_reviews:
@@ -1199,6 +1200,12 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                     _append_log(project_id, "INFO", f"ОЧЕРЕДЬ · {where}")
                 except Exception as e:  # noqa: BLE001
                     _append_log(project_id, "WARN", f"ОЧЕРЕДЬ · сохранить наружу не вышло: {e}")
+                _append_log(project_id, "INFO",
+                            "ОЧЕРЕДЬ · ответы ждут вас в разделе «🔄 Актуализация», "
+                            "карточка «Ответы на отзывы» наверху страницы")
+
+        save_report("finished")
+        push_state("stopped" if stopped else "done", "")
     except Exception as e:  # noqa: BLE001
         _append_log(project_id, "ERROR", f"💥 Критическая ошибка: {e}")
         save_report("crashed")

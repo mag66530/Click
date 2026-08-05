@@ -39,7 +39,7 @@ from playwright_worker import PlaywrightWorker
 # обновлении «на лету»), интерфейс собирается из новой разметки и старого CSS –
 # и кнопки либо смещаются, либо становятся невидимыми. Проверяем метку и, если
 # она не совпала, перезагружаем модуль сами.
-UI_BUILD = "2026-08-05-reviews"
+UI_BUILD = "2026-08-05-reviews-fix"
 if getattr(T, "BUILD", "") != UI_BUILD:
     import importlib
 
@@ -1515,17 +1515,30 @@ _REVIEW_LABELS = {
 
 
 def _review_queue_state(project_id: str) -> list[dict]:
-    """Очередь держим в session_state: перечитывать файл на каждый клик незачем."""
+    """
+    Очередь читаем с диска при каждой перерисовке, а НЕ кэшируем в session_state.
+
+    Первая версия кэшировала – и это была главная поломка: человек открывал
+    «Актуализацию» до прогона (очередь пустая, запомнили), запускал прогон,
+    прогон писал черновики в файл, а на экране по-прежнему висел запомненный
+    пустой список. Черновики были, показать их было некому.
+
+    Файл маленький, читать его на каждый клик дешевле, чем ловить такие
+    несоответствия. Правки человека сохраняются сразу же, так что потерять
+    их между перерисовками нельзя.
+    """
     key = f"_rvq_{project_id}"
-    if key not in st.session_state:
-        st.session_state[key] = rv.load_queue(project_id)
+    st.session_state[key] = rv.load_queue(project_id)
     return st.session_state[key]
 
 
-def _review_queue_save(project_id: str, push: bool = True) -> None:
-    items = st.session_state.get(f"_rvq_{project_id}") or []
+def _review_queue_save(project_id: str, items: list[dict] | None = None,
+                       push: bool = True) -> None:
+    if items is None:
+        items = st.session_state.get(f"_rvq_{project_id}") or []
     try:
         rv.save_queue(project_id, items, push=push)
+        st.session_state[f"_rvq_{project_id}"] = items
     except Exception as e:  # noqa: BLE001
         st.session_state["_store_error"] = str(e)
 
@@ -1625,6 +1638,9 @@ def reviews_queue_block(project_id: str) -> None:
                 if bad:
                     st.warning("В ответе есть слова, которые промпт запрещает: "
                                + ", ".join(f"«{w}»" for w in bad))
+                if rv.looks_cut_off(text):
+                    st.warning("Похоже, ответ оборван на середине фразы. "
+                               "Нажмите «Переписать» – или допишите сами.")
 
                 c1, c2, c3 = st.columns(3)
                 if c1.button("✅ Отправить", key=f"rv-send-{n}", type="primary",
@@ -2741,9 +2757,19 @@ def show_main(project_id: str) -> None:
     current = st.session_state.get("section_name", SECTIONS[0])
     if current not in SECTIONS:
         current = SECTIONS[0]
+    # Счётчик на вкладке «Актуализация»: после прогона с отзывами человек
+    # иначе не догадается, что где-то ждут готовые ответы. Первый боевой
+    # прогон это и показал – черновики были, а найти их было негде.
+    waiting = len(rv.open_items(rv.load_queue(project_id)))
+
+    def _section_label(name: str) -> str:
+        if name == SECTIONS[2] and waiting:
+            return f"{name} · 💬 {waiting}"
+        return name
+
     with st.container(key="click-tabs"):
         section = st.radio("Раздел", SECTIONS, index=SECTIONS.index(current), horizontal=True,
-                           label_visibility="collapsed",
+                           label_visibility="collapsed", format_func=_section_label,
                            key=f"main-section-{st.session_state.get('nav-gen', 0)}")
     st.session_state["section_name"] = section
 

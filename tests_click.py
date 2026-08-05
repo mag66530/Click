@@ -1490,11 +1490,12 @@ def test_reviews() -> None:
     eq("отбор: четвёрка и единица – человеку", [i["id"] for i in box["needs_human"]], ["b", "c"])
     eq("отбор: отзыв без текста пропускаем", [i["id"] for i in box["no_text"]], ["d"])
 
+    over = rv.MAX_DRAFTS_PER_CITY + 3
     many = [{"id": f"x{n}", "rating": 5, "full_text": "текст", "author": {"user": "Егор"}}
-            for n in range(9)]
+            for n in range(over)]
     box = rv.triage(many)
     eq("потолок черновиков на город", len(box["to_draft"]), rv.MAX_DRAFTS_PER_CITY)
-    eq("остальные помечены как сверх потолка", len(box["over_limit"]), 9 - rv.MAX_DRAFTS_PER_CITY)
+    eq("остальные помечены как сверх потолка", len(box["over_limit"]), 3)
 
     # ─── имя автора ───
     eq("имя: обычное берём как есть", rv.nice_name("Егор Севастьянов"), "Егор Севастьянов")
@@ -1546,6 +1547,45 @@ def test_reviews() -> None:
     eq("очередь: город записан", made_items[0]["city"], "Москва")
     merged = rv.merge(made_items, made_items)
     eq("очередь: повторный прогон не плодит дубли", len(merged), 1)
+
+
+    check("обрыв на середине фразы виден", rv.looks_cut_off("Благодарим за отзыв и"))
+    check("целая фраза обрывом не считается", not rv.looks_cut_off("Благодарим за отзыв."))
+    check("пустой текст обрывом не считается", not rv.looks_cut_off(""))
+
+    # ─── разбор ответа Gemini ───
+    # Всё это – разбор первого боевого прогона: там обрезало ВСЕ 13 черновиков,
+    # а в пару из них просочились размышления модели по-английски.
+    import llm
+    text, finish = llm._text_from({"candidates": [{"content": {"parts": [
+        {"text": "Разбираю структуру...", "thought": True},
+        {"text": "Уважаемый Егор!\nБлагодарим за отзыв."}]}, "finishReason": "STOP"}]})
+    eq("ответ Gemini: размышления не попадают в текст",
+       text, "Уважаемый Егор!\nБлагодарим за отзыв.")
+    eq("ответ Gemini: причина завершения видна", finish, "STOP")
+
+    text, finish = llm._text_from({"candidates": [{"content": {"parts": [
+        {"text": "думаю", "thought": True}]}, "finishReason": "STOP"}]})
+    eq("ответ Gemini: одни размышления – пустой текст", text, "")
+
+    _, finish = llm._text_from({"candidates": [{"content": {"parts": [
+        {"text": "Уважаемый Егор! Благодарим за"}]}, "finishReason": "MAX_TOKENS"}]})
+    eq("ответ Gemini: обрыв распознаётся", finish, "MAX_TOKENS")
+
+    eq("Gemini 3.x – thinkingLevel", llm._thinking_config("gemini-3.6-flash"),
+       {"thinkingLevel": "minimal"})
+    eq("Gemini 2.5 – thinkingBudget", llm._thinking_config("gemini-2.5-flash"),
+       {"thinkingBudget": 0})
+    eq("Gemini: слушаем подсказку retryDelay",
+       llm._retry_after({"error": {"details": [{"retryDelay": "27s"}]}}), 27.0)
+    eq("Gemini: без подсказки – ноль", llm._retry_after({"error": {}}), 0.0)
+    check("между запросами к Gemini есть пауза", llm.MIN_GAP_S >= 4, llm.MIN_GAP_S)
+
+    # Потолок должен вмещать реальную карточку: в Ереване было 12 неотвеченных.
+    many12 = [{"id": f"y{n}", "rating": 5, "full_text": "текст", "author": {"user": "Егор"}}
+              for n in range(12)]
+    eq("потолок вмещает 12 неотвеченных с одной карточки",
+       len(rv.triage(many12)["to_draft"]), 12)
 
     answered = dict(made_items[0], status=rv.ANSWERED)
     eq("очередь: разобранное уходит из открытых", len(rv.open_items([answered])), 0)

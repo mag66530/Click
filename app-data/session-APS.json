@@ -71,21 +71,11 @@
       "sameSite": "None"
     },
     {
-      "name": "_yasc",
-      "value": "i5bjejS9LoLEM2sj0FteYDlxKvroXz8WKGltQN3ftzcrkZdj7f60wZvMth6jkNVPnLB4",
-      "domain": ".ya.ru",
-      "path": "/",
-      "expires": 1820495278.053,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "yp",
-      "value": "1801609620.sz.1366x768x1#1785936498.nlc.0",
+      "value": "1801609620.sz.1366x768x1#1785940688.nlc.0",
       "domain": ".ya.ru",
       "path": "/",
-      "expires": 1820495898.15,
+      "expires": 1820500088.095,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -95,27 +85,37 @@
       "value": "YwA=",
       "domain": ".ya.ru",
       "path": "/",
-      "expires": 1820495898.15,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "bh",
-      "value": "YJnwzNMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
-      "domain": ".ya.ru",
-      "path": "/",
-      "expires": 1820495897.15,
+      "expires": 1820500088.095,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "_yasc",
-      "value": "gGI0hymTmqdRXxk3NtUwc/evhPh8EC9ateQMZQ6yvn1ZKw7Pbn5wxPdF0tCVlsrKYuWX",
+      "value": "aYm0+YrdbViq+/reWOljbI8ucCbFd/RZgqD1lHIuV29/ebHYzBa7uzQWZcn5kZbPssm2",
+      "domain": ".ya.ru",
+      "path": "/",
+      "expires": 1820500088.095,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "bh",
+      "value": "YPeQzdMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "domain": ".ya.ru",
+      "path": "/",
+      "expires": 1820500087.095,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_yasc",
+      "value": "a+7KIZrDtESihfbZW3+DVhIPGV4L8KF8A+KbVobiNt38QXLg5FOi4pYwy3sKn8TZMLgZ",
       "domain": ".yandex.net",
       "path": "/",
-      "expires": 1820495276.178,
+      "expires": 1820500085.681,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -251,16 +251,6 @@
       "sameSite": "None"
     },
     {
-      "name": "bh",
-      "value": "YM2AzdMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
-      "domain": ".yandex.com",
-      "path": "/",
-      "expires": 1820497997,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "_yasc",
       "value": "FpRpcpKg6GY3kmoI3eWurpFI0u3TcL+kS6p/gBqjejniaH48OEXaAjn49Ky+QG+SuiA4427aHJpe",
       "domain": ".yandex.com",
@@ -271,11 +261,21 @@
       "sameSite": "None"
     },
     {
+      "name": "bh",
+      "value": "YPSQzdMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "domain": ".yandex.com",
+      "path": "/",
+      "expires": 1820500084,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
       "name": "receive-cookie-deprecation",
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817474488,
+      "expires": 1817476150,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -481,63 +481,13 @@
       "sameSite": "None"
     },
     {
-      "name": "my",
-      "value": "YwA=",
+      "name": "_yasc",
+      "value": "8JS/sHH80x8bCED/z6/6tHskBygQnubUSm1Gnrur0QZc+xmPBCJXc8JJ0hkIo9ATU0YtERdi38ba+M06QY69cqcFMctr9HXZfQB75rRW6I32kpgHoWd952LXAg==",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1820495897.529,
+      "expires": 1820500083.515,
       "httpOnly": false,
       "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_ym_uid",
-      "value": "1785841533317968761",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1817471903,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_ym_d",
-      "value": "1785935904",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1817471903,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "ys",
-      "value": "udn.cDrQkNCy0LjQsNC%2F0YDQvtC80YHRgtCw0LvRjA%3D%3D#wprid.1785936133586952-1111792459953143998-balancer-l7leveler-kubr-yp-vla-54-BAL",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": -1,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "yp",
-      "value": "2101201582.udn.cDrQkNCy0LjQsNC%2F0YDQvtC80YHRgtCw0LvRjA%3D%3D#1786705616.dlp.2#1788433616.gph.225_84#1788520018.hdrc.0#1801609619.sz.1366x768x1#2101296134.pcs.0#1786446432.szm.1%3A1366x768%3A0x0%3A0#1785936497.nlc.0",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1820496134.347,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "maps_session_id",
-      "value": "1785936134318495-18320657823108637846-balancer-l7leveler-kubr-yp-vla-54-BAL",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": -1,
-      "httpOnly": false,
-      "secure": false,
       "sameSite": "None"
     },
     {
@@ -551,21 +501,71 @@
       "sameSite": "None"
     },
     {
-      "name": "_yasc",
-      "value": "oyBEtpqIDxakD+WoSv5SfEDvYlbdOUKkjx8ny1r6VL7osciEIs/itKI3C3+ll3SPH55cLQ8v7N3AP3+ZWew+/CpFgdtkeCEM4wiilK7W0ux29i6wOZChlRQ9YQ==",
+      "name": "my",
+      "value": "YwA=",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1820498406.881,
+      "expires": 1820500087.453,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
-      "name": "cycada",
-      "value": "vkjJ0iFdbxKVRxG30maYAyfA5hjy39BWIgnQZ/gtJxs=",
+      "name": "_ym_uid",
+      "value": "1785841533317968761",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1787148085.803,
+      "expires": 1817476091,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ym_d",
+      "value": "1785940092",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1817476091,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "ys",
+      "value": "udn.cDrQkNCy0LjQsNC%2F0YDQvtC80YHRgtCw0LvRjA%3D%3D#wprid.1785940125088003-15926056823153671858-balancer-l7leveler-kubr-yp-klg-27-BAL",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "yp",
+      "value": "2101201582.udn.cDrQkNCy0LjQsNC%2F0YDQvtC80YHRgtCw0LvRjA%3D%3D#1786705616.dlp.2#1788433616.gph.225_84#1788520018.hdrc.0#1801609619.sz.1366x768x1#2101300126.pcs.0#1786446432.szm.1%3A1366x768%3A0x0%3A0#1785940687.nlc.0",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1820500125.934,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "maps_session_id",
+      "value": "1785940125469540-15529119533463780598-balancer-l7leveler-kubr-yp-klg-27-BAL",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "bh",
+      "value": "YKORzdMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1820500131,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -575,8 +575,28 @@
       "value": "1",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817474487,
+      "expires": 1817476146,
       "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ym_visorc",
+      "value": "w",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1785941951,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "cycada",
+      "value": "IRfhHgi42y6lYfooiVQyAifA5hjy39BWIgnQZ/gtJxs=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1787149756.754,
+      "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
@@ -585,27 +605,7 @@
       "value": "0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817474488,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_ym_visorc",
-      "value": "b",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1785940288,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "bh",
-      "value": "YLaGzdMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1820498742.165,
+      "expires": 1817476157,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -657,11 +657,11 @@
         },
         {
           "name": "maps_analytics_event_index",
-          "value": "{\"1785936134318495-18320657823108637846-balancer-l7leveler-kubr-yp-vla-54-BAL\":151}"
+          "value": "{\"1785940125469540-15529119533463780598-balancer-l7leveler-kubr-yp-klg-27-BAL\":121}"
         },
         {
           "name": "_ym22555771:0_reqNum",
-          "value": "92"
+          "value": "94"
         },
         {
           "name": "_ym86879039_lsid",
@@ -681,11 +681,11 @@
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "541"
+          "value": "551"
         },
         {
           "name": "_ym85710618_lastHit",
-          "value": "1785936653536"
+          "value": "1785940107161"
         },
         {
           "name": "_ym72578986:0_reqNum",
@@ -721,11 +721,11 @@
         },
         {
           "name": "_mt__data",
-          "value": "{\"1785936133586952-1111792459953143998-balancer-l7leveler-kubr-yp-vla-54-BAL\":[[108,0,50,0,12,49,95,57,116,121,120,119,48,48,50,0,0,0,0,0,0,49,95,57,116,121,120,119,48,48,51,0,0,0,0,0,0,50,95,57,116,121,120,119,48,48,53,0,0,0,0,0,0,50,95,57,116,121,120,119,48,48,54,0,0,0,0,0,0,50,95,57,116,121,120,119,48,48,55,0,0,0,0,0,0,50,95,57,116,121,120,119,48,48,56,0,0,0,0,0,0,50,95,57,116,121,120,119,48,48,57,0,0,0,0,0,0,50,95,57,116,121,120,119,48,48,97,0,0,0,0,0,0,50,95,57,116,121,120,119,48,48,98,0,0,0,0,0,0,50,95,57,116,121,120,119,48,48,99,0,0,0,0,0,0,50,95,57,116,121,120,119,48,48,100,0,0,0,0,0,0,50,95,57,116,121,120,119,48,48,101,0,0,0,0,0,0,103,0,0,0,0,0,105,60,105,120],1785936141915,0]}"
+          "value": "{\"1785940125088003-15926056823153671858-balancer-l7leveler-kubr-yp-klg-27-BAL\":[[108,0,50,0,12,49,95,106,102,113,117,119,48,48,50,0,0,0,0,0,0,49,95,106,102,113,117,119,48,48,51,0,0,0,0,0,0,50,95,106,102,113,117,119,48,48,53,0,0,0,0,0,0,50,95,106,102,113,117,119,48,48,54,0,0,0,0,0,0,50,95,106,102,113,117,119,48,48,55,0,0,0,0,0,0,50,95,106,102,113,117,119,48,48,56,0,0,0,0,0,0,50,95,106,102,113,117,119,48,48,57,0,0,0,0,0,0,50,95,106,102,113,117,119,48,48,97,0,0,0,0,0,0,50,95,106,102,113,117,119,48,48,98,0,0,0,0,0,0,50,95,106,102,113,117,119,48,48,99,0,0,0,0,0,0,50,95,106,102,113,117,119,48,48,100,0,0,0,0,0,0,50,95,106,102,113,117,119,48,48,101,0,0,0,0,0,0,103,0,0,0,0,0,105,60,105,120],1785940132450,0]}"
         },
         {
           "name": "_ym94294428:0_reqNum",
-          "value": "1"
+          "value": "2"
         },
         {
           "name": "_ym_wv2rf:56213845:0",
@@ -741,7 +741,7 @@
         },
         {
           "name": "_ym24367924:0_reqNum",
-          "value": "295"
+          "value": "300"
         },
         {
           "name": "_ym87649676_lsid",
@@ -769,7 +769,7 @@
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "4772"
+          "value": "4831"
         },
         {
           "name": "_ym87015792:0_reqNum",
@@ -833,7 +833,7 @@
         },
         {
           "name": "_ym_retryReqs",
-          "value": "{}"
+          "value": "{\"1\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/39321485\",\"time\":1785940157658,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/219161630357/p/edit/reviews/\",\"charset\":\"utf-8\",\"exp\":\"9FCGqINccppkfWUWO2m08A,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":1,\"dp\":0,\"ls\":1404211136050,\"hid\":166310668,\"z\":0,\"i\":\"20260805142917\",\"et\":1785940158,\"c\":1,\"rn\":1040838285,\"rqn\":4831,\"u\":\"1785841533317968761\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":660,\"wv\":2,\"ds\":\"0,0,349,0,2,0,,281,1,,,,820\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1785940156752,\"t\":\"403\",\"adb\":\"2\",\"rqnl\":1,\"st\":1785940158},\"counterId\":39321485,\"ghid\":166310668,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"2902687631785841527\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}},\"2\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/56213845\",\"time\":1785940157658,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/219161630357/p/edit/reviews/\",\"charset\":\"utf-8\",\"exp\":\"9FCGqINccppkfWUWO2m08A,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":1691197175121,\"hid\":166310668,\"z\":0,\"i\":\"20260805142917\",\"et\":1785940158,\"c\":1,\"rn\":568866442,\"rqn\":4509,\"u\":\"1785841533317968761\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":660,\"wv\":2,\"ds\":\"0,0,349,0,2,0,,281,1,,,,820\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1785940156752,\"t\":\"403\",\"adb\":\"2\",\"rqnl\":1,\"st\":1785940158},\"counterId\":56213845,\"ghid\":166310668,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"2902687631785841527\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}},\"3\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/46231566\",\"time\":1785940157659,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/219161630357/p/edit/reviews/\",\"charset\":\"utf-8\",\"exp\":\"9FCGqINccppkfWUWO2m08A,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":3,\"dp\":0,\"ls\":391174080352,\"hid\":166310668,\"z\":0,\"i\":\"20260805142917\",\"et\":1785940158,\"c\":1,\"rn\":704875530,\"rqn\":1222,\"u\":\"1785841533317968761\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":660,\"wv\":2,\"ds\":\"0,0,349,0,2,0,,281,1,,,,820\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1785940156752,\"t\":\"403\",\"adb\":\"2\",\"rqnl\":1,\"st\":1785940158},\"counterId\":46231566,\"ghid\":166310668,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"2902687631785841527\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}}}"
         },
         {
           "name": "_ym86226515_lsid",
@@ -868,6 +868,10 @@
           "value": "1"
         },
         {
+          "name": "_ym86972774_lsid",
+          "value": "1165288391765"
+        },
+        {
           "name": "_ym86796361_lsid",
           "value": "1780515260898"
         },
@@ -900,8 +904,8 @@
           "value": "1785841716779"
         },
         {
-          "name": "_ym86972774_lsid",
-          "value": "1165288391765"
+          "name": "_ym86931758:0_reqNum",
+          "value": "1"
         },
         {
           "name": "_ym87870287_lsid",
@@ -945,7 +949,7 @@
         },
         {
           "name": "_ym46231566_lastHit",
-          "value": "1785936652998"
+          "value": "1785940106623"
         },
         {
           "name": "_ym86969315_lsid",
@@ -953,7 +957,7 @@
         },
         {
           "name": "_ym56213845_lastHit",
-          "value": "1785936652992"
+          "value": "1785940106616"
         },
         {
           "name": "_ym86420123:0_reqNum",
@@ -965,7 +969,7 @@
         },
         {
           "name": "_ym93090613:0_reqNum",
-          "value": "2"
+          "value": "3"
         },
         {
           "name": "_ym87269520:0_reqNum",
@@ -1000,7 +1004,7 @@
           "value": "1416639858937"
         },
         {
-          "name": "_ym86931758:0_reqNum",
+          "name": "_ym88849238:0_reqNum",
           "value": "1"
         },
         {
@@ -1041,7 +1045,7 @@
         },
         {
           "name": "_ym46231566:0_reqNum",
-          "value": "1203"
+          "value": "1222"
         },
         {
           "name": "_ym86525359:0_reqNum",
@@ -1049,7 +1053,7 @@
         },
         {
           "name": "_ym56213845:0_reqNum",
-          "value": "4450"
+          "value": "4509"
         },
         {
           "name": "_ym99908298:0_reqNum",
@@ -1068,10 +1072,6 @@
           "value": "1454639487427"
         },
         {
-          "name": "_ym88849238:0_reqNum",
-          "value": "1"
-        },
-        {
           "name": "_ym22555771_lsid",
           "value": "432517883693"
         },
@@ -1085,7 +1085,7 @@
         },
         {
           "name": "_ym39321485_lastHit",
-          "value": "1785936652985"
+          "value": "1785940106608"
         }
       ]
     },

@@ -519,10 +519,30 @@ def test_requirements_txt() -> None:
              if ln.strip() and not ln.strip().startswith("#")]
     pinned = {ln.split("==")[0].strip().lower() for ln in lines if "==" in ln}
 
-    # Всё, что определяет, поднимется ли веб-сервер, держим на точной версии.
-    for name in ("streamlit", "starlette", "playwright"):
-        check(f"{name} закреплён точной версией", name in pinned,
-              f"строки: {lines}")
+    # Мотор – всё, из чего собран сам веб-сервер. Его поломка = белый экран без
+    # диагноза, поэтому держим на точных версиях. Список закрыт: новую строку
+    # сюда добавляем только вместе с записью в requirements.txt.
+    motor = ("streamlit", "starlette", "uvicorn", "h11", "httptools", "anyio",
+             "websockets", "python-multipart", "itsdangerous", "watchdog",
+             "protobuf", "playwright")
+    missing = [n for n in motor if n not in pinned]
+    check("мотор закреплён точными версиями", not missing, f"без версии: {missing}")
+
+    # Закреплённое должно совпадать с тем, на чём прогнаны тесты, – иначе
+    # проверки говорят про один состав, а в облако уезжает другой.
+    from importlib.metadata import version as installed_version
+
+    for line in lines:
+        if "==" not in line:
+            continue
+        name, want = (x.strip() for x in line.split("#")[0].split("=="))
+        if name.lower() == "playwright":
+            continue  # ставится отдельно вместе с браузерами
+        try:
+            got = installed_version(name)
+        except Exception:
+            continue  # локально не стоит – проверить нечем
+        eq(f"{name}: закреплена та версия, на которой тестируем", got, want)
 
     # Главная проверка: подпись, по которой Streamlit создаёт свой сжиматель
     # ответов, совпадает с тем, что умеет установленная starlette.

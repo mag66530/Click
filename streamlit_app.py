@@ -52,15 +52,25 @@ def _same_build(mod) -> bool:
     return getattr(mod, "BUILD", "") == UI_BUILD
 
 
-if not all(_same_build(m) for m in (T, yb, rv, llm, runner)):
+# Список ПОЛНЫЙ: любой модуль, оставшийся в памяти старым, ломает своё. Так
+# заказчик перезагрузила города из таблицы, а Click опять взял старый лист –
+# kp_sheet в списке не было, и правка просто не работала.
+_MODULES = ("paths", "repo_store", "projects_data", "kp_sheet",
+            "ui_theme", "yb_playwright", "reviews", "llm", "runner")
+
+if not all(_same_build(m) for m in (paths, repo_store, pdata, kp_sheet, T, yb, rv, llm, runner)):
     import importlib
 
-    for _name in ("ui_theme", "yb_playwright", "reviews", "llm", "runner"):
+    for _name in _MODULES:                # порядок: зависимости раньше зависимых
         try:
             importlib.reload(sys.modules[_name])
         except Exception:  # noqa: BLE001 – без перезагрузки хуже, но падать нельзя
             pass
+    import kp_sheet  # noqa: F811
     import llm  # noqa: F811
+    import paths  # noqa: F811
+    import projects_data as pdata  # noqa: F811
+    import repo_store  # noqa: F811
     import reviews as rv  # noqa: F811
     import runner  # noqa: F811
     import ui_theme as T  # noqa: F811

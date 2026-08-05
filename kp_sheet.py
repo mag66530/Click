@@ -48,6 +48,9 @@ import os
 import re
 from typing import Any
 
+# Метка сборки: streamlit_app сверяет её и перезагружает модуль при расхождении.
+BUILD = "2026-08-06-kp-sheet-pick"
+
 # Права нужны на оба API: у нативной таблицы значения читает Sheets API, а
 # залитый .xlsx приходится качать файлом через Drive API.
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly",
@@ -301,8 +304,14 @@ def _pick_sheet(titles: list[str], read, prefer: str = "") -> list[list[str]]:
     """Первый лист, на котором нашлись города со ссылками на Яндекс.Бизнес."""
     if not titles:
         raise RuntimeError("В таблице нет листов")
+    # Старые копии не читаем ВООБЩЕ – ровно этого просила заказчик. К ним
+    # возвращаемся, только если на нормальных листах городов не нашлось: иначе
+    # таблица, где рабочий лист один и он назван «…OLD», перестала бы читаться.
+    normal = [t for t in titles if t == prefer or not _OLD_SHEET_RX.search((t or "").lower())]
+    skipped_old = [t for t in titles if t not in normal]
+
     tried = []
-    for title in _sheet_order(titles, prefer):
+    for title in _sheet_order(normal, prefer) + _sheet_order(skipped_old, prefer):
         try:
             rows = read(title)
         except Exception as e:  # noqa: BLE001

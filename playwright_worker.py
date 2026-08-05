@@ -16,6 +16,9 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+# Метка сборки: streamlit_app сверяет её и перезагружает модуль при расхождении.
+BUILD = "2026-08-06-kp-sheet-pick"
+
 
 @dataclass
 class _Job:

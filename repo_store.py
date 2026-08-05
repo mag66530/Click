@@ -32,7 +32,7 @@ from pathlib import Path
 import paths
 
 # Метка сборки: streamlit_app сверяет её и перезагружает модуль при расхождении.
-BUILD = "2026-08-06-send-all"
+BUILD = "2026-08-06-reviews-rules"
 
 API = "https://api.github.com"
 BRANCH = "click-data"           # ветка под данные; облако её не отслеживает

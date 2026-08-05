@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 import kp_audit
 import kp_sheet
@@ -673,8 +674,47 @@ _TILE_SAFETY_CSS = """
 """
 
 
+def _persist_css(style_html: str, tag: str) -> None:
+    """
+    Продублировать наш CSS в <head> страницы.
+
+    Блок <style> из st.markdown живёт среди обычных элементов, а Streamlit при
+    перерисовке их пересобирает: на «Выбрать все в стране» стиль пропадал со
+    страницы примерно на 450 мс, и всё это время экран выглядел «растянутым» –
+    голая вёрстка Streamlit без нашего оформления. Замерено на живой странице,
+    не на глаз.
+
+    В <head> Streamlit не заглядывает, поэтому стиль там переживает любую
+    перерисовку. Блок в теле страницы остаётся: он рисует самый первый экран,
+    пока код ниже ещё не выполнился, и он же спасает, если это не сработает.
+
+    Код выполняется внутри рамки (iframe) – только так Streamlit пускает
+    скрипты, из markdown он их вырезает. Рамка своя на каждую перерисовку,
+    поэтому вставка идёт с проверкой «такой стиль уже стоит».
+    """
+    body = re.sub(r"</?style[^>]*>", "", style_html)   # в <head> кладём сами правила
+    components.html(
+        "<script>(function () {\n"
+        "  try {\n"
+        "    var d = window.parent.document;\n"
+        f"    var id = {json.dumps('click-css-' + tag)};\n"
+        "    if (d.getElementById(id)) return;\n"
+        "    d.querySelectorAll('style[data-click-css]').forEach(function (s) { s.remove(); });\n"
+        "    var s = d.createElement('style');\n"
+        "    s.id = id;\n"
+        "    s.setAttribute('data-click-css', '1');\n"
+        f"    s.textContent = {json.dumps(body)};\n"
+        "    d.head.appendChild(s);\n"
+        "  } catch (e) { /* чужой домен – останется стиль из тела страницы */ }\n"
+        "})();</script>",
+        height=0,
+    )
+
+
 def inject_css() -> None:
-    st.markdown(_css(theme(), UI_BUILD) + _TILE_SAFETY_CSS, unsafe_allow_html=True)
+    style = _css(theme(), UI_BUILD) + _TILE_SAFETY_CSS
+    st.markdown(style, unsafe_allow_html=True)
+    _persist_css(style, f"{UI_BUILD}-{theme()}")
     if getattr(T, "BUILD", "") != UI_BUILD:
         st.error("Интерфейс загружен частично (стиль от прежней сборки). "
                  "Нажмите «Reboot app» в меню Streamlit – это лечится перезапуском.")

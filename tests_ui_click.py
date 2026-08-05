@@ -18,6 +18,7 @@ tests_ui_click.py – проверка, что по кнопкам действ�
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import time
@@ -175,6 +176,101 @@ def main() -> int:
                      ?.innerText.trim().split('\\n')[0] || ''""")
             check("клик мимо плиток ничего не переключает", before == after, f"{before} → {after}")
 
+            # ── Прикреплённые файлы не вылезают за рамку карточки ──
+            # Заказчик: «немного выходят за пределы». У зоны загрузки была
+            # жёсткая высота 118px – ровно по полю со ссылками слева. Список
+            # файлов в неё не влезал: на четырёх файлах последняя плитка
+            # уходила на 14 пикселей ниже рамки, а кнопка «+» – на 54.
+            print("\n▸ Прикреплённые файлы держатся внутри карточки")
+            page.locator('[class*="st-key-tile-pt-shipment"] button').first.click()
+            page.wait_for_timeout(3000)
+
+            import tempfile as _tf
+            _dir = Path(_tf.mkdtemp(prefix="click-upl-"))
+            _png = bytes.fromhex(
+                "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753"
+                "de0000000c4944415408d7636060600000000400012734270a0000000049454e44ae426082")
+            _names = ["отгрузка АПС.jpg", "отгрузка АПС 2.jpg", "отгрузка АПС 3.jpg",
+                      "отгрузка АПС на объект Северный комплект номер четыре.jpg"]
+            _files = []
+            for _n in _names:
+                _fp = _dir / _n
+                _fp.write_bytes(_png)
+                _files.append(str(_fp))
+
+            # Пустая зона обязана остаться вровень с полем слева – ради этого
+            # высота и задавалась. Меряем ДО загрузки файлов.
+            _empty = page.evaluate("""() => {
+              const dz = document.querySelector('.st-key-img-row [data-testid="stFileUploaderDropzone"]');
+              const ta = document.querySelector('.st-key-img-row textarea');
+              return dz && ta ? {dz: Math.round(dz.getBoundingClientRect().height),
+                                 ta: Math.round(ta.getBoundingClientRect().height)} : null;
+            }""")
+            check("пустая зона загрузки вровень с полем ссылок",
+                  bool(_empty) and abs(_empty["dz"] - _empty["ta"]) <= 2, str(_empty))
+
+            _inputs = page.locator('input[type="file"]')
+            check("загрузчиков на «Отгрузке» два", _inputs.count() == 2, str(_inputs.count()))
+            for _i in range(_inputs.count()):
+                _inputs.nth(_i).set_input_files(_files)
+                page.wait_for_timeout(2500)
+            page.wait_for_timeout(1500)
+
+            _over = page.evaluate("""() => {
+              const bad = [];
+              document.querySelectorAll('[data-testid="stFileUploader"]').forEach((up, i) => {
+                const card = up.closest('[data-testid="stVerticalBlockBorderWrapper"]')
+                          || up.closest('.stVerticalBlock');
+                if (!card) return;
+                const cr = card.getBoundingClientRect();
+                const parts = [...up.querySelectorAll('[data-testid="stFileChip"]')];
+                const plus = up.querySelector('[aria-label="Add files"]');
+                if (plus) parts.push(plus);
+                parts.forEach(el => {
+                  const b = el.getBoundingClientRect();
+                  const down = Math.round(b.bottom - cr.bottom);
+                  const right = Math.round(b.right - cr.right);
+                  if (down > 0 || right > 0)
+                    bad.push(`загрузчик ${i}: ${el.getAttribute('aria-label') || '+'} `
+                             + `ниже на ${down}, правее на ${right}`);
+                });
+              });
+              return bad;
+            }""")
+            check("ни один файл и «+» не вылезли за рамку карточки",
+                  not _over, "; ".join(_over[:4]))
+
+            _grew = page.evaluate("""() => {
+              const dz = document.querySelector('.st-key-img-row [data-testid="stFileUploaderDropzone"]');
+              return dz ? Math.round(dz.getBoundingClientRect().height) : 0;
+            }""")
+            check("зона загрузки растянулась под список файлов", _grew > 118 + 40, f"высота {_grew}")
+
+            # Растёт правый блок – левый обязан идти следом, иначе слева дыра
+            # высотой в весь список файлов.
+            _pairs = page.evaluate("""() => {
+              const out = [];
+              ['img-row', 'goods-row'].forEach(k => {
+                const row = document.querySelector('.st-key-' + k);
+                if (!row) return;
+                const ta = row.querySelector('textarea');
+                const dz = row.querySelector('[data-testid="stFileUploaderDropzone"]');
+                if (!ta || !dz) return;
+                out.push({row: k,
+                          diff: Math.round(ta.getBoundingClientRect().bottom
+                                         - dz.getBoundingClientRect().bottom)});
+              });
+              return out;
+            }""")
+            _skew = [x for x in _pairs if abs(x["diff"]) > 4]
+            check("поле ссылок и загрузчик кончаются на одной высоте",
+                  bool(_pairs) and not _skew,
+                  "; ".join(f'{x["row"]}: разница {x["diff"]}px' for x in _skew) or "рядов не нашлось")
+
+            shutil.rmtree(_dir, ignore_errors=True)
+            page.locator('[class*="st-key-tile-pt-arrival"] button').first.click()
+            page.wait_for_timeout(2500)
+
             print("\n▸ Актуализация: строки стран")
             page.get_by_text("🔄 Актуализация", exact=True).first.click()
             page.wait_for_timeout(4000)
@@ -196,6 +292,42 @@ def main() -> int:
                 """() => [...new Set([...document.querySelectorAll('.st-key-city-grid label')]
                      .map(l => Math.round(l.getBoundingClientRect().width)))]""")
             check("рамки городов одной ширины", len(widths) == 1, str(widths))
+
+            # ── Оформление не пропадает во время перерисовки ──
+            # Заказчик: «при нажатии «Выбрать все в стране» всё растягивается,
+            # секунду, потом возвращается». Наш <style> лежал среди обычных
+            # элементов, а Streamlit при перерисовке их пересобирает: стиля не
+            # было на странице ~450 мс, и всё это время экран показывал голую
+            # вёрстку Streamlit. Следим не за тегом, а за тем, ДЕЙСТВУЕТ ли CSS:
+            # переменную --acc объявляют только наши правила.
+            print("\n▸ Оформление не мигает при перерисовке")
+            page.evaluate("""() => {
+              window.__css = [];
+              const on = () => !!getComputedStyle(document.documentElement)
+                  .getPropertyValue('--acc').trim();
+              let last = null;
+              window.__t0 = performance.now();
+              window.__timer = setInterval(() => {
+                const now = on();
+                if (now !== last) {
+                  window.__css.push({t: Math.round(performance.now() - window.__t0), on: now});
+                  last = now;
+                }
+              }, 20);
+            }""")
+            _toggle = page.get_by_role("button", name="Выбрать все в стране").first
+            if _toggle.count() == 0:
+                _toggle = page.get_by_role("button", name="Снять все в стране").first
+            check("кнопка «выбрать/снять все в стране» на месте", _toggle.count() > 0)
+            _toggle.click()
+            page.wait_for_timeout(4000)
+            _log = page.evaluate("() => { clearInterval(window.__timer); return window.__css; }")
+            _gone = [e for e in _log if not e["on"]]
+            check("CSS не пропадал при «выбрать все в стране»",
+                  not _gone, f"пропадал на {[e['t'] for e in _gone]} мс от клика")
+            check("стиль продублирован в <head> – его перерисовка не трогает",
+                  page.evaluate(
+                      """() => !!document.head.querySelector('style[data-click-css]')"""))
 
             print("\n▸ Города: строки стран")
             page.get_by_text("🏙 Города", exact=True).first.click()

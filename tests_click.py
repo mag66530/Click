@@ -1777,6 +1777,40 @@ def test_reviews() -> None:
     eq("Gemini: слушаем подсказку retryDelay",
        llm._retry_after({"error": {"details": [{"retryDelay": "27s"}]}}), 27.0)
     eq("Gemini: без подсказки – ноль", llm._retry_after({"error": {}}), 0.0)
+    # Несколько ключей: лимит Gemini считается на каждый отдельно, поэтому
+    # два-три ключа – самый дешёвый способ ускорить генерацию.
+    import os as _os
+    saved = {k: _os.environ.get(k) for k in
+             ("gemini_api_key", "gemini_api_key_2", "gemini_api_keys")}
+    try:
+        _os.environ["gemini_api_key"] = "k1"
+        _os.environ["gemini_api_key_2"] = "k2"
+        _os.environ["gemini_api_keys"] = "k3, k2"      # повтор не должен задваиваться
+        eq("ключи собираются из всех секретов", llm.api_keys(), ["k1", "k2", "k3"])
+        check("несколько ключей видно в описании", "3" in llm.where(), llm.where())
+
+        llm._key_cool.clear(); llm._key_last.clear()
+        key, wait = llm._pick_key(llm.api_keys())
+        eq("свободный ключ берётся сразу", (key, wait == 0), ("k1", True))
+        llm._cool("k1")
+        key, _ = llm._pick_key(llm.api_keys())
+        eq("отказавший ключ откладывается", key, "k2")
+        llm._cool("k2"); llm._cool("k3")
+        _, wait = llm._pick_key(llm.api_keys())
+        check("когда все в остывании – ждём, а не долбим", wait > 1, wait)
+        llm._key_cool.clear(); llm._key_last.clear()
+
+        _os.environ.pop("gemini_api_key_2"); _os.environ.pop("gemini_api_keys")
+        eq("один ключ – тоже рабочий случай", llm.api_keys(), ["k1"])
+        check("при одном ключе подсказываем добавить второй",
+              "gemini_api_key_2" in llm.where(), llm.where())
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                _os.environ.pop(k, None)
+            else:
+                _os.environ[k] = v
+
     check("общее время на один черновик ограничено", llm.TOTAL_BUDGET_S <= 120, llm.TOTAL_BUDGET_S)
     check("кругов по моделям немного", llm.ROUNDS <= 3, llm.ROUNDS)
     was = llm.current_gap()

@@ -42,7 +42,7 @@ import yb_playwright as yb
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-06-batch-stop"
+BUILD = "2026-08-06-gemini-keys"
 
 ROOT = Path(__file__).parent
 USERS_DATA = paths.data_root()

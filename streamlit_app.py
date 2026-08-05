@@ -45,7 +45,7 @@ from playwright_worker import PlaywrightWorker
 # Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
 # Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
 # ссылкой на старый yb_playwright.
-UI_BUILD = "2026-08-06-batch-stop"
+UI_BUILD = "2026-08-06-gemini-keys"
 
 
 def _same_build(mod) -> bool:
@@ -2572,8 +2572,15 @@ def _reviews_settings_block(project_id: str) -> None:
     """Промпт ответов на отзывы – по проекту, рядом с остальными настройками."""
     html('<div class="card-title">💬 Ответы на отзывы</div>')
 
-    if llm.is_configured():
+    keys = llm.api_keys()
+    if keys:
         st.caption(f"✅ {llm.where()}.")
+        if len(keys) < 2:
+            st.caption("💡 Генерация упирается в лимит запросов Gemini, а лимит считается "
+                       "на каждый ключ отдельно. Заведите в Google AI Studio ещё один-два "
+                       "ключа и положите их в секреты как `gemini_api_key_2` и "
+                       "`gemini_api_key_3` – Click распределит запросы между ними, и "
+                       "черновики пойдут во столько же раз быстрее.")
     else:
         st.caption("⚠️ Ключ Gemini не задан. Черновики ответов писаться не будут – "
                    "отзывы всё равно соберутся, но отвечать придётся вручную. "
@@ -2632,7 +2639,8 @@ def _reviews_settings_block(project_id: str) -> None:
             st.caption(f"Отзыв: «{sample['full_text']}» · автор Павел Филиппов "
                        f"(в обращении – {rv.name_for_prompt('Павел Филиппов')}) · "
                        f"модель {stats.get('model') or llm.model_in_use() or '–'} · "
-                       f"{stats.get('seconds', '?')} сек, запросов {stats.get('calls', 1)}")
+                       f"{stats.get('seconds', '?')} сек, запросов {stats.get('calls', 1)}, "
+                       f"ключей {stats.get('keys', len(keys))}")
             html(T.preview_box(answer))
             if rv.looks_cut_off(answer):
                 st.warning("Ответ оборван на середине – напишите мне, покажу, куда смотреть.")

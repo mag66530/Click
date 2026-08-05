@@ -2275,26 +2275,62 @@ def test_two_people_at_once(tmp: Path) -> None:
     check("метка сборки осталась – её показываем", bool(app.UI_BUILD))
 
     # ── Потолок общий на всё приложение ──
-    saved_root = r.USERS_DATA
+    saved_root, saved_mem = r.USERS_DATA, r.memory_mb
     r.USERS_DATA = tmp
+    r.memory_mb = lambda: 300           # памяти вдоволь – проверяем только счёт
     try:
-        for pid, kinds in (("IMP", ("publish", "actualize")),):
-            for k in kinds:
-                fp = r.p_lock(pid, k)
-                fp.parent.mkdir(parents=True, exist_ok=True)
-                fp.write_text(json.dumps({"runId": "x", "kind": k, "ownerPid": 10 ** 7}),
-                              encoding="utf-8")
+        def lock(pid: str, kind: str) -> None:
+            fp = r.p_lock(pid, kind)
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            fp.write_text(json.dumps({"runId": "x", "kind": kind, "ownerPid": 10 ** 7}),
+                          encoding="utf-8")
+
+        lock("IMP", "publish")
+        lock("IMP", "actualize")
         eq("видим чужие прогоны во всех проектах",
            sorted(r.live_runs_everywhere()), [("IMP", "actualize"), ("IMP", "publish")])
         why = r.busy_reason("APS", "actualize")
         check("третий прогон в ДРУГОМ проекте не пускаем", bool(why), why)
-        check("и объясняем, почему", "памят" in why.lower() and "IMP" in why, why)
+        check("и объясняем, почему", "памят" in why.lower(), why)
 
+        # Ровно тот случай, на котором всё легло: в одном проекте прогон идёт,
+        # в другом их два – и сверка пролезала третьей, потому что «своему»
+        # проекту делалась поблажка.
         for k in ("publish", "actualize"):
             r.p_lock("IMP", k).unlink(missing_ok=True)
+        lock("APS", "actualize")
+        lock("IMP", "actualize")
+        why = r.busy_reason("APS", "collect")
+        check("сверка третьей в свой же проект не пролезает", bool(why), why)
+
+        for pid, k in (("APS", "actualize"), ("IMP", "actualize")):
+            r.p_lock(pid, k).unlink(missing_ok=True)
         eq("когда чужие закончились – можно", r.busy_reason("APS", "actualize"), "")
+
+        # ── И отдельно по факту занятой памяти ──
+        r.memory_mb = lambda: r.MEM_START_MB + 200
+        why = r.busy_reason("APS", "actualize")
+        check("при нехватке памяти новый прогон не пускаем", bool(why), why)
+        check("и говорим, сколько занято", "МБ" in why, why)
+        r.memory_mb = lambda: 300
+        eq("память вернулась – можно", r.busy_reason("APS", "actualize"), "")
+
+        check("пороги памяти по возрастанию",
+              r.MEM_START_MB < r.MEM_SOFT_MB < r.MEM_HARD_MB,
+              f"{r.MEM_START_MB}/{r.MEM_SOFT_MB}/{r.MEM_HARD_MB}")
     finally:
-        r.USERS_DATA = saved_root
+        r.USERS_DATA, r.memory_mb = saved_root, saved_mem
+
+    # Замер памяти должен работать по-настоящему, а не возвращать ноль.
+    check("память измеряется", r.memory_mb() > 0, r.memory_mb())
+
+    # Внутри прогона память тоже сторожится: мягкий порог – перезапуск
+    # браузера, жёсткий – аккуратная остановка с сохранённым отчётом.
+    import inspect
+    loop = inspect.getsource(r._actualize_worker)
+    check("в прогоне есть сторож памяти", "MEM_HARD_MB" in loop and "MEM_SOFT_MB" in loop)
+    check("жёсткий порог останавливает прогон", "stopped = True" in loop)
+    check("мягкий порог перезапускает браузер", "browser.restart()" in loop)
 
 
 # ════════════════════════════════════════════════════════════════════

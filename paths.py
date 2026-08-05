@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 # Метка сборки: streamlit_app сверяет её и перезагружает модуль при расхождении.
-BUILD = "2026-08-06-gemini-keys"
+BUILD = "2026-08-06-send-report"
 
 PROJECT_ROOT = Path(__file__).parent
 

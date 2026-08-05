@@ -45,7 +45,7 @@ from playwright_worker import PlaywrightWorker
 # Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
 # Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
 # ссылкой на старый yb_playwright.
-UI_BUILD = "2026-08-06-gemini-keys"
+UI_BUILD = "2026-08-06-send-report"
 
 
 def _same_build(mod) -> bool:
@@ -1600,8 +1600,8 @@ def _review_regenerate(project_id: str, item: dict) -> None:
     if not prompt.strip():
         item["note"] = "Промпт проекта пуст – заполните его в «Настройках»"
         return
-    fake = {"full_text": item.get("text"), "author": {"user": item.get("author")},
-            "rating": item.get("rating")}
+    fake = {"text": item.get("text"), "author": item.get("author"),
+            "rating": item.get("rating"), "answered": False}
     try:
         item["draft"] = rv.clean_draft(llm.generate(rv.build_prompt(prompt, fake)))
         item["status"] = rv.DRAFTED
@@ -1655,6 +1655,8 @@ def _batch_browser(project_id: str):
 
 
 def _batch_browser_close(project_id: str) -> None:
+    _BATCH_URL.pop(project_id, None)
+    _BATCH_COUNT.pop(project_id, None)
     have = _BATCH_BROWSER.pop(project_id, None)
     if not have:
         return
@@ -1670,16 +1672,35 @@ def _batch_browser_close(project_id: str) -> None:
     worker.stop()
 
 
+# Через столько ответов браузер перезапускается. Страница отзывов тяжёлая, и
+# на четырнадцати подряд Streamlit Cloud выбило по памяти: «This app has gone
+# over its resource limits». Перезапуск занимает пару секунд и отдаёт память.
+SEND_RESTART_EVERY = 5
+
+_BATCH_URL: dict[str, str] = {}      # какой город сейчас открыт
+_BATCH_COUNT: dict[str, int] = {}    # сколько ответов ушло с этого запуска браузера
+
+
 def _send_one(project_id: str, item: dict, text: str) -> None:
     """Отправить один ответ через браузер пачки и записать исход."""
+    url = item.get("reviewsUrl")
     try:
+        if _BATCH_COUNT.get(project_id, 0) >= SEND_RESTART_EVERY:
+            _batch_browser_close(project_id)          # отдаём память
         worker, browser = _batch_browser(project_id)
-        res = worker.call(yb.publish_review_answer, browser.page, item.get("reviewsUrl"),
-                          item.get("reviewId"), text, item.get("text") or "")
+        # Страница этого города уже открыта – грузить заново незачем.
+        same = _BATCH_URL.get(project_id) == url
+        res = worker.call(yb.publish_review_answer, browser.page, url,
+                          item.get("reviewId"), text, item.get("text") or "",
+                          not same)
+        _BATCH_URL[project_id] = url
+        _BATCH_COUNT[project_id] = _BATCH_COUNT.get(project_id, 0) + 1
         status, reason = res.get("status", "failed"), res.get("reason", "")
     except Exception as e:  # noqa: BLE001
         status, reason = "failed", str(e)
+        _BATCH_URL.pop(project_id, None)
     item["finalText"] = text
+    item["sentAt"] = datetime.now(timezone.utc).isoformat()
     _apply_send_result(item, status, reason)
 
 
@@ -1695,6 +1716,8 @@ def _review_send(project_id: str, item: dict, text: str) -> tuple[str, str]:
 
 
 def _batch_start(kind: str, items: list[dict], project_id: str) -> None:
+    # По городам: соседние ответы уходят на одну и ту же открытую страницу.
+    items = sorted(items, key=lambda it: (it.get("reviewsUrl") or "", it.get("city") or ""))
     st.session_state["rv-batch"] = {
         "kind": kind, "project": project_id,
         "ids": [it.get("reviewId") for it in items],
@@ -1768,9 +1791,74 @@ def _batch_block(project_id: str, items: list[dict]) -> bool:
         batch[key] += 1
 
     batch["done"] += 1
-    _review_queue_save(project_id, push=False)     # наружу – один раз в конце
+    # Отправку выталкиваем наружу сразу: приложение может упасть, а локальные
+    # файлы облако не переживает – и тогда непонятно, что уже опубликовано.
+    _review_queue_save(project_id, push=(batch["kind"] == "send"))
     st.rerun()
     return True
+
+
+_SENT_LABELS = {
+    rv.ANSWERED: "✅ отправлен",
+    rv.ALREADY: "⊝ уже был ответ",
+    rv.SKIPPED: "⏭ пропущен",
+    rv.FAILED: "❌ не отправился",
+}
+
+
+def _sent_report_block(project_id: str, done: list[dict], pending: list[dict]) -> None:
+    """
+    Что уже отправлено – город, автор, когда и чем кончилось.
+
+    Нужен после того, как приложение упало посреди отправки четырнадцати
+    ответов: список опустел, а понять, что успело уйти в Яндекс, можно было
+    только руками по карточкам. Теперь исход каждого ответа сохраняется
+    сразу и виден здесь, даже если приложение перезапустилось.
+    """
+    if not done:
+        return
+    c = rv.counters(done)
+    rows = sorted(done, key=lambda it: it.get("sentAt") or it.get("collectedAt") or "",
+                  reverse=True)
+
+    with st.expander(f"📋 Отчёт по отправке ({len(done)})", expanded=bool(c["failed"])):
+        st.caption(f"Отправлено {c['answered']} · уже были отвечены "
+                   f"{len([r for r in done if r.get('status') == rv.ALREADY])} · "
+                   f"пропущено {c['skipped']} · не отправилось {c['failed']}")
+        for it in rows:
+            when = local_time(it.get("sentAt")) if it.get("sentAt") else ""
+            label = _SENT_LABELS.get(it.get("status"), it.get("status") or "")
+            st.markdown(
+                f"- **{T.esc(it.get('city') or '?')}** · {T.esc(it.get('author') or 'без имени')} "
+                f"– {label}" + (f' · <span class="hint">{when}</span>' if when else "")
+                + (f"<br><span class='hint'>{T.esc(it.get('note') or '')}</span>"
+                   if it.get("status") == rv.FAILED and it.get("note") else ""),
+                unsafe_allow_html=True)
+
+        c1, c2 = st.columns(2)
+        c1.download_button("⬇ Отчёт (CSV)", data=_sent_csv(rows),
+                           file_name=f"reviews-{project_id}.csv", mime="text/csv",
+                           use_container_width=True, key="rv-report-csv")
+        if c2.button("Очистить отчёт", key="rv-clear-done", use_container_width=True):
+            st.session_state[f"_rvq_{project_id}"] = pending
+            _review_queue_save(project_id)
+            st.rerun()
+
+
+def _sent_csv(rows: list[dict]) -> bytes:
+    import csv
+    import io
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";")
+    w.writerow(["Город", "Автор", "Оценка", "Статус", "Когда", "Отзыв", "Ответ", "Причина"])
+    for it in rows:
+        w.writerow([it.get("city") or "", it.get("author") or "", it.get("rating") or "",
+                    _SENT_LABELS.get(it.get("status"), it.get("status") or ""),
+                    local_time(it.get("sentAt")) if it.get("sentAt") else "",
+                    (it.get("text") or "").replace("\n", " "),
+                    (it.get("finalText") or it.get("draft") or "").replace("\n", " "),
+                    it.get("note") or ""])
+    return buf.getvalue().encode("utf-8-sig")
 
 
 def _send_all_block(project_id: str, pending: list[dict], running: bool) -> None:
@@ -1947,18 +2035,7 @@ def reviews_queue_block(project_id: str) -> None:
                     _review_queue_save(project_id)
                     st.rerun()
 
-        if done:
-            c = rv.counters(done)
-            with st.expander(f"Разобрано за эту очередь ({len(done)})"):
-                st.caption(f"Отвечено {c['answered']} · пропущено {c['skipped']} · "
-                           f"не отправилось {c['failed']}")
-                for it in done:
-                    st.markdown(f"- **{T.esc(it.get('city') or '?')}** · "
-                                f"{T.esc(it.get('author') or '')} – {it.get('status')}")
-            if st.button("Очистить разобранное", key="rv-clear-done"):
-                st.session_state[f"_rvq_{project_id}"] = pending
-                _review_queue_save(project_id)
-                st.rerun()
+        _sent_report_block(project_id, done, pending)
 
 
 def tab_actualize(project_id: str, config: dict) -> None:
@@ -2625,8 +2702,8 @@ def _reviews_settings_block(project_id: str) -> None:
     # Gemini и не обрывается ли ответ, – слишком дорогое удовольствие.
     if st.button("Проверить генерацию на примере", key=f"rv-try-{project_id}",
                  disabled=not llm.is_configured()):
-        sample = {"full_text": "Продукция отличного качества, все отлично! Поставка без задержек.",
-                  "author": {"user": "Павел Филиппов"}, "rating": 5}
+        sample = {"text": "Продукция отличного качества, все отлично! Поставка без задержек.",
+                  "author": "Павел Филиппов", "rating": 5, "answered": False}
         with st.spinner("Прошу у Gemini ответ на пробный отзыв…"):
             try:
                 answer = rv.clean_draft(

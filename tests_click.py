@@ -1569,7 +1569,7 @@ def test_reviews() -> None:
     eq("фикстура: без ответа ровно один", len(box["unanswered"]), 1)
     eq("фикстура: он же уходит в генерацию", len(box["to_draft"]), 1)
     eq("фикстура: это отзыв Егора Севастьянова",
-       (box["to_draft"][0]["author"]["user"]), "Егор Севастьянов")
+       rv.review_author(box["to_draft"][0]), "Егор Севастьянов")
 
     # Пустой __PRELOAD_DATA не должен ронять прогон – просто нет отзывов.
     eq("пустое состояние страницы – ноль отзывов", rv.extract_list(None)["shown"], 0)
@@ -1701,6 +1701,17 @@ def test_reviews() -> None:
           "обратную связь" in aps and "оправдываться" in aps)
     check("АПС: закрытие на месте", "С уважением, команда Авиапромсталь." in aps)
 
+    # Отчёт по отправке: после падения приложения это единственный способ
+    # понять, что уже ушло в Яндекс.
+    import streamlit_app as _app2
+    csv = _app2._sent_csv([{"city": "Гродно", "author": "Иван", "rating": 5,
+                            "status": rv.ANSWERED, "sentAt": "2026-08-05T10:00:00+00:00",
+                            "text": "трубы\nхорошие", "finalText": "Спасибо!", "note": ""}])
+    text = csv.decode("utf-8-sig")
+    check("в отчёте есть город и автор", "Гродно" in text and "Иван" in text)
+    check("в отчёте видно, что отправлено", "отправлен" in text)
+    check("переносы строк не ломают CSV", text.count("\n") == 2, repr(text))
+
     # Раскладка исходов отправки. Отдельно проверяем «не подтвердилось»:
     # раньше такой ответ считался успехом и уходил из списка, а в Яндексе
     # его не было.
@@ -1713,6 +1724,23 @@ def test_reviews() -> None:
     it = {"status": rv.DRAFTED}
     _app._apply_send_result(it, "unknown", "Яндекс пока не показывает ответ")
     check("не подтверждённый ответ остаётся в списке", it["status"] in rv.OPEN_STATUSES)
+
+    # Плоский вид отзыва: со страницы теперь приходит он, из фикстуры –
+    # исходный. Понимать надо оба, иначе отбор молча пропустит всё.
+    flat = {"id": "f1", "author": "Иван", "rating": 5, "text": "трубы",
+            "time_created": 1, "answered": False}
+    check("плоский отзыв опознаётся как без ответа", rv.is_unanswered(flat))
+    eq("плоский: текст", rv.review_text(flat), "трубы")
+    eq("плоский: автор", rv.review_author(flat), "Иван")
+    eq("исходный: автор из вложенного поля",
+       rv.review_author({"author": {"user": "Пётр"}}), "Пётр")
+    check("плоский отвеченный не берётся",
+          not rv.is_unanswered({**flat, "answered": True}))
+    eq("отбор понимает плоский вид", len(rv.triage([flat])["to_draft"]), 1)
+    norm = rv.normalize({"id": "x", "author": {"user": "Анна"}, "rating": 4,
+                         "full_text": "лист", "owner_comment": {"text": "ответ"}})
+    eq("приведение к плоскому виду",
+       (norm["author"], norm["text"], norm["answered"]), ("Анна", "лист", True))
 
     # Правила, о которых заказчик просила отдельно.
     rules = pdata.REVIEW_COMMON_RULES

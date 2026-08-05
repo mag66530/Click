@@ -48,7 +48,7 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-06-gemini-keys"
+BUILD = "2026-08-06-send-report"
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -1880,81 +1880,103 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
 REVIEWS_WAIT_MS = 15_000
 
 
-def read_reviews(page: Page, url: str) -> dict:
+# Читаем не весь __PRELOAD_DATA, а только нужные поля – и делаем это ВНУТРИ
+# браузера. Раньше в Python приезжал весь блок состояния страницы, а это
+# двести килобайт JSON на каждое чтение. При отправке 14 ответов подряд
+# приложение просто съело всю память облака и упало.
+_READ_REVIEWS_JS = r"""
+() => {
+  const st = ((((window.__PRELOAD_DATA || {}).initialState || {}).edit || {}).reviews) || {};
+  const list = st.list || {};
+  const pager = list.pager || {};
+  const items = (list.items || []).map(it => ({
+    id: it.id,
+    author: ((it.author || {}).user || ''),
+    rating: it.rating || 0,
+    text: it.full_text || it.snippet || '',
+    time_created: it.time_created || 0,
+    answered: !!((it.owner_comment || {}).text || '').trim(),
+  }));
+  return { items, total: pager.total || items.length, limit: pager.limit || items.length };
+}
+"""
+
+
+def _reviews_on_page(page: Page) -> dict | None:
+    """Список отзывов с УЖЕ открытой страницы. None – состояния на ней нет."""
+    try:
+        data = page.evaluate(_READ_REVIEWS_JS)
+    except Exception:  # noqa: BLE001 – страница ещё перерисовывается
+        return None
+    return data if data and data.get("items") is not None else None
+
+
+def read_reviews(page: Page, url: str, navigate: bool = True) -> dict:
     """
     Открыть раздел отзывов и вернуть {'ok', 'items', 'total', 'shown', 'reason', 'url'}.
 
-    ok=False – страница не открылась или состояния на ней не оказалось;
-    причина уже пригодна для показа человеку.
+    navigate=False – страница уже открыта, грузить заново не надо. На отправке
+    пачки это главное: один заход на город вместо перезагрузки под каждый ответ.
     """
     out = {"ok": False, "items": [], "total": 0, "shown": 0, "reason": "", "url": url}
     if not url:
         out["reason"] = "Не удалось определить URL раздела «Отзывы»"
         return out
 
-    def load(u: str) -> str:
-        page.goto(u, wait_until="domcontentloaded", timeout=30_000)
-        return u
-
-    try:
-        load(url)
-    except Exception as e:  # noqa: BLE001
-        out["reason"] = f"Не удалось открыть страницу отзывов: {_short_error(e)}"
-        return out
-
-    # 404 – возможно, не угадали формат адреса. Пробуем второй, как с постами.
-    if is_404(page):
-        alt = alt_posts_url(url)
-        if alt:
-            try:
-                load(alt)
-                out["url"] = alt
-            except Exception:  # noqa: BLE001
-                pass
-        if is_404(page):
-            out["reason"] = f"Страница отзывов не найдена (404): {url}"
+    if navigate:
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        except Exception as e:  # noqa: BLE001
+            out["reason"] = f"Не удалось открыть страницу отзывов: {_short_error(e)}"
             return out
 
-    if looks_like_login_page(page):
-        out["reason"] = "Яндекс увёл на страницу входа – сессия не действует"
-        return out
+        # 404 – возможно, не угадали формат адреса. Пробуем второй, как с постами.
+        if is_404(page):
+            alt = alt_posts_url(url)
+            if alt:
+                try:
+                    page.goto(alt, wait_until="domcontentloaded", timeout=30_000)
+                    out["url"] = alt
+                except Exception:  # noqa: BLE001
+                    pass
+            if is_404(page):
+                out["reason"] = f"Страница отзывов не найдена (404): {url}"
+                return out
 
-    # Состояние приезжает вместе с HTML, но у медленной сети ждём чуть-чуть.
-    preload = None
-    deadline = time.time() + REVIEWS_WAIT_MS / 1000
+        if looks_like_login_page(page):
+            out["reason"] = "Яндекс увёл на страницу входа – сессия не действует"
+            return out
+
+    data = None
+    deadline = time.time() + (REVIEWS_WAIT_MS / 1000 if navigate else 3)
     while time.time() < deadline:
-        try:
-            preload = page.evaluate("() => window.__PRELOAD_DATA || null")
-        except Exception:  # noqa: BLE001 – страница ещё перерисовывается
-            preload = None
-        if preload:
+        data = _reviews_on_page(page)
+        if data:
             break
         page.wait_for_timeout(400)
 
-    if not preload:
+    if not data:
         out["reason"] = ("На странице отзывов не нашли window.__PRELOAD_DATA – "
                          "Яндекс мог поменять отдачу страницы")
         return out
 
-    import reviews as rv
-    block = rv.extract_list(preload)
-    out.update(ok=True, items=block["items"], total=block["total"], shown=block["shown"])
+    out.update(ok=True, items=data["items"], total=int(data["total"] or 0),
+               shown=len(data["items"]))
     return out
 
 
-def review_state(page: Page, url: str, review_id: str) -> dict:
+def review_state(page: Page, url: str, review_id: str, navigate: bool = True) -> dict:
     """
-    Свежее состояние одного отзыва – нужно прямо перед публикацией.
-    Пока черновик ждал человека, на отзыв мог ответить кто-то другой;
-    второй ответ на тот же отзыв – ровно то, чего заказчик не хочет.
+    Состояние одного отзыва. Пока черновик ждал человека, на отзыв мог
+    ответить кто-то другой; второй ответ на тот же отзыв – ровно то, чего
+    заказчик не хочет.
     """
-    data = read_reviews(page, url)
+    data = read_reviews(page, url, navigate=navigate)
     if not data["ok"]:
         return {"ok": False, "found": False, "answered": False, "reason": data["reason"]}
     for it in data["items"]:
         if it.get("id") == review_id:
-            import reviews as rv
-            return {"ok": True, "found": True, "answered": not rv.is_unanswered(it),
+            return {"ok": True, "found": True, "answered": bool(it.get("answered")),
                     "reason": "", "item": it}
     return {"ok": True, "found": False, "answered": False,
             "reason": "Отзыв не найден на первой странице – возможно, уехал ниже"}
@@ -2080,25 +2102,52 @@ _ANSWER_TOAST_JS = r"""
 """
 
 
+# Появился ли наш ответ рядом с отзывом. Проверяем по живой странице, а не
+# перезагружая её: каждая перезагрузка раздела отзывов – это тяжёлая страница
+# Яндекса, и четыре штуки на один ответ клали приложение по памяти.
+_ANSWER_SHOWN_JS = r"""
+(payload) => {
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const needle = norm(payload.review).slice(0, 60);
+  const mark = norm(payload.answer).slice(0, 40);
+  if (!needle || !mark) return false;
+  for (const el of document.querySelectorAll('div, li, article, section')) {
+    const t = norm(el.innerText);
+    if (t.includes(needle) && t.includes(mark)) {
+      // Поле ввода с нашим же текстом не считается: ждём именно опубликованный ответ.
+      const field = el.querySelector('textarea, [contenteditable="true"]');
+      if (!field || !norm(field.value || field.innerText).includes(mark)) return true;
+    }
+  }
+  return false;
+}
+"""
+
+
 def publish_review_answer(page: Page, url: str, review_id: str, text: str,
-                          review_text: str = "") -> dict:
+                          review_text: str = "", navigate: bool = True) -> dict:
     """
     Опубликовать подтверждённый человеком ответ на конкретный отзыв.
 
     Порядок ровно тот, что человек делает руками: вписать текст в поле
-    «Ответ компании» → нажать кружок со стрелкой справа → дождаться, пока
-    Яндекс покажет ответ.
+    «Ответ компании» → нажать кружок со стрелкой справа → убедиться, что
+    ответ появился.
 
-    Возвращаем {'status', 'reason'}. 'answered' – ТОЛЬКО когда Яндекс сам
-    показал ответ на перечитанной странице. Раньше «клик был, подтверждения
-    нет» уходило как успех, отзыв исчезал из очереди, а в Яндексе ничего не
-    появлялось – хуже этого только опубликовать не то.
+    navigate=False – страница города уже открыта, грузить её заново не надо.
+    Так пачка ответов по одному городу обходится ОДНИМ заходом на страницу.
+
+    'answered' возвращаем, только когда ответ реально видно. «Клик был,
+    подтверждения нет» уходило как успех – отзыв исчезал из очереди, а в
+    Яндексе ничего не появлялось.
     """
     body = (text or "").strip()
     if not body:
         return {"status": "failed", "reason": "Пустой текст ответа"}
 
-    state = review_state(page, url, review_id)
+    state = review_state(page, url, review_id, navigate=navigate)
+    if not state["ok"] and not navigate:
+        # Страница оказалась не та – зайдём честно.
+        state = review_state(page, url, review_id, navigate=True)
     if not state["ok"]:
         return {"status": "failed", "reason": state["reason"]}
     if state["answered"]:
@@ -2106,7 +2155,7 @@ def publish_review_answer(page: Page, url: str, review_id: str, text: str,
     if not state["found"]:
         return {"status": "failed", "reason": state["reason"]}
 
-    needle = review_text or ((state.get("item") or {}).get("full_text") or "")
+    needle = review_text or ((state.get("item") or {}).get("text") or "")
     if not needle:
         return {"status": "failed", "reason": "Нечем опознать отзыв на странице"}
 
@@ -2132,8 +2181,7 @@ def publish_review_answer(page: Page, url: str, review_id: str, text: str,
     except Exception:  # noqa: BLE001
         pass
 
-    # Помечаем кнопки ДО ввода: стрелка отправки появится только после него,
-    # и отличить её от остальных получится только так.
+    # Помечаем кнопки ДО ввода – запасной путь поиска кнопки отправки.
     try:
         page.evaluate(_MARK_SEEN_BUTTONS_JS)
     except Exception:  # noqa: BLE001
@@ -2148,7 +2196,6 @@ def publish_review_answer(page: Page, url: str, review_id: str, text: str,
     except Exception as e:  # noqa: BLE001
         return {"status": "failed", "reason": f"Не удалось вписать ответ: {_short_error(e)}"}
 
-    # Кнопка отправки появляется только после ввода текста.
     label = None
     deadline = time.time() + 8
     while time.time() < deadline:
@@ -2170,30 +2217,20 @@ def publish_review_answer(page: Page, url: str, review_id: str, text: str,
     except Exception as e:  # noqa: BLE001
         return {"status": "failed", "reason": f"Кнопка отправки не нажалась: {_short_error(e)}"}
 
-    # Зелёное «Ответ отправлен» – быстрый признак успеха.
-    toast = False
-    deadline = time.time() + 6
+    # Ждём, пока ответ появится на самой странице – без перезагрузки.
+    deadline = time.time() + 12
     while time.time() < deadline:
         try:
-            toast = bool(page.evaluate(_ANSWER_TOAST_JS))
+            if page.evaluate(_ANSWER_SHOWN_JS, {"review": needle, "answer": body}):
+                return {"status": "answered", "reason": "Ответ опубликован – Яндекс его показывает"}
         except Exception:  # noqa: BLE001
-            toast = False
-        if toast:
-            break
-        page.wait_for_timeout(400)
+            pass
+        page.wait_for_timeout(700)
 
-    # Но верим только состоянию страницы: перечитываем и смотрим, появился
-    # ли ответ. Уведомление могло быть и от чего-то другого.
-    for _ in range(3):
-        page.wait_for_timeout(2_000)
-        after = review_state(page, url, review_id)
-        if after["ok"] and after["answered"]:
-            return {"status": "answered", "reason": "Ответ опубликован – Яндекс его показывает"}
-
-    if toast:
-        return {"status": "unknown",
-                "reason": "Яндекс сказал «Ответ отправлен», но пока его не показывает – "
-                          "проверьте карточку через минуту"}
+    # Не увидели глазами – один раз перечитываем страницу начисто.
+    after = review_state(page, url, review_id, navigate=True)
+    if after["ok"] and after["answered"]:
+        return {"status": "answered", "reason": "Ответ опубликован"}
     return {"status": "failed",
             "reason": "Кнопку нажали, но ответ на карточке не появился. "
                       "Ответьте вручную по ссылке из списка"}

@@ -36,7 +36,7 @@ import projects_data as pdata
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-06-gemini-keys"
+BUILD = "2026-08-06-send-report"
 
 # ─── Статусы элемента очереди ───────────────────────────────────────
 DRAFTED = "drafted"                  # черновик готов, ждём человека
@@ -65,6 +65,27 @@ FALLBACK_NAME = "Клиент"
 #  Разбор данных страницы
 # ════════════════════════════════════════════════════════════════════
 
+def normalize(raw: dict) -> dict:
+    """
+    Отзыв Яндекса – к плоскому виду, с которым дальше работает всё Click.
+
+    Со страницы отзывы теперь приходят уже плоскими: тянуть в Python весь
+    блок состояния было расточительно по памяти. Но фикстура и старые
+    данные лежат в исходном виде, поэтому понимаем оба.
+    """
+    if "answered" in raw and "text" in raw:
+        return raw                                   # уже плоский
+    author = raw.get("author")
+    return {
+        "id": raw.get("id"),
+        "author": (author.get("user") if isinstance(author, dict) else author) or "",
+        "rating": int(raw.get("rating") or 0),
+        "text": (raw.get("full_text") or raw.get("snippet") or "").strip(),
+        "time_created": raw.get("time_created") or 0,
+        "answered": bool(((raw.get("owner_comment") or {}).get("text") or "").strip()),
+    }
+
+
 def extract_list(preload: dict | None) -> dict:
     """
     Вытащить блок отзывов из `window.__PRELOAD_DATA`.
@@ -74,7 +95,7 @@ def extract_list(preload: dict | None) -> dict:
     """
     node = (((preload or {}).get("initialState") or {}).get("edit") or {}).get("reviews") or {}
     lst = node.get("list") or {}
-    items = lst.get("items") or []
+    items = [normalize(x) for x in (lst.get("items") or [])]
     pager = lst.get("pager") or {}
     return {
         "items": items,
@@ -86,12 +107,21 @@ def extract_list(preload: dict | None) -> dict:
 
 
 def is_unanswered(item: dict) -> bool:
-    """Ответ компании лежит в owner_comment. Нет его – отзыв без ответа."""
+    """Есть ли ответ компании. Понимаем и плоский вид, и исходный."""
+    if "answered" in item:
+        return not item["answered"]
     return not ((item.get("owner_comment") or {}).get("text") or "").strip()
 
 
 def review_text(item: dict) -> str:
-    return (item.get("full_text") or item.get("snippet") or "").strip()
+    return (item.get("text") or item.get("full_text") or item.get("snippet") or "").strip()
+
+
+def review_author(item: dict) -> str:
+    a = item.get("author")
+    if isinstance(a, dict):
+        a = a.get("user")
+    return (a or "").strip()
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -195,7 +225,7 @@ def build_prompt(prompt_template: str, item: dict) -> str:
     промпта в «Настройках» их не отменяла.
     """
     text = review_text(item)
-    name = name_for_prompt((item.get("author") or {}).get("user"))
+    name = name_for_prompt(review_author(item))
     body = (prompt_template
             .replace(pdata.REVIEW_TEXT_MARK, text)
             .replace(pdata.REVIEW_NAME_MARK, name))
@@ -325,7 +355,7 @@ def as_queue_item(item: dict, *, project_id: str, city: str, company_url: str,
         "city": city,
         "companyUrl": company_url,
         "reviewsUrl": reviews_url,
-        "author": ((item.get("author") or {}).get("user") or "").strip(),
+        "author": review_author(item),
         "rating": int(item.get("rating") or 0),
         "text": review_text(item),
         "createdAt": _ms_to_iso(created),

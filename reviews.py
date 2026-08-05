@@ -36,7 +36,7 @@ import projects_data as pdata
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-05-reviews-style"
+BUILD = "2026-08-06-reviews-polish"
 
 # ─── Статусы элемента очереди ───────────────────────────────────────
 DRAFTED = "drafted"                  # черновик готов, ждём человека
@@ -180,12 +180,38 @@ def is_custom_prompt(project_id: str) -> bool:
 
 
 def build_prompt(prompt_template: str, item: dict) -> str:
-    """Подставить отзыв и имя в промпт проекта по маркерам из документа."""
+    """
+    Подставить отзыв и имя в промпт проекта и добавить общие правила.
+
+    Правила (тире, обращение по полу, без разметки) идут последними и
+    одинаковы для всех пяти брендов. Держим их отдельно, чтобы правка
+    промпта в «Настройках» их не отменяла.
+    """
     text = review_text(item)
     name = name_for_prompt((item.get("author") or {}).get("user"))
-    return (prompt_template
+    body = (prompt_template
             .replace(pdata.REVIEW_TEXT_MARK, text)
             .replace(pdata.REVIEW_NAME_MARK, name))
+    return body.rstrip() + "\n" + pdata.REVIEW_COMMON_RULES
+
+
+def clean_draft(text: str) -> str:
+    """
+    Причесать ответ после модели.
+
+    Правила вроде «не используй длинное тире» модель выполняет через раз,
+    а замена – работа на одну строку и не ошибается. Заодно убираем
+    markdown-звёздочки и кавычки, в которые модель иногда заворачивает
+    весь ответ целиком.
+    """
+    t = (text or "").strip()
+    if len(t) > 1 and t[0] in "\"«" and t[-1] in "\"»":
+        t = t[1:-1].strip()
+    t = t.replace("\u2014", "\u2013")          # длинное тире – на короткое
+    t = re.sub(r"\*\*(.+?)\*\*", r"\1", t)      # **жирный** markdown
+    t = re.sub(r"(?m)^#{1,6}\s*", "", t)        # заголовки решётками
+    t = re.sub(r"\n{3,}", "\n\n", t)            # лишние пустые строки
+    return t.strip()
 
 
 def looks_cut_off(text: str) -> bool:
@@ -224,6 +250,10 @@ def looks_broken(text: str) -> bool:
     if looks_cut_off(t):
         return True
     if _THINKING_TRACE.search(t):
+        return True
+    # Модель копировала «Уважаемый(ая)» прямо из промпта – в ответе под
+    # именем бренда так писать нельзя, пол выбирается один.
+    if "(ая)" in t or "(a)" in t.lower():
         return True
     # Ответ на русском, а тут сплошная латиница – значит, это не ответ.
     letters = [c for c in t if c.isalpha()]

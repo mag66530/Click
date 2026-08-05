@@ -48,7 +48,7 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-05-reviews-style"
+BUILD = "2026-08-06-reviews-polish"
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -2014,31 +2014,62 @@ _MARK_SEEN_BUTTONS_JS = r"""
 }
 """
 
+# Кнопка отправки – кружок со стрелкой, без единой буквы внутри. Разметку
+# прислал заказчик из инспектора браузера:
+#
+#   <div class="BusinessResponseDraft-SendButtonWrapper">
+#     <button class="… BusinessResponseDraft-SendButton">
+#       <span class="… Icon_depot_ArrowLongForward16White" aria-hidden="true">
+#
+# Ищем сначала по этому классу – он говорит сам за себя. Прошлая версия
+# опиралась на «кнопка, которой до ввода текста не было», и промахнулась:
+# кнопка есть в разметке всегда, до ввода она просто свёрнута
+# (BusinessResponseDraft-Controls_expanded). Поиск по «новизне» оставлен
+# запасным путём на случай, если Яндекс переименует классы.
 _FIND_SEND_BUTTON_JS = r"""
 () => {
+  const box = document.querySelector('[data-click-answer-box="1"]') || document;
   const field = document.querySelector('[data-click-answer="1"]');
   const fr = field ? field.getBoundingClientRect() : null;
 
+  const usable = b => {
+    const r = b.getBoundingClientRect();
+    return r.width >= 8 && r.height >= 8 &&
+           !b.disabled && b.getAttribute('aria-disabled') !== 'true';
+  };
+  const take = (b, how) => {
+    b.setAttribute('data-click-answer-send', '1');
+    return how;
+  };
+
+  // 1. Своё имя у кнопки отправки ответа.
+  for (const b of box.querySelectorAll('[class*="SendButton"], [class*="sendButton"]')) {
+    const btn = b.tagName === 'BUTTON' ? b : b.querySelector('button, [role="button"]');
+    if (btn && usable(btn)) return take(btn, 'SendButton');
+  }
+
+  // 2. Кнопка со стрелкой внутри.
+  for (const icon of box.querySelectorAll('[class*="ArrowLongForward"], [class*="ArrowForward"]')) {
+    const btn = icon.closest('button, [role="button"]');
+    if (btn && usable(btn)) return take(btn, 'стрелка');
+  }
+
+  // 3. Запасной путь: кнопка, которой до ввода текста на странице не было.
   const fresh = [];
   document.querySelectorAll('button, [role="button"], input[type="submit"]').forEach(b => {
-    if (b.getAttribute('data-click-seen')) return;          // была до ввода – не она
-    const r = b.getBoundingClientRect();
-    if (r.width < 8 || r.height < 8) return;                // невидимая
-    if (b.disabled || b.getAttribute('aria-disabled') === 'true') return;
+    if (b.getAttribute('data-click-seen') || !usable(b)) return;
     const label = ((b.textContent || '') + ' ' +
                    (b.getAttribute('aria-label') || '') + ' ' +
                    (b.getAttribute('title') || '')).replace(/\s+/g, ' ').trim();
-    if (/отмен|cancel|удал|delete/i.test(label)) return;     // «Отменить редактирование»
-    const dist = fr ? Math.abs(r.top - fr.bottom) + Math.abs(r.left - fr.left) : 0;
-    fresh.push({ el: b, label: label.slice(0, 40),
-                 submit: b.getAttribute('type') === 'submit', dist });
+    if (/отмен|cancel|удал|delete/i.test(label)) return;
+    const dist = fr ? Math.abs(b.getBoundingClientRect().top - fr.bottom) : 0;
+    fresh.push({ el: b, dist });
   });
-  if (!fresh.length) return null;
-
-  // Явный submit важнее; иначе – ближайшая к полю ответа.
-  fresh.sort((a, b) => (b.submit - a.submit) || (a.dist - b.dist));
-  fresh[0].el.setAttribute('data-click-answer-send', '1');
-  return fresh[0].label || '→';
+  if (fresh.length) {
+    fresh.sort((a, b) => a.dist - b.dist);
+    return take(fresh[0].el, 'новая кнопка у поля');
+  }
+  return null;
 }
 """
 

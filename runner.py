@@ -42,7 +42,7 @@ import yb_playwright as yb
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-05-reviews-style"
+BUILD = "2026-08-06-reviews-polish"
 
 ROOT = Path(__file__).parent
 USERS_DATA = paths.data_root()
@@ -1045,7 +1045,7 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str) -> dict:
             continue
         try:
             import llm
-            draft = llm.generate(rv.build_prompt(prompt, item))
+            draft = rv.clean_draft(llm.generate(rv.build_prompt(prompt, item)))
             add(item, rv.DRAFTED, draft=draft)
             out["drafted"] += 1
         except Exception as e:  # noqa: BLE001 – причина уже человеческая

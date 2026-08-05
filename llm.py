@@ -26,7 +26,7 @@ API = "https://generativelanguage.googleapis.com/v1beta/models"
 # скрипт, оставив этот модуль в памяти прежним, и тогда страница зовёт
 # функцию, которой тут ещё нет. streamlit_app сверяет метку и при
 # расхождении перезагружает модуль сам.
-BUILD = "2026-08-05-reviews-style"
+BUILD = "2026-08-06-reviews-polish"
 
 # По убыванию свежести. Свежая может быть недоступна на бесплатном
 # тарифе – тогда молча берём следующую.
@@ -34,11 +34,17 @@ MODELS = ("gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash")
 
 TIMEOUT = 45
 
-# Бесплатный тариф Gemini считает запросы в минуту. Первый же боевой прогон
-# упёрся в лимит на восьмом городе: 13 черновиков подряд без пауз – и всё,
-# «Упёрлись в лимит». Поэтому держим паузу между вызовами сами: лучше прогон
-# на минуту длиннее, чем половина отзывов без черновика.
-MIN_GAP_S = 6.0             # ≈10 запросов в минуту
+# Пауза между запросами. Бесплатный тариф Gemini считает запросы в минуту, и
+# первый боевой прогон упёрся в лимит: 13 черновиков подряд без пауз.
+#
+# Фиксированные 6 секунд эту беду вылечили, но заказчик справедливо сказала,
+# что генерация стала долгой: два десятка черновиков – это две минуты одного
+# ожидания. Поэтому пауза адаптивная: начинаем с малой и растим ТОЛЬКО когда
+# Google действительно ответил «слишком часто». Пока лимит не мешает, работаем
+# быстро; упёрлись – притормаживаем сами.
+MIN_GAP_S = 1.5             # с чего начинаем
+MAX_GAP_S = 20.0            # куда упираемся после отказов
+GAP_DECAY = 0.8             # после удачного ответа пауза потихоньку тает
 
 RETRIES = 4                 # на лимит запросов и сетевые сбои
 RETRY_PAUSE = (5, 20, 45, 60)
@@ -46,6 +52,7 @@ MAX_RETRY_WAIT = 90         # дольше ждать по подсказке Go
 
 _working_model: str | None = None
 _last_call_at: float = 0.0
+_gap: float = MIN_GAP_S
 
 
 class LlmError(RuntimeError):
@@ -79,12 +86,28 @@ def where() -> str:
 
 # ─── Запрос ─────────────────────────────────────────────────────────
 def _throttle() -> None:
-    """Выдержать паузу между запросами, чтобы не выбить дневной лимит за минуту."""
+    """Выдержать текущую паузу между запросами."""
     global _last_call_at
-    wait = MIN_GAP_S - (time.time() - _last_call_at)
+    wait = _gap - (time.time() - _last_call_at)
     if wait > 0:
         time.sleep(wait)
     _last_call_at = time.time()
+
+
+def _slower() -> None:
+    """Google сказал «слишком часто» – увеличиваем паузу."""
+    global _gap
+    _gap = min(MAX_GAP_S, max(MIN_GAP_S, _gap * 2))
+
+
+def _faster() -> None:
+    """Ответ пришёл спокойно – можно понемногу разгоняться обратно."""
+    global _gap
+    _gap = max(MIN_GAP_S, _gap * GAP_DECAY)
+
+
+def current_gap() -> float:
+    return _gap
 
 
 def _retry_after(payload: dict) -> float:
@@ -200,6 +223,7 @@ def generate(prompt: str) -> str:
                 text, finish = _text_from(r.json() or {})
                 if text and finish != "MAX_TOKENS":
                     _working_model = model
+                    _faster()
                     return text
                 if finish == "MAX_TOKENS":
                     # Обрезанный ответ не отдаём: половина фразы под именем
@@ -222,6 +246,8 @@ def generate(prompt: str) -> str:
             last = _explain(r.status_code, r.text)
             # Лимит и серверные сбои имеет смысл переждать, остальное – нет.
             if r.status_code == 429 or r.status_code >= 500:
+                if r.status_code == 429:
+                    _slower()
                 if attempt < RETRIES - 1:
                     try:
                         asked = _retry_after(r.json() or {})

@@ -45,7 +45,7 @@ from playwright_worker import PlaywrightWorker
 # Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
 # Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
 # ссылкой на старый yb_playwright.
-UI_BUILD = "2026-08-05-reviews-style"
+UI_BUILD = "2026-08-06-reviews-polish"
 
 
 def _same_build(mod) -> bool:
@@ -1572,7 +1572,7 @@ def _review_regenerate(project_id: str, item: dict) -> None:
     fake = {"full_text": item.get("text"), "author": {"user": item.get("author")},
             "rating": item.get("rating")}
     try:
-        item["draft"] = llm.generate(rv.build_prompt(prompt, fake))
+        item["draft"] = rv.clean_draft(llm.generate(rv.build_prompt(prompt, fake)))
         item["status"] = rv.DRAFTED
         item["note"] = ""
     except Exception as e:  # noqa: BLE001
@@ -2412,7 +2412,8 @@ def _reviews_settings_block(project_id: str) -> None:
                   "author": {"user": "Павел Филиппов"}, "rating": 5}
         with st.spinner("Прошу у Gemini ответ на пробный отзыв…"):
             try:
-                answer = llm.generate(rv.build_prompt(rv.project_prompt(project_id), sample))
+                answer = rv.clean_draft(
+                    llm.generate(rv.build_prompt(rv.project_prompt(project_id), sample)))
             except Exception as e:  # noqa: BLE001
                 answer = None
                 st.error(str(e))

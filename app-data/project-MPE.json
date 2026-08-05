@@ -12,7 +12,7 @@
         {
           "id": "ct-MPE-0-1-санкт-петербург",
           "name": "Санкт-Петербург",
-          "url": "https://yandex.ru/sprav/46921969012/p/edit/posts/"
+          "url": "https://yandex.ru/sprav/46921969012/p/"
         },
         {
           "id": "ct-MPE-0-2-новосибирск",
@@ -706,14 +706,19 @@
           "url": "https://yandex.ru/sprav/107769173912/p/edit/posts/"
         },
         {
-          "id": "ct-MPE-1-10-петропавловск",
+          "id": "ct-MPE-1-10-жанаозен",
+          "name": "Жанаозен",
+          "url": "https://yandex.ru/sprav/121416383557/p/edit/posts/"
+        },
+        {
+          "id": "ct-MPE-1-11-петропавловск",
           "name": "Петропавловск",
           "url": "https://yandex.ru/sprav/173961783407/p/edit/posts/"
         },
         {
-          "id": "ct-MPE-1-11-абай",
+          "id": "ct-MPE-1-12-абай",
           "name": "Абай",
-          "url": "https://yandex.ru/sprav/227868942827/p/edit/posts/"
+          "url": "https://yandex.ru/sprav/227868942827/p/edit/posts/?ncrnd=60330"
         }
       ]
     },
@@ -727,8 +732,20 @@
           "url": "https://yandex.ru/sprav/49159280235/p/edit/posts/"
         }
       ]
+    },
+    {
+      "id": "c-MPE-3-азербайджан",
+      "name": "Азербайджан",
+      "cities": [
+        {
+          "id": "ct-MPE-3-0-баку",
+          "name": "Баку",
+          "url": "https://yandex.ru/sprav/169907493109/p/edit/posts/"
+        }
+      ]
     }
   ],
   "email": "mepen88@yandex.ru",
-  "kpSheetUrl": "https://docs.google.com/spreadsheets/d/1-7PoEXl8ik8L1k8KEOxNrS7OaH76xQnD/edit?gid=441667614#gid=441667614"
+  "kpSheetUrl": "https://docs.google.com/spreadsheets/d/1-7PoEXl8ik8L1k8KEOxNrS7OaH76xQnD/edit?gid=441667614#gid=441667614",
+  "kpSyncedAt": "2026-08-05T15:33:43.621324+00:00"
 }

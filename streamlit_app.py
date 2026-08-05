@@ -37,50 +37,30 @@ import yb_playwright as yb
 import playwright_worker
 from playwright_worker import PlaywrightWorker
 
-# ВСЕ модули обязаны быть из одной сборки. Облако умеет обновить главный
-# скрипт «на лету», оставив соседние модули в памяти прежними – и тогда новая
-# страница зовёт функцию, которой в старом модуле ещё нет. Сначала это ловили
-# только для ui_theme (разъезжались вёрстка и CSS), потом ровно так же
-# посыпались отзывы: страница уже знала про looks_cut_off, а reviews в памяти –
-# нет, и вкладка падала с AttributeError.
+# Метка сборки. Показывается человеку и служит ключом кэша для CSS.
 #
-# Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
-# Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
-# ссылкой на старый yb_playwright.
+# ЗДЕСЬ БОЛЬШЕ НЕТ САМОДЕЛЬНОЙ ПЕРЕЗАГРУЗКИ МОДУЛЕЙ, и это важно.
+#
+# Раньше тут стояло: «не совпала метка – перезагружаем модуль сами» через
+# importlib.reload. Задумка была честная: облако умеет обновить главный скрипт,
+# оставив соседние модули в памяти прежними, и тогда страница зовёт функцию,
+# которой в старом модуле ещё нет.
+#
+# Но это оказалось лечением несуществующей болезни ценой настоящей. Streamlit
+# делает ровно ту же работу сам: следит за локальными модулями и выселяет
+# изменённые из sys.modules – причём аккуратно, откладывая выселение так, чтобы
+# «never mutate sys.modules while user code is running» (его local_sources_watcher).
+#
+# А наша перезагрузка шла из пользовательского потока, без всякой оглядки на
+# соседей. Пока один поток перезагружал модули, другой их импортировал – и
+# импорт падал на ровном месте: KeyError: 'runner', KeyError: 'repo_store',
+# KeyError: 'reviews'. Приложение умирало целиком. Потоков же стало много:
+# два прогона разом, плюс каждая открытая вкладка – это свой поток. Заказчик
+# получила это, запустив актуализацию вместе со сверкой КП; и на вопрос «а если
+# два человека с разных компов?» ответ был бы такой же – упало бы.
+#
+# Поэтому: модули не трогаем, метку только показываем.
 from build import BUILD as UI_BUILD
-
-
-def _same_build(mod) -> bool:
-    return getattr(mod, "BUILD", "") == UI_BUILD
-
-
-# Список ПОЛНЫЙ: любой модуль, оставшийся в памяти старым, ломает своё. Так
-# заказчик перезагрузила города из таблицы, а Click опять взял старый лист –
-# kp_sheet в списке не было, и правка просто не работала.
-_MODULES = ("build", "paths", "repo_store", "projects_data", "kp_sheet", "kp_audit",
-            "playwright_worker", "ui_theme", "yb_playwright", "reviews", "llm", "runner")
-
-if not all(_same_build(m) for m in (paths, repo_store, pdata, kp_sheet, kp_audit,
-                                    playwright_worker, T, yb, rv, llm, runner)):
-    import importlib
-
-    for _name in _MODULES:                # порядок: зависимости раньше зависимых
-        try:
-            importlib.reload(sys.modules[_name])
-        except Exception:  # noqa: BLE001 – без перезагрузки хуже, но падать нельзя
-            pass
-    import kp_audit  # noqa: F811
-    import playwright_worker  # noqa: F811
-    import kp_sheet  # noqa: F811
-    import llm  # noqa: F811
-    import paths  # noqa: F811
-    import projects_data as pdata  # noqa: F811
-    import repo_store  # noqa: F811
-    import reviews as rv  # noqa: F811
-    import runner  # noqa: F811
-    import ui_theme as T  # noqa: F811
-    import yb_playwright as yb  # noqa: F811
-    from playwright_worker import PlaywrightWorker  # noqa: F811
 
 ROOT = Path(__file__).parent
 USERS_DATA = paths.data_root()

@@ -239,6 +239,27 @@ def is_running(project_id: str, kind: str | None = None) -> bool:
     return read_state(project_id, kind).get("status") == "running"
 
 
+def live_runs_everywhere() -> list[tuple[str, str]]:
+    """
+    Все идущие прогоны по ВСЕМ проектам: [(проект, вид)].
+
+    Память у облака одна на всё приложение, а не на проект. Пока потолок
+    считался по проекту, двое за разными компами на разных проектах могли
+    поднять по два браузера каждый – четыре разом, и это верная смерть по
+    памяти (один браузер весит около 450 МБ). Считаем поэтому глобально.
+    """
+    out: list[tuple[str, str]] = []
+    try:
+        projects = [d.name for d in USERS_DATA.iterdir() if d.is_dir()]
+    except OSError:
+        return out
+    for pid in projects:
+        for k in RUN_KINDS:
+            if is_running(pid, k) or lock_owner(pid, k) is not None:
+                out.append((pid, k))
+    return out
+
+
 def busy_reason(project_id: str, kind: str) -> str:
     """
     Почему прогон этого вида сейчас не запустить. Пустая строка – можно.
@@ -257,6 +278,14 @@ def busy_reason(project_id: str, kind: str) -> str:
     if len(live) >= MAX_PARALLEL_RUNS:
         return (f"Уже идут два прогона ({', '.join(KIND_RU[k] for k in live)}). "
                 "Дождитесь окончания одного из них.")
+    # Потолок общий на всё приложение: браузеры делят одну память облака,
+    # и неважно, из какого проекта и с чьего компьютера их запустили.
+    everywhere = live_runs_everywhere()
+    if len(everywhere) >= MAX_PARALLEL_RUNS and not any(p == project_id for p, _ in everywhere):
+        where = ", ".join(sorted({p for p, _ in everywhere}))
+        return (f"Сейчас идут прогоны в других проектах ({where}). Больше "
+                f"{MAX_PARALLEL_RUNS} разом приложению не потянуть – это тяжёлые "
+                "браузеры, память у облака одна на всех. Дождитесь окончания.")
     return ""
 
 

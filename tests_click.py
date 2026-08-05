@@ -498,6 +498,60 @@ def test_packages_txt() -> None:
            "libcups2t64", "libatk1.0-0t64", "libatk-bridge2.0-0t64"} <= set(listed))
 
 
+def test_requirements_txt() -> None:
+    """
+    requirements.txt: закреплены не только наши библиотеки, но и чужие, которые
+    тянутся следом и способны положить сервер ДО запуска нашего кода.
+
+    Живой случай. Streamlit требует «starlette<2,>=0.40.0», облако при пересборке
+    поставило самую свежую – 1.4.0. В ней у GZipResponder появился обязательный
+    аргумент thread_minimum_size, а Streamlit 1.60.0 его не передаёт. Сервер падал
+    с TypeError на КАЖДОМ запросе и отвечал 500 даже на проверку живости: заказчик
+    видел «Oh no. Error running app», а перезапуск не помогал – окружение
+    собиралось тем же составом.
+
+    Поэтому здесь две проверки: версия записана в файле И установленная starlette
+    правда стыкуется со Streamlit. Вторая ловит ту же поломку на будущих версиях,
+    как бы её ни назвали.
+    """
+    print("\n▸ requirements.txt")
+    lines = [ln.strip() for ln in Path("requirements.txt").read_text(encoding="utf-8").splitlines()
+             if ln.strip() and not ln.strip().startswith("#")]
+    pinned = {ln.split("==")[0].strip().lower() for ln in lines if "==" in ln}
+
+    # Всё, что определяет, поднимется ли веб-сервер, держим на точной версии.
+    for name in ("streamlit", "starlette", "playwright"):
+        check(f"{name} закреплён точной версией", name in pinned,
+              f"строки: {lines}")
+
+    # Главная проверка: подпись, по которой Streamlit создаёт свой сжиматель
+    # ответов, совпадает с тем, что умеет установленная starlette.
+    import inspect
+
+    from starlette.middleware.gzip import GZipResponder
+
+    from streamlit.web.server.starlette.starlette_gzip_middleware import (
+        _MediaAwareGZipResponder,
+    )
+
+    required = [p.name for p in inspect.signature(GZipResponder.__init__).parameters.values()
+                if p.name != "self" and p.default is inspect.Parameter.empty
+                and p.kind is not inspect.Parameter.VAR_KEYWORD]
+    check("у starlette нет новых обязательных аргументов сжатия",
+          required == ["app", "minimum_size"], f"требуются: {required}")
+
+    async def nothing(scope, receive, send) -> None:  # ASGI-заглушка
+        return None
+
+    try:
+        _MediaAwareGZipResponder(nothing, 500, compresslevel=9)
+        built = True
+        why = ""
+    except TypeError as exc:  # ровно то, на чём падало облако
+        built, why = False, str(exc)
+    check("сжиматель ответов Streamlit создаётся на этой starlette", built, why)
+
+
 def test_publish_click_on_real_page() -> None:
     """
     Клик по кнопке «Создать» в НАСТОЯЩЕМ браузере.
@@ -2049,6 +2103,7 @@ def main() -> int:
         test_browser_fallback()
         test_engine_order()
         test_packages_txt()
+        test_requirements_txt()
         test_publish_click_on_real_page()
         test_city_duplicates()
         test_worker_thread()

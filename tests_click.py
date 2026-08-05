@@ -2189,6 +2189,58 @@ def test_review_batch() -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+def test_no_stray_output() -> None:
+    """
+    В главном скрипте не должно быть выражений, которые Streamlit сам выведет
+    на экран.
+
+    Живой случай: заказчик сняла галочку города и увидела страницу, забитую
+    словом «None» – по одному на каждый из 101 города, – после чего всё
+    подвисло.
+
+    Причина в «магии» Streamlit. Он переписывает главный скрипт и ЛЮБОЕ голое
+    выражение заворачивает в st.write. Вызовы функций он пропускает (иначе
+    каждая строка st.caption(...) печатала бы None), а вот условное выражение
+    «A if cond else B» – нет. У нас стояло
+
+        sel.add(cid) if st.session_state[key] else sel.discard(cid)
+
+    и оба метода возвращают None. Причём заходит эта магия и внутрь функций,
+    не только в тело модуля.
+
+    Проверяем по разбору кода: голыми в главном скрипте могут быть только
+    вызовы функций и строки-документации.
+    """
+    import ast
+    print("\n▸ Ничего лишнего на экран")
+
+    src_path = Path(__file__).parent / "streamlit_app.py"
+    tree = ast.parse(src_path.read_text(encoding="utf-8"), filename=src_path.name)
+
+    def docstrings(node) -> set:
+        """Первые строковые литералы модуля, классов и функций – это описания."""
+        out = set()
+        for n in ast.walk(node):
+            body = getattr(n, "body", None)
+            if isinstance(body, list) and body and isinstance(body[0], ast.Expr) \
+                    and isinstance(body[0].value, ast.Constant) \
+                    and isinstance(body[0].value.value, str):
+                out.add(id(body[0]))
+        return out
+
+    known = docstrings(tree)
+    bad = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Expr) or id(node) in known:
+            continue
+        if isinstance(node.value, (ast.Call, ast.Yield, ast.YieldFrom, ast.Await)):
+            continue      # вызовы Streamlit пропускает сам
+        bad.append(f"строка {node.lineno}: {type(node.value).__name__}")
+
+    check("голых выражений, которые уедут на экран, нет", not bad, "; ".join(bad[:5]))
+
+
+# ════════════════════════════════════════════════════════════════════
 def test_two_people_at_once(tmp: Path) -> None:
     """
     Двое за разными компами не должны ронять приложение.
@@ -2928,6 +2980,7 @@ def main() -> int:
         test_reviews()
         test_gemini_keys()
         test_review_batch()
+        test_no_stray_output()
         test_two_people_at_once(tmp)
         test_city_checkbox_survives_collapse()
         test_reviews_limit_and_stop()

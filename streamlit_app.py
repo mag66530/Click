@@ -724,8 +724,11 @@ def status_pills(project_id: str) -> list[tuple[str, str]]:
         ("ok", "Авторизован") if _session_cached(project_id) else ("warn", "Требуется вход"),
         ("info", f"{cities_word(cities)} в очереди") if cities else ("warn", "Очередь пуста"),
     ]
-    if state.get("status") == "running":
-        pills.append(("warn", "Идёт " + ("публикация" if state.get("action") == "publish" else "актуализация")))
+    # Прогонов может идти несколько разом – показываем все, иначе человек видит
+    # «идёт публикация» и не понимает, откуда взялся второй браузер.
+    live = runner.running_kinds(project_id)
+    if live:
+        pills += [("warn", "Идёт: " + runner.KIND_RU[k].lower()) for k in live]
     elif state.get("status") == "error":
         pills.append(("err", "Последний прогон с ошибкой"))
     return pills
@@ -957,11 +960,11 @@ def _open_report(kind: str, run_id: str = "") -> None:
     st.rerun()
 
 
-def _render_live_panel(project_id: str, was_running: bool = False) -> None:
-    state = runner.read_state(project_id)
+def _render_live_panel(project_id: str, run_kind: str, was_running: bool = False) -> None:
+    state = runner.read_state(project_id, run_kind)
     status = state.get("status")
-    action = state.get("action")
-    kind = "publish" if action == "publish" else "actualize"
+    action = state.get("action") or run_kind
+    kind = "publish" if action == "publish" else "actualize"   # какой отчёт открывать
     action_ru = {"publish": "Публикация", "collect": "Чтение организаций"}.get(action, "Актуализация")
     running = status == "running"
 
@@ -1004,15 +1007,21 @@ def _render_live_panel(project_id: str, was_running: bool = False) -> None:
 
     # Пока идёт прогон лог нужен на виду, после – он только мешает: экран
     # длинный, а под ним отчёт. Сворачиваем.
-    log_text = runner.read_live_log(project_id)
+    log_text = runner.read_live_log(project_id, run_kind)
     if running or not log_text:
         html(T.log_box(log_text))
     else:
         with st.expander("📄 Показать лог прогона"):
             html(T.log_box(log_text))
 
+    # Рядом идёт ещё один прогон – про него тут же и скажем, чтобы человек не
+    # гадал, почему браузер шевелится, когда на этой вкладке всё закончилось.
+    others = [k for k in runner.running_kinds(project_id) if k != run_kind]
+    if others:
+        st.caption("Параллельно идёт: " + ", ".join(runner.KIND_RU[k] for k in others) + ".")
 
-def live_panel(project_id: str, running: bool) -> None:
+
+def live_panel(project_id: str, running: bool, run_kind: str) -> None:
     """
     Живая панель прогона – одна на обе вкладки.
 
@@ -1029,18 +1038,19 @@ def live_panel(project_id: str, running: bool) -> None:
     if fragment and running:
         @fragment(run_every=2)
         def _live() -> None:
-            _render_live_panel(project_id, was_running=True)
+            _render_live_panel(project_id, run_kind, was_running=True)
         _live()
         return
-    _render_live_panel(project_id)
+    _render_live_panel(project_id, run_kind)
     if running:
         st.caption("Обновите страницу, чтобы увидеть свежий прогресс.")
 
 
 def tab_run(project_id: str, config: dict) -> None:
     settings = get_settings(project_id)
-    state = runner.read_state(project_id)
+    state = runner.read_state(project_id, "publish")
     running = state.get("status") == "running"
+    busy = runner.busy_reason(project_id, "publish")   # пусто – запускать можно
     files, cities = runner.count_pending(project_id)
     has_session = yb.has_saved_session(project_id)
     has_creds = bool((config.get("email") or "").strip())
@@ -1070,7 +1080,7 @@ def tab_run(project_id: str, config: dict) -> None:
     # ─── Кнопки ───
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1:
-        disabled = running or not cities or not has_session
+        disabled = bool(busy) or not cities or not has_session
         if st.button(f"▶ Опубликовать ({cities_word(cities)})", type="primary",
                      use_container_width=True, disabled=disabled, key="btn-publish"):
             ok, msg = runner.start_publish(
@@ -1087,7 +1097,7 @@ def tab_run(project_id: str, config: dict) -> None:
             st.rerun()
     with c2:
         if st.button("⏹ Остановить", use_container_width=True, disabled=not running, key="btn-stop"):
-            runner.request_stop(project_id)
+            runner.request_stop(project_id, "publish")
             st.rerun()
     with c3:
         if st.button("🔄 Обновить", use_container_width=True, key="btn-refresh-run"):
@@ -1097,13 +1107,15 @@ def tab_run(project_id: str, config: dict) -> None:
         st.warning("В «Настройках» не указан email Яндекс.Бизнеса – без него не работает "
                    "защита от публикации не с того аккаунта.")
     if running:
-        st.caption("Кнопка запуска заблокирована, пока идёт прогон – это защита от повторного старта "
-                   "и дублей постов.")
+        st.caption("Кнопка запуска заблокирована, пока идёт публикация – это защита от повторного "
+                   "старта и дублей постов.")
+    elif busy:
+        st.caption(busy)
 
     st.divider()
 
     # ─── Живой лог: обновляется сам, пока идёт прогон ───
-    live_panel(project_id, running)
+    live_panel(project_id, running, "publish")
 
     # ─── Очередь задач ───
     st.divider()
@@ -2019,15 +2031,20 @@ def reviews_queue_block(project_id: str) -> None:
     if not pending:
         return
 
-    running = runner.read_state(project_id).get("status") == "running"
+    # Отправка ответов водит браузер сама, из вкладки. Пускать её рядом с любым
+    # прогоном не будем: страница отзывов тяжёлая, и именно на ней приложение
+    # уже выбивало по памяти – третий браузер тут лишний.
+    live = runner.running_kinds(project_id)
+    running = bool(live)
     done = [it for it in items if it.get("status") not in rv.OPEN_STATUSES]
 
     with st.container(border=True):
         html(f'<div class="card-title">💬 Ответы на отзывы – на подтверждении '
              f'({len(pending)})</div>')
         if running:
-            st.info("Идёт прогон. Отправлять ответы можно будет, когда он закончится: "
-                    "во время прогона браузер занят, и второй вход в Яндекс его собьёт.")
+            st.info(f"Идёт {', '.join(runner.KIND_RU[k].lower() for k in live)}. Отправлять ответы "
+                    "можно будет, когда прогон закончится: страница отзывов тяжёлая, и третий "
+                    "браузер приложению не потянуть.")
         else:
             html('<div class="hint" style="margin-bottom:10px">Ничего не уходит в Яндекс само. '
                  'Проверьте текст, при желании поправьте прямо здесь и нажмите '
@@ -2152,8 +2169,9 @@ def tab_actualize(project_id: str, config: dict) -> None:
     chosen = _act_selected(all_ids)
     selected = [cid for cid in all_ids if cid in chosen]
 
-    state = runner.read_state(project_id)
+    state = runner.read_state(project_id, "actualize")
     running = state.get("status") == "running"
+    busy = runner.busy_reason(project_id, "actualize")   # пусто – запускать можно
 
     with st.container(border=True):
         html('<div class="card-title">🔄 Актуализация данных</div>')
@@ -2234,7 +2252,7 @@ def tab_actualize(project_id: str, config: dict) -> None:
     # идёт. Раньше панель с «Посмотреть отчёт» стояла НАД кнопкой запуска, а
     # ещё ниже висела вторая карточка отчёта – выглядело нацепленным сверху.
     if st.button(f"🔄 Запустить актуализацию ({cities_word(len(selected))})", type="primary",
-                 use_container_width=True, disabled=running or not selected, key="btn-actualize"):
+                 use_container_width=True, disabled=bool(busy) or not selected, key="btn-actualize"):
         selection = {c["id"]: [ct["id"] for ct in c["cities"] if ct["id"] in chosen]
                      for c in countries}
         save_actualize_tasks(project_id, config, selection)
@@ -2245,13 +2263,15 @@ def tab_actualize(project_id: str, config: dict) -> None:
         st.rerun()
     if running:
         st.button("⏹ Остановить", use_container_width=True, key="btn-stop-act",
-                  on_click=runner.request_stop, args=(project_id,))
+                  on_click=runner.request_stop, args=(project_id, "actualize"))
+    elif busy:
+        st.caption(busy)
 
     # Панель показываем, только когда есть что показывать: до первого прогона
     # пустая рамка с пустым логом только мешает.
-    if running or runner.read_state(project_id).get("status") not in (None, "idle"):
+    if running or state.get("status") not in (None, "idle"):
         with st.container(border=True):
-            live_panel(project_id, running)
+            live_panel(project_id, running, "actualize")
 
     # Вторая карточка отчёта убрана: весь отчёт теперь на вкладке «Отчёт»,
     # и туда ведёт кнопка «Посмотреть отчёт» из панели выше.
@@ -2543,9 +2563,13 @@ _REPORT_KINDS = {"publish": "📤 Публикация", "actualize": "🔄 Ак
 
 
 def _last_run_kind(project_id: str) -> str:
-    """Какой прогон был последним – его отчёт и показываем по умолчанию."""
-    state = runner.read_state(project_id)
-    return "actualize" if state.get("action") == "actualize" else "publish"
+    """
+    Какой прогон был последним – его отчёт и показываем по умолчанию.
+    Чтение организаций не в счёт: отчёта у него нет.
+    """
+    when = {k: (runner.read_state(project_id, k).get("startedAt") or "")
+            for k in ("publish", "actualize")}
+    return "actualize" if when["actualize"] > when["publish"] else "publish"
 
 
 def tab_report(project_id: str) -> None:
@@ -3264,8 +3288,9 @@ def _audit_pick_sheet(titles: list[str], prefer: str) -> str:
 
 
 def tab_audit(project_id: str, config: dict) -> None:
-    state = runner.read_state(project_id)
+    state = runner.read_state(project_id, "collect")
     running = state.get("status") == "running"
+    busy = runner.busy_reason(project_id, "collect")   # пусто – запускать можно
     stored = runner.load_companies(project_id)
     companies = stored.get("companies") or []
 
@@ -3280,7 +3305,7 @@ def tab_audit(project_id: str, config: dict) -> None:
         c1, c2 = st.columns([2, 3])
         collected_at = local_time(stored.get("collectedAt")) if stored.get("collectedAt") else ""
         if c1.button("🔄 Прочитать организации в Яндексе", type="primary", key="audit-collect",
-                     disabled=running or not yb.has_saved_session(project_id),
+                     disabled=bool(busy) or not yb.has_saved_session(project_id),
                      use_container_width=True):
             ok, msg = runner.start_collect(project_id,
                                            headless=bool(get_settings(project_id)["headless"]),
@@ -3295,12 +3320,17 @@ def tab_audit(project_id: str, config: dict) -> None:
                     help="Список организаций и так отдаёт сайт, телефоны и почту. Открывать "
                          "карточки нужно, только если в списке чего-то не хватает: это "
                          "3-4 секунды на каждую из сотен карточек.")
+        if running:
+            st.button("⏹ Остановить", key="audit-stop", on_click=runner.request_stop,
+                      args=(project_id, "collect"))
+        elif busy:
+            st.caption(busy)
         if not yb.has_saved_session(project_id):
             st.warning("Сначала войдите в Яндекс в разделе «⚙️ Настройки».")
 
-    if running or runner.read_state(project_id).get("status") not in (None, "idle"):
+    if running or state.get("status") not in (None, "idle"):
         with st.container(border=True):
-            live_panel(project_id, running)
+            live_panel(project_id, running, "collect")
 
     # ─── Лист КП ───
     saved_url = (config.get("kpSheetUrl") or "").strip()

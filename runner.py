@@ -54,8 +54,45 @@ SLOW_THRESHOLD_MS = 60_000
 COOLDOWN_PAUSE_S = 30
 PROTOCOL_FAIL_LIMIT = 3      # столько подряд протокольных падений = браузер завис
 
-_threads: dict[str, threading.Thread] = {}
+# ─── виды прогонов ──────────────────────────────────────────────────
+# Прогоны разных видов идут параллельно, поэтому у каждого свои файлы:
+# состояние, живой лог, лок и флаг остановки. Раньше файл был один на проект,
+# и второй прогон затирал бы первому и лог, и прогресс.
+RUN_KINDS = ("publish", "actualize", "collect")
+
+KIND_RU = {"publish": "Публикация", "actualize": "Актуализация",
+           "collect": "Чтение организаций"}
+
+# Что с чем НЕ уживается. Сверка только читает раздел «Организации» и ничего
+# в Яндексе не меняет – её можно гонять рядом с чем угодно. Два прогона
+# одного вида не пускаются никогда: это дубли постов и двойные клики по
+# одному городу, ради чего лок и заводился. Публикация с актуализацией
+# разведены по другой причине – это два тяжёлых браузера разом, а бесплатному
+# облаку хватает и одного (приложение уже выбивало по памяти).
+CONFLICTS: dict[str, tuple[str, ...]] = {
+    "publish":   ("publish", "actualize"),
+    "actualize": ("actualize", "publish"),
+    "collect":   ("collect",),
+}
+
+# Потолок на всякий случай: сколько браузеров живёт разом. Из таблицы выше
+# больше двух и не выходит, но если видов прогонов станет больше – потолок
+# останется.
+MAX_PARALLEL_RUNS = 2
+
+_threads: dict[tuple[str, str], threading.Thread] = {}
 _lock = threading.Lock()
+
+# Какой прогон ведёт этот поток. Ставится один раз в начале воркера, дальше
+# все пути (лог, стоп-флаг, состояние) сами попадают в нужные файлы – иначе
+# пришлось бы протаскивать вид прогона через полсотни вызовов, и один
+# забытый писал бы соседу в стоп-флаг.
+_CUR = threading.local()
+
+
+def _kind(kind: str | None = None) -> str:
+    """Вид прогона: явно переданный или тот, что ведёт этот поток."""
+    return kind or getattr(_CUR, "kind", "") or "publish"
 
 
 # ─── пути ───────────────────────────────────────────────────────────
@@ -85,20 +122,42 @@ def p_logs(project_id: str) -> Path:
     return base(project_id) / "logs"
 
 
-def p_state(project_id: str) -> Path:
+def p_state(project_id: str, kind: str | None = None) -> Path:
+    return base(project_id) / f".run-state-{_kind(kind)}.json"
+
+
+def p_lock(project_id: str, kind: str | None = None) -> Path:
+    return base(project_id) / f".run-{_kind(kind)}.lock"
+
+
+def p_live_log(project_id: str, kind: str | None = None) -> Path:
+    return base(project_id) / f".run-log-{_kind(kind)}.txt"
+
+
+def p_stop(project_id: str, kind: str | None = None) -> Path:
+    return base(project_id) / f".STOP_FLAG-{_kind(kind)}"
+
+
+# Файлы прошлой версии – один комплект на проект. Читаем их, чтобы после
+# обновления на экране остался итог последнего прогона; писать в них больше
+# некому.
+def p_state_legacy(project_id: str) -> Path:
     return base(project_id) / ".run-state.json"
 
 
-def p_lock(project_id: str) -> Path:
-    return base(project_id) / ".run.lock"
-
-
-def p_live_log(project_id: str) -> Path:
+def p_live_log_legacy(project_id: str) -> Path:
     return base(project_id) / ".run-log.txt"
 
 
-def p_stop(project_id: str) -> Path:
-    return base(project_id) / ".STOP_FLAG"
+def _legacy_action(project_id: str) -> str:
+    """Какого вида был прогон, записанный файлами прошлой версии."""
+    fp = p_state_legacy(project_id)
+    if not fp.exists():
+        return ""
+    try:
+        return json.loads(fp.read_text(encoding="utf-8")).get("action") or "publish"
+    except (json.JSONDecodeError, OSError):
+        return ""
 
 
 def p_ledger(project_id: str) -> Path:
@@ -122,34 +181,91 @@ def _write_atomic(path: Path, text: str) -> None:
 
 
 # ─── состояние прогона ──────────────────────────────────────────────
-def read_state(project_id: str) -> dict:
-    fp = p_state(project_id)
+def _read_state_file(project_id: str, kind: str) -> dict | None:
+    fp = p_state(project_id, kind)
     if not fp.exists():
-        return {"status": "idle"}
-    try:
-        state = json.loads(fp.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {"status": "idle"}
+        # Прогон, начатый прошлой версией: комплект файлов был один на проект.
+        if _legacy_action(project_id) != kind:
+            return None
+        try:
+            fp_state = json.loads(p_state_legacy(project_id).read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+    else:
+        try:
+            fp_state = json.loads(fp.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
 
     # Прогон помечен running, но процесс, который его вёл, уже не жив
     # (перезапуск Streamlit) – показываем честно, а не «вечно идёт».
-    if state.get("status") == "running" and state.get("ownerPid") != os.getpid():
-        state = {**state, "status": "interrupted",
-                 "error": "Прогон прерван перезапуском приложения. Данные о выполненных городах сохранены."}
-    return state
+    if fp_state.get("status") == "running" and fp_state.get("ownerPid") != os.getpid():
+        fp_state = {**fp_state, "status": "interrupted",
+                    "error": "Прогон прерван перезапуском приложения. Данные о выполненных городах сохранены."}
+    return fp_state
+
+
+def read_state(project_id: str, kind: str | None = None) -> dict:
+    """
+    Состояние прогона. С видом – именно этого вида; без вида – того, что идёт
+    сейчас, а если не идёт ни один – последнего начатого.
+    """
+    if kind is not None:
+        return _read_state_file(project_id, kind) or {"status": "idle"}
+
+    states = [s for s in (_read_state_file(project_id, k) for k in RUN_KINDS) if s]
+    if not states:
+        return {"status": "idle"}
+    live = [s for s in states if s.get("status") == "running"]
+    return max(live or states, key=lambda s: s.get("startedAt") or "")
 
 
 def _write_state(project_id: str, state: dict) -> None:
-    _write_atomic(p_state(project_id), json.dumps(state, ensure_ascii=False, indent=2))
+    _write_atomic(p_state(project_id, state.get("action")),
+                  json.dumps(state, ensure_ascii=False, indent=2))
 
 
-def is_running(project_id: str) -> bool:
-    return read_state(project_id).get("status") == "running"
+def running_kinds(project_id: str) -> list[str]:
+    """Какие прогоны идут прямо сейчас – их может быть несколько."""
+    return [k for k in RUN_KINDS
+            if (_read_state_file(project_id, k) or {}).get("status") == "running"]
 
 
-def request_stop(project_id: str) -> None:
-    p_stop(project_id).write_text(str(int(time.time())), encoding="utf-8")
-    _append_log(project_id, "WARN", "⏹  Запрошена остановка – завершу после текущего города")
+def is_running(project_id: str, kind: str | None = None) -> bool:
+    """Без вида – идёт ли хоть какой-нибудь прогон."""
+    if kind is None:
+        return bool(running_kinds(project_id))
+    return read_state(project_id, kind).get("status") == "running"
+
+
+def busy_reason(project_id: str, kind: str) -> str:
+    """
+    Почему прогон этого вида сейчас не запустить. Пустая строка – можно.
+
+    Смотрим и на состояние (свой процесс), и на лок (чужое окно или другая
+    копия Click: там состояние читается как «прервано», а прогон живой).
+    """
+    live = [k for k in RUN_KINDS
+            if is_running(project_id, k) or lock_owner(project_id, k) is not None]
+    for other in CONFLICTS.get(kind, (kind,)):
+        if other in live:
+            if other == kind:
+                return f"{KIND_RU[kind]} уже идёт – второй запуск заблокирован."
+            return (f"Сейчас идёт «{KIND_RU[other]}». Вместе с ней «{KIND_RU[kind]}» "
+                    "не запускается: это два браузера разом, приложению не хватит памяти.")
+    if len(live) >= MAX_PARALLEL_RUNS:
+        return (f"Уже идут два прогона ({', '.join(KIND_RU[k] for k in live)}). "
+                "Дождитесь окончания одного из них.")
+    return ""
+
+
+def request_stop(project_id: str, kind: str | None = None) -> None:
+    """Остановить прогон этого вида. Без вида – все, что идут."""
+    kinds = [kind] if kind else (running_kinds(project_id) or [_kind()])
+    for k in kinds:
+        p_stop(project_id, k).write_text(str(int(time.time())), encoding="utf-8")
+        _append_log(project_id, "WARN",
+                    "⏹  Запрошена остановка – завершу после текущего города", kind=k)
 
 
 def run_log_path(project_id: str, kind: str, report_name: str) -> Path:
@@ -158,10 +274,10 @@ def run_log_path(project_id: str, kind: str, report_name: str) -> Path:
     return folder / (Path(report_name).name.replace(".json", "") + ".log")
 
 
-def _snapshot_log(project_id: str, report_path: Path) -> None:
+def _snapshot_log(project_id: str, report_path: Path, kind: str | None = None) -> None:
     """Сохранить лог этого прогона рядом с его отчётом."""
     try:
-        text = p_live_log(project_id).read_text(encoding="utf-8", errors="replace")
+        text = p_live_log(project_id, kind).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return
     try:
@@ -179,10 +295,17 @@ def read_run_log(project_id: str, kind: str, report_name: str) -> str:
         return ""
 
 
-def read_live_log(project_id: str, tail: int = 40_000) -> str:
-    fp = p_live_log(project_id)
+def read_live_log(project_id: str, kind: str | None = None, tail: int = 40_000) -> str:
+    kind = _kind(kind)
+    fp = p_live_log(project_id, kind)
     if not fp.exists():
-        return ""
+        # Лог прогона, начатого прошлой версией: файл был один на проект.
+        # Без этого сразу после обновления лог последнего прогона исчезал бы
+        # с экрана, хотя его итог рядом по-прежнему показан.
+        legacy = p_live_log_legacy(project_id)
+        if _legacy_action(project_id) != kind or not legacy.exists():
+            return ""
+        fp = legacy
     try:
         text = fp.read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -190,15 +313,12 @@ def read_live_log(project_id: str, tail: int = 40_000) -> str:
     return text[-tail:]
 
 
-# Какой прогон идёт сейчас – нужно только для имени файла лога.
-_LOG_KIND: dict[str, str] = {}
-
-
-def _append_log(project_id: str, level: str, msg: str) -> None:
+def _append_log(project_id: str, level: str, msg: str, kind: str | None = None) -> None:
+    kind = _kind(kind)
     line = f"[{datetime.now().strftime('%H:%M:%S')}] [{level}] {msg}\n"
-    _touch_lock(project_id)
+    _touch_lock(project_id, kind)
     try:
-        live = p_live_log(project_id)
+        live = p_live_log(project_id, kind)
         live.parent.mkdir(parents=True, exist_ok=True)
         if live.exists() and live.stat().st_size > LIVE_LOG_MAX_BYTES:
             live.write_text(live.read_text(encoding="utf-8", errors="replace")[-LIVE_LOG_MAX_BYTES // 2:],
@@ -210,7 +330,6 @@ def _append_log(project_id: str, level: str, msg: str) -> None:
     try:
         p_logs(project_id).mkdir(parents=True, exist_ok=True)
         day = datetime.now().strftime("%Y-%m-%d")
-        kind = _LOG_KIND.get(project_id, "publish")
         with (p_logs(project_id) / f"{kind}-{day}.log").open("a", encoding="utf-8") as f:
             f.write(line)
     except OSError:
@@ -278,27 +397,29 @@ def clear_ledger(project_id: str) -> None:
 # забирать. Судить по PID нельзя: чужой процесс проверить переносимо не выйдет,
 # а на Windows os.kill(pid, 0) вообще убивает процесс.
 LOCK_STALE_S = 180
-_LOCK_HELD: set[str] = set()
-_LOCK_TOUCHED: dict[str, float] = {}
+_LOCK_HELD: set[tuple[str, str]] = set()
+_LOCK_TOUCHED: dict[tuple[str, str], float] = {}
 
 
-def _touch_lock(project_id: str) -> None:
+def _touch_lock(project_id: str, kind: str | None = None) -> None:
     """Отметить, что прогон жив. Зовётся часто, поэтому не чаще раза в 5 секунд."""
-    if project_id not in _LOCK_HELD:
+    key = (project_id, _kind(kind))
+    if key not in _LOCK_HELD:
         return
     now = time.time()
-    if now - _LOCK_TOUCHED.get(project_id, 0) < 5:
+    if now - _LOCK_TOUCHED.get(key, 0) < 5:
         return
-    _LOCK_TOUCHED[project_id] = now
+    _LOCK_TOUCHED[key] = now
     try:
-        os.utime(p_lock(project_id), None)
+        os.utime(p_lock(project_id, key[1]), None)
     except OSError:
         pass
 
 
-def lock_owner(project_id: str) -> dict | None:
-    """Кто держит лок прямо сейчас. None – свободен или брошен."""
-    fp = p_lock(project_id)
+def lock_owner(project_id: str, kind: str | None = None) -> dict | None:
+    """Кто держит лок этого вида прямо сейчас. None – свободен или брошен."""
+    kind = _kind(kind)
+    fp = p_lock(project_id, kind)
     if not fp.exists():
         return None
     try:
@@ -310,27 +431,28 @@ def lock_owner(project_id: str) -> dict | None:
     except OSError:
         return None
     if data.get("ownerPid") == os.getpid():
-        thread = _threads.get(project_id)
+        thread = _threads.get((project_id, kind))
         return {**data, "age": age, "mine": True} if (thread and thread.is_alive()) else None
     # Чужой процесс: живым считаем только пока лок «дышит».
     return {**data, "age": age, "mine": False} if age < LOCK_STALE_S else None
 
 
-def _acquire_lock(project_id: str, run_id: str) -> bool:
-    if lock_owner(project_id) is not None:
+def _acquire_lock(project_id: str, kind: str, run_id: str) -> bool:
+    if lock_owner(project_id, kind) is not None:
         return False
-    fp = p_lock(project_id)
-    fp.write_text(json.dumps({"runId": run_id, "ownerPid": os.getpid(), "at": _now_iso()},
-                             ensure_ascii=False), encoding="utf-8")
-    _LOCK_HELD.add(project_id)
-    _LOCK_TOUCHED[project_id] = time.time()
+    fp = p_lock(project_id, kind)
+    fp.write_text(json.dumps({"runId": run_id, "kind": kind, "ownerPid": os.getpid(),
+                              "at": _now_iso()}, ensure_ascii=False), encoding="utf-8")
+    _LOCK_HELD.add((project_id, kind))
+    _LOCK_TOUCHED[(project_id, kind)] = time.time()
     return True
 
 
-def _release_lock(project_id: str) -> None:
-    _LOCK_HELD.discard(project_id)
-    _LOCK_TOUCHED.pop(project_id, None)
-    p_lock(project_id).unlink(missing_ok=True)
+def _release_lock(project_id: str, kind: str | None = None) -> None:
+    key = (project_id, _kind(kind))
+    _LOCK_HELD.discard(key)
+    _LOCK_TOUCHED.pop(key, None)
+    p_lock(project_id, key[1]).unlink(missing_ok=True)
 
 
 # ─── чтение задач ───────────────────────────────────────────────────
@@ -388,24 +510,24 @@ def start_publish(
     от «нажал кнопку дважды → опубликовалось дважды».
     """
     with _lock:
-        if is_running(project_id):
-            return False, "Публикация уже идёт – второй запуск заблокирован."
-        thread = _threads.get(project_id)
+        busy = busy_reason(project_id, "publish")
+        if busy:
+            return False, busy
+        thread = _threads.get((project_id, "publish"))
         if thread and thread.is_alive():
-            return False, "Предыдущий прогон ещё не завершился."
+            return False, "Предыдущая публикация ещё не завершилась."
 
         files = _load_task_files(p_tasks(project_id))
         if not files:
             return False, "Очередь задач пуста."
 
         run_id = f"run-{int(time.time() * 1000)}"
-        if not _acquire_lock(project_id, run_id):
-            return False, ("Прогон уже идёт – запущен другим окном или другой копией Click. "
+        if not _acquire_lock(project_id, "publish", run_id):
+            return False, ("Публикация уже идёт – запущена другим окном или другой копией Click. "
                            "Если та копия закрыта, подождите пару минут: лок освободится сам.")
 
-        p_stop(project_id).unlink(missing_ok=True)
-        p_live_log(project_id).write_text("", encoding="utf-8")
-        _LOG_KIND[project_id] = "publish"
+        p_stop(project_id, "publish").unlink(missing_ok=True)
+        p_live_log(project_id, "publish").write_text("", encoding="utf-8")
 
         total = sum(len(cfg.get("tasks") or []) for _, cfg in files)
         _write_state(project_id, {
@@ -424,7 +546,7 @@ def start_publish(
             daemon=True,
             name=f"click-publish-{project_id}",
         )
-        _threads[project_id] = t
+        _threads[(project_id, "publish")] = t
         t.start()
         return True, f"Публикация запущена: {total} городов."
 
@@ -440,7 +562,8 @@ def _publish_worker(
     retry_unknown: bool,
     dedup_window_hours: float,
 ) -> None:
-    yb.set_logger(lambda level, msg: _append_log(project_id, level, msg))
+    _CUR.kind = "publish"
+    yb.set_logger(lambda level, msg: _append_log(project_id, level, msg, kind="publish"))
 
     started_at = _now_iso()
     start_ts = time.time()
@@ -955,24 +1078,24 @@ def start_actualize(project_id: str, headless: bool = True, delay_s: float = 2.5
                     with_reviews: bool = False) -> tuple[bool, str]:
     """with_reviews – заодно собрать неотвеченные отзывы и черновики ответов."""
     with _lock:
-        if is_running(project_id):
-            return False, "Уже идёт другой прогон."
-        thread = _threads.get(project_id)
+        busy = busy_reason(project_id, "actualize")
+        if busy:
+            return False, busy
+        thread = _threads.get((project_id, "actualize"))
         if thread and thread.is_alive():
-            return False, "Предыдущий прогон ещё не завершился."
+            return False, "Предыдущая актуализация ещё не завершилась."
 
         files = _load_task_files(p_tasks_actualize(project_id))
         if not files:
             return False, "Список городов для актуализации пуст."
 
         run_id = f"act-{int(time.time() * 1000)}"
-        if not _acquire_lock(project_id, run_id):
-            return False, ("Прогон уже идёт – запущен другим окном или другой копией Click. "
+        if not _acquire_lock(project_id, "actualize", run_id):
+            return False, ("Актуализация уже идёт – запущена другим окном или другой копией Click. "
                            "Если та копия закрыта, подождите пару минут: лок освободится сам.")
 
-        p_stop(project_id).unlink(missing_ok=True)
-        p_live_log(project_id).write_text("", encoding="utf-8")
-        _LOG_KIND[project_id] = "actualize"
+        p_stop(project_id, "actualize").unlink(missing_ok=True)
+        p_live_log(project_id, "actualize").write_text("", encoding="utf-8")
 
         total = sum(len(cfg.get("tasks") or []) for _, cfg in files)
         _write_state(project_id, {
@@ -985,7 +1108,7 @@ def start_actualize(project_id: str, headless: bool = True, delay_s: float = 2.5
         t = threading.Thread(target=_actualize_worker,
                              args=(project_id, run_id, files, headless, delay_s, with_reviews),
                              daemon=True, name=f"click-actualize-{project_id}")
-        _threads[project_id] = t
+        _threads[(project_id, "actualize")] = t
         t.start()
         tail = " + отзывы" if with_reviews else ""
         return True, f"Актуализация запущена: {total} городов{tail}."
@@ -1087,7 +1210,8 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str) -> dict:
 
 def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay_s: float,
                       with_reviews: bool = False) -> None:
-    yb.set_logger(lambda level, msg: _append_log(project_id, level, msg))
+    _CUR.kind = "actualize"
+    yb.set_logger(lambda level, msg: _append_log(project_id, level, msg, kind="actualize"))
     started_at = _now_iso()
     start_ts = time.time()
     report_name = f"actualize-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.json"
@@ -1309,20 +1433,20 @@ def start_collect(project_id: str, headless: bool = True, with_cards: bool = Fal
     card_ids – открыть только эти карточки (например, только спорные).
     """
     with _lock:
-        if is_running(project_id):
-            return False, "Уже идёт другой прогон."
-        thread = _threads.get(project_id)
+        busy = busy_reason(project_id, "collect")
+        if busy:
+            return False, busy
+        thread = _threads.get((project_id, "collect"))
         if thread and thread.is_alive():
-            return False, "Предыдущий прогон ещё не завершился."
+            return False, "Предыдущее чтение организаций ещё не завершилось."
 
         run_id = f"col-{int(time.time() * 1000)}"
-        if not _acquire_lock(project_id, run_id):
-            return False, ("Прогон уже идёт – запущен другим окном или другой копией Click. "
-                           "Если та копия закрыта, подождите пару минут: лок освободится сам.")
+        if not _acquire_lock(project_id, "collect", run_id):
+            return False, ("Организации уже читаются – запущено другим окном или другой копией "
+                           "Click. Если та копия закрыта, подождите пару минут: лок освободится сам.")
 
-        p_stop(project_id).unlink(missing_ok=True)
-        p_live_log(project_id).write_text("", encoding="utf-8")
-        _LOG_KIND[project_id] = "collect"
+        p_stop(project_id, "collect").unlink(missing_ok=True)
+        p_live_log(project_id, "collect").write_text("", encoding="utf-8")
         _write_state(project_id, {
             "runId": run_id, "action": "collect", "status": "running",
             "ownerPid": os.getpid(), "startedAt": _now_iso(), "finishedAt": None,
@@ -1332,14 +1456,15 @@ def start_collect(project_id: str, headless: bool = True, with_cards: bool = Fal
         t = threading.Thread(target=_collect_worker,
                              args=(project_id, run_id, headless, with_cards, list(card_ids or [])),
                              daemon=True, name=f"click-collect-{project_id}")
-        _threads[project_id] = t
+        _threads[(project_id, "collect")] = t
         t.start()
         return True, "Читаю организации в Яндексе…"
 
 
 def _collect_worker(project_id: str, run_id: str, headless: bool,
                     with_cards: bool, card_ids: list[str]) -> None:
-    yb.set_logger(lambda level, msg: _append_log(project_id, level, msg))
+    _CUR.kind = "collect"
+    yb.set_logger(lambda level, msg: _append_log(project_id, level, msg, kind="collect"))
     started_at = _now_iso()
     start_ts = time.time()
     companies: list[dict] = []

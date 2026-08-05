@@ -1,0 +1,46 @@
+{
+  "contacts": {
+    "Россия": {
+      "site": "aviastal.ru",
+      "email": "info@aviastal.ru",
+      "phone": "8-800-700-36-89"
+    },
+    "Казахстан": {
+      "site": "aviastal.kz",
+      "email": "almaty@aviastal.kz",
+      "phone": "7 (727) 317-28-36"
+    },
+    "Азербайджан": {
+      "site": "aviastal.az",
+      "email": "info@aviastal.az",
+      "phone": "994-12-3110128"
+    },
+    "Армения": {
+      "site": "aviastal.am",
+      "email": "info@aviastal.am",
+      "phone": "7 (962)386-88-83"
+    },
+    "Беларусь": {
+      "site": "aviastal.by",
+      "email": "minsk@aviastal.by",
+      "phone": "375(44)503-88-86"
+    },
+    "Киргизия": {
+      "site": "aviastal.kg",
+      "email": "info@aviastal.kg",
+      "phone": "996 223 96 76 88"
+    },
+    "Узбекистан": {
+      "site": "aviastal.uz",
+      "email": "info@aviastal.uz",
+      "phone": "998-90-63-86-88"
+    }
+  },
+  "templates": {
+    "arrival": "Ознакомиться с ассортиментом и оформить заказ можно на нашем сайте {site}.\n\n#Поступление_АПС #Авиапромсталь #АПС #Металлопрокат",
+    "shipment": "{phoneLine}\n✉️ {email}\n🌏 {site}\n\n#Отгрузка_АПС #Авиапромсталь #АПС #Металлопрокат",
+    "special": "🌏 {site}\n📫 {email}\n{phoneSpecialLine}\n\n#СПЕЦПРЕДЛОЖЕНИЕ_АПС #Авиапромсталь #АПС #Металлопрокат",
+    "info": "🔹 Ознакомиться с полным сортаментом металлопроката вы можете на нашем сайте {site}.",
+    "greeting": ""
+  }
+}

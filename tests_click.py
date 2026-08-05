@@ -731,6 +731,61 @@ def test_account_check_on_real_page() -> None:
         check("браузер запустился", False, str(e)[:120])
 
 
+def test_kp_sheet_choice() -> None:
+    """
+    Из какого ЛИСТА берём города.
+
+    Живой случай: в таблице рядом с рабочим листом «кп» (101 город) лежал
+    старый «карта присутсвия Аэросталь (OLD» с четырьмя. Click выбирал по
+    названию и брал старый – заказчик видела 4 города вместо 101. Плюс
+    ссылка с gid прямо указывала нужный лист, а мы его игнорировали.
+    """
+    import kp_sheet
+    print("\n▸ Выбор листа в таблице КП")
+
+    eq("gid из ссылки читается",
+       kp_sheet.sheet_gid("https://docs.google.com/spreadsheets/d/X/edit?gid=1223548196#gid=1223548196"),
+       "1223548196")
+    eq("без gid – пусто", kp_sheet.sheet_gid("https://docs.google.com/spreadsheets/d/X/edit"), "")
+
+    titles = ["карта присутсвия Аэросталь (OLD", "Чек-лист доб городов", "кп",
+              "НЕ ТРОГАТЬ ОРИГ", "Выгрузка", "Оплаты"]
+    order = kp_sheet._sheet_order(titles)  # noqa: SLF001
+    eq("рабочий лист «кп» идёт первым", order[0], "кп")
+    check("старая копия ушла в конец",
+          order.index("карта присутсвия Аэросталь (OLD") > order.index("кп"), str(order))
+    check("«НЕ ТРОГАТЬ ОРИГ» тоже в конце",
+          order.index("НЕ ТРОГАТЬ ОРИГ") > order.index("кп"), str(order))
+
+    picked = kp_sheet._sheet_order(titles, prefer="Выгрузка")  # noqa: SLF001
+    eq("лист, указанный ссылкой, идёт первым", picked[0], "Выгрузка")
+
+    # Обычная таблица без старых копий – порядок как раньше.
+    plain = ["Оплаты", "Карта присутствия", "Сводка"]
+    eq("карта присутствия по-прежнему в приоритете",
+       kp_sheet._sheet_order(plain)[0], "Карта присутствия")  # noqa: SLF001
+
+    # Берём первый лист, на котором ЕСТЬ города.
+    sheets = {
+        "карта присутсвия Аэросталь (OLD": [
+            ["Страна", "Город", "Аккаунт", "Статус"],
+            ["Россия", "Москва", "https://yandex.ru/sprav/1/edit", "активные"],
+        ],
+        "кп": [
+            ["Страна", "Город", "Аккаунт", "Статус"],
+            ["Россия", "Москва", "https://yandex.ru/sprav/1/edit", "активные"],
+            ["Россия", "Казань", "https://yandex.ru/sprav/2/edit", "активные"],
+            ["Казахстан", "Алматы", "https://yandex.ru/sprav/3/edit", "активные"],
+        ],
+    }
+    rows = kp_sheet._pick_sheet(list(sheets), lambda t: sheets[t])  # noqa: SLF001
+    eq("взят «кп», а не старая копия", len(kp_sheet.parse_rows(rows)[0]), 3)
+    rows = kp_sheet._pick_sheet(list(sheets), lambda t: sheets[t],  # noqa: SLF001
+                                prefer="карта присутсвия Аэросталь (OLD")
+    eq("если ссылка указывает на старый лист – берём его",
+       len(kp_sheet.parse_rows(rows)[0]), 1)
+
+
 def test_kp_sheet() -> None:
     """
     Разбор КП-таблицы. Ключевая сложность: шапка объединённая и колонка
@@ -1763,6 +1818,7 @@ def main() -> int:
         test_session_validity(tmp)
         test_account_check_on_real_page()
         test_login_step_detection()
+        test_kp_sheet_choice()
         test_kp_sheet()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

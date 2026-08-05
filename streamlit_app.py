@@ -2008,14 +2008,16 @@ def _send_all_block(project_id: str, pending: list[dict], running: bool) -> None
         tail = (f" Остальные {skipped} останутся в списке: там либо нужен ваш ответ, "
                 "либо черновик не получился." if skipped else "")
         st.caption(f"Готовы к отправке: {len(ready)}.{tail}")
+        # Фиолетовая: это главное действие раздела, а серая кнопка терялась
+        # среди «Переписать все» и прочих.
         if st.button(f"📨 Отправить все ({len(ready)})", key="rv-send-all",
-                     use_container_width=True):
+                     type="primary", use_container_width=True):
             st.session_state["rv-send-all-asked"] = True
             st.rerun()
         return
 
     st.warning(f"Отправить {len(ready)} ответов в Яндекс? Они появятся на карточках "
-               "под именем бренда сразу, отменить это можно будет только вручную.")
+               "под именем бренда, удалить можно будет только вручную.")
     yes, no = st.columns(2)
     if no.button("Отмена", key="rv-send-all-no", use_container_width=True):
         st.session_state.pop("rv-send-all-asked", None)

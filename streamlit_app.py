@@ -34,6 +34,7 @@ import reviews as rv
 import runner
 import ui_theme as T
 import yb_playwright as yb
+import playwright_worker
 from playwright_worker import PlaywrightWorker
 
 # ВСЕ модули обязаны быть из одной сборки. Облако умеет обновить главный
@@ -46,7 +47,7 @@ from playwright_worker import PlaywrightWorker
 # Поэтому метка одна на всех: не совпала – перезагружаем модуль сами.
 # Порядок важен, зависимости идут раньше зависимых, иначе runner останется со
 # ссылкой на старый yb_playwright.
-UI_BUILD = "2026-08-06-send-report"
+from build import BUILD as UI_BUILD
 
 
 def _same_build(mod) -> bool:
@@ -56,10 +57,11 @@ def _same_build(mod) -> bool:
 # Список ПОЛНЫЙ: любой модуль, оставшийся в памяти старым, ломает своё. Так
 # заказчик перезагрузила города из таблицы, а Click опять взял старый лист –
 # kp_sheet в списке не было, и правка просто не работала.
-_MODULES = ("paths", "repo_store", "projects_data", "kp_sheet", "kp_audit",
-            "ui_theme", "yb_playwright", "reviews", "llm", "runner")
+_MODULES = ("build", "paths", "repo_store", "projects_data", "kp_sheet", "kp_audit",
+            "playwright_worker", "ui_theme", "yb_playwright", "reviews", "llm", "runner")
 
-if not all(_same_build(m) for m in (paths, repo_store, pdata, kp_sheet, kp_audit, T, yb, rv, llm, runner)):
+if not all(_same_build(m) for m in (paths, repo_store, pdata, kp_sheet, kp_audit,
+                                    playwright_worker, T, yb, rv, llm, runner)):
     import importlib
 
     for _name in _MODULES:                # порядок: зависимости раньше зависимых
@@ -68,6 +70,7 @@ if not all(_same_build(m) for m in (paths, repo_store, pdata, kp_sheet, kp_audit
         except Exception:  # noqa: BLE001 – без перезагрузки хуже, но падать нельзя
             pass
     import kp_audit  # noqa: F811
+    import playwright_worker  # noqa: F811
     import kp_sheet  # noqa: F811
     import llm  # noqa: F811
     import paths  # noqa: F811
@@ -77,6 +80,7 @@ if not all(_same_build(m) for m in (paths, repo_store, pdata, kp_sheet, kp_audit
     import runner  # noqa: F811
     import ui_theme as T  # noqa: F811
     import yb_playwright as yb  # noqa: F811
+    from playwright_worker import PlaywrightWorker  # noqa: F811
 
 ROOT = Path(__file__).parent
 USERS_DATA = paths.data_root()

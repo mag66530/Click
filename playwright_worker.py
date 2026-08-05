@@ -17,7 +17,11 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 # Метка сборки: streamlit_app сверяет её и перезагружает модуль при расхождении.
-BUILD = "2026-08-06-send-report"
+# Метка сборки – одна на всё приложение, лежит в build.py. Держать её
+# в каждом модуле своей строкой уже ломалось: у одного файла осталось
+# старое значение, и Click принялся перезагружать все модули на каждое
+# нажатие, пока не выбило по памяти.
+from build import BUILD  # noqa: F401
 
 
 @dataclass

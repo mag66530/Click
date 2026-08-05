@@ -15,6 +15,7 @@ tests_click.py – самопроверка логики без запуска �
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -1926,6 +1927,56 @@ def test_review_batch() -> None:
 
 
 
+# ════════════════════════════════════════════════════════════════════
+def test_one_build() -> None:
+    """
+    Метка сборки обязана быть одна на все модули.
+
+    Проверка не косметическая. Если хоть у одного модуля метка своя,
+    условие «все ли из одной сборки» становится ложным НАВСЕГДА, и Click
+    перезагружает все десять модулей на каждое нажатие. Так приложение и
+    выбило по памяти в облаке, причём перезапуск не помогал: следующее же
+    действие всё повторяло.
+    """
+    import build
+    import kp_audit
+    import kp_sheet
+    import llm
+    import paths as _paths
+    import playwright_worker
+    import projects_data
+    import repo_store
+    import reviews
+    import runner
+    import streamlit_app as app
+    import ui_theme
+    import yb_playwright
+    print("\n▸ Одна метка сборки на всё приложение")
+
+    mods = {
+        "kp_audit": kp_audit, "kp_sheet": kp_sheet, "llm": llm, "paths": _paths,
+        "playwright_worker": playwright_worker, "projects_data": projects_data,
+        "repo_store": repo_store, "reviews": reviews, "runner": runner,
+        "ui_theme": ui_theme, "yb_playwright": yb_playwright,
+    }
+    for name, mod in mods.items():
+        eq(f"метка модуля {name}", getattr(mod, "BUILD", None), build.BUILD)
+    eq("метка главного экрана", app.UI_BUILD, build.BUILD)
+
+    # Своей строки BUILD в модулях быть не должно – только импорт из build.py,
+    # иначе рано или поздно её опять забудут поменять.
+    root = Path(__file__).parent
+    own = [f.name for f in root.glob("*.py")
+           if f.name not in ("build.py",)
+           and re.search(r'^BUILD = "', f.read_text(encoding="utf-8"), re.M)]
+    eq("метка задана только в build.py", own, [])
+
+    check("список перезагрузки включает сам build", "build" in app._MODULES)
+    for name in mods:
+        check(f"{name} в списке перезагрузки", name in app._MODULES, app._MODULES)
+
+
+
 def test_yandex_domain() -> None:
     """
     Один ящик – два паспорта.
@@ -1986,6 +2037,7 @@ def main() -> int:
         test_aps_project()
         test_reviews()
         test_review_batch()
+        test_one_build()
         test_actualize_selection()
         test_add_post_click_on_real_page()
         test_toast_and_access_on_real_page()

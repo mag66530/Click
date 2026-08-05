@@ -143,9 +143,9 @@ def settle(pid: str, timeout: float = 5) -> None:
         time.sleep(0.05)
     # Лок снят, но поток ещё доживает свой finally – без join следующий
     # старт получает «Предыдущий прогон ещё не завершился».
-    t = runner._threads.get(pid)
-    if t:
-        t.join(timeout=max(0.1, end - time.time()))
+    for key, t in list(runner._threads.items()):
+        if key[0] == pid and t:
+            t.join(timeout=max(0.1, end - time.time()))
 
 
 def latest_report(pid: str) -> dict:
@@ -171,7 +171,7 @@ def scenario_happy_path(pid: str) -> None:
     check("каждый город был опубликован ровно один раз",
           CALLS == ["Москва", "Казань", "Пермь"], str(CALLS))
     check("файл задач уехал в done/", not list(runner.p_tasks(pid).glob("*.json")))
-    check("лог прогона записан", "ИТОГИ" in runner.read_live_log(pid))
+    check("лог прогона записан", "ИТОГИ" in runner.read_live_log(pid, "publish"))
     check("файл лога на диске создан", bool(runner.list_logs(pid)))
 
 
@@ -319,7 +319,7 @@ def scenario_stop(pid: str) -> None:
         write_tasks(pid, [f"Город-{i}" for i in range(10)], text="Текст для остановки")
         runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru")
         time.sleep(1.2)
-        runner.request_stop(pid)
+        runner.request_stop(pid, "publish")
         state = wait_done(pid, timeout=15)
         check("статус прогона – «остановлен»", state.get("status") == "stopped", str(state.get("status")))
         check("обработали не все 10 городов", len(CALLS) < 10, str(len(CALLS)))
@@ -450,7 +450,7 @@ def scenario_actualize_reviews(pid: str) -> None:
     check("отчёт помечен как прогон с отзывами", bool(data.get("withReviews")))
     eq("в отчёте два неотвеченных", (data.get("reviewTotals") or {}).get("found"), 2)
     eq("в отчёте один черновик", (data.get("reviewTotals") or {}).get("drafted"), 1)
-    live = runner.read_live_log(pid)
+    live = runner.read_live_log(pid, "actualize")
     check("итог по отзывам попал в лог", "ОТЗЫВЫ" in live, live[-300:])
 
 
@@ -571,7 +571,7 @@ def scenario_collect(pid: str) -> None:
     eq("сохранилось то же, что прочитали",
        [c["id"] for c in saved["companies"]], ["1", "2"])
     check("отметка времени есть", bool(saved.get("collectedAt")), str(saved)[:120])
-    log = runner.read_live_log(pid)
+    log = runner.read_live_log(pid, "collect")
     check("в логе видно, сколько собрано", "организаций: 2" in log, log[-200:])
 
     # С галочкой «открывать карточки» – обходим каждую и дополняем данными.
@@ -593,6 +593,89 @@ def scenario_collect(pid: str) -> None:
     eq("прогон честно сломался", state.get("status"), "error")
     check("в ошибке сказано про вход", "сессия" in (state.get("error") or ""), str(state.get("error")))
     eq("прошлые данные не затёрты", len(runner.load_companies(pid).get("companies") or []), 2)
+
+
+def scenario_parallel(pid: str) -> None:
+    """
+    Сверка и актуализация идут ОДНОВРЕМЕННО – ради этого всё и затевалось.
+
+    Раньше лок был один на проект, и второй запуск отбивался «уже идёт другой
+    прогон». Проверяем не только что оба стартовали, а что они реально жили
+    в одну секунду, что логи не перемешались и что «Остановить» у одного не
+    трогает второго.
+    """
+    print("\n▸ Сверка и актуализация параллельно")
+    import threading
+
+    runner.p_stop(pid, "actualize").unlink(missing_ok=True)
+    runner.p_stop(pid, "collect").unlink(missing_ok=True)
+
+    (runner.p_tasks_actualize(pid)).mkdir(parents=True, exist_ok=True)
+    (runner.p_tasks_actualize(pid) / "01-Россия.json").write_text(json.dumps({
+        "country": "Россия", "projectName": "TEST",
+        "tasks": [{"cityName": f"Город-{i}", "companyId": str(600 + i),
+                   "companyUrl": f"https://yandex.ru/sprav/{600 + i}/p/edit/"} for i in range(4)],
+    }, ensure_ascii=False), encoding="utf-8")
+
+    # Оба прогона придерживаем, пока не убедимся, что они живы разом.
+    both_live = threading.Event()
+
+    def slow_actualize(page, task, i=0, t=1):
+        both_live.wait(timeout=10)
+        return {"cityName": task["cityName"], "companyUrl": task["companyUrl"],
+                "status": "actualized", "reason": "клик прошёл", "durationMs": 10}
+
+    def slow_collect(page, log_every=0, page_limit=50):
+        both_live.wait(timeout=10)
+        return [{"id": "9", "type": "ordinal", "publishing": "publish", "name": "Тест",
+                 "address": "Земля", "site": "", "sites": [], "social": {}, "emails": [],
+                 "phones": [], "rubrics": [], "noAccess": False}]
+
+    yb.actualize_city = slow_actualize          # type: ignore[assignment]
+    yb.collect_companies = slow_collect         # type: ignore[assignment]
+
+    ok_a, msg_a = runner.start_actualize(pid, headless=True)
+    check("актуализация стартовала", ok_a, msg_a)
+    ok_c, msg_c = runner.start_collect(pid, headless=True)
+    check("сверка стартовала ПРИ ИДУЩЕЙ актуализации", ok_c, msg_c)
+
+    # Оба должны оказаться живыми одновременно – это и есть параллельность.
+    live = []
+    end = time.time() + 10
+    while time.time() < end:
+        live = runner.running_kinds(pid)
+        if len(live) == 2:
+            break
+        time.sleep(0.05)
+    eq("оба прогона идут в одну секунду", sorted(live), ["actualize", "collect"])
+
+    # Пока оба живы – третий не пускаем и одинаковый второй тоже.
+    check("вторая сверка не пускается", not runner.start_collect(pid, headless=True)[0])
+    check("публикация третьей не пускается", bool(runner.busy_reason(pid, "publish")))
+
+    both_live.set()
+    for kind in ("actualize", "collect"):
+        end = time.time() + 25
+        while time.time() < end and runner.is_running(pid, kind):
+            time.sleep(0.05)
+    for key, t in list(runner._threads.items()):
+        if key[0] == pid and t:
+            t.join(timeout=10)
+
+    eq("актуализация дошла до конца", runner.read_state(pid, "actualize").get("status"), "done")
+    eq("сверка дошла до конца", runner.read_state(pid, "collect").get("status"), "done")
+
+    log_a = runner.read_live_log(pid, "actualize")
+    log_c = runner.read_live_log(pid, "collect")
+    check("в логе актуализации её строки", "АКТУАЛИЗАЦИЯ" in log_a, log_a[-200:])
+    check("в логе сверки её итог", "организаций: 1" in log_c, log_c[-200:])
+    check("логи не перемешались: сверка не писала в чужой",
+          "СБОР ОРГАНИЗАЦИЙ" not in log_a, log_a[-200:])
+    check("логи не перемешались: актуализация не писала в чужой",
+          "АКТУАЛИЗАЦИЯ" not in log_c, log_c[-200:])
+
+    eq("отчёт актуализации записан", len(runner.list_reports(pid, "actualize", limit=99)) > 0, True)
+    eq("после прогонов свободно", runner.busy_reason(pid, "publish"), "")
 
 
 def main() -> int:
@@ -620,6 +703,7 @@ def main() -> int:
         scenario_reviews_llm_down(pid)
         scenario_reviews_page_broken(pid)
         scenario_collect(pid)
+        scenario_parallel(pid)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

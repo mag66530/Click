@@ -239,21 +239,23 @@ def test_ledger_and_lock(tmp: Path) -> None:
     check("очистка реестра работает", runner.recent_publication(pid, task) is None)
 
     print("\n▸ Лок прогона (защита от дубля №1)")
-    check("лок берётся", runner._acquire_lock(pid, "run-A"))
-    runner._threads.pop(pid, None)
-    check("протухший лок (процесс перезапущен) забирается", runner._acquire_lock(pid, "run-B"))
+    check("лок берётся", runner._acquire_lock(pid, "publish", "run-A"))
+    runner._threads.pop((pid, "publish"), None)
+    check("протухший лок (процесс перезапущен) забирается",
+          runner._acquire_lock(pid, "publish", "run-B"))
 
     import threading
     stop = threading.Event()
     t = threading.Thread(target=stop.wait, daemon=True)
     t.start()
-    runner._threads[pid] = t
-    check("лок живого прогона НЕ забирается", not runner._acquire_lock(pid, "run-C"))
+    runner._threads[(pid, "publish")] = t
+    check("лок живого прогона НЕ забирается",
+          not runner._acquire_lock(pid, "publish", "run-C"))
     stop.set()
     t.join(timeout=2)
-    runner._threads.pop(pid, None)
-    runner._release_lock(pid)
-    check("лок снимается", not runner.p_lock(pid).exists())
+    runner._threads.pop((pid, "publish"), None)
+    runner._release_lock(pid, "publish")
+    check("лок снимается", not runner.p_lock(pid, "publish").exists())
 
     # ── Лок между РАЗНЫМИ копиями Click ──
     # Раньше чужой процесс считался протухшим и лок у него отбирался: две
@@ -263,32 +265,34 @@ def test_ledger_and_lock(tmp: Path) -> None:
     # Windows os.kill(pid, 0) убивает процесс, а не проверяет его.
     import json as _json
     import os as _os
-    lock = runner.p_lock(pid)
+    lock = runner.p_lock(pid, "publish")
     lock.parent.mkdir(parents=True, exist_ok=True)
     lock.write_text(_json.dumps({"runId": "run-чужой", "ownerPid": _os.getpid() + 12345}),
                     encoding="utf-8")
-    runner._LOCK_HELD.discard(pid)
-    check("лок ЖИВОЙ чужой копии не забирается", not runner._acquire_lock(pid, "run-D"))
+    runner._LOCK_HELD.discard((pid, "publish"))
+    check("лок ЖИВОЙ чужой копии не забирается",
+          not runner._acquire_lock(pid, "publish", "run-D"))
     check("видно, кто держит лок",
-          (runner.lock_owner(pid) or {}).get("runId") == "run-чужой")
+          (runner.lock_owner(pid, "publish") or {}).get("runId") == "run-чужой")
 
     # Тот же лок, но пульса давно нет – копию закрыли, лок можно забрать.
     old_time = time.time() - runner.LOCK_STALE_S - 30
     _os.utime(lock, (old_time, old_time))
-    check("брошенный чужой лок забирается", runner._acquire_lock(pid, "run-E"))
+    check("брошенный чужой лок забирается", runner._acquire_lock(pid, "publish", "run-E"))
     check("после захвата в локе наш прогон",
           _json.loads(lock.read_text(encoding="utf-8"))["runId"] == "run-E")
     # Свой лок без живого потока – это закончившийся прогон, он свободен.
-    check("свой лок без живого прогона считается свободным", runner.lock_owner(pid) is None)
+    check("свой лок без живого прогона считается свободным",
+          runner.lock_owner(pid, "publish") is None)
 
     # Пульс: пока прогон идёт, метка времени обновляется.
     stale = time.time() - 60
     _os.utime(lock, (stale, stale))
-    runner._LOCK_TOUCHED.pop(pid, None)
-    runner._touch_lock(pid)
+    runner._LOCK_TOUCHED.pop((pid, "publish"), None)
+    runner._touch_lock(pid, "publish")
     check("прогон отмечает, что жив", lock.stat().st_mtime > stale + 30)
-    runner._threads.pop(pid, None)
-    runner._release_lock(pid)
+    runner._threads.pop((pid, "publish"), None)
+    runner._release_lock(pid, "publish")
 
 
 def test_run_state(tmp: Path) -> None:
@@ -306,6 +310,76 @@ def test_run_state(tmp: Path) -> None:
     eq("прогон чужого (убитого) процесса → interrupted, а не вечный running",
        runner.read_state(pid).get("status"), "interrupted")
     check("is_running=False для мёртвого прогона", not runner.is_running(pid))
+
+    # Состояние у каждого вида своё: сверка рядом с публикацией не должна
+    # ни затирать её прогресс, ни выглядеть на её вкладке как «идёт».
+    runner._write_state(pid, {"status": "running", "ownerPid": os.getpid(),
+                              "action": "publish", "startedAt": "2026-01-01T10:00:00"})
+    runner._write_state(pid, {"status": "done", "ownerPid": os.getpid(),
+                              "action": "collect", "startedAt": "2026-01-01T11:00:00"})
+    eq("публикация видит своё состояние",
+       runner.read_state(pid, "publish").get("status"), "running")
+    eq("сверка видит своё", runner.read_state(pid, "collect").get("status"), "done")
+    eq("без вида показывается идущий прогон, а не последний начатый",
+       runner.read_state(pid).get("action"), "publish")
+    eq("список идущих прогонов", runner.running_kinds(pid), ["publish"])
+
+    # Прогон, начатый прошлой версией: файл был один на проект.
+    for k in runner.RUN_KINDS:
+        runner.p_state(pid, k).unlink(missing_ok=True)
+    runner.p_state_legacy(pid).write_text(
+        json.dumps({"status": "done", "action": "actualize", "ownerPid": os.getpid()}),
+        encoding="utf-8")
+    eq("прогон прошлой версии виден на своей вкладке",
+       runner.read_state(pid, "actualize").get("status"), "done")
+    eq("и не подмешивается к чужой", runner.read_state(pid, "publish").get("status"), "idle")
+    runner.p_state_legacy(pid).unlink(missing_ok=True)
+
+
+def test_parallel_runs(tmp: Path) -> None:
+    """
+    Сверка идёт рядом с актуализацией, а два прогона одного вида – никогда.
+
+    Заказчик просила гонять «Актуализацию» и «Сверку» одновременно: раньше лок
+    был один на проект и любой второй прогон отбивался «уже идёт другой».
+    """
+    import os
+    import runner
+    runner.USERS_DATA = tmp
+    print("\n▸ Параллельные прогоны")
+    pid = "TEST-PAR"
+
+    eq("на пустом месте запускать можно", runner.busy_reason(pid, "collect"), "")
+
+    runner._write_state(pid, {"status": "running", "ownerPid": os.getpid(),
+                              "action": "actualize", "startedAt": "2026-01-01T10:00:00"})
+    eq("сверка рядом с актуализацией разрешена", runner.busy_reason(pid, "collect"), "")
+    check("вторая актуализация НЕ разрешена", bool(runner.busy_reason(pid, "actualize")))
+    check("публикация рядом с актуализацией НЕ разрешена (два браузера)",
+          bool(runner.busy_reason(pid, "publish")))
+
+    runner._write_state(pid, {"status": "running", "ownerPid": os.getpid(),
+                              "action": "collect", "startedAt": "2026-01-01T10:30:00"})
+    eq("идут оба прогона", sorted(runner.running_kinds(pid)), ["actualize", "collect"])
+    check("третий прогон упирается в потолок", bool(runner.busy_reason(pid, "publish")))
+
+    # Стоп-флаги раздельные: остановили сверку – актуализация идёт дальше.
+    runner.request_stop(pid, "collect")
+    check("сверке сказали остановиться", runner.p_stop(pid, "collect").exists())
+    check("актуализацию не трогали", not runner.p_stop(pid, "actualize").exists())
+
+    # Живые логи тоже раздельные – иначе строки одного прогона летели бы в лог
+    # другого, а это ровно то, из-за чего лог раньше «прыгал».
+    runner._append_log(pid, "INFO", "строка сверки", kind="collect")
+    runner._append_log(pid, "INFO", "строка актуализации", kind="actualize")
+    check("лог сверки только свой",
+          "строка актуализации" not in runner.read_live_log(pid, "collect"))
+    check("лог актуализации только свой",
+          "строка сверки" not in runner.read_live_log(pid, "actualize"))
+
+    for k in runner.RUN_KINDS:
+        runner.p_state(pid, k).unlink(missing_ok=True)
+        runner.p_stop(pid, k).unlink(missing_ok=True)
 
 
 def test_task_format(tmp: Path) -> None:
@@ -1487,14 +1561,12 @@ def test_run_logs(tmp: Path) -> None:
     pid = "TEST-LOGS"
     runner.USERS_DATA = tmp
     try:
-        runner._LOG_KIND[pid] = "actualize"  # noqa: SLF001
-        runner._append_log(pid, "INFO", "строка актуализации")  # noqa: SLF001
+        runner._append_log(pid, "INFO", "строка актуализации", kind="actualize")  # noqa: SLF001
         names = runner.list_logs(pid)
         check("дневной лог назван по типу прогона",
               any(n.startswith("actualize-") for n in names), str(names))
 
-        runner._LOG_KIND[pid] = "publish"  # noqa: SLF001
-        runner._append_log(pid, "INFO", "строка публикации")  # noqa: SLF001
+        runner._append_log(pid, "INFO", "строка публикации", kind="publish")  # noqa: SLF001
         names = runner.list_logs(pid)
         check("публикация пишется в свой файл",
               any(n.startswith("publish-") for n in names), str(names))
@@ -1502,7 +1574,7 @@ def test_run_logs(tmp: Path) -> None:
         report = runner.p_reports_actualize(pid) / "actualize-2026-08-04T10-00-00.json"
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text("{}", encoding="utf-8")
-        runner._snapshot_log(pid, report)  # noqa: SLF001
+        runner._snapshot_log(pid, report, kind="actualize")  # noqa: SLF001
         saved = runner.read_run_log(pid, "actualize", report.name)
         check("лог прогона сохранён рядом с отчётом", "строка актуализации" in saved, saved[:80])
         eq("путь лога совпадает с именем отчёта",
@@ -2105,6 +2177,7 @@ def main() -> int:
         test_retry_rules()
         test_ledger_and_lock(tmp)
         test_run_state(tmp)
+        test_parallel_runs(tmp)
         test_task_format(tmp)
         test_report_render()
         test_yandex_domain()

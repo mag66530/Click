@@ -287,16 +287,19 @@ def main() -> int:
             import json as _json
             import paths as _paths
             data = _paths.data_root() / "SMU"
-            live_log = data / ".run-log.txt"
-            state = data / ".run-state.json"
             data.mkdir(parents=True, exist_ok=True)
+
+            # Файлы у каждого вида прогона свои: прогоны идут параллельно, и
+            # вкладка обязана показывать СВОЙ прогон, а не соседний.
+            def files_of(action: str):
+                return (data / f".run-log-{action}.txt", data / f".run-state-{action}.json")
 
             # Прогон «чужого» процесса приложение честно считает прерванным
             # (ownerPid), поэтому подделываем состояние от имени сервера.
             app_pid = proc.pid if proc is not None else None
 
             def fake_run(action: str, city: str) -> None:
-                state.write_text(_json.dumps({
+                files_of(action)[1].write_text(_json.dumps({
                     "runId": "ui-test", "action": action, "status": "running",
                     "ownerPid": app_pid, "total": 3, "current": 1,
                     "currentCity": city, "totals": {"total": 1},
@@ -308,6 +311,7 @@ def main() -> int:
                 tabs = ()
             for tab, action in tabs:
                 fake_run(action, "Барнаул")
+                live_log = files_of(action)[0]
                 live_log.write_text("[10:00:00] [INFO] СТРОКА-ОДИН\n", encoding="utf-8")
                 page.get_by_text(tab, exact=True).first.click()
                 page.wait_for_timeout(4000)
@@ -324,8 +328,9 @@ def main() -> int:
                         break
                 check(f"{tab}: новая строка появилась БЕЗ нажатий", appeared)
 
-            state.unlink(missing_ok=True)
-            live_log.unlink(missing_ok=True)
+            for _act in ("publish", "actualize"):
+                for _fp in files_of(_act):
+                    _fp.unlink(missing_ok=True)
 
             # ── Отчёт: плашки И ЕСТЬ фильтры ──
             # Заказчик: «сделаем плашки кликабельными, чтобы не дублировались

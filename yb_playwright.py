@@ -37,6 +37,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -86,19 +87,24 @@ UI_READY_TIMEOUT = 15_000   # сколько ждём, пока React отрис
 IMAGE_PREVIEW_TIMEOUT = 8_000
 TEXT_CONFIRM_TIMEOUT = 10_000
 
-_LOG: Callable[[str, str], None] | None = None
+# Логгер ставится ДЛЯ СВОЕГО ПОТОКА, а не на весь модуль. Прогоны идут
+# параллельно, каждый в своём потоке, и общий логгер сваливал бы строки одного
+# прогона в лог другого, а снятие его в конце обрывало бы лог соседу. Ещё
+# и вкладки, которые водят браузер сами (отправка ответов на отзывы, вход
+# в Яндекс), больше не пишут в лог чужого прогона.
+_LOG_LOCAL = threading.local()
 
 
 def set_logger(fn: Callable[[str, str], None] | None) -> None:
-    """Внешний логгер: fn(level, message). Используется runner.py."""
-    global _LOG
-    _LOG = fn
+    """Внешний логгер этого потока: fn(level, message). Используется runner.py."""
+    _LOG_LOCAL.fn = fn
 
 
 def _log(level: str, msg: str) -> None:
-    if _LOG:
+    fn = getattr(_LOG_LOCAL, "fn", None)
+    if fn:
         try:
-            _LOG(level, msg)
+            fn(level, msg)
             return
         except Exception:
             pass
@@ -450,6 +456,27 @@ def session_path(project_id: str) -> Path:
     return d / "yb_storage_state.json"
 
 
+def _save_storage_state(context, path: Path) -> None:
+    """
+    Сохранить сессию так, чтобы её нельзя было застать на середине записи.
+
+    Прогоны идут параллельно, и каждый в конце дописывает сессию. Пиши мы
+    прямо в файл – второй прогон мог бы прочитать его наполовину записанным
+    и остаться без входа в Яндекс. Пишем во временный файл рядом и
+    переименовываем: подмена мгновенная, читающий видит либо старый файл
+    целиком, либо новый целиком.
+    """
+    tmp = path.with_suffix(path.suffix + f".{os.getpid()}-{threading.get_ident()}.tmp")
+    try:
+        context.storage_state(path=str(tmp))
+        os.replace(tmp, path)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def device_path(project_id: str) -> Path:
     """
     Куки «этого устройства» – их Яндекс ставит ещё до входа (yandexuid и
@@ -531,7 +558,7 @@ class YbBrowser:
     def save_session(self) -> None:
         try:
             if self.context:
-                self.context.storage_state(path=str(session_path(self.project_id)))
+                _save_storage_state(self.context, session_path(self.project_id))
         except Exception as e:  # noqa: BLE001
             warn(f"Не удалось сохранить сессию: {e}")
 
@@ -3121,7 +3148,7 @@ class YbLoginFlow:
 
     def save_session(self) -> Path:
         path = session_path(self.project_id)
-        self.context.storage_state(path=str(path))
+        _save_storage_state(self.context, path)
         return path
 
     def save_device(self) -> None:

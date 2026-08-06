@@ -215,22 +215,41 @@ def load_raw_config(project_id: str) -> dict:
                 return _merge_kept(project_id, raw)
         except (json.JSONDecodeError, OSError):
             pass
+    # Локального конфига нет – собираем из кода. Это НЕ данные заказчика, а
+    # заготовка, и _merge_kept обязан знать разницу (см. ниже).
     sub = _default_subproject(project_id)
-    return _merge_kept(project_id, {"projects": [sub], "activeProjectId": sub["id"], "settings": {}})
+    return _merge_kept(project_id, {"projects": [sub], "activeProjectId": sub["id"], "settings": {}},
+                       from_preset=True)
 
 
-def _merge_kept(project_id: str, raw: dict) -> dict:
+def _merge_kept(project_id: str, raw: dict, from_preset: bool = False) -> dict:
     """
-    Города и настройки проекта поднимаем из репозитория, если локально пусто.
-    В облаке файловая система временная: без этого после каждого перезапуска
-    список городов пришлось бы набирать заново.
+    Города и настройки проекта поднимаем из репозитория. В облаке файловая
+    система временная: без этого после каждого перезапуска список городов
+    пришлось бы набирать заново.
+
+    ГЛАВНОЕ ЗДЕСЬ: сохранённые города ВАЖНЕЕ зашитого в код списка.
+
+    Так было не всегда, и это стоило заказчику дня работы. Она загрузила
+    города МПЭ из КП, ночью облако перезапустилось, файловая система
+    обнулилась – и Click, не найдя локального конфига, собрал его из
+    пресета `projects_data.MPE_CITIES`. Пресет не пустой, а внешняя копия
+    подставлялась только «если локально пусто» – свежий список из КП молча
+    проиграл коду, и утром на экране были вчерашние города.
+
+    Проявлялось это только у проектов с пресетом (СМУ, ИМП, МПЭ, АПС). У МПИ
+    пресета нет, поэтому там всё работало, и беда выглядела случайной.
+
+    Пресет теперь – только для проекта, который ещё ни разу ничего не
+    сохранял. Правки, сделанные в самом приложении (локальный файл есть),
+    по-прежнему главнее: их писал человек, а не код.
     """
     saved = repo_store.load(f"project-{project_id}")
     if not saved:
         return raw
     sub = next((x for x in raw["projects"] if x["id"] == raw.get("activeProjectId")), raw["projects"][0])
     for key in _KEPT:
-        if key in saved and not sub.get(key):
+        if key in saved and (from_preset or not sub.get(key)):
             sub[key] = saved[key]
     return raw
 
@@ -443,6 +462,85 @@ def _save_kept(project_id: str, raw: dict) -> None:
 
 def country_by_id(config: dict, cid: str) -> dict | None:
     return next((c for c in config["countries"] if c["id"] == cid), None)
+
+
+# ════════════════════════════════════════════════════════════════════
+#  Города из КП: одна дорога для кнопки и для автообновления
+# ════════════════════════════════════════════════════════════════════
+
+KP_SYNC_TTL_HOURS = 6      # столько живёт загруженный список, дальше обновляем сами
+KP_SYNC_RETRY_S = 600      # не вышло – следующая попытка не раньше
+
+
+def _hours_since(iso: str | None) -> float:
+    """Сколько часов прошло с отметки. Нет отметки или мусор – бесконечность."""
+    try:
+        t = datetime.fromisoformat((iso or "").replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return float("inf")
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - t).total_seconds() / 3600
+
+
+def kp_pull(project_id: str, config: dict) -> tuple[bool, str]:
+    """
+    Перечитать КП и заменить ею список городов.
+
+    Возвращает (получилось, что сказать человеку). Одна дорога и для кнопки
+    «Загрузить», и для автообновления: разъехавшись, они означали бы, что
+    город появляется в списке по-разному в зависимости от того, как его
+    загрузили.
+    """
+    cities, diag = kp_sheet.load_cities(project_id, (config.get("kpSheetUrl") or "").strip())
+    if diag.get("error"):
+        return False, diag["error"]
+    if not cities:
+        return False, "В таблице не нашлось ни одного города со ссылкой на Яндекс.Бизнес."
+    config["countries"] = kp_sheet.to_countries(cities, project_id)
+    config["kpSyncedAt"] = datetime.now(timezone.utc).isoformat()
+    save_config(project_id)
+    note = f'Загружено: {cities_word(len(cities))} в {diag.get("countries", 0)} странах.'
+    if diag.get("skippedDeleted"):
+        note += f' Пропущено удалённых карточек: {diag["skippedDeleted"]}.'
+    return True, note
+
+
+def _kp_autosync(project_id: str, config: dict) -> None:
+    """
+    Города подтягиваются из КП сами, без кнопки.
+
+    Зачем. Таблица КП – источник правды: её правят руками, в ней же статусы
+    карточек. Загрузка кнопкой означала, что достаточно забыть нажать – и
+    прогон уходит по вчерашнему списку, а карточка, вчера отмеченная
+    «Удалена», получает клики. Плюс облако: файловая система там временная,
+    и после перезапуска список должен вернуться сам.
+
+    Раз в KP_SYNC_TTL_HOURS часов и только если КП настроена. Не вышло –
+    работаем на прежнем списке и говорим об этом, но не долбимся в таблицу
+    на каждое нажатие: следующая попытка не раньше чем через KP_SYNC_RETRY_S.
+    """
+    if not kp_sheet.is_configured(project_id, (config.get("kpSheetUrl") or "").strip()):
+        return
+    if _hours_since(config.get("kpSyncedAt")) < KP_SYNC_TTL_HOURS:
+        return
+    fail_key = f"_kp_sync_failed_{project_id}"
+    try:
+        if time.time() - float(st.session_state.get(fail_key, 0)) < KP_SYNC_RETRY_S:
+            return
+    except (TypeError, ValueError):
+        pass
+    try:
+        with st.spinner("Обновляю города из КП…"):
+            ok, note = kp_pull(project_id, config)
+    except Exception as e:  # noqa: BLE001 – текст ошибки уже человеческий
+        ok, note = False, str(e)
+    if ok:
+        st.session_state.pop(fail_key, None)
+        st.toast(f"🏙 {note}")
+        return
+    st.session_state[fail_key] = time.time()
+    st.warning(f"Города из КП не обновились: {note} Работаем на прежнем списке.", icon="📊")
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -2429,22 +2527,12 @@ def _cities_source_block(project_id: str, config: dict) -> None:
                      use_container_width=True):
             try:
                 with st.spinner("Читаю таблицу КП…"):
-                    cities, diag = kp_sheet.load_cities(project_id, saved_url)
+                    ok, note = kp_pull(project_id, config)
             except Exception as e:  # noqa: BLE001
-                st.error(str(e))
+                ok, note = False, str(e)
+            if not ok:
+                st.error(note)
                 return
-            if diag.get("error"):
-                st.error(diag["error"])
-                return
-            if not cities:
-                st.warning("В таблице не нашлось ни одного города со ссылкой на Яндекс.Бизнес.")
-                return
-            config["countries"] = kp_sheet.to_countries(cities, project_id)
-            config["kpSyncedAt"] = datetime.now(timezone.utc).isoformat()
-            save_config(project_id)
-            note = f'Загружено: {cities_word(len(cities))} в {diag.get("countries", 0)} странах.'
-            if diag.get("skippedDeleted"):
-                note += f' Пропущено удалённых карточек: {diag["skippedDeleted"]}.'
             st.success(note)
             time.sleep(1.2)
             st.rerun()
@@ -2452,6 +2540,9 @@ def _cities_source_block(project_id: str, config: dict) -> None:
         synced = (config.get("kpSyncedAt") or "")[:19].replace("T", " ")
         c2.caption(f"Последняя загрузка: {synced} UTC" if synced else
                    "Города из таблицы ещё не загружались.")
+        st.caption(f"Загружается само: если с последней загрузки прошло больше "
+                   f"{KP_SYNC_TTL_HOURS} часов, Click перечитает таблицу при открытии проекта. "
+                   "Кнопка – когда нужно прямо сейчас.")
         st.caption("Загрузка ЗАМЕНЯЕТ список стран и городов данными из таблицы. "
                    "Карточки со статусом «Удалена» не попадают.")
 
@@ -3596,6 +3687,9 @@ def show_main(project_id: str) -> None:
     _push_session(project_id)          # дешёвая проверка по mtime: пуш только при изменении
     _push_ledger(project_id)
     config = get_config(project_id)
+    # Города – из КП и сами. Проверка дешёвая (сравнение отметки времени),
+    # в таблицу лезем не чаще раза в KP_SYNC_TTL_HOURS часов.
+    _kp_autosync(project_id, config)
     project = PROJECTS[project_id]
 
     with st.container(key="click-topbar"):

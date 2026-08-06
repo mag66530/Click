@@ -1059,6 +1059,99 @@ def test_kp_sheet() -> None:
     check("служебные листы уходят в конец", order[-1] in {"Сводка", "НЕ ТРОГАТЬ", "Приоритеты"})
 
 
+def test_kp_autosync(tmp: Path) -> None:
+    """
+    Города из КП: внешняя копия важнее пресета, и список обновляется сам.
+
+    Живой случай, из-за которого это написано. Заказчик загрузила города МПЭ
+    из КП; ночью облако перезапустилось, файловая система обнулилась; утром
+    в списке были вчерашние города. Причина: Click, не найдя локального
+    конфига, собирал его из пресета `projects_data.MPE_CITIES`, а внешнюю
+    копию подставлял только «если локально пусто». Пресет не пустой – свежий
+    список из КП молча проигрывал коду. У МПИ пресета нет, поэтому там всё
+    работало, и беда выглядела случайной.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    import streamlit as st
+    import streamlit_app as app
+    import kp_sheet
+    import repo_store
+    print("\n▸ Города из КП: откат и автообновление")
+
+    st.session_state.clear()
+    data_root = tmp / "kp-sync"
+    old_users, old_load, old_save = app.USERS_DATA, repo_store.load, repo_store.save
+    old_cities = kp_sheet.load_cities
+    app.USERS_DATA = data_root
+    saved_outside = {"countries": [{"id": "c-1", "name": "Россия",
+                                    "cities": [{"id": "ct-1", "name": "Из КП", "url": "u"}]}],
+                     "email": "kp@example.com",
+                     "kpSyncedAt": "2026-08-05T10:00:00+00:00"}
+    repo_store.load = lambda name: dict(saved_outside) if name.startswith("project-") else None
+    repo_store.save = lambda name, data, message="": "тест"
+    try:
+        # 1. Файловой системы нет (как после перезапуска облака) – конфиг
+        #    собирается из пресета. Внешняя копия обязана победить.
+        raw = app.load_raw_config("MPE")
+        sub = raw["projects"][0]
+        eq("после перезапуска берутся города из КП, а не пресет из кода",
+           [c["name"] for c in sub["countries"]], ["Россия"])
+        eq("почта тоже из внешней копии", sub["email"], "kp@example.com")
+
+        # 2. Локальный конфиг есть – это правки человека, они главнее.
+        mine = {"projects": [{"id": "p-mpe-default", "name": "МПЭ", "email": "my@example.com",
+                              "countries": [{"id": "c-2", "name": "Казахстан", "cities": []}]}],
+                "activeProjectId": "p-mpe-default", "settings": {}}
+        fp = app.config_path("MPE")
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        fp.write_text(json.dumps(mine, ensure_ascii=False), encoding="utf-8")
+        got = app.load_raw_config("MPE")["projects"][0]
+        eq("свой список городов внешняя копия не затирает",
+           [c["name"] for c in got["countries"]], ["Казахстан"])
+
+        # 3. Пора ли обновляться.
+        check("без отметки времени – пора", app._hours_since(None) == float("inf"))  # noqa: SLF001
+        check("мусор вместо даты – пора", app._hours_since("вчера") == float("inf"))  # noqa: SLF001
+        fresh = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        check("час назад – ещё рано", app._hours_since(fresh) < app.KP_SYNC_TTL_HOURS)  # noqa: SLF001
+        stale = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
+        check("сутки назад – пора", app._hours_since(stale) > app.KP_SYNC_TTL_HOURS)  # noqa: SLF001
+
+        # 4. Загрузка заменяет список и ставит отметку – одинаково и по
+        #    кнопке, и сама.
+        cities = [{"country": "Россия", "name": "Москва", "url": "https://yandex.ru/sprav/1",
+                   "status": "Активная", "site": "", "email": "", "phone": ""},
+                  {"country": "Россия", "name": "Пермь", "url": "https://yandex.ru/sprav/2",
+                   "status": "Активная", "site": "", "email": "", "phone": ""}]
+        app.kp_sheet.load_cities = lambda pid, url="": (cities, {"countries": 1, "skippedDeleted": 3})
+        config = {"id": "p-mpe-default", "countries": [], "kpSheetUrl": "", "kpSyncedAt": stale}
+        st.session_state["_cfg_MPE"] = {"projects": [config], "activeProjectId": "p-mpe-default"}
+        ok, note = app.kp_pull("MPE", config)
+        check("загрузка прошла", ok, note)
+        eq("города заменены данными КП",
+           [ct["name"] for ct in config["countries"][0]["cities"]], ["Москва", "Пермь"])
+        check("отметка времени обновилась", app._hours_since(config["kpSyncedAt"]) < 1)  # noqa: SLF001
+        check("сказано, сколько пропущено удалённых", "3" in note, note)
+
+        # 5. Таблица недоступна – работаем на прежнем списке, а не на пустом.
+        def boom(pid, url=""):
+            raise RuntimeError("Google отказал (403)")
+        app.kp_sheet.load_cities = boom
+        before = config["countries"]
+        try:
+            app.kp_pull("MPE", config)
+        except RuntimeError:
+            pass
+        check("при недоступной таблице список городов не обнулился",
+              config["countries"] is before and config["countries"])
+    finally:
+        app.USERS_DATA = old_users
+        repo_store.load, repo_store.save = old_load, old_save
+        kp_sheet.load_cities = old_cities
+        st.session_state.clear()
+
+
 def yb_extract(url: str):
     import yb_playwright as yb
     return yb.extract_company_id(url)
@@ -3047,6 +3140,7 @@ def main() -> int:
         test_login_step_detection()
         test_kp_sheet_choice()
         test_kp_sheet()
+        test_kp_autosync(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

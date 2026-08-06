@@ -521,9 +521,14 @@ class YbBrowser:
     ради чего в publish.js был browser.newPage().
     """
 
-    def __init__(self, project_id: str, headless: bool = True):
+    def __init__(self, project_id: str, headless: bool = True,
+                 session_file: Path | None = None):
         self.project_id = project_id
         self.headless = headless
+        # Файл сессии можно подменить – так этим же браузером работает 2ГИС
+        # (gis_playwright), не заводя второй такой же класс. По умолчанию –
+        # сессия Яндекса.
+        self.session_file = session_file or session_path(project_id)
         self._pw = None
         self.browser: Browser | None = None
         self.context: BrowserContext | None = None
@@ -533,7 +538,7 @@ class YbBrowser:
         engine = resolve_engine()
         self._pw = sync_playwright().start()
         self.browser = _launch(self._pw, engine, headless=self.headless)
-        state = session_path(self.project_id)
+        state = self.session_file
         self.context = self.browser.new_context(
             storage_state=str(state) if state.exists() else None,
             viewport={"width": 1280, "height": 900},
@@ -558,7 +563,7 @@ class YbBrowser:
     def save_session(self) -> None:
         try:
             if self.context:
-                _save_storage_state(self.context, session_path(self.project_id))
+                _save_storage_state(self.context, self.session_file)
         except Exception as e:  # noqa: BLE001
             warn(f"Не удалось сохранить сессию: {e}")
 

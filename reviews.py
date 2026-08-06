@@ -279,8 +279,28 @@ _MPI_SIGN_RX = re.compile(r"\s*С\s+уважением\b.*$", re.S | re.I)
 _MPI_OPENER_RX = re.compile(r"^\s*Спасибо[^.!?\n]*[.!]?\s*", re.I)
 _SENTENCE_SPLIT_RX = re.compile(r"(?<=[.!?])\s+")
 
+# Рекомендация в отзыве. Ловим корень «рекоменд» и глагол «советовать» во всех
+# ходовых видах. Отрицание отбрасываем: «не рекомендую» – это ровно наоборот.
+# Голое существительное «совет» сюда намеренно не попадает: «менеджер дал
+# дельный совет» – это похвала консультации, а не рекомендация компании.
+_RECOMMEND_RX = re.compile(
+    r"\b(не\s+(?:очень\s+|особо\s+|стал\w*\s+|буду\s+)?)?"
+    r"((?:по)?рекоменд\w*|(?:по)?совет(?:ую|уем|уют|овал\w*|овать))\b", re.I)
 
-def fix_mpi_shape(text: str) -> str:
+
+def mentions_recommendation(text: str) -> bool:
+    """
+    Рекомендует ли клиент компанию в своём отзыве.
+
+    Заказчик: благодарить за рекомендацию можно только тогда, когда она есть.
+    «Здесь очень классный выбор металла. Ценники более, чем адекватные.
+    Доставка была быстрая.» – рекомендации нет, а ответ всё равно начинался
+    со «Спасибо за отзыв и рекомендацию!».
+    """
+    return any(not m.group(1) for m in _RECOMMEND_RX.finditer(text or ""))
+
+
+def fix_mpi_shape(text: str, review: str = "") -> str:
     """
     Привести ответ МПИ к виду, который заказчик утвердила образцами:
 
@@ -291,6 +311,10 @@ def fix_mpi_shape(text: str) -> str:
         подход к каждому клиенту.
         <пустая строка>
         С уважением, МетПромИнтекс.
+
+    Первая строка одна из двух: с рекомендацией – если клиент нас и правда
+    кому-то рекомендует, иначе просто «Спасибо за отзыв!». Для этого сюда и
+    передаётся текст отзыва.
 
     Правим только ФОРМУ – первую строку, последнее предложение и подпись.
     Середину не трогаем: что там написать, знает модель, а не мы.
@@ -303,6 +327,12 @@ def fix_mpi_shape(text: str) -> str:
     t = (text or "").strip()
     if not t:
         return t
+
+    # Отзыва под рукой нет (старый вызов, «Проверить генерацию на примере»
+    # без текста) – смотрим на сам черновик: про рекомендацию модель пишет
+    # только тогда, когда о ней сказал клиент.
+    opener = (pdata.REVIEW_MPI_OPENER if mentions_recommendation(review or t)
+              else pdata.REVIEW_MPI_OPENER_PLAIN)
 
     t = _MPI_SIGN_RX.sub("", t).strip()          # подпись поставим сами
     t = _MPI_OPENER_RX.sub("", t, count=1).strip()   # и первую строку тоже
@@ -331,7 +361,7 @@ def fix_mpi_shape(text: str) -> str:
     body = _mpi_wording(body)
     body = (body + " " + tail).strip() if body else tail
 
-    return f"{pdata.REVIEW_MPI_OPENER}\n\n{body}\n\n{pdata.REVIEW_MPI_SIGN}"
+    return f"{opener}\n\n{body}\n\n{pdata.REVIEW_MPI_SIGN}"
 
 
 # Прощания, которыми модель подменяла фразу про ассортимент.
@@ -385,7 +415,7 @@ def _mpi_wording(body: str) -> str:
     return _SENTENCE_HEAD_RX.sub(lambda m: m.group(1) + m.group(2).upper(), body)
 
 
-def clean_draft(text: str, project_id: str = "") -> str:
+def clean_draft(text: str, project_id: str = "", review: str = "") -> str:
     """
     Причесать ответ после модели.
 
@@ -393,6 +423,9 @@ def clean_draft(text: str, project_id: str = "") -> str:
     а замена – работа на одну строку и не ошибается. Заодно убираем
     markdown-звёздочки и кавычки, в которые модель иногда заворачивает
     весь ответ целиком, и возвращаем эталонный вид ассортиментной фразе.
+
+    `review` – текст самого отзыва. Нужен только МПИ: от него зависит первая
+    строка ответа (благодарить за рекомендацию или нет).
     """
     t = (text or "").strip()
     if len(t) > 1 and t[0] in "\"«" and t[-1] in "\"»":
@@ -402,7 +435,7 @@ def clean_draft(text: str, project_id: str = "") -> str:
     t = re.sub(r"(?m)^#{1,6}\s*", "", t)        # заголовки решётками
     t = re.sub(r"\n{3,}", "\n\n", t).strip()    # лишние пустые строки
     if project_id == "MPI":
-        return fix_mpi_shape(t)                 # у МПИ вид ответа свой, см. функцию
+        return fix_mpi_shape(t, review)         # у МПИ вид ответа свой, см. функцию
     return fix_assortment(project_id, t) if project_id else t
 
 

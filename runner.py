@@ -1493,7 +1493,8 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
         try:
             import llm
             t0 = time.time()
-            draft = rv.clean_draft(llm.generate(rv.build_prompt(prompt, item, project_id)), project_id)
+            draft = rv.clean_draft(llm.generate(rv.build_prompt(prompt, item, project_id)),
+                                   project_id, rv.review_text(item))
             add(item, rv.DRAFTED, draft=draft)
             out["drafted"] += 1
             # Замер в лог: без него «долго генерирует» не отличить от

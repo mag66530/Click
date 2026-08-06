@@ -1650,12 +1650,37 @@ def gis_actualize_checks(gis, page) -> None:
         none = gis.actualize_city(page, task)
         eq("без плашки – «не требуется»", none["status"], "not-needed")
 
+        # ── Кабинет сменил слова на надписи – ищем внутри плашки ────
+        serve("""<div class="CQydym6f" style="padding:12px">Данные о компании не обновлялись
+                 достаточно давно, они не изменились?
+                 <span style="color:#D97F00" onclick="confirmData()">Всё верно</span></div>""")
+        open_page()
+        other = gis.look_at_page(page)
+        check("другие слова внутри плашки тоже находим",
+              (other.get("spot") or {}).get("near"), str(other.get("spot")))
+        serve("""<div class="CQydym6f" style="padding:12px">Данные о компании не обновлялись
+                 достаточно давно, они не изменились?
+                 <span style="color:#D97F00" onclick="confirmData()">Всё верно</span></div>""")
+        alt = gis.actualize_city(page, task)
+        eq("и подтверждаем ими", alt["status"], "actualized")
+
+        # Но по всей странице – не ищем: «всё верно» бывает и в отзыве.
+        serve("""<div>Отзыв: всё верно и в срок, спасибо</div>""")
+        stray = gis.look_at_page(page)
+        eq("вне плашки запасные слова не ловим", bool(stray.get("spot")), False)
+
         # ── Плашка есть, надписи нет – это НЕ «нечего делать» ───────
         serve("""<div class="CQydym6f">Данные о компании не обновлялись достаточно давно,
                  они не изменились? <span>Обновить</span></div>""")
         odd = gis.actualize_city(page, task)
         eq("плашка без надписи – честный отказ", odd["status"], "failed")
         check("и человеку сказано, что делать", "вручную" in odd["reason"], odd["reason"])
+        serve("""<div class="CQydym6f">Данные о компании не обновлялись достаточно давно,
+                 они не изменились? <span>Обновить</span></div>""")
+        open_page()
+        blind = gis.look_at_page(page)
+        check("разметка плашки уходит в лог – разбирать будет по чему",
+              "CQydym6f" in (blind.get("markup") or ""), (blind.get("markup") or "")[:120])
 
         # ── Кабинет увёл на другую страницу ────────────────────────
         serve("""<script>history.replaceState({}, '', '/orgs/70000001079192862/dashboard')</script>

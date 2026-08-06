@@ -951,6 +951,46 @@ _DEEP_JS = r"""
     return null;
   }
 
+  // Та же охота, но только рядом с вопросом. Нужна на случай, когда кабинет
+  // сменит слова на кнопке: внутри плашки короткий ответ на вопрос – это она
+  // и есть, а вот по всей странице так искать нельзя.
+  function findNear(rx, anchorRx, span) {
+    for (const entry of ROOTS) {
+      anchorRx.lastIndex = 0;
+      const a = anchorRx.exec(entry.text);
+      if (!a) continue;
+      const from = a.index, to = Math.min(entry.text.length, a.index + a[0].length + span);
+      rx.lastIndex = 0;
+      let m;
+      while ((m = rx.exec(entry.text)) !== null) {
+        if (m.index >= from && m.index < to) {
+          const s = spotFor(entry, m.index, m.index + m[0].length);
+          if (s) { s.near = norm(m[0]); return s; }
+        }
+        if (rx.lastIndex <= m.index) rx.lastIndex = m.index + 1;
+      }
+    }
+    return null;
+  }
+
+  // Разметка плашки – в лог. Если надпись когда-нибудь снова не найдётся,
+  // разбираться будем по этой строчке, а не по переписке со скриншотами.
+  function markupOf(rx) {
+    let best = null;
+    for (const entry of ROOTS) {
+      let all = [];
+      try { all = entry.root.querySelectorAll('*'); } catch (e) { continue; }
+      for (const el of all) {
+        if (!rx.test(norm(el.textContent))) continue;
+        const len = (el.textContent || '').length;
+        if (!best || len < best.len) best = { el: el, len: len };
+      }
+    }
+    if (!best) return '';
+    try { return (best.el.outerHTML || '').replace(/\s+/g, ' ').slice(0, 700); }
+    catch (e) { return ''; }
+  }
+
   function clean() {
     for (const entry of ROOTS) {
       try {
@@ -971,18 +1011,26 @@ _ACTUALIZE_LOOK_JS = "() => {\n" + _DEEP_JS + r"""
   // «Данные верны» с иконкой, надпись внутри длинной строки – всё подходит.
   const OK_RX = /данные\s+верны/gi;
   const BANNER_RX = /(не\s+обновлял\w*\s+достаточно\s+давно|данные\s+о\s+компании\s+не\s+обновлял|они\s+не\s+изменил)/i;
+  const BANNER_G = new RegExp(BANNER_RX.source, 'gi');
+  // Запасные слова – только внутри плашки и только если основных нет.
+  const ALT_RX = /(вс[её]\s+верно|данные\s+актуальны|подтвердить\s+данные|да,\s*верно)/gi;
   const DONE_RX = /(спасибо\s+за\s+подтверждение|данные\s+подтвержден)/i;
 
   const seen = norm(TEXT);
+  const banner = BANNER_RX.test(seen);
+  const spot = find(OK_RX) || (banner ? findNear(ALT_RX, BANNER_G, 200) : null);
   return {
-    spot: find(OK_RX),
-    banner: BANNER_RX.test(seen),
+    spot: spot,
+    banner: banner,
     toast: DONE_RX.test(seen),
     onCompany: /\/company(\/|$)/.test(location.pathname || ''),
     path: (location.pathname || '') + (location.search || ''),
     size: seen.length,
     roots: ROOTS.length,
     seen: seen.slice(0, 400),
+    // Разметку плашки достаём, только когда надпись не нашлась: это
+    // единственный случай, когда она нужна, а строка длинная.
+    markup: (!spot && banner) ? markupOf(BANNER_RX) : '',
   };
 }"""
 
@@ -1115,6 +1163,11 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
                  f"текста {look.get('size')} знаков, плашка "
                  f"{'есть' if had_banner else 'не видна'}. Начало страницы: "
                  f"{(look.get('seen') or '')[:160]}")
+            if look.get("markup"):
+                # Разметка самой плашки. По ней видно, чем на самом деле
+                # оказалась надпись, – и следующая правка делается сразу,
+                # без ещё одного круга со скриншотами.
+                warn(f"  🔎 {label}: разметка плашки {look['markup']}")
         if not look:
             return finish("failed", "Страницу «Данные о компании» прочитать не вышло "
                                     "(браузер не ответил). Попробуйте ещё раз")

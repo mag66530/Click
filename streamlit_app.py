@@ -1416,68 +1416,77 @@ def tab_compose(project_id: str, config: dict) -> None:
     if len(all_images) > 4:
         st.warning(f"Яндекс берёт максимум 4 фото в пост – лишние {len(all_images) - 4} не отправятся.")
 
-    if not selected_countries:
+    # Предпросмотр и кнопка «в очередь» нужны, только когда выбрана страна.
+    # Раньше тут стоял ранний выход из функции, и вместе с ним со страницы
+    # пропадал блок «В очереди к сохранению» – а в нём кнопка «Сохранить
+    # очередь в задачи». Ловушка захлопывалась ровно на последней стране:
+    # добавили её, выбор стран сбросился, следующей уже нет – и сохранить
+    # собранное стало нечем. Плашка при этом бодро советовала «сохраните
+    # очередь ниже», а ниже ничего не было.
+    if selected_countries:
+        if (body or "").strip():
+            with st.container(border=True):
+                html('<div class="card-title">👁 Так пост уйдёт в Яндекс</div>')
+                for country in selected_countries:
+                    html(f'<div class="hint" style="margin:8px 0 4px">{flag(country["name"])} '
+                         f'<b style="color:var(--text)">{T.esc(country["name"])}</b></div>')
+                    html(T.preview_box(build_final_text(project_id, country["name"], post_type, body)))
+
+        total_cities = sum(len(v) for v in per_country.values())
+
+        # ─── Шаг 5: в очередь ───
+        st.divider()
+        c1, c2 = st.columns([2, 3])
+        with c1:
+            can_add = bool((body or "").strip()) and total_cities > 0
+            if st.button(f"➕ Добавить в очередь ({cities_word(total_cities)})", type="primary",
+                         use_container_width=True, disabled=not can_add, key="btn-add-queue"):
+                added = 0
+                for country in selected_countries:
+                    city_ids = per_country.get(country["id"]) or []
+                    if not city_ids:
+                        continue
+                    if any(q["countryId"] == country["id"] and q["text"] ==
+                           build_final_text(project_id, country["name"], post_type, body) for q in queue):
+                        st.warning(f"{country['name']}: такой же пост уже в очереди – пропускаю.")
+                        continue
+                    queue.append({
+                        "countryId": country["id"],
+                        "countryName": country["name"],
+                        "cityIds": list(city_ids),
+                        "postType": post_type,
+                        "text": build_final_text(project_id, country["name"], post_type, body),
+                        "imagePath": all_images[0] if all_images and not all_images[0].startswith("http") else None,
+                        "imageUrl": all_images[0] if all_images and all_images[0].startswith("http") else None,
+                        "extraImages": all_images[1:4] or None,
+                        "productPhotos": product_photos or None,
+                    })
+                    added += 1
+                if added:
+                    # Порт addToDraftQueue оригинала: выбор стран сбрасывается,
+                    # сама выбирается ПЕРВАЯ страна, которой ещё нет в очереди;
+                    # текст, тип и картинки остаются – пост едет дальше по странам.
+                    queued_ids = {q["countryId"] for q in queue}
+                    for c in config["countries"]:
+                        st.session_state[f"compose-cb-{c['id']}"] = False
+                    nxt = next((c for c in config["countries"] if c["id"] not in queued_ids), None)
+                    if nxt is not None:
+                        st.session_state[f"compose-cb-{nxt['id']}"] = True
+                        st.session_state["compose-note"] = (
+                            f"✓ Добавлено ({cities_word(sum(len(q['cityIds']) for q in queue[-added:]))}) · "
+                            f"следующая страна: {nxt['name']}")
+                    else:
+                        st.session_state["compose-note"] = (
+                            "🎉 Все страны добавлены! Сохраните очередь – блок «В очереди к сохранению» ниже.")
+                st.rerun()
+        with c2:
+            if not can_add:
+                st.caption("Нужно: текст поста + хотя бы один выбранный город.")
+    elif queue:
+        st.info("Все страны уже добавлены в очередь. Осталось сохранить её в задачи – "
+                "кнопка «Сохранить очередь в задачи» ниже.")
+    else:
         st.info("Выберите хотя бы одну страну выше.")
-        return
-
-    if (body or "").strip():
-        with st.container(border=True):
-            html('<div class="card-title">👁 Так пост уйдёт в Яндекс</div>')
-            for country in selected_countries:
-                html(f'<div class="hint" style="margin:8px 0 4px">{flag(country["name"])} '
-                     f'<b style="color:var(--text)">{T.esc(country["name"])}</b></div>')
-                html(T.preview_box(build_final_text(project_id, country["name"], post_type, body)))
-
-    total_cities = sum(len(v) for v in per_country.values())
-
-    # ─── Шаг 5: в очередь ───
-    st.divider()
-    c1, c2 = st.columns([2, 3])
-    with c1:
-        can_add = bool((body or "").strip()) and total_cities > 0
-        if st.button(f"➕ Добавить в очередь ({cities_word(total_cities)})", type="primary",
-                     use_container_width=True, disabled=not can_add, key="btn-add-queue"):
-            added = 0
-            for country in selected_countries:
-                city_ids = per_country.get(country["id"]) or []
-                if not city_ids:
-                    continue
-                if any(q["countryId"] == country["id"] and q["text"] ==
-                       build_final_text(project_id, country["name"], post_type, body) for q in queue):
-                    st.warning(f"{country['name']}: такой же пост уже в очереди – пропускаю.")
-                    continue
-                queue.append({
-                    "countryId": country["id"],
-                    "countryName": country["name"],
-                    "cityIds": list(city_ids),
-                    "postType": post_type,
-                    "text": build_final_text(project_id, country["name"], post_type, body),
-                    "imagePath": all_images[0] if all_images and not all_images[0].startswith("http") else None,
-                    "imageUrl": all_images[0] if all_images and all_images[0].startswith("http") else None,
-                    "extraImages": all_images[1:4] or None,
-                    "productPhotos": product_photos or None,
-                })
-                added += 1
-            if added:
-                # Порт addToDraftQueue оригинала: выбор стран сбрасывается,
-                # сама выбирается ПЕРВАЯ страна, которой ещё нет в очереди;
-                # текст, тип и картинки остаются – пост едет дальше по странам.
-                queued_ids = {q["countryId"] for q in queue}
-                for c in config["countries"]:
-                    st.session_state[f"compose-cb-{c['id']}"] = False
-                nxt = next((c for c in config["countries"] if c["id"] not in queued_ids), None)
-                if nxt is not None:
-                    st.session_state[f"compose-cb-{nxt['id']}"] = True
-                    st.session_state["compose-note"] = (
-                        f"✓ Добавлено ({cities_word(sum(len(q['cityIds']) for q in queue[-added:]))}) · "
-                        f"следующая страна: {nxt['name']}")
-                else:
-                    st.session_state["compose-note"] = (
-                        "🎉 Все страны добавлены! Сохраните очередь – блок «В очереди к сохранению» ниже.")
-            st.rerun()
-    with c2:
-        if not can_add:
-            st.caption("Нужно: текст поста + хотя бы один выбранный город.")
 
     # Заметка живёт до следующего добавления, а не мигает тостом: после
     # перерисовки видно, ЧТО добавилось и какая страна выбралась сама.

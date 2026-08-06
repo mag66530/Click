@@ -816,7 +816,12 @@ def _set_cities_sync(state_key: str, options: list[str], value: list[str]) -> No
 
 def _city_toggle(state_key: str, city_id: str, widget_key: str) -> None:
     cur = set(st.session_state.get(state_key) or [])
-    cur.add(city_id) if st.session_state.get(widget_key) else cur.discard(city_id)
+    # if/else, а не выражение: голое условное выражение Streamlit печатает на
+    # экран (см. тест «Ничего лишнего на экран»).
+    if st.session_state.get(widget_key):
+        cur.add(city_id)
+    else:
+        cur.discard(city_id)
     st.session_state[state_key] = list(cur)
 
 
@@ -1583,7 +1588,10 @@ def _act_set(city_ids: list[str], value: bool) -> None:
     галочки – иначе «Выбрать все» меняло бы счётчик, а галочки нет.
     """
     sel = st.session_state.setdefault("act-selected", set())
-    sel.update(city_ids) if value else sel.difference_update(city_ids)
+    if value:
+        sel.update(city_ids)
+    else:
+        sel.difference_update(city_ids)
     for cid in city_ids:
         st.session_state[f"act-cb-{cid}"] = value
 
@@ -1616,8 +1624,17 @@ def _act_sync_widgets(all_ids: list[str]) -> None:
     sel = st.session_state.setdefault("act-selected", set())
     for cid in all_ids:
         key = f"act-cb-{cid}"
-        if key in st.session_state:
-            sel.add(cid) if st.session_state[key] else sel.discard(cid)
+        if key not in st.session_state:
+            continue
+        # Именно if/else, а не выражение «A if cond else B». Streamlit
+        # переписывает главный скрипт: любое голое выражение, кроме вызова
+        # функции, он заворачивает в вывод на экран. Условное выражение под
+        # это правило попадает, а sel.add/sel.discard возвращают None – и на
+        # странице печаталось по «None» на каждый город, сто одна штука.
+        if st.session_state[key]:
+            sel.add(cid)
+        else:
+            sel.discard(cid)
 
 
 # ════════════════════════════════════════════════════════════════════

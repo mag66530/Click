@@ -569,7 +569,7 @@ def _join(values: Iterable[str]) -> str:
     return "\n".join(out)
 
 
-def build(rows: list[list[str]], companies: list[dict]) -> dict:
+def build(rows: list[list[str]], companies: list[dict], yandex_total: int = 0) -> dict:
     """
     Сверка целиком: разобрать КП, разложить организации, сравнить поля.
 
@@ -589,7 +589,10 @@ def build(rows: list[list[str]], companies: list[dict]) -> dict:
     items = []
     totals = {"rows": len(sheet["items"]), "found": 0, "several": 0, "missing": 0,
               "mismatch": 0, "clean": 0, "noLink": 0, "extra": len(found["extra"]),
-              "chains": len(found["chains"]), "companies": len(companies)}
+              "chains": len(found["chains"]), "companies": len(companies),
+              # Сколько организаций насчитал сам Яндекс: меньше прочитанного –
+              # список отдал не всё, и отчёт скажет об этом прямо.
+              "yandexTotal": int(yandex_total or 0)}
 
     # Номера всех прочитанных организаций – чтобы отличить «ссылка ведёт на
     # чужую карточку» от «карточки по ссылке вообще нет среди прочитанных».
@@ -1062,10 +1065,26 @@ def _dashboard(ws, result: dict, sheet_name: str, when: str) -> None:
     ws["B2"] = "Сверка КП с организациями Яндекса"
     ws["B2"].font = Font(size=16, bold=True, color=C_LINK)
     ws.merge_cells("B3:H3")
+    # Метка сборки в отчёте – чтобы не гадать, свежим ли кодом он сделан.
+    # Из-за этого уже был потерян день: заказчик присылала отчёт, а понять,
+    # доехала ли до неё правка, было нечем.
     ws["B3"] = (f"Лист КП «{sheet_name}»"
                 + (f" · организации прочитаны {when}" if when else "")
-                + f" · организаций в аккаунте: {t.get('companies', 0)}")
+                + f" · организаций в аккаунте: {t.get('companies', 0)}"
+                + f" · сборка {BUILD}")
     ws["B3"].font = Font(size=10, color=C_GREY)
+
+    # Яндекс сам говорит, сколько у него организаций. Прочитали меньше –
+    # список отдал не всё, и об этом надо сказать прямо, а не показывать
+    # «нашлось столько-то» как полную картину.
+    обещал = int(t.get("yandexTotal") or 0)
+    прочитано = int(t.get("companies") or 0)
+    if обещал and обещал > прочитано:
+        ws.merge_cells("B4:H4")
+        ws["B4"] = (f"⚠️ Яндекс насчитал {обещал} организаций, а список отдал {прочитано}. "
+                    "Недостающие карточки Click добирает по ссылкам из КП – если ссылки "
+                    "нет, карточка в сверку не попадёт.")
+        ws["B4"].font = Font(size=10, bold=True, color="B26A00")
 
     tiles = (
         ("B5", "Городов в КП", "B6", t.get("rows", 0), C_LINK),

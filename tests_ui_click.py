@@ -372,6 +372,27 @@ def main() -> int:
             check("следующая страна выбралась сама",
                   len(primary) == 1 and primary[0] != rows[-1]["text"], str(primary))
 
+            # ── Добавили ВСЕ страны – кнопка сохранения обязана остаться ──
+            # Заказчик: «загрузила всю очередь на публикацию, а кнопки нет».
+            # После последней страны выбор стран сбрасывался, следующей уже не
+            # было – и ранний выход из функции уносил со страницы весь блок
+            # «В очереди к сохранению» вместе с кнопкой «Сохранить очередь в
+            # задачи». Собранное сохранить было нечем, а «Запуск» показывал
+            # пустую очередь, хотя плитки стран стояли помеченные «в очереди».
+            for _ in range(20):
+                add = page.get_by_role("button", name="Добавить в очередь", exact=False)
+                if add.count() == 0 or not add.first.is_enabled():
+                    break
+                add.first.click()
+                page.wait_for_timeout(2500)
+            left = page.get_by_role("button", name="Добавить в очередь", exact=False).count()
+            check("после последней страны кнопки «в очередь» уже нет", left == 0, str(left))
+            save = page.get_by_role("button", name="Сохранить очередь в задачи", exact=False)
+            check("но кнопка «Сохранить очередь в задачи» на месте", save.count() > 0,
+                  "пропала вместе с блоком очереди")
+            check("и человеку сказано, что делать дальше",
+                  page.get_by_text("Осталось сохранить", exact=False).count() > 0)
+
             page.get_by_role("button", name="Сохранить очередь в задачи").click()
             page.wait_for_timeout(5000)
             check("приложение не упало", page.get_by_text("StreamlitAPIException").count() == 0,
@@ -381,6 +402,11 @@ def main() -> int:
                      '.st-key-click-tabs [aria-checked=true], .st-key-click-tabs [data-selected=true]');
                    return e ? e.innerText.trim() : ''; }""")
             check("открылся раздел «Запуск»", "Запуск" in active, f"активно: {active!r}")
+            import re as _re
+            _body = page.evaluate("() => document.body.innerText")
+            _m = _re.search(r"Сейчас:\s*(\d+)\s*файл\w*,\s*(\d+)\s*город\w*", _body)
+            check("очередь доехала до «Запуска», а не осталась пустой",
+                  bool(_m) and _m.group(1) != "0", _m.group(0) if _m else "строку не нашли")
 
             # ── Галочка «показывать окно браузера» переживает смену раздела ──
             # Streamlit выбрасывает состояние виджетов, которых не было на

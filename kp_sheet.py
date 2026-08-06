@@ -63,6 +63,16 @@ GOOGLE_SHEET_MIME = "application/vnd.google-apps.spreadsheet"
 
 SPRAV_RX = re.compile(r"yandex\.[a-z.]+/sprav/\d+", re.I)
 
+# Блок 2ГИС в той же строке КП: «Аккаунт» – ссылка на кабинет организации,
+# «Карта» – её публичная карточка, «Статус» – тот же словарь, что у Яндекса.
+# Номера в этих двух ссылках РАЗНЫЕ: в кабинете номер организации, на карте –
+# номер филиала. Кабинету нужен первый.
+GIS_ACCOUNT_RX = re.compile(r"account\.2gis\.[a-z.]+", re.I)
+GIS_ORG_RX = re.compile(r"account\.2gis\.[a-z.]+/orgs/(\d+)", re.I)
+GIS_MAP_RX = re.compile(r"(2gis\.[a-z.]+|go\.2gis\.[a-z.]+)/", re.I)
+
+YANDEX, GIS = "yandex", "gis"
+
 # Значения колонки «Статус» у Яндекс.Бизнеса (список из выпадающего в КП):
 # Активная, Онлайн, Тех. проблемы, Удалена, Добавить.
 #   Удалена / Добавить  – карточки для работы нет, город не берём;
@@ -476,39 +486,69 @@ def parse_rows(rows: list[list[str]]) -> tuple[list[dict], dict]:
     # 3. «Статус» – ближайшая колонка справа от ссылок (у Яндекса свой, у 2ГИС свой).
     #    Название бывает и «Статус», и «Яндекс_Статус» – ищем по вхождению, но
     #    отсекаем чужие площадки, чтобы не подхватить статус 2ГИС или Гугла.
-    col_status = -1
-    for c in range(best_col + 1, min(best_col + 6, len(header))):
-        h = header[c]
-        if "статус" in h and not re.search(r"2гис|2gis|гугл|google", h):
-            col_status = c
-            break
+    col_status = _status_column(header, best_col, avoid=r"2гис|2gis|гугл|google")
     diag["statusColumn"] = col_status
     diag["statusHeader"] = rows[header_idx][col_status] if 0 <= col_status < len(rows[header_idx]) else ""
+
+    # 4. Блок 2ГИС – так же по содержимому: в шапке у него тоже «Аккаунт»,
+    #    а название площадки живёт строкой выше, в объединённой ячейке.
+    col_gis = _best_column(data, width, GIS_ACCOUNT_RX)
+    col_gis_map = _best_column(data, width, GIS_MAP_RX, skip={col_gis})
+    col_gis_status = _status_column(header, col_gis, avoid=r"яндекс|yandex|гугл|google")
+    diag["gisColumn"] = col_gis
+    diag["gisStatusColumn"] = col_gis_status
 
     cities: list[dict] = []
     for r in data:
         def cell(i: int) -> str:
             return r[i].strip() if 0 <= i < len(r) else ""
 
+        country, name = cell(col_country), cell(col_city)
         url_raw = cell(best_col)
         m = SPRAV_RX.search(url_raw)
-        if not m:
+        gis_raw = cell(col_gis)
+        gis_ok = bool(GIS_ACCOUNT_RX.search(gis_raw))
+        if not m and not gis_ok:
             continue
-        country, name = cell(col_country), cell(col_city)
         if not country or not name:
             diag["skippedNoUrl"] += 1
             continue
+
+        # Статусы у площадок свои: карточку могли удалить в Яндексе и оставить
+        # живой в 2ГИС. Поэтому отбираем каждую площадку отдельно, а строку
+        # выбрасываем, только если не осталось ни одной.
         status = cell(col_status) if col_status >= 0 else ""
-        if status and SKIP_STATUS_RX.search(status):
-            diag["skippedDeleted"] += 1
+        url = ""
+        if m:
+            if status and SKIP_STATUS_RX.search(status):
+                diag["skippedDeleted"] += 1
+            else:
+                url = "https://" + m.group(0) if not url_raw.lower().startswith("http") else url_raw
+                if status and WARN_STATUS_RX.search(status):
+                    diag["withProblems"] = diag.get("withProblems", 0) + 1
+
+        gis_status = cell(col_gis_status) if col_gis_status >= 0 else ""
+        gis_url = ""
+        if gis_ok:
+            if gis_status and SKIP_STATUS_RX.search(gis_status):
+                diag["gisSkipped"] = diag.get("gisSkipped", 0) + 1
+            elif not GIS_ORG_RX.search(gis_raw):
+                # Ссылка на кабинет есть, а номера организации в ней нет –
+                # работать по такой нельзя, но и молчать нельзя.
+                diag["gisNoOrgId"] = diag.get("gisNoOrgId", 0) + 1
+            else:
+                gis_url = gis_raw if gis_raw.lower().startswith("http") else "https://" + gis_raw
+
+        if not url and not gis_url:
             continue
-        if status and WARN_STATUS_RX.search(status):
-            diag["withProblems"] = diag.get("withProblems", 0) + 1
         cities.append({
             "country": normalize_country(country),
             "name": name,
-            "url": "https://" + m.group(0) if not url_raw.lower().startswith("http") else url_raw,
+            "url": url,
             "status": status,
+            "gisUrl": gis_url,
+            "gisStatus": gis_status,
+            "gisMap": cell(col_gis_map),
             # Контакты из той же строки КП – ими можно подставлять окончания постов,
             # чтобы номер и почта менялись правкой таблицы, а не кода.
             "site": cell(col_site),
@@ -516,9 +556,38 @@ def parse_rows(rows: list[list[str]]) -> tuple[list[dict], dict]:
             "phone": cell(col_phone),
         })
 
-    diag["cities"] = len(cities)
-    diag["countries"] = len({c["country"] for c in cities})
+    diag["cities"] = sum(1 for c in cities if c["url"])
+    diag["gisCities"] = sum(1 for c in cities if c["gisUrl"])
+    diag["countries"] = len({c["country"] for c in cities if c["url"]})
     return cities, diag
+
+
+def _best_column(data: list[list[str]], width: int, rx: re.Pattern,
+                 skip: set[int] | None = None) -> int:
+    """Колонка, в которой больше всего значений подходит под образец. -1 – нет такой."""
+    best, hits = -1, 0
+    for c in range(width):
+        if skip and c in skip:
+            continue
+        n = sum(1 for r in data if c < len(r) and rx.search(r[c]))
+        if n > hits:
+            best, hits = c, n
+    return best
+
+
+def _status_column(header: list[str], from_col: int, avoid: str) -> int:
+    """
+    «Статус» ближайшей справа колонкой. Так устроена КП: у каждой площадки свой
+    блок «Аккаунт – Карта – Статус», а название площадки стоит строкой выше, в
+    объединённой ячейке, и до сюда не доезжает.
+    """
+    if from_col < 0:
+        return -1
+    for c in range(from_col + 1, min(from_col + 6, len(header))):
+        h = header[c]
+        if "статус" in h and not re.search(avoid, h):
+            return c
+    return -1
 
 
 def load_cities(project_id: str, from_config: str = "") -> tuple[list[dict], dict]:
@@ -536,25 +605,35 @@ def load_cities(project_id: str, from_config: str = "") -> tuple[list[dict], dic
     return parse_rows(_read_values(fid, sa, sheet_gid(url)))
 
 
-def to_countries(cities: list[dict], project_id: str) -> list[dict]:
+def to_countries(cities: list[dict], project_id: str, platform: str = YANDEX) -> list[dict]:
     """
     Список городов → структура конфига Click: [{id, name, cities:[{id,name,url}]}].
     Порядок стран и городов сохраняется как в таблице.
+
+    platform выбирает площадку: у 2ГИС свои ссылки и свой статус, и городов
+    там обычно заметно меньше – карточка заведена не везде. Идентификаторы у
+    площадок разные, иначе выбранные галочки одной перепутались бы с другой.
     """
+    key = "url" if platform == YANDEX else "gisUrl"
+    mark = "" if platform == YANDEX else f"{platform}-"
+
     def slug(s: str) -> str:
         return re.sub(r"[^0-9a-zа-яё]+", "-", (s or "").lower()).strip("-") or "x"
 
     by_country: dict[str, list[dict]] = {}
     for c in cities:
+        if not (c.get(key) or "").strip():
+            continue
         by_country.setdefault(c["country"], []).append(c)
 
     out = []
     for n, (country, items) in enumerate(by_country.items()):
         out.append({
-            "id": f"c-{project_id}-{n}-{slug(country)}",
+            "id": f"c-{project_id}-{mark}{n}-{slug(country)}",
             "name": country,
             "cities": [
-                {"id": f"ct-{project_id}-{n}-{i}-{slug(it['name'])}", "name": it["name"], "url": it["url"]}
+                {"id": f"ct-{project_id}-{mark}{n}-{i}-{slug(it['name'])}",
+                 "name": it["name"], "url": it[key]}
                 for i, it in enumerate(items)
             ],
         })

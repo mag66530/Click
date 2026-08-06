@@ -50,6 +50,13 @@ FAILED = "failed"                    # публикация не прошла
 
 OPEN_STATUSES = (DRAFTED, NEEDS_HUMAN, NO_DRAFT, FAILED)
 
+# ─── Площадки ───────────────────────────────────────────────────────
+# Правила отбора и промпт у них общие, а вот очередь и отправка – нет:
+# отвечать надо разными браузерами и разными сессиями, и перепутать ответы
+# нельзя. Имена файлов Яндекса остались прежними – его очередь после
+# обновления не потеряется.
+YANDEX, GIS = "yandex", "gis"
+
 GOOD_RATING = 5                      # ниже – человеку (решение заказчика)
 
 # Потолок черновиков на город. Ставили 5 – исходили из того, что неотвеченных
@@ -441,12 +448,16 @@ def triage(items: list[dict], max_drafts: int = MAX_DRAFTS_PER_CITY) -> dict:
 
 
 def as_queue_item(item: dict, *, project_id: str, city: str, company_url: str,
-                  reviews_url: str, status: str, draft: str = "", note: str = "") -> dict:
+                  reviews_url: str, status: str, draft: str = "", note: str = "",
+                  platform: str = YANDEX) -> dict:
     """Плоская запись для очереди – ровно то, что нужно UI и отчёту."""
     created = item.get("time_created")
     return {
         "reviewId": item.get("id"),
         "projectId": project_id,
+        # Площадка нужна при отправке: ответ уходит через её браузер и её
+        # сессию. Без метки ответ на отзыв 2ГИС ушёл бы в Яндекс.
+        "platform": platform,
         "city": city,
         "companyUrl": company_url,
         "reviewsUrl": reviews_url,
@@ -483,18 +494,22 @@ def _ms_to_iso(ms) -> str:
 USERS_DATA = paths.data_root()
 
 
-def queue_path(project_id: str) -> Path:
+def _suffix(platform: str) -> str:
+    return "" if platform == YANDEX else f"-{platform}"
+
+
+def queue_path(project_id: str, platform: str = YANDEX) -> Path:
     d = USERS_DATA / project_id
     d.mkdir(parents=True, exist_ok=True)
-    return d / "reviews-queue.json"
+    return d / f"reviews-queue{_suffix(platform)}.json"
 
 
-def _store_key(project_id: str) -> str:
-    return f"reviews-queue-{project_id}"
+def _store_key(project_id: str, platform: str = YANDEX) -> str:
+    return f"reviews-queue{_suffix(platform)}-{project_id}"
 
 
-def load_queue(project_id: str) -> list[dict]:
-    fp = queue_path(project_id)
+def load_queue(project_id: str, platform: str = YANDEX) -> list[dict]:
+    fp = queue_path(project_id, platform)
     if fp.exists():
         try:
             data = json.loads(fp.read_text(encoding="utf-8"))
@@ -505,35 +520,37 @@ def load_queue(project_id: str) -> list[dict]:
     # Локально пусто – в облаке это норма после перезапуска, тянем из хранилища.
     try:
         import repo_store
-        saved = repo_store.load(_store_key(project_id))
+        saved = repo_store.load(_store_key(project_id, platform))
         if saved and isinstance(saved.get("items"), list):
-            _write_local(project_id, saved["items"])
+            _write_local(project_id, saved["items"], platform)
             return saved["items"]
     except Exception:  # noqa: BLE001 – нет сети/токена: работаем с пустой очередью
         pass
     return []
 
 
-def _write_local(project_id: str, items: list[dict]) -> None:
-    fp = queue_path(project_id)
+def _write_local(project_id: str, items: list[dict], platform: str = YANDEX) -> None:
+    fp = queue_path(project_id, platform)
     tmp = fp.with_suffix(".tmp")
     tmp.write_text(json.dumps({"items": items}, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(fp)
 
 
-def save_queue(project_id: str, items: list[dict], push: bool = False) -> str:
+def save_queue(project_id: str, items: list[dict], push: bool = False,
+               platform: str = YANDEX) -> str:
     """
     Сохранить очередь. push=True – ещё и наружу, чтобы пережила
     перезапуск. Возвращает описание «куда сохранили» либо причину, по
     которой наружу не получилось (не роняя прогон из-за этого).
     """
-    _write_local(project_id, items)
+    _write_local(project_id, items, platform)
     if not push:
         return "сохранено локально"
     try:
         import repo_store
-        return repo_store.save(_store_key(project_id), {"items": items},
-                               f"Click: очередь ответов на отзывы {project_id}")
+        where = "2ГИС" if platform == GIS else "Яндекса"
+        return repo_store.save(_store_key(project_id, platform), {"items": items},
+                               f"Click: очередь ответов на отзывы {where} {project_id}")
     except Exception as e:  # noqa: BLE001
         return f"наружу сохранить не вышло: {e}"
 

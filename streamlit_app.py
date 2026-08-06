@@ -25,6 +25,7 @@ from pathlib import Path
 import streamlit as st
 import streamlit.components.v1 as components
 
+import gis_playwright as gis
 import kp_audit
 import kp_sheet
 import llm
@@ -203,7 +204,7 @@ def _default_subproject(project_id: str) -> dict:
 
 # Что из конфига храним снаружи (в репозитории). Пароль от Яндекса – НИКОГДА:
 # он остаётся только в этом контейнере.
-_KEPT = ("countries", "email", "kpSheetUrl", "kpSyncedAt")
+_KEPT = ("countries", "countriesGis", "email", "kpSheetUrl", "kpSyncedAt")
 
 
 def load_raw_config(project_id: str) -> dict:
@@ -215,22 +216,41 @@ def load_raw_config(project_id: str) -> dict:
                 return _merge_kept(project_id, raw)
         except (json.JSONDecodeError, OSError):
             pass
+    # Локального конфига нет – собираем из кода. Это НЕ данные заказчика, а
+    # заготовка, и _merge_kept обязан знать разницу (см. ниже).
     sub = _default_subproject(project_id)
-    return _merge_kept(project_id, {"projects": [sub], "activeProjectId": sub["id"], "settings": {}})
+    return _merge_kept(project_id, {"projects": [sub], "activeProjectId": sub["id"], "settings": {}},
+                       from_preset=True)
 
 
-def _merge_kept(project_id: str, raw: dict) -> dict:
+def _merge_kept(project_id: str, raw: dict, from_preset: bool = False) -> dict:
     """
-    Города и настройки проекта поднимаем из репозитория, если локально пусто.
-    В облаке файловая система временная: без этого после каждого перезапуска
-    список городов пришлось бы набирать заново.
+    Города и настройки проекта поднимаем из репозитория. В облаке файловая
+    система временная: без этого после каждого перезапуска список городов
+    пришлось бы набирать заново.
+
+    ГЛАВНОЕ ЗДЕСЬ: сохранённые города ВАЖНЕЕ зашитого в код списка.
+
+    Так было не всегда, и это стоило заказчику дня работы. Она загрузила
+    города МПЭ из КП, ночью облако перезапустилось, файловая система
+    обнулилась – и Click, не найдя локального конфига, собрал его из
+    пресета `projects_data.MPE_CITIES`. Пресет не пустой, а внешняя копия
+    подставлялась только «если локально пусто» – свежий список из КП молча
+    проиграл коду, и утром на экране были вчерашние города.
+
+    Проявлялось это только у проектов с пресетом (СМУ, ИМП, МПЭ, АПС). У МПИ
+    пресета нет, поэтому там всё работало, и беда выглядела случайной.
+
+    Пресет теперь – только для проекта, который ещё ни разу ничего не
+    сохранял. Правки, сделанные в самом приложении (локальный файл есть),
+    по-прежнему главнее: их писал человек, а не код.
     """
     saved = repo_store.load(f"project-{project_id}")
     if not saved:
         return raw
     sub = next((x for x in raw["projects"] if x["id"] == raw.get("activeProjectId")), raw["projects"][0])
     for key in _KEPT:
-        if key in saved and not sub.get(key):
+        if key in saved and (from_preset or not sub.get(key)):
             sub[key] = saved[key]
     return raw
 
@@ -260,7 +280,8 @@ def _pull_session(project_id: str) -> None:
     if not repo_store.is_configured():
         return
     pairs = ((f"session-{project_id}", yb.session_path(project_id)),
-             (f"device-{project_id}", yb.device_path(project_id)))
+             (f"device-{project_id}", yb.device_path(project_id)),
+             (f"session-gis-{project_id}", gis.session_path(project_id)))
     for name, path in pairs:
         if path.exists() and path.stat().st_size > 2:
             continue
@@ -276,18 +297,22 @@ def _push_session(project_id: str) -> None:
     """Свежие куки – в хранилище. Прогон продлевает их, копия не должна отставать."""
     if not repo_store.is_configured():
         return
-    pairs = ((f"session-{project_id}", yb.session_path(project_id), True),
-             (f"device-{project_id}", yb.device_path(project_id), False))
-    for name, path, need_auth in pairs:
-        if not path.exists() or (need_auth and not yb.has_saved_session(project_id)):
+    pairs = ((f"session-{project_id}", yb.session_path(project_id), yb.has_saved_session),
+             (f"device-{project_id}", yb.device_path(project_id), None),
+             # Сессия 2ГИС – туда же: без неё после перезапуска облака вход
+             # пришлось бы проходить заново, а обещано, что не придётся.
+             (f"session-gis-{project_id}", gis.session_path(project_id), gis.has_saved_session))
+    for name, path, alive in pairs:
+        if not path.exists() or (alive and not alive(project_id)):
             continue
         mark = f"_pushed_{name}"
         mtime = path.stat().st_mtime
         if st.session_state.get(mark) == mtime:
             continue
         try:
+            where = "2ГИС" if "gis" in name else "Яндекса"
             repo_store.save(name, json.loads(path.read_text(encoding="utf-8")),
-                            f"Click: сессия Яндекса ({project_id})")
+                            f"Click: сессия {where} ({project_id})")
             st.session_state[mark] = mtime
         except Exception:  # noqa: BLE001
             pass
@@ -446,6 +471,90 @@ def country_by_id(config: dict, cid: str) -> dict | None:
 
 
 # ════════════════════════════════════════════════════════════════════
+#  Города из КП: одна дорога для кнопки и для автообновления
+# ════════════════════════════════════════════════════════════════════
+
+KP_SYNC_TTL_HOURS = 6      # столько живёт загруженный список, дальше обновляем сами
+KP_SYNC_RETRY_S = 600      # не вышло – следующая попытка не раньше
+
+
+def _hours_since(iso: str | None) -> float:
+    """Сколько часов прошло с отметки. Нет отметки или мусор – бесконечность."""
+    try:
+        t = datetime.fromisoformat((iso or "").replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return float("inf")
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - t).total_seconds() / 3600
+
+
+def kp_pull(project_id: str, config: dict) -> tuple[bool, str]:
+    """
+    Перечитать КП и заменить ею список городов.
+
+    Возвращает (получилось, что сказать человеку). Одна дорога и для кнопки
+    «Загрузить», и для автообновления: разъехавшись, они означали бы, что
+    город появляется в списке по-разному в зависимости от того, как его
+    загрузили.
+    """
+    cities, diag = kp_sheet.load_cities(project_id, (config.get("kpSheetUrl") or "").strip())
+    if diag.get("error"):
+        return False, diag["error"]
+    if not cities:
+        return False, "В таблице не нашлось ни одного города со ссылкой на Яндекс.Бизнес."
+    config["countries"] = kp_sheet.to_countries(cities, project_id)
+    # Города 2ГИС – из того же прохода по таблице: блок «2ГИС» лежит в тех же
+    # строках, отдельного чтения не требуется.
+    config["countriesGis"] = kp_sheet.to_countries(cities, project_id, platform=kp_sheet.GIS)
+    config["kpSyncedAt"] = datetime.now(timezone.utc).isoformat()
+    save_config(project_id)
+    note = f'Загружено: {cities_word(len(cities))} в {diag.get("countries", 0)} странах.'
+    if diag.get("gisCities"):
+        note += f' В 2ГИС карточек: {diag["gisCities"]}.'
+    if diag.get("skippedDeleted"):
+        note += f' Пропущено удалённых карточек: {diag["skippedDeleted"]}.'
+    return True, note
+
+
+def _kp_autosync(project_id: str, config: dict) -> None:
+    """
+    Города подтягиваются из КП сами, без кнопки.
+
+    Зачем. Таблица КП – источник правды: её правят руками, в ней же статусы
+    карточек. Загрузка кнопкой означала, что достаточно забыть нажать – и
+    прогон уходит по вчерашнему списку, а карточка, вчера отмеченная
+    «Удалена», получает клики. Плюс облако: файловая система там временная,
+    и после перезапуска список должен вернуться сам.
+
+    Раз в KP_SYNC_TTL_HOURS часов и только если КП настроена. Не вышло –
+    работаем на прежнем списке и говорим об этом, но не долбимся в таблицу
+    на каждое нажатие: следующая попытка не раньше чем через KP_SYNC_RETRY_S.
+    """
+    if not kp_sheet.is_configured(project_id, (config.get("kpSheetUrl") or "").strip()):
+        return
+    if _hours_since(config.get("kpSyncedAt")) < KP_SYNC_TTL_HOURS:
+        return
+    fail_key = f"_kp_sync_failed_{project_id}"
+    try:
+        if time.time() - float(st.session_state.get(fail_key, 0)) < KP_SYNC_RETRY_S:
+            return
+    except (TypeError, ValueError):
+        pass
+    try:
+        with st.spinner("Обновляю города из КП…"):
+            ok, note = kp_pull(project_id, config)
+    except Exception as e:  # noqa: BLE001 – текст ошибки уже человеческий
+        ok, note = False, str(e)
+    if ok:
+        st.session_state.pop(fail_key, None)
+        st.toast(f"🏙 {note}")
+        return
+    st.session_state[fail_key] = time.time()
+    st.warning(f"Города из КП не обновились: {note} Работаем на прежнем списке.", icon="📊")
+
+
+# ════════════════════════════════════════════════════════════════════
 #  Окончания постов: значения по умолчанию из кода + правки заказчика
 # ════════════════════════════════════════════════════════════════════
 
@@ -576,15 +685,22 @@ def save_queue_to_tasks(project_id: str, config: dict, queue: list[dict]) -> int
     return saved
 
 
-def save_actualize_tasks(project_id: str, config: dict, selection: dict[str, list[str]]) -> int:
-    folder = project_base(project_id) / "tasks-actualize"
+def platform_countries(config: dict, platform: str = rv.YANDEX) -> list[dict]:
+    """Страны и города площадки. У 2ГИС свой список: карточка заведена не везде."""
+    return config["countries"] if platform == rv.YANDEX else (config.get("countriesGis") or [])
+
+
+def save_actualize_tasks(project_id: str, config: dict, selection: dict[str, list[str]],
+                         platform: str = rv.YANDEX) -> int:
+    folder = project_base(project_id) / runner.PLATFORMS[platform]["tasks"]
     folder.mkdir(parents=True, exist_ok=True)
     for old in folder.glob("*.json"):          # чистим прошлые – иначе прогон подхватит лишнее
         old.unlink(missing_ok=True)
     ts = int(time.time() * 1000)
     total = 0
+    countries = platform_countries(config, platform)
     for idx, (country_id, city_ids) in enumerate(selection.items()):
-        country = country_by_id(config, country_id)
+        country = next((c for c in countries if c["id"] == country_id), None)
         if not country or not city_ids:
             continue
         city_tasks = [
@@ -1561,7 +1677,7 @@ def row_vars(country: dict, chosen: set[str] | None, action: str) -> dict[str, s
             "--act": T.css_text(action)}
 
 
-def _act_selected(all_ids: list[str]) -> set[str]:
+def _act_selected(all_ids: list[str], prefix: str = "act") -> set[str]:
     """
     Какие города отмечены для актуализации.
 
@@ -1573,47 +1689,49 @@ def _act_selected(all_ids: list[str]) -> set[str]:
     исчезнувшие города из набора уходят.
     """
     ids = set(all_ids)
-    sel = st.session_state.get("act-selected")
+    # У каждой площадки свой набор: города 2ГИС и Яндекса – разные, и общий
+    # набор при переключении вкладки затирал бы соседний.
+    sel = st.session_state.get(f"{prefix}-selected")
     if sel is None:
-        st.session_state["act-selected"] = set(ids)
-        st.session_state["act-known"] = set(ids)
-        return st.session_state["act-selected"]
+        st.session_state[f"{prefix}-selected"] = set(ids)
+        st.session_state[f"{prefix}-known"] = set(ids)
+        return st.session_state[f"{prefix}-selected"]
 
-    known = st.session_state.get("act-known")
+    known = st.session_state.get(f"{prefix}-known")
     if known is None:
         known = set(sel)
     fresh = (sel & ids) | (ids - known)        # новые города – сразу выбраны
     if fresh != sel:
         sel.clear()
         sel.update(fresh)
-    st.session_state["act-known"] = ids
+    st.session_state[f"{prefix}-known"] = ids
     return sel
 
 
-def _act_set(city_ids: list[str], value: bool) -> None:
+def _act_set(city_ids: list[str], value: bool, prefix: str = "act") -> None:
     """
     Вызывается ТОЛЬКО из on_click кнопки: в этот момент виджеты ещё не созданы,
     поэтому их состояние можно переписать. Держим в согласии свой набор и сами
     галочки – иначе «Выбрать все» меняло бы счётчик, а галочки нет.
     """
-    sel = st.session_state.setdefault("act-selected", set())
+    sel = st.session_state.setdefault(f"{prefix}-selected", set())
     if value:
         sel.update(city_ids)
     else:
         sel.difference_update(city_ids)
     for cid in city_ids:
-        st.session_state[f"act-cb-{cid}"] = value
+        st.session_state[f"{prefix}-cb-{cid}"] = value
 
 
-def _act_toggle(city_id: str, widget_key: str) -> None:
-    sel = st.session_state.setdefault("act-selected", set())
+def _act_toggle(city_id: str, widget_key: str, prefix: str = "act") -> None:
+    sel = st.session_state.setdefault(f"{prefix}-selected", set())
     if st.session_state.get(widget_key):
         sel.add(city_id)
     else:
         sel.discard(city_id)
 
 
-def _act_sync_widgets(all_ids: list[str]) -> None:
+def _act_sync_widgets(all_ids: list[str], prefix: str = "act") -> None:
     """
     Подобрать значения галочек, которые браузер прислал, а отрисовать их уже
     не успели.
@@ -1630,9 +1748,9 @@ def _act_sync_widgets(all_ids: list[str]) -> None:
     Лечится тем, что значение галочки читается НАПРЯМУЮ, до отрисовки: к
     моменту запуска скрипта Streamlit уже положил присланное в session_state.
     """
-    sel = st.session_state.setdefault("act-selected", set())
+    sel = st.session_state.setdefault(f"{prefix}-selected", set())
     for cid in all_ids:
-        key = f"act-cb-{cid}"
+        key = f"{prefix}-cb-{cid}"
         if key not in st.session_state:
             continue
         # Именно if/else, а не выражение «A if cond else B». Streamlit
@@ -1662,7 +1780,7 @@ _REVIEW_LABELS = {
 }
 
 
-def _review_queue_state(project_id: str) -> list[dict]:
+def _review_queue_state(project_id: str, platform: str = rv.YANDEX) -> list[dict]:
     """
     Очередь читаем с диска при каждой перерисовке, а НЕ кэшируем в session_state.
 
@@ -1675,18 +1793,19 @@ def _review_queue_state(project_id: str) -> list[dict]:
     несоответствия. Правки человека сохраняются сразу же, так что потерять
     их между перерисовками нельзя.
     """
-    key = f"_rvq_{project_id}"
-    st.session_state[key] = rv.load_queue(project_id)
+    key = f"_rvq_{platform}_{project_id}"
+    st.session_state[key] = rv.load_queue(project_id, platform)
     return st.session_state[key]
 
 
 def _review_queue_save(project_id: str, items: list[dict] | None = None,
-                       push: bool = True) -> None:
+                       push: bool = True, platform: str = rv.YANDEX) -> None:
+    key = f"_rvq_{platform}_{project_id}"
     if items is None:
-        items = st.session_state.get(f"_rvq_{project_id}") or []
+        items = st.session_state.get(key) or []
     try:
-        rv.save_queue(project_id, items, push=push)
-        st.session_state[f"_rvq_{project_id}"] = items
+        rv.save_queue(project_id, items, push=push, platform=platform)
+        st.session_state[key] = items
     except Exception as e:  # noqa: BLE001
         st.session_state["_store_error"] = str(e)
 
@@ -1764,37 +1883,51 @@ def _batch_box(name: str) -> dict:
     return box
 
 
-def _batch_browser(project_id: str):
+def _batch_key(project_id: str, platform: str) -> str:
+    """У каждой площадки свой браузер и своя сессия – ключ общий на двоих."""
+    return f"{project_id}:{platform}"
+
+
+def _batch_browser(project_id: str, platform: str = rv.YANDEX):
     """Браузер и поток для пачки отправки. Открывается один раз на пачку."""
-    have = _batch_box(_BROWSER_BOX).get(project_id)
+    key = _batch_key(project_id, platform)
+    have = _batch_box(_BROWSER_BOX).get(key)
     if have and have[0].alive():
         return have
     if have:
         # Поток воркера умер, а браузер мог остаться – убираем за собой,
         # иначе получаем ровно ту утечку, из-за которой всё и падало.
-        _batch_browser_close(project_id)
-    browser = yb.YbBrowser(project_id, headless=bool(get_settings(project_id)["headless"]))
+        _batch_browser_close(project_id, platform)
+    headless = bool(get_settings(project_id)["headless"])
+    if platform == rv.GIS:
+        import gis_playwright as gis
+        browser = gis.browser(project_id, headless=headless)
+    else:
+        browser = yb.YbBrowser(project_id, headless=headless)
     worker = PlaywrightWorker()
     worker.call(browser.start)
-    _batch_box(_BROWSER_BOX)[project_id] = (worker, browser)
+    _batch_box(_BROWSER_BOX)[key] = (worker, browser)
     return worker, browser
 
 
-def _batch_browser_close(project_id: str) -> None:
-    _batch_box(_URL_BOX).pop(project_id, None)
-    have = _batch_box(_BROWSER_BOX).pop(project_id, None)
-    if not have:
-        return
-    worker, browser = have
-    try:
-        worker.call(browser.save_session)
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        worker.call(browser.close)
-    except Exception:  # noqa: BLE001
-        pass
-    worker.stop()
+def _batch_browser_close(project_id: str, platform: str | None = None) -> None:
+    """Закрыть браузер отправки. Без площадки – все, какие остались открытыми."""
+    for pf in ([platform] if platform else [rv.YANDEX, rv.GIS]):
+        key = _batch_key(project_id, pf)
+        _batch_box(_URL_BOX).pop(key, None)
+        have = _batch_box(_BROWSER_BOX).pop(key, None)
+        if not have:
+            continue
+        worker, browser = have
+        try:
+            worker.call(browser.save_session)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            worker.call(browser.close)
+        except Exception:  # noqa: BLE001
+            pass
+        worker.stop()
 
 
 # Через столько ответов браузер перезапускается. Страница отзывов тяжёлая, и
@@ -1820,20 +1953,30 @@ def _send_one(project_id: str, item: dict, text: str) -> None:
     было три; чинить их по отдельности смысла нет.
     """
     url = item.get("reviewsUrl")
+    # Площадку берём из самого отзыва: ответ должен уйти тем браузером и той
+    # сессией, откуда отзыв пришёл. Перепутать – значит ответить в чужом
+    # кабинете, и отменить это уже нельзя.
+    platform = item.get("platform") or rv.YANDEX
+    key = _batch_key(project_id, platform)
     try:
-        worker, browser = _batch_browser(project_id)
+        worker, browser = _batch_browser(project_id, platform)
         urls = _batch_box(_URL_BOX)
-        same = urls.get(project_id) == url
+        same = urls.get(key) == url
         if not same:
             worker.call(browser.new_page)     # новый город – новая вкладка
-        res = worker.call(yb.publish_review_answer, browser.page, url,
-                          item.get("reviewId"), text, item.get("text") or "",
-                          not same)
-        urls[project_id] = url
+        if platform == rv.GIS:
+            import gis_playwright as gis
+            res = worker.call(gis.publish_review_answer, browser.page, url,
+                              item.get("text") or "", text, not same)
+        else:
+            res = worker.call(yb.publish_review_answer, browser.page, url,
+                              item.get("reviewId"), text, item.get("text") or "",
+                              not same)
+        urls[key] = url
         status, reason = res.get("status", "failed"), res.get("reason", "")
     except Exception as e:  # noqa: BLE001
         status, reason = "failed", str(e)
-        _batch_box(_URL_BOX).pop(project_id, None)
+        _batch_box(_URL_BOX).pop(key, None)
     item["finalText"] = text
     item["sentAt"] = datetime.now(timezone.utc).isoformat()
     _apply_send_result(item, status, reason)
@@ -1841,20 +1984,22 @@ def _send_one(project_id: str, item: dict, text: str) -> None:
 
 def _review_send(project_id: str, item: dict, text: str) -> tuple[str, str]:
     """Отправка одного ответа кнопкой – та же дорога, что и у пачки."""
+    platform = item.get("platform") or rv.YANDEX
     try:
         _send_one(project_id, item, text)
     finally:
-        _batch_browser_close(project_id)
-    _review_queue_save(project_id)
+        _batch_browser_close(project_id, platform)
+    _review_queue_save(project_id, platform=platform)
     status = {rv.ANSWERED: "answered", rv.ALREADY: "already"}.get(item.get("status"), "failed")
     return status, item.get("note") or ""
 
 
-def _batch_start(kind: str, items: list[dict], project_id: str) -> None:
+def _batch_start(kind: str, items: list[dict], project_id: str,
+                 platform: str = rv.YANDEX) -> None:
     # По городам: соседние ответы уходят на одну и ту же открытую страницу.
     items = sorted(items, key=lambda it: (it.get("reviewsUrl") or "", it.get("city") or ""))
     st.session_state["rv-batch"] = {
-        "kind": kind, "project": project_id,
+        "kind": kind, "project": project_id, "platform": platform,
         "ids": [it.get("reviewId") for it in items],
         "done": 0, "total": len(items), "stop": False,
         "answered": 0, "already": 0, "failed": 0,
@@ -1868,8 +2013,9 @@ def _batch_stop() -> None:
 
 
 def _batch_finish(project_id: str, batch: dict) -> None:
-    _batch_browser_close(project_id)
-    _review_queue_save(project_id)
+    platform = batch.get("platform") or rv.YANDEX
+    _batch_browser_close(project_id, platform)
+    _review_queue_save(project_id, push=True, platform=platform)
     st.session_state.pop("rv-batch", None)
     left = batch["total"] - batch["done"]
     if batch["kind"] == "send":
@@ -1886,7 +2032,8 @@ def _batch_finish(project_id: str, batch: dict) -> None:
     st.session_state["rv-batch-note"] = note
 
 
-def _batch_block(project_id: str, items: list[dict]) -> bool:
+def _batch_block(project_id: str, items: list[dict],
+                 platform: str = rv.YANDEX) -> bool:
     """
     Один шаг пачки. Возвращает True, если пачка идёт – тогда остальной
     список рисовать не надо, человек и так смотрит на прогресс.
@@ -1928,7 +2075,7 @@ def _batch_block(project_id: str, items: list[dict]) -> bool:
     batch["done"] += 1
     # Отправку выталкиваем наружу сразу: приложение может упасть, а локальные
     # файлы облако не переживает – и тогда непонятно, что уже опубликовано.
-    _review_queue_save(project_id, push=(batch["kind"] == "send"))
+    _review_queue_save(project_id, push=(batch["kind"] == "send"), platform=platform)
     st.rerun()
     return True
 
@@ -1946,7 +2093,8 @@ _SENT_LABELS = {
 }
 
 
-def _sent_report_block(project_id: str, done: list[dict], pending: list[dict]) -> None:
+def _sent_report_block(project_id: str, done: list[dict], pending: list[dict],
+                       platform: str = rv.YANDEX) -> None:
     """
     Что уже отправлено – город, автор, когда и чем кончилось.
 
@@ -1983,8 +2131,8 @@ def _sent_report_block(project_id: str, done: list[dict], pending: list[dict]) -
                            file_name=f"reviews-{project_id}.csv", mime="text/csv",
                            use_container_width=True, key="rv-report-csv")
         if c2.button("Очистить отчёт", key="rv-clear-done", use_container_width=True):
-            st.session_state[f"_rvq_{project_id}"] = pending
-            _review_queue_save(project_id)
+            st.session_state[f"_rvq_{platform}_{project_id}"] = pending
+            _review_queue_save(project_id, platform=platform)
             st.rerun()
 
 
@@ -2004,7 +2152,7 @@ def _sent_csv(rows: list[dict]) -> bytes:
     return buf.getvalue().encode("utf-8-sig")
 
 
-def _report_reviews(project_id: str, data: dict) -> list[dict]:
+def _report_reviews(project_id: str, data: dict, platform: str = rv.YANDEX) -> list[dict]:
     """
     Отзывы прогона – с тем, что с ними стало ПОСЛЕ прогона.
 
@@ -2014,7 +2162,7 @@ def _report_reviews(project_id: str, data: dict) -> list[dict]:
     свежий статус, время отправки и итоговый текст. Отзыв, разобранный уже
     после прогона, в выгрузке виден разобранным – как оно и есть.
     """
-    queue = rv.load_queue(project_id)
+    queue = rv.load_queue(project_id, platform)
     rows = data.get("reviews") or []
     if not rows:
         # Отчёт старый – отзывов в нём не сохраняли. Но у элементов очереди
@@ -2056,7 +2204,8 @@ def _report_reviews_block(rows: list[dict]) -> None:
                 html(T.review_report_row(r))
 
 
-def _send_all_block(project_id: str, pending: list[dict], running: bool) -> None:
+def _send_all_block(project_id: str, pending: list[dict], running: bool,
+                    platform: str = rv.YANDEX) -> None:
     """
     Отправить все готовые ответы разом.
 
@@ -2087,7 +2236,8 @@ def _send_all_block(project_id: str, pending: list[dict], running: bool) -> None
             st.rerun()
         return
 
-    st.warning(f"Отправить {len(ready)} ответов в Яндекс? Они появятся на карточках "
+    where = "2ГИС" if platform == rv.GIS else "Яндекс"
+    st.warning(f"Отправить {len(ready)} ответов в {where}? Они появятся на карточках "
                "под именем бренда, удалить можно будет только вручную.")
     yes, no = st.columns(2)
     if no.button("Отмена", key="rv-send-all-no", use_container_width=True):
@@ -2096,12 +2246,12 @@ def _send_all_block(project_id: str, pending: list[dict], running: bool) -> None
     if yes.button(f"Да, отправить {len(ready)}", key="rv-send-all-yes",
                   type="primary", use_container_width=True):
         st.session_state.pop("rv-send-all-asked", None)
-        _batch_start("send", ready, project_id)
+        _batch_start("send", ready, project_id, platform)
         st.rerun()
 
 
-def reviews_queue_block(project_id: str) -> None:
-    items = _review_queue_state(project_id)
+def reviews_queue_block(project_id: str, platform: str = rv.YANDEX) -> None:
+    items = _review_queue_state(project_id, platform)
     pending = rv.open_items(items)
 
     # Пачку разбираем ДО проверки «список пуст»: отправив всё, список
@@ -2109,7 +2259,7 @@ def reviews_queue_block(project_id: str) -> None:
     if st.session_state.get("rv-batch") or st.session_state.get("rv-batch-note"):
         with st.container(border=True):
             html('<div class="card-title">💬 Ответы на отзывы</div>')
-            if _batch_block(project_id, items):
+            if _batch_block(project_id, items, platform):
                 return
         if not pending:
             return
@@ -2128,7 +2278,8 @@ def reviews_queue_block(project_id: str) -> None:
     # заказчик только собрала новые отзывы, а видела «3 отправленных» с
     # какого-то прошлого раза. История прогонов теперь во вкладке «Отчёт»,
     # у каждого прогона свои отзывы и своя выгрузка.
-    run_id = (runner.read_state(project_id, "actualize") or {}).get("runId") or ""
+    run_id = (runner.read_state(project_id, runner.PLATFORMS[platform]["kind"])
+              or {}).get("runId") or ""
     done = [it for it in items
             if it.get("status") not in rv.OPEN_STATUSES and it.get("runId") == run_id and run_id]
     # Ждущие ответа показываем ВСЕ, даже со старых прогонов: черновик написан,
@@ -2180,10 +2331,10 @@ def reviews_queue_block(project_id: str) -> None:
                                        key="rv-again-bad", use_container_width=True):
                 todo = broken
             if todo:
-                _batch_start("redo", todo, project_id)
+                _batch_start("redo", todo, project_id, platform)
                 st.rerun()
 
-        _send_all_block(project_id, pending, running)
+        _send_all_block(project_id, pending, running, platform)
 
         for n, item in enumerate(pending):
             label = _REVIEW_LABELS.get(item.get("status"), "–")
@@ -2208,7 +2359,7 @@ def reviews_queue_block(project_id: str) -> None:
                     st.markdown(f"[Открыть отзывы этого города]({item.get('reviewsUrl')})")
                     if st.button("Убрать из списка", key=f"rv-drop-{n}"):
                         item["status"] = rv.SKIPPED
-                        _review_queue_save(project_id)
+                        _review_queue_save(project_id, platform=platform)
                         st.rerun()
                     continue
 
@@ -2251,41 +2402,72 @@ def reviews_queue_block(project_id: str) -> None:
                              disabled=not llm.is_configured()):
                     with st.spinner("Прошу новый вариант…"):
                         _review_regenerate(project_id, item)
-                    _review_queue_save(project_id, push=False)
+                    _review_queue_save(project_id, push=False, platform=platform)
                     st.rerun()
 
                 if c3.button("⏭ Пропустить", key=f"rv-skip-{n}", use_container_width=True):
                     item["status"] = rv.SKIPPED
                     item["note"] = ""
-                    _review_queue_save(project_id)
+                    _review_queue_save(project_id, platform=platform)
                     st.rerun()
 
-        _sent_report_block(project_id, done, pending)
+        _sent_report_block(project_id, done, pending, platform)
 
 
 def tab_actualize(project_id: str, config: dict) -> None:
-    countries = config["countries"]
+    """
+    Актуализация и отзывы. Площадок две – Яндекс.Бизнес и 2ГИС; выбор наверху.
+
+    Обе половины устроены одинаково: тот же выбор городов, тот же прогон, та
+    же очередь ответов. Отличаются города (в 2ГИС карточка заведена не везде),
+    сессия, кнопка в кабинете и файлы прогона. Поэтому здесь один код с
+    параметром, а не две вкладки-близнеца.
+    """
+    # Переключатель рисуем всегда – даже если у площадки нет городов: иначе
+    # непонятно, куда делся 2ГИС.
+    st.session_state.setdefault("act-platform", "Яндекс.Бизнес")
+    label = st.radio("Площадка", ["Яндекс.Бизнес", "2ГИС"], horizontal=True,
+                     key="act-platform", label_visibility="collapsed")
+    platform = rv.GIS if label == "2ГИС" else rv.YANDEX
+    kind = runner.PLATFORMS[platform]["kind"]
+    prefix = "act" if platform == rv.YANDEX else "actgis"
+
+    countries = platform_countries(config, platform)
     if not countries:
-        html(T.empty("🏙", "Нет городов", "Добавьте страны и города во вкладке «Города»."))
+        if platform == rv.GIS:
+            html(T.empty("🗺", "Городов 2ГИС нет",
+                         "Загрузите города из КП во вкладке «Города»: они берутся из "
+                         "блока «2ГИС» той же таблицы. Город попадает сюда, если у него "
+                         "есть ссылка на кабинет и статус не «Удалена»."))
+        else:
+            html(T.empty("🏙", "Нет городов", "Добавьте страны и города во вкладке «Города»."))
+        reviews_queue_block(project_id, platform)
         return
 
     all_ids = [ct["id"] for c in countries for ct in c["cities"]]
-    chosen = _act_selected(all_ids)
+    chosen = _act_selected(all_ids, prefix)
     # Значения галочек читаем ДО отрисовки: те, что браузер прислал, а
     # нарисовать в этот проход не успеем (страну свернули), иначе пропали бы.
-    _act_sync_widgets(all_ids)
+    _act_sync_widgets(all_ids, prefix)
     selected = [cid for cid in all_ids if cid in chosen]
 
-    state = runner.read_state(project_id, "actualize")
+    state = runner.read_state(project_id, kind)
     running = state.get("status") == "running"
-    busy = runner.busy_reason(project_id, "actualize")   # пусто – запускать можно
+    busy = runner.busy_reason(project_id, kind)   # пусто – запускать можно
 
     with st.container(border=True):
-        html('<div class="card-title">🔄 Актуализация данных</div>')
-        html('<div class="hint" style="margin-bottom:12px">Скрипт зайдёт в раздел «Данные» каждого города '
-             'и нажмёт кнопку <b>«Данные актуальны»</b>, если она там есть. Кнопка появляется на странице '
-             'периодически – Яндекс просит подтверждать, что данные не изменились. '
-             'Если кнопки нет – актуализация не требуется.</div>')
+        if platform == rv.GIS:
+            html('<div class="card-title">🗺 Актуализация 2ГИС</div>')
+            html('<div class="hint" style="margin-bottom:12px">Click зайдёт в раздел '
+                 '<b>«Данные о компании»</b> каждого города и нажмёт <b>«Данные верны»</b>, '
+                 'если 2ГИС просит подтвердить, что данные не изменились. Плашки нет – '
+                 'подтверждать нечего.</div>')
+        else:
+            html('<div class="card-title">🔄 Актуализация данных</div>')
+            html('<div class="hint" style="margin-bottom:12px">Скрипт зайдёт в раздел «Данные» каждого города '
+                 'и нажмёт кнопку <b>«Данные актуальны»</b>, если она там есть. Кнопка появляется на странице '
+                 'периодически – Яндекс просит подтверждать, что данные не изменились. '
+                 'Если кнопки нет – актуализация не требуется.</div>')
 
         head, act = st.columns([3, 1])
         head.markdown(
@@ -2293,31 +2475,32 @@ def tab_actualize(project_id: str, config: dict) -> None:
             f'<span style="color:var(--acc)">{len(selected)}</span> / {len(all_ids)} городов</div>',
             unsafe_allow_html=True)
         all_on = len(selected) == len(all_ids)
-        act.button("Снять все" if all_on else "Выбрать все", key="act-toggle-all",
-                   use_container_width=True, on_click=_act_set, args=(all_ids, not all_on))
+        act.button("Снять все" if all_on else "Выбрать все", key=f"{prefix}-toggle-all",
+                   use_container_width=True, on_click=_act_set, args=(all_ids, not all_on, prefix))
 
+        open_key = f"{prefix}-open"
         html(T.tile_css([
-            (f"tile-row-act-{n}", row_vars(c, chosen,
-                                           "свернуть ▾" if st.session_state.get("act-open") == c["id"]
-                                           else "изменить ▸"))
+            (f"tile-row-{prefix}-{n}", row_vars(c, chosen,
+                                                "свернуть ▾" if st.session_state.get(open_key) == c["id"]
+                                                else "изменить ▸"))
             for n, c in enumerate(countries)
         ]))
         for n, c in enumerate(countries):
             ids = [ct["id"] for ct in c["cities"]]
             picked = sum(1 for cid in ids if cid in chosen)
-            is_open = st.session_state.get("act-open") == c["id"]
-            with st.container(key=f"tile-row-act-{n}"):
-                st.button(c["name"], key=f"act-row-{c['id']}", use_container_width=True,
+            is_open = st.session_state.get(open_key) == c["id"]
+            with st.container(key=f"tile-row-{prefix}-{n}"):
+                st.button(c["name"], key=f"{prefix}-row-{c['id']}", use_container_width=True,
                           type="primary" if is_open else "secondary",
-                          on_click=_toggle_open, args=("act-open", c["id"]))
+                          on_click=_toggle_open, args=(open_key, c["id"]))
             # Города рисуем только для раскрытой страны – иначе 117 чекбоксов
             # строились бы при каждом клике по чему угодно.
             if not is_open:
                 continue
             with st.container(border=True):
                 st.button("Снять все в стране" if picked == len(ids) else "Выбрать все в стране",
-                          key=f"act-toggle-{c['id']}",
-                          on_click=_act_set, args=(ids, picked != len(ids)))
+                          key=f"{prefix}-toggle-{c['id']}",
+                          on_click=_act_set, args=(ids, picked != len(ids), prefix))
                 # Галочка переключается сразу, без кнопки «применить»: on_change
                 # правит только набор выбранных, а не пересобирает состояние.
                 with st.container(key="city-grid"):
@@ -2325,24 +2508,28 @@ def tab_actualize(project_id: str, config: dict) -> None:
                     for start_i in range(0, len(c["cities"]), per_row):
                         cols = st.columns(per_row)
                         for col, ct in zip(cols, c["cities"][start_i:start_i + per_row]):
-                            wkey = f"act-cb-{ct['id']}"
+                            wkey = f"{prefix}-cb-{ct['id']}"
                             col.checkbox(ct["name"], value=ct["id"] in chosen, key=wkey,
-                                         on_change=_act_toggle, args=(ct["id"], wkey))
+                                         on_change=_act_toggle, args=(ct["id"], wkey, prefix))
 
-    if not yb.has_saved_session(project_id) and not running:
-        st.warning("Сначала войдите в Яндекс в разделе «⚙️ Настройки».")
+    logged_in = (gis.has_saved_session(project_id) if platform == rv.GIS
+                 else yb.has_saved_session(project_id))
+    if not logged_in and not running:
+        where = "2ГИС" if platform == rv.GIS else "Яндекс"
+        st.warning(f"Сначала войдите в {where} в разделе «⚙️ Настройки».")
         # Очередь ответов показываем и без входа: черновики уже написаны и
         # никуда не делись, а без этой строки они бы просто исчезли с экрана –
         # раздел уходил в выход раньше, чем до них доходило дело.
-        reviews_queue_block(project_id)
+        reviews_queue_block(project_id, platform)
         return
 
     # По умолчанию ВКЛЮЧЕНА – прогон почти всегда делают вместе с отзывами.
     # Ставим через session_state, а не через value: у виджета есть key, и
     # Streamlit ругается, когда состояние приходит из обоих мест сразу.
-    st.session_state.setdefault("act-reviews", True)
+    reviews_key = f"{prefix}-reviews"
+    st.session_state.setdefault(reviews_key, True)
     with_reviews = st.checkbox(
-        "💬 Заодно проверить отзывы и подготовить ответы", key="act-reviews",
+        "💬 Заодно проверить отзывы и подготовить ответы", key=reviews_key,
         help="Click зайдёт в раздел «Отзывы» каждой карточки, найдёт отзывы без ответа "
              "и напишет черновики. Ничего не публикуется: ответы уйдут только после "
              "вашего подтверждения, уже после прогона.",
@@ -2356,27 +2543,31 @@ def tab_actualize(project_id: str, config: dict) -> None:
         if notes:
             st.warning(" · ".join(notes).capitalize())
         else:
+            tail = ("" if platform == rv.YANDEX else
+                    " Отзывы с Flamp, Otello и прочих площадок 2ГИС показывает вместе со "
+                    "своими – отвечать на них оттуда нельзя, они попадут в список со ссылкой.")
             st.caption(f"Черновики пишутся только на отзывы в {rv.GOOD_RATING} звёзд, "
                        f"не больше {rv.MAX_DRAFTS_PER_CITY} на город. "
                        "Всё, что ниже, попадёт в список без ответа – отвечаете сами. "
-                       "Прогон станет примерно в полтора раза длиннее.")
+                       "Прогон станет примерно в полтора раза длиннее." + tail)
 
     # Порядок как у человека в голове: сначала запускаем, потом смотрим, как
     # идёт. Раньше панель с «Посмотреть отчёт» стояла НАД кнопкой запуска, а
     # ещё ниже висела вторая карточка отчёта – выглядело нацепленным сверху.
     if st.button(f"🔄 Запустить актуализацию ({cities_word(len(selected))})", type="primary",
-                 use_container_width=True, disabled=bool(busy) or not selected, key="btn-actualize"):
+                 use_container_width=True, disabled=bool(busy) or not selected,
+                 key=f"btn-{prefix}-run"):
         selection = {c["id"]: [ct["id"] for ct in c["cities"] if ct["id"] in chosen]
                      for c in countries}
-        save_actualize_tasks(project_id, config, selection)
+        save_actualize_tasks(project_id, config, selection, platform)
         ok, msg = runner.start_actualize(project_id, headless=bool(get_settings(project_id)["headless"]),
-                                         with_reviews=bool(with_reviews))
+                                         with_reviews=bool(with_reviews), platform=platform)
         (st.toast if ok else st.error)(msg)
         time.sleep(0.6)
         st.rerun()
     if running:
-        st.button("⏹ Остановить", use_container_width=True, key="btn-stop-act",
-                  on_click=runner.request_stop, args=(project_id, "actualize"))
+        st.button("⏹ Остановить", use_container_width=True, key=f"btn-stop-{prefix}",
+                  on_click=runner.request_stop, args=(project_id, kind))
     elif busy:
         st.caption(busy)
 
@@ -2384,13 +2575,13 @@ def tab_actualize(project_id: str, config: dict) -> None:
     # пустая рамка с пустым логом только мешает.
     if running or state.get("status") not in (None, "idle"):
         with st.container(border=True):
-            live_panel(project_id, running, "actualize")
+            live_panel(project_id, running, kind)
 
     # Очередь ответов – В КОНЦЕ, под запуском и прогрессом. Раньше она стояла
     # первой, и во время прогона экран открывался на ней: сколько городов
     # пройдено и что происходит, видно не было – приходилось листать вниз.
     # Заказчик попросила поменять местами: сверху сам прогон, ответы под ним.
-    reviews_queue_block(project_id)
+    reviews_queue_block(project_id, platform)
 
     # Вторая карточка отчёта убрана: весь отчёт теперь на вкладке «Отчёт»,
     # и туда ведёт кнопка «Посмотреть отчёт» из панели выше.
@@ -2439,22 +2630,12 @@ def _cities_source_block(project_id: str, config: dict) -> None:
                      use_container_width=True):
             try:
                 with st.spinner("Читаю таблицу КП…"):
-                    cities, diag = kp_sheet.load_cities(project_id, saved_url)
+                    ok, note = kp_pull(project_id, config)
             except Exception as e:  # noqa: BLE001
-                st.error(str(e))
+                ok, note = False, str(e)
+            if not ok:
+                st.error(note)
                 return
-            if diag.get("error"):
-                st.error(diag["error"])
-                return
-            if not cities:
-                st.warning("В таблице не нашлось ни одного города со ссылкой на Яндекс.Бизнес.")
-                return
-            config["countries"] = kp_sheet.to_countries(cities, project_id)
-            config["kpSyncedAt"] = datetime.now(timezone.utc).isoformat()
-            save_config(project_id)
-            note = f'Загружено: {cities_word(len(cities))} в {diag.get("countries", 0)} странах.'
-            if diag.get("skippedDeleted"):
-                note += f' Пропущено удалённых карточек: {diag["skippedDeleted"]}.'
             st.success(note)
             time.sleep(1.2)
             st.rerun()
@@ -2462,6 +2643,9 @@ def _cities_source_block(project_id: str, config: dict) -> None:
         synced = (config.get("kpSyncedAt") or "")[:19].replace("T", " ")
         c2.caption(f"Последняя загрузка: {synced} UTC" if synced else
                    "Города из таблицы ещё не загружались.")
+        st.caption(f"Загружается само: если с последней загрузки прошло больше "
+                   f"{KP_SYNC_TTL_HOURS} часов, Click перечитает таблицу при открытии проекта. "
+                   "Кнопка – когда нужно прямо сейчас.")
         st.caption("Загрузка ЗАМЕНЯЕТ список стран и городов данными из таблицы. "
                    "Карточки со статусом «Удалена» не попадают.")
 
@@ -2678,7 +2862,8 @@ def _report_csv(data: dict) -> bytes:
     return ("﻿" + "\n".join(rows)).encode("utf-8")
 
 
-_REPORT_KINDS = {"publish": "📤 Публикация", "actualize": "🔄 Актуализация"}
+_REPORT_KINDS = {"publish": "📤 Публикация", "actualize": "🔄 Актуализация",
+                 "actualize-gis": "🗺 2ГИС"}
 
 
 def _last_run_kind(project_id: str) -> str:
@@ -2686,9 +2871,9 @@ def _last_run_kind(project_id: str) -> str:
     Какой прогон был последним – его отчёт и показываем по умолчанию.
     Чтение организаций не в счёт: отчёта у него нет.
     """
-    when = {k: (runner.read_state(project_id, k).get("startedAt") or "")
-            for k in ("publish", "actualize")}
-    return "actualize" if when["actualize"] > when["publish"] else "publish"
+    kinds = ("publish", "actualize", "actualize-gis")
+    when = {k: (runner.read_state(project_id, k).get("startedAt") or "") for k in kinds}
+    return max(kinds, key=lambda k: when[k])
 
 
 def tab_report(project_id: str) -> None:
@@ -2707,7 +2892,7 @@ def tab_report(project_id: str) -> None:
             st.session_state.pop("report-select", None)
             st.rerun()
 
-    is_act = kind == "actualize"
+    is_act = kind in ("actualize", "actualize-gis")
     reports = runner.list_reports(project_id, kind)
     if not reports:
         html(T.empty("📊", "Отчётов пока нет",
@@ -2797,7 +2982,9 @@ def tab_report(project_id: str) -> None:
             run_log = reader(project_id, kind, selected) if reader else ""
             base_name = selected.replace(".json", "")
             # Прогон с отзывами скачивается целиком: города, отзывы, лог.
-            review_rows = _report_reviews(project_id, data) if is_act else []
+            review_rows = (_report_reviews(project_id, data,
+                                           data.get("platform") or rv.YANDEX)
+                           if is_act else [])
             cols = st.columns([1, 1, 1, 2] if review_rows else [1, 1, 3])
             cols[0].download_button("⬇ Города (CSV)", data=_report_csv(data),
                                     file_name=base_name + ".csv", mime="text/csv",
@@ -2872,6 +3059,9 @@ def tab_settings(project_id: str, config: dict) -> None:
     _yandex_login_block(project_id, config)
 
     st.divider()
+    _gis_login_block(project_id, config)
+
+    st.divider()
     _reviews_settings_block(project_id)
 
     st.divider()
@@ -2905,6 +3095,7 @@ def tab_settings(project_id: str, config: dict) -> None:
 def _reviews_settings_block(project_id: str) -> None:
     """Промпт ответов на отзывы – по проекту, рядом с остальными настройками."""
     html('<div class="card-title">💬 Ответы на отзывы</div>')
+    st.caption("Промпт один на обе площадки: правила ответа у Яндекса и 2ГИС одинаковые.")
 
     keys = llm.api_keys()
     if keys:
@@ -3002,6 +3193,100 @@ def _browser_error(exc: Exception) -> None:
             )
     with st.expander("Технические подробности"):
         st.code(text[:6000])
+
+
+def _gis_login_block(project_id: str, config: dict) -> None:
+    """
+    Вход в кабинет 2ГИС – почта и пароль, как на самом сайте.
+
+    Проще, чем у Яндекса: 2ГИС при входе с сохранённым устройством кода
+    обычно не просит. Если всё-таки попросит – шаг распознаётся, и поле для
+    кода появляется здесь же, вместе со снимком экрана.
+
+    Пароль лежит только в этом контейнере: наружу (в репозиторий) уезжают
+    города и почта, но не пароли – как и у Яндекса. А вот сессия уезжает,
+    поэтому после перезапуска облака вход обычно не нужен.
+    """
+    worker = get_worker()
+    html('<div class="card-title">🗺 Вход в 2ГИС</div>')
+
+    c1, c2 = st.columns(2)
+    email = c1.text_input("Почта кабинета 2ГИС", value=config.get("gisEmail", ""),
+                          key="set-gis-email",
+                          placeholder="та же, что у Яндекса, если аккаунт один")
+    password = c2.text_input("Пароль 2ГИС", value=config.get("gisPassword", ""),
+                             type="password", key="set-gis-password")
+    if email != config.get("gisEmail", "") or password != config.get("gisPassword", ""):
+        config["gisEmail"] = email
+        config["gisPassword"] = password
+        save_config(project_id)
+
+    if gis.has_saved_session(project_id):
+        st.success("Сессия 2ГИС сохранена – прогон пойдёт без повторного входа.")
+        with st.container(key="danger-reset-gis"):
+            if st.button("Войти заново (сбросить сессию)", key="gis-reset"):
+                gis.session_path(project_id).unlink(missing_ok=True)
+                for k in ("gis_flow", "gis_state"):
+                    st.session_state.pop(k, None)
+                st.rerun()
+        return
+
+    flow = st.session_state.get("gis_flow")
+    if flow is None:
+        if not (email and password):
+            st.caption("Впишите почту и пароль кабинета 2ГИС – и Click войдёт сам. "
+                       "Одна учётка на проект: в ней все города.")
+            return
+        if st.button("🔑 Войти в 2ГИС", type="primary", key="gis-login",
+                     use_container_width=True):
+            try:
+                flow = gis.GisLoginFlow(project_id, headless=bool(get_settings(project_id)["headless"]))
+                with st.spinner("Открываю кабинет 2ГИС…"):
+                    worker.call(flow.start)
+                    state = worker.call(flow.submit_credentials, email, password)
+                st.session_state["gis_flow"] = flow
+                st.session_state["gis_state"] = state
+                st.rerun()
+            except Exception as e:  # noqa: BLE001
+                _browser_error(e)
+        return
+
+    state = st.session_state.get("gis_state") or {}
+    if state.get("screenshot"):
+        st.image(state["screenshot"], use_container_width=True)
+
+    if state.get("step") == "done":
+        try:
+            worker.call(flow.save_session)
+        finally:
+            worker.call(flow.close)
+        st.session_state.pop("gis_flow", None)
+        st.session_state.pop("gis_state", None)
+        if gis.has_saved_session(project_id):
+            st.success("Вошли в 2ГИС. Сессия сохранена.")
+        else:
+            st.warning("2ГИС пустил, но куки входа не сохранились – попробуйте ещё раз.")
+        time.sleep(1.0)
+        st.rerun()
+
+    if state.get("step") == "code":
+        st.caption("2ГИС просит код подтверждения – он на почте или в СМС.")
+        code = st.text_input("Код", key="gis-code")
+        if st.button("Подтвердить", key="gis-code-go", type="primary") and code.strip():
+            st.session_state["gis_state"] = worker.call(flow.submit_code, code.strip())
+            st.rerun()
+    else:
+        st.warning("Кабинет не пустил с этой парой почта/пароль – проверьте их выше "
+                   "и попробуйте снова. На снимке видно, что показывает 2ГИС.")
+
+    if st.button("Отменить вход", key="gis-cancel"):
+        try:
+            worker.call(flow.close)
+        except Exception:  # noqa: BLE001
+            pass
+        st.session_state.pop("gis_flow", None)
+        st.session_state.pop("gis_state", None)
+        st.rerun()
 
 
 def _yandex_login_block(project_id: str, config: dict) -> None:
@@ -3606,6 +3891,9 @@ def show_main(project_id: str) -> None:
     _push_session(project_id)          # дешёвая проверка по mtime: пуш только при изменении
     _push_ledger(project_id)
     config = get_config(project_id)
+    # Города – из КП и сами. Проверка дешёвая (сравнение отметки времени),
+    # в таблицу лезем не чаще раза в KP_SYNC_TTL_HOURS часов.
+    _kp_autosync(project_id, config)
     project = PROJECTS[project_id]
 
     with st.container(key="click-topbar"):
@@ -3638,7 +3926,8 @@ def show_main(project_id: str) -> None:
     # Счётчик на вкладке «Актуализация»: после прогона с отзывами человек
     # иначе не догадается, что где-то ждут готовые ответы. Первый боевой
     # прогон это и показал – черновики были, а найти их было негде.
-    waiting = len(rv.open_items(rv.load_queue(project_id)))
+    waiting = sum(len(rv.open_items(rv.load_queue(project_id, pf)))
+                  for pf in (rv.YANDEX, rv.GIS))
 
     def _section_label(name: str) -> str:
         if name == SECTIONS[2] and waiting:

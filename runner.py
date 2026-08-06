@@ -59,10 +59,27 @@ LIMIT_GIVE_UP = 2            # столько отказов Gemini по лим�
 # Прогоны разных видов идут параллельно, поэтому у каждого свои файлы:
 # состояние, живой лог, лок и флаг остановки. Раньше файл был один на проект,
 # и второй прогон затирал бы первому и лог, и прогресс.
-RUN_KINDS = ("publish", "actualize", "collect")
+RUN_KINDS = ("publish", "actualize", "actualize-gis", "collect")
 
 KIND_RU = {"publish": "Публикация", "actualize": "Актуализация",
-           "collect": "Чтение организаций"}
+           "actualize-gis": "Актуализация 2ГИС", "collect": "Чтение организаций"}
+
+# ─── площадки ───────────────────────────────────────────────────────
+# Яндекс.Бизнес и 2ГИС отличаются браузерной частью и папками, а всё
+# остальное – очередь городов, отчёт, лог, память, остановка – у них общее.
+# Поэтому не второй воркер, а параметр: две копии одного прогона разъехались
+# бы на первой же правке.
+YANDEX, GIS = "yandex", "gis"
+
+# «ru» – как называется площадка в заголовках, «short» – как её зовут в
+# обычной речи («войдите в Яндекс»), «gen» – родительный падеж («сессия
+# Яндекса»). Без падежей выходило «Сессия Яндекс.Бизнес не активна».
+PLATFORMS = {
+    YANDEX: {"kind": "actualize", "ru": "Яндекс.Бизнес", "short": "Яндекс", "gen": "Яндекса",
+             "tasks": "tasks-actualize", "reports": "reports-actualize"},
+    GIS:    {"kind": "actualize-gis", "ru": "2ГИС", "short": "2ГИС", "gen": "2ГИС",
+             "tasks": "tasks-actualize-gis", "reports": "reports-actualize-gis"},
+}
 
 # Что с чем НЕ уживается. Сверка только читает раздел «Организации» и ничего
 # в Яндексе не меняет – её можно гонять рядом с чем угодно. Два прогона
@@ -71,9 +88,12 @@ KIND_RU = {"publish": "Публикация", "actualize": "Актуализац
 # разведены по другой причине – это два тяжёлых браузера разом, а бесплатному
 # облаку хватает и одного (приложение уже выбивало по памяти).
 CONFLICTS: dict[str, tuple[str, ...]] = {
-    "publish":   ("publish", "actualize"),
-    "actualize": ("actualize", "publish"),
-    "collect":   ("collect",),
+    "publish":       ("publish", "actualize", "actualize-gis"),
+    "actualize":     ("actualize", "publish", "actualize-gis"),
+    # 2ГИС – такой же тяжёлый браузер, как Яндекс. Рядом с яндексовым прогоном
+    # его не пускаем по той же причине: облако не тянет два разом.
+    "actualize-gis": ("actualize-gis", "actualize", "publish"),
+    "collect":       ("collect",),
 }
 
 # Потолок на всякий случай: сколько браузеров живёт разом. Из таблицы выше
@@ -107,16 +127,16 @@ def p_tasks(project_id: str) -> Path:
     return base(project_id) / "tasks"
 
 
-def p_tasks_actualize(project_id: str) -> Path:
-    return base(project_id) / "tasks-actualize"
+def p_tasks_actualize(project_id: str, platform: str = YANDEX) -> Path:
+    return base(project_id) / PLATFORMS[platform]["tasks"]
 
 
 def p_reports(project_id: str) -> Path:
     return base(project_id) / "reports"
 
 
-def p_reports_actualize(project_id: str) -> Path:
-    return base(project_id) / "reports-actualize"
+def p_reports_actualize(project_id: str, platform: str = YANDEX) -> Path:
+    return base(project_id) / PLATFORMS[platform]["reports"]
 
 
 def p_logs(project_id: str) -> Path:
@@ -1158,48 +1178,55 @@ def _cleanup_temp(project_id: str) -> None:
 # ════════════════════════════════════════════════════════════════════
 
 def start_actualize(project_id: str, headless: bool = True, delay_s: float = 2.5,
-                    with_reviews: bool = False) -> tuple[bool, str]:
-    """with_reviews – заодно собрать неотвеченные отзывы и черновики ответов."""
+                    with_reviews: bool = False, platform: str = YANDEX) -> tuple[bool, str]:
+    """
+    with_reviews – заодно собрать неотвеченные отзывы и черновики ответов.
+    platform – 'yandex' (по умолчанию) или 'gis'. У площадок свои города, свои
+    файлы прогона и свой лок: прогон 2ГИС не мешает яндексовой очереди.
+    """
+    kind = PLATFORMS[platform]["kind"]
     with _lock:
-        busy = busy_reason(project_id, "actualize")
+        busy = busy_reason(project_id, kind)
         if busy:
             return False, busy
-        thread = _threads.get((project_id, "actualize"))
+        thread = _threads.get((project_id, kind))
         if thread and thread.is_alive():
             return False, "Предыдущая актуализация ещё не завершилась."
 
-        files = _load_task_files(p_tasks_actualize(project_id))
+        files = _load_task_files(p_tasks_actualize(project_id, platform))
         if not files:
             return False, "Список городов для актуализации пуст."
 
         run_id = f"act-{int(time.time() * 1000)}"
-        if not _acquire_lock(project_id, "actualize", run_id):
+        if not _acquire_lock(project_id, kind, run_id):
             return False, ("Актуализация уже идёт – запущена другим окном или другой копией Click. "
                            "Если та копия закрыта, подождите пару минут: лок освободится сам.")
 
-        p_stop(project_id, "actualize").unlink(missing_ok=True)
-        p_live_log(project_id, "actualize").write_text("", encoding="utf-8")
+        p_stop(project_id, kind).unlink(missing_ok=True)
+        p_live_log(project_id, kind).write_text("", encoding="utf-8")
 
         total = sum(len(cfg.get("tasks") or []) for _, cfg in files)
         _write_state(project_id, {
-            "runId": run_id, "action": "actualize", "status": "running",
+            "runId": run_id, "action": kind, "status": "running",
             "ownerPid": os.getpid(), "startedAt": _now_iso(), "finishedAt": None,
             "total": total, "current": 0, "currentCity": "", "reportName": None,
             "totals": {"total": 0, "actualized": 0, "notNeeded": 0, "failed": 0}, "error": None,
         })
 
         t = threading.Thread(target=_actualize_worker,
-                             args=(project_id, run_id, files, headless, delay_s, with_reviews),
-                             daemon=True, name=f"click-actualize-{project_id}")
-        _threads[(project_id, "actualize")] = t
+                             args=(project_id, run_id, files, headless, delay_s, with_reviews,
+                                   platform),
+                             daemon=True, name=f"click-{kind}-{project_id}")
+        _threads[(project_id, kind)] = t
         t.start()
         tail = " + отзывы" if with_reviews else ""
-        return True, f"Актуализация запущена: {total} городов{tail}."
+        where = PLATFORMS[platform]["ru"]
+        return True, f"Актуализация {where} запущена: {total} городов{tail}."
 
 
 def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
                       should_stop=None, budget: dict | None = None,
-                      run_id: str = "") -> dict:
+                      run_id: str = "", platform: str = YANDEX) -> dict:
     """
     Шаг по отзывам для одного города: прочитать раздел отзывов, отобрать
     неотвеченные и написать черновики. Ничего не публикует.
@@ -1207,27 +1234,51 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
     Возвращает {'items': [...в очередь...], 'summary': 'что вышло словами'}.
     Исключения наружу не пускает: сломавшийся шаг по отзывам не должен
     ронять уже работающую актуализацию этого же города.
+
+    Площадки отличаются только чтением: правила отбора (пять звёзд – пишем,
+    ниже – человеку, без текста – молча мимо) и промпт у них общие.
     """
     import reviews as rv
 
     city = task.get("cityName") or "?"
     company_url = task.get("companyUrl")
-    url = yb.build_reviews_url(company_url, task.get("companyId"))
-    out = {"items": [], "summary": "", "found": 0, "drafted": 0, "needsHuman": 0, "noDraft": 0}
+    out = {"items": [], "summary": "", "found": 0, "drafted": 0, "needsHuman": 0,
+           "noDraft": 0, "foreign": 0}
 
-    data = yb.read_reviews(page, url)
+    if platform == GIS:
+        import gis_playwright as gis
+        url = gis.build_reviews_url(company_url)
+        data = gis.read_reviews(page, url, org_id=gis.extract_org_id(company_url))
+        total = data.get("shown", 0)
+    else:
+        url = yb.build_reviews_url(company_url, task.get("companyId"))
+        data = yb.read_reviews(page, url)
+        total = data.get("total", 0)
+
     if not data["ok"]:
         out["summary"] = data["reason"]
         out["noSession"] = bool(data.get("noSession"))   # прогону – знак остановиться
         _append_log(project_id, "WARN", f"  💬 {city}: отзывы не прочитаны – {data['reason']}")
         return out
 
-    page_url = data["url"]
-    box = rv.triage(data["items"])
-    out["found"] = len(box["unanswered"])
+    page_url = data.get("url") or url
+    items = data["items"]
 
-    if not box["unanswered"]:
-        out["summary"] = f"отзывов {data['total']}, все с ответом"
+    # 2ГИС показывает отзывы ещё и с Flamp, Otello, Booking и прочих площадок.
+    # Ответить на них из кабинета нельзя – там вместо кнопки ссылка «Посмотреть
+    # на …». Такие отзывы собираем и отдаём человеку: молча их потерять хуже,
+    # чем показать со ссылкой.
+    foreign = []
+    if platform == GIS:
+        import gis_playwright as gis
+        foreign = [it for it in items if not gis.is_own(it)]
+        items = [it for it in items if gis.is_own(it)]
+
+    box = rv.triage(items)
+    out["found"] = len(box["unanswered"]) + len(foreign)
+
+    if not box["unanswered"] and not foreign:
+        out["summary"] = f"отзывов {total}, все с ответом"
         _append_log(project_id, "INFO", f"  💬 {city}: {out['summary']}")
         return out
 
@@ -1237,13 +1288,23 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
         # собрала новые, а видела «3 отправленных» с какого-то прошлого раза.
         row = rv.as_queue_item(
             item, project_id=project_id, city=city, company_url=company_url,
-            reviews_url=page_url, status=status, draft=draft, note=note)
+            reviews_url=page_url, status=status, draft=draft, note=note,
+            platform=platform)
         if run_id:
             row["runId"] = run_id
         out["items"].append(row)
 
     for item in box["no_text"]:
         pass  # одни звёзды без текста – в очередь не берём (решение заказчика)
+
+    for item in foreign:
+        where = item.get("platform") or "другой площадке"
+        row_note = f"отзыв с {where} – ответить можно только там"
+        add(item, rv.NEEDS_HUMAN, note=row_note)
+        out["foreign"] += 1
+        out["needsHuman"] += 1
+        if item.get("foreignUrl"):
+            out["items"][-1]["reviewsUrl"] = item["foreignUrl"]
 
     for item in box["needs_human"]:
         add(item, rv.NEEDS_HUMAN, note=f"оценка {item.get('rating')} – отвечает человек")
@@ -1323,7 +1384,9 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
         bits.append(f"без черновика {out['noDraft']}")
     if box["no_text"]:
         bits.append(f"без текста пропущено {len(box['no_text'])}")
-    if data["total"] > data["shown"]:
+    if out["foreign"]:
+        bits.append(f"на чужих площадках {out['foreign']}")
+    if data.get("total", 0) > data.get("shown", 0):
         bits.append(f"за первой страницей осталось {data['total'] - data['shown']}")
     out["summary"] = ", ".join(bits)
     _append_log(project_id, "INFO", f"  💬 {city}: {out['summary']}")
@@ -1331,13 +1394,16 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
 
 
 def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay_s: float,
-                      with_reviews: bool = False) -> None:
-    _CUR.kind = "actualize"
-    yb.set_logger(lambda level, msg: _append_log(project_id, level, msg, kind="actualize"))
+                      with_reviews: bool = False, platform: str = YANDEX) -> None:
+    kind = PLATFORMS[platform]["kind"]
+    _CUR.kind = kind
+    # Логгер общий: 2ГИС пишет в лог через те же yb.info/warn, и строки
+    # попадают в живой лог своего прогона.
+    yb.set_logger(lambda level, msg: _append_log(project_id, level, msg, kind=kind))
     started_at = _now_iso()
     start_ts = time.time()
     report_name = f"actualize-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.json"
-    report_path = p_reports_actualize(project_id) / report_name
+    report_path = p_reports_actualize(project_id, platform) / report_name
 
     results: list[dict] = []
     counters = {"actualized": 0, "notNeeded": 0, "failed": 0}
@@ -1356,7 +1422,8 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
 
     def save_report(state: str) -> None:
         payload = {
-            "type": "actualize", "startedAt": started_at, "finishedAt": _now_iso(),
+            "type": "actualize", "platform": platform,
+            "startedAt": started_at, "finishedAt": _now_iso(),
             "durationSec": int(time.time() - start_ts), "stoppedByUser": stopped,
             "state": state, "runId": run_id,
             "totals": {"total": len(results), **counters},
@@ -1382,21 +1449,27 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
 
     def push_state(status: str, city: str, err: str | None = None) -> None:
         _write_state(project_id, {
-            "runId": run_id, "action": "actualize", "status": status, "ownerPid": os.getpid(),
+            "runId": run_id, "action": kind, "status": status, "ownerPid": os.getpid(),
             "startedAt": started_at, "finishedAt": None if status == "running" else _now_iso(),
             # Считаем законченные города, а не текущий номер – см. публикацию.
             "total": total, "current": len(results), "currentCity": city, "reportName": report_name,
             "totals": {"total": len(results), **counters}, "error": err,
         })
 
-    browser = yb.YbBrowser(project_id, headless=headless)
+    if platform == GIS:
+        import gis_playwright as gis
+        browser = gis.browser(project_id, headless=headless)
+        actualize_one = gis.actualize_city
+    else:
+        browser = yb.YbBrowser(project_id, headless=headless)
+        actualize_one = yb.actualize_city
     prompt = ""
     if with_reviews:
         import reviews as rv
         prompt = rv.project_prompt(project_id)
 
     try:
-        head = f"АКТУАЛИЗАЦИЯ · {total} городов"
+        head = f"АКТУАЛИЗАЦИЯ {PLATFORMS[platform]['ru'].upper()} · {total} городов"
         if with_reviews:
             head += " · с отзывами"
         _append_log(project_id, "INFO", head)
@@ -1444,7 +1517,7 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                 processed += 1
                 push_state("running", task.get("cityName", ""))
                 try:
-                    res = yb.actualize_city(browser.page, task, i, len(city_tasks))
+                    res = actualize_one(browser.page, task, i, len(city_tasks))
                 except Exception as e:  # noqa: BLE001
                     res = {"cityName": task.get("cityName"), "companyUrl": task.get("companyUrl"),
                            "status": "failed", "reason": f"Критическая ошибка: {e}", "durationMs": 0}
@@ -1458,13 +1531,14 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                 if res["status"] == "no-session":
                     results.append(res)
                     counters["failed"] += 1
+                    gen, short = PLATFORMS[platform]["gen"], PLATFORMS[platform]["short"]
                     _append_log(project_id, "ERROR",
-                                "❌ ОСТАНОВКА: сессия Яндекса не активна – вместо кабинета "
+                                f"❌ ОСТАНОВКА: сессия {gen} не активна – вместо кабинета "
                                 "открывается страница входа")
                     save_report("finished")
                     push_state("error", task.get("cityName", ""),
-                               "Сессия Яндекса не активна: вместо кабинета открывается страница "
-                               "входа. Зайдите в «Настройки» и войдите в Яндекс заново.")
+                               f"Сессия {gen} не активна: вместо кабинета открывается страница "
+                               f"входа. Зайдите в «Настройки» и войдите в {short} заново.")
                     return
 
                 # Отзывы – отдельным шагом ПОСЛЕ актуализации: он опциональный
@@ -1472,7 +1546,7 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                 if with_reviews:
                     try:
                         rr = _reviews_for_city(project_id, browser.page, task, prompt,
-                                               should_stop, review_budget, run_id)
+                                               should_stop, review_budget, run_id, platform)
                     except Exception as e:  # noqa: BLE001
                         rr = {"items": [], "summary": f"сбой шага отзывов: {e}",
                               "found": 0, "drafted": 0, "needsHuman": 0, "noDraft": 0}
@@ -1487,12 +1561,13 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                         results.append(res)
                         counters[{"actualized": "actualized",
                                   "not-needed": "notNeeded"}.get(res["status"], "failed")] += 1
+                        gen = PLATFORMS[platform]["gen"]
                         _append_log(project_id, "ERROR",
-                                    "❌ ОСТАНОВКА: сессия Яндекса не действует – раздел отзывов "
+                                    f"❌ ОСТАНОВКА: сессия {gen} не действует – раздел отзывов "
                                     "открывает страницу входа")
                         save_report("finished")
                         push_state("error", task.get("cityName", ""),
-                                   "Сессия Яндекса не действует: вместо отзывов открывается "
+                                   f"Сессия {gen} не действует: вместо отзывов открывается "
                                    "страница входа. Зайдите в «Настройки» и войдите заново.")
                         return
                     if rr["items"]:
@@ -1501,7 +1576,9 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                         # не должен уносить с собой уже написанные черновики.
                         try:
                             import reviews as rv
-                            rv.save_queue(project_id, rv.merge(rv.load_queue(project_id), collected))
+                            rv.save_queue(project_id,
+                                          rv.merge(rv.load_queue(project_id, platform), collected),
+                                          platform=platform)
                         except Exception as e:  # noqa: BLE001
                             _append_log(project_id, "WARN", f"  💬 очередь не сохранилась: {e}")
                 results.append(res)
@@ -1544,8 +1621,9 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
             if collected:
                 try:
                     import reviews as rv
-                    where = rv.save_queue(project_id, rv.merge(rv.load_queue(project_id), collected),
-                                          push=True)
+                    where = rv.save_queue(project_id,
+                                          rv.merge(rv.load_queue(project_id, platform), collected),
+                                          push=True, platform=platform)
                     _append_log(project_id, "INFO", f"ОЧЕРЕДЬ · {where}")
                 except Exception as e:  # noqa: BLE001
                     _append_log(project_id, "WARN", f"ОЧЕРЕДЬ · сохранить наружу не вышло: {e}")
@@ -1707,8 +1785,14 @@ def _collect_worker(project_id: str, run_id: str, headless: bool,
 #  Чтение отчётов для UI
 # ════════════════════════════════════════════════════════════════════
 
+def _report_folder(project_id: str, kind: str) -> Path:
+    if kind == "publish":
+        return p_reports(project_id)
+    return p_reports_actualize(project_id, GIS if kind == "actualize-gis" else YANDEX)
+
+
 def list_reports(project_id: str, kind: str = "publish", limit: int = 30) -> list[dict]:
-    folder = p_reports(project_id) if kind == "publish" else p_reports_actualize(project_id)
+    folder = _report_folder(project_id, kind)
     if not folder.exists():
         return []
     out = []
@@ -1730,7 +1814,7 @@ def list_reports(project_id: str, kind: str = "publish", limit: int = 30) -> lis
 
 
 def read_report(project_id: str, kind: str, name: str) -> dict | None:
-    folder = p_reports(project_id) if kind == "publish" else p_reports_actualize(project_id)
+    folder = _report_folder(project_id, kind)
     fp = folder / Path(name).name
     if not fp.exists():
         return None

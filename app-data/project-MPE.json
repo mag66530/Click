@@ -745,7 +745,55 @@
       ]
     }
   ],
+  "countriesGis": [
+    {
+      "id": "c-MPE-gis-0-россия",
+      "name": "Россия",
+      "cities": [
+        {
+          "id": "ct-MPE-gis-0-0-санкт-петербург",
+          "name": "Санкт-Петербург",
+          "url": "https://account.2gis.com/orgs/70000001112978593/dashboard"
+        },
+        {
+          "id": "ct-MPE-gis-0-1-новосибирск",
+          "name": "Новосибирск",
+          "url": "https://account.2gis.com/orgs/70000001101937079/dashboard"
+        },
+        {
+          "id": "ct-MPE-gis-0-2-екатеринбург",
+          "name": "Екатеринбург",
+          "url": "https://account.2gis.com/orgs/70000001096912877/dashboard"
+        },
+        {
+          "id": "ct-MPE-gis-0-3-казань",
+          "name": "Казань",
+          "url": "https://account.2gis.com/orgs/70000001113227858/dashboard"
+        },
+        {
+          "id": "ct-MPE-gis-0-4-нижний-новгород",
+          "name": "Нижний Новгород",
+          "url": "https://account.2gis.com/orgs/70000001112997037/dashboard"
+        },
+        {
+          "id": "ct-MPE-gis-0-5-челябинск",
+          "name": "Челябинск",
+          "url": "https://account.2gis.com/orgs/70000001112968970/dashboard"
+        },
+        {
+          "id": "ct-MPE-gis-0-6-воронеж",
+          "name": "Воронеж",
+          "url": "https://account.2gis.com/orgs/70000001101951391/dashboard"
+        },
+        {
+          "id": "ct-MPE-gis-0-7-волгоград",
+          "name": "Волгоград",
+          "url": "https://account.2gis.com/orgs/70000001097298164/dashboard"
+        }
+      ]
+    }
+  ],
   "email": "mepen88@yandex.ru",
   "kpSheetUrl": "https://docs.google.com/spreadsheets/d/1-7PoEXl8ik8L1k8KEOxNrS7OaH76xQnD/edit?gid=441667614#gid=441667614",
-  "kpSyncedAt": "2026-08-06T06:44:38.179327+00:00"
+  "kpSyncedAt": "2026-08-06T15:45:13.885368+00:00"
 }

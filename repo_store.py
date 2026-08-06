@@ -55,8 +55,15 @@ def _secret(key: str) -> str:
         return v
     try:
         import streamlit as st
-        return str(st.secrets.get(key) or "").strip()
+        v = str(st.secrets.get(key) or "").strip()
+        if v:
+            return v
     except Exception:
+        pass
+    try:                                   # вписанное в «Настройках»
+        import secrets_local
+        return secrets_local.get(key)
+    except Exception:  # noqa: BLE001
         return ""
 
 

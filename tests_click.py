@@ -382,6 +382,83 @@ def test_parallel_runs(tmp: Path) -> None:
         runner.p_stop(pid, k).unlink(missing_ok=True)
 
 
+
+def test_secrets_local(tmp: Path) -> None:
+    """
+    Ключи к веб-сервисам, вписанные в приложении.
+
+    Локально секретов Streamlit нет, и без этого на своём компьютере не
+    работало ничего, что ходит в интернет: черновики отзывов, таблица КП,
+    хранение данных. Порядок источников менять нельзя – окружение и секреты
+    остаются главнее, иначе в облаке поле в настройках перебило бы секрет.
+    """
+    import base64
+    import json as _json
+    import os as _os
+    import importlib
+
+    import paths as _paths
+    print("\n▸ Ключи к веб-сервисам")
+    было = _os.environ.get("CLICK_DATA_DIR")
+    _os.environ["CLICK_DATA_DIR"] = str(tmp / "keys")
+    try:
+        import secrets_local as SL
+        importlib.reload(SL)
+
+        eq("пока ничего не вписано", SL.load(), {})
+        eq("и источника нет", SL.source_of("gemini_api_key"), "")
+
+        SL.save({"gemini_api_key": "AIzaTEST1234567890"})
+        eq("ключ сохранился", SL.get("gemini_api_key"), "AIzaTEST1234567890")
+        eq("источник – настройки", SL.source_of("gemini_api_key"), "настройки приложения")
+        check("файл лежит вне папки Click", "Click" not in str(SL.path().parent.name)
+              or str(tmp) in str(SL.path()), str(SL.path()))
+
+        import llm
+        importlib.reload(llm)
+        check("Gemini видит ключ из настроек", llm.is_configured())
+
+        # Окружение главнее: в облаке настройка не должна перебивать секрет.
+        _os.environ["GEMINI_API_KEY"] = "AIzaFROMENV000000"
+        importlib.reload(llm)
+        eq("окружение главнее настроек", llm.api_keys()[0], "AIzaFROMENV000000")
+        eq("и это видно человеку", SL.source_of("gemini_api_key"), "переменная окружения")
+        del _os.environ["GEMINI_API_KEY"]
+
+        # Пустое поле стирает ключ, а не пишет пустую строку.
+        SL.save({"gemini_api_key": ""})
+        eq("пустое поле стёрло ключ", SL.get("gemini_api_key"), "")
+        importlib.reload(llm)
+        check("и Gemini снова не настроен", not llm.is_configured())
+
+        # Ключ Google понимаем и как JSON, и как base64.
+        sa = {"type": "service_account", "project_id": "click-test"}
+        import kp_sheet as KS
+        importlib.reload(KS)
+        SL.save({"gcp_service_account_b64": _json.dumps(sa)})
+        eq("JSON целиком", (KS.service_account_info() or {}).get("project_id"), "click-test")
+        SL.save({"gcp_service_account_b64":
+                 base64.b64encode(_json.dumps(sa).encode()).decode()})
+        eq("и base64", (KS.service_account_info() or {}).get("project_id"), "click-test")
+
+        import repo_store as RS
+        importlib.reload(RS)
+        SL.save({"github_token": "ghp_test0000000000"})
+        check("GitHub видит токен из настроек", RS.is_configured())
+
+        eq("маска не показывает ключ целиком",
+           SL.masked("AIzaSyD-1234567890abcdef"), "AIzaSy…cdef (24 знаков)")
+        eq("пустое не маскируем", SL.masked(""), "")
+    finally:
+        if было is None:
+            _os.environ.pop("CLICK_DATA_DIR", None)
+        else:
+            _os.environ["CLICK_DATA_DIR"] = было
+        for имя in ("secrets_local", "llm", "kp_sheet", "repo_store", "paths"):
+            if имя in sys.modules:
+                importlib.reload(sys.modules[имя])
+
+
 def test_task_format(tmp: Path) -> None:
     import runner
     runner.USERS_DATA = tmp
@@ -2586,8 +2663,9 @@ def test_reviews() -> None:
     print("\n▸ МПИ: вид ответа")
     mpi = rv.default_prompt("MPI")
     check("в промпте есть все три образца заказчика",
-          mpi.count(pdata.REVIEW_MPI_OPENER) >= 4, str(mpi.count(pdata.REVIEW_MPI_OPENER)))
-    check("промпт требует не менять первую строку", "Варьировать эту фразу НЕ нужно" in mpi)
+          mpi.count("\nОтвет:\n") == 3, str(mpi.count("\nОтвет:\n")))
+    check("промпт запрещает свои варианты первой строки",
+          "первая строка всегда одна из" in mpi)
     check("промпт запрещает прощание вместо ассортимента",
           "Будем рады видеть вас снова" in mpi)
 
@@ -2605,6 +2683,62 @@ def test_reviews() -> None:
     eq("правильный ответ не трогаем", rv.clean_draft(ЭТАЛОН, "MPI"), ЭТАЛОН)
     eq("повторная чистка ничего не меняет",
        rv.clean_draft(rv.clean_draft(ЭТАЛОН, "MPI"), "MPI"), ЭТАЛОН)
+
+    # ─── спасибо за рекомендацию, которой не было ───
+    # Заказчик: «если не говорят о рекомендации, то просто писать "Спасибо за
+    # отзыв"». На отзыв «классный выбор металла, ценники адекватные, доставка
+    # быстрая» система отвечала «Спасибо за отзыв и рекомендацию!».
+    print("\n▸ МПИ: рекомендация")
+    check("промпт разбирает первую строку на два случая",
+          pdata.REVIEW_MPI_OPENER in mpi and pdata.REVIEW_MPI_OPENER_PLAIN in mpi)
+    check("и прямо запрещает благодарить за чужую рекомендацию",
+          "которой человек не давал" in mpi)
+    примеры = [b.split("\n")[0] for b in mpi.split("Ответ:\n")[1:]]
+    eq("первый образец – с рекомендацией («Рекомендую» в отзыве)",
+       примеры[0], pdata.REVIEW_MPI_OPENER)
+    check("во втором и третьем рекомендации нет – там простое спасибо",
+          примеры[1:] == [pdata.REVIEW_MPI_OPENER_PLAIN] * 2, "; ".join(примеры[1:]))
+
+    for рек in ("Рекомендую.", "Однозначно рекомендую!", "Всем советую эту компанию",
+                "Буду рекомендовать знакомым", "Могу смело порекомендовать",
+                "Посоветую друзьям", "Рекомендация от меня"):
+        check(f"рекомендация видна: «{рек[:30]}»", rv.mentions_recommendation(рек))
+    for нет in ("Здесь очень классный выбор металла. Ценники более, чем адекватные. "
+                "Доставка была быстрая.",
+                "Склад отличный, выбор большой. По цене норм.",
+                "Не рекомендую, ждал две недели",
+                "Не советую связываться",
+                "Менеджер дал дельный совет по марке стали",
+                ""):
+        check(f"рекомендации нет: «{нет[:30]}»", not rv.mentions_recommendation(нет))
+
+    ОТЗЫВ_БЕЗ = ("Здесь очень классный выбор металла. Ценники более, чем адекватные. "
+                 "Доставка была быстрая.")
+    ОТЗЫВ_С = "Купил арматуру по выгодной цене, остался доволен. Рекомендую."
+    сырой = (f"{pdata.REVIEW_MPI_OPENER}\n\nПриятно слышать, что вы оценили выбор металла, "
+             f"адекватные цены и быструю доставку. {pdata.REVIEW_MPI_TAIL}\n\n"
+             f"{pdata.REVIEW_MPI_SIGN}")
+    без_рек = rv.clean_draft(сырой, "MPI", ОТЗЫВ_БЕЗ)
+    check("в отзыве нет рекомендации – первая строка «Спасибо за отзыв!»",
+          без_рек.startswith(pdata.REVIEW_MPI_OPENER_PLAIN + "\n\n"), без_рек.split("\n")[0])
+    check("слова «рекомендацию» в первой строке не осталось",
+          "рекомендацию" not in без_рек.split("\n\n")[0])
+    eq("остальное не тронуто", без_рек.split("\n\n")[1:], сырой.split("\n\n")[1:])
+    check("а с рекомендацией в отзыве первая строка прежняя",
+          rv.clean_draft(сырой, "MPI", ОТЗЫВ_С).startswith(pdata.REVIEW_MPI_OPENER + "\n\n"))
+    # Модель могла и сама написать простое «Спасибо за отзыв!» – если клиент нас
+    # рекомендует, строку возвращаем на место.
+    простой = (f"{pdata.REVIEW_MPI_OPENER_PLAIN}\n\nПриятно слышать, что арматура подошла. "
+               f"{pdata.REVIEW_MPI_TAIL}\n\n{pdata.REVIEW_MPI_SIGN}")
+    check("простое спасибо на отзыв с рекомендацией дополняется",
+          rv.clean_draft(простой, "MPI", ОТЗЫВ_С).startswith(pdata.REVIEW_MPI_OPENER + "\n\n"))
+    # Отзыва под рукой нет (старый вызов, проверка генерации) – верим черновику.
+    check("без отзыва первая строка черновика сохраняется",
+          rv.clean_draft(простой, "MPI").startswith(pdata.REVIEW_MPI_OPENER_PLAIN + "\n\n"))
+    check("и наоборот", rv.clean_draft(сырой, "MPI").startswith(pdata.REVIEW_MPI_OPENER + "\n\n"))
+    # У остальных брендов «рекомендацию» не трогаем – там своя форма ответа.
+    чужой = "Благодарим за отзыв и рекомендацию! Всё отгружено вовремя."
+    eq("правило только для МПИ", rv.clean_draft(чужой, "SMU"), чужой)
 
     # ─── масло масляное ───
     # Заказчик: «Спасибо за отзыв и рекомендацию!» и тут же «Благодарим вас за
@@ -2679,7 +2813,7 @@ def test_reviews() -> None:
     # Настоящие ответы системы из боевого прогона – три беды по очереди.
     свой_зачин = ("Спасибо за положительный отзыв! Очень приятно, что вы оценили выбор "
                   "арматуры. Будем рады видеть вас снова!\n\nС уважением, МетПромИнтекс.")
-    out = rv.clean_draft(свой_зачин, "MPI")
+    out = rv.clean_draft(свой_зачин, "MPI", "Хороший выбор арматуры. Рекомендую.")
     check("первая строка приведена к эталонной", out.startswith(pdata.REVIEW_MPI_OPENER + "\n\n"))
     check("прощание заменено фразой про ассортимент", pdata.REVIEW_MPI_TAIL in out)
     check("«Будем рады видеть вас снова» убрано", "видеть вас снова" not in out)
@@ -4108,6 +4242,7 @@ def main() -> int:
         test_ledger_and_lock(tmp)
         test_run_state(tmp)
         test_parallel_runs(tmp)
+        test_secrets_local(tmp)
         test_task_format(tmp)
         test_report_render()
         test_yandex_domain()

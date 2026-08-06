@@ -173,7 +173,10 @@ def service_account_info() -> dict | None:
     JSON-ключ сервисного аккаунта. Источники по порядку:
       1) окружение GCP_SA_JSON (строка-JSON) или GCP_SA_B64 (base64);
       2) секреты Streamlit: gcp_service_account (секция или строка-JSON)
-         либо gcp_service_account_b64 (base64 всего файла – удобнее для TOML).
+         либо gcp_service_account_b64 (base64 всего файла – удобнее для TOML);
+      3) вписанное в «Настройках» приложения – понимает и JSON, и base64.
+         Локально секретов Streamlit нет, и без этого пункта таблица КП
+         на своём компьютере не читалась вовсе.
     None – ключ не задан или не разобрался.
     """
     raw = (os.environ.get("GCP_SA_JSON") or "").strip()
@@ -191,7 +194,7 @@ def service_account_info() -> dict | None:
     try:
         import streamlit as st
     except Exception:
-        return None
+        return _from_settings()
     try:
         v = st.secrets.get("gcp_service_account")
     except Exception:
@@ -210,7 +213,27 @@ def service_account_info() -> dict | None:
             return _from_b64(str(b))
         except Exception:
             pass
-    return None
+    return _from_settings()
+
+
+def _from_settings() -> dict | None:
+    """Ключ, вписанный в «Настройках». Принимаем и JSON целиком, и base64."""
+    try:
+        import secrets_local
+        raw = secrets_local.get("gcp_service_account_b64")
+    except Exception:  # noqa: BLE001
+        return None
+    if not raw:
+        return None
+    if raw.lstrip().startswith("{"):
+        try:
+            return json.loads(raw)
+        except Exception:  # noqa: BLE001
+            return None
+    try:
+        return _from_b64(raw)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def is_configured(project_id: str, from_config: str = "") -> bool:

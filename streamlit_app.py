@@ -2934,6 +2934,32 @@ def _report_notes(data: dict, totals: dict) -> list[str]:
     return notes
 
 
+def _report_shots(project_id: str, data: dict) -> None:
+    """
+    Снимки экрана в момент сбоя – прямо в отчёте.
+
+    Прогон их сохранял и раньше, но добраться до них было нельзя: в логе
+    стояло имя файла, а файл лежал в облаке. Отчёт говорил «плашки нет»,
+    глаза говорили «есть», и рассудить их было нечем. Показываем по одному:
+    два десятка картинок разом – это лишняя память на ровном месте.
+    """
+    shots = [(r.get("cityName") or "?", r["screenshot"])
+             for r in (data.get("results") or []) if r.get("screenshot")]
+    if not shots:
+        return
+    folder = runner.p_screenshots(project_id)
+    st.markdown("---")
+    st.caption(f"📸 Снимки экрана в момент сбоя ({len(shots)}) – "
+               "что приложение видело на странице")
+    names = [c for c, _ in shots]
+    picked = st.selectbox("Город", names, key="shot-city", label_visibility="collapsed")
+    fp = folder / dict(shots)[picked]
+    if fp.exists():
+        st.image(str(fp), use_container_width=True)
+    else:
+        st.caption("Снимок не сохранился – облако могло перезапуститься с тех пор.")
+
+
 def _report_csv(data: dict) -> bytes:
     rows = ["Страна;Город;Статус;Причина;Время_сек;URL"]
     for r in data.get("results") or []:
@@ -3092,6 +3118,7 @@ def tab_report(project_id: str) -> None:
             if not run_log:
                 st.caption("Лог этого прогона не сохранён – он появится у прогонов, "
                            "запущенных начиная с этой версии.")
+            _report_shots(project_id, data)
 
         # ─── Отзывы того же прогона – отдельным разделом того же отчёта ───
         if review_rows:

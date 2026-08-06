@@ -1019,12 +1019,31 @@ _ACTUALIZE_LOOK_JS = "() => {\n" + _DEEP_JS + r"""
   const seen = norm(TEXT);
   const banner = BANNER_RX.test(seen);
   const spot = find(OK_RX) || (banner ? findNear(ALT_RX, BANNER_G, 200) : null);
+
+  // Где мы – спрашиваем у САМОЙ страницы, а не у адреса.
+  //
+  // Адрес обманул: у организации с филиалами кабинет уводит с `/company` на
+  // `/orgs/<id>/branches/<филиал>` – и это ТА ЖЕ страница «Данные о компании»,
+  // только конкретного филиала. Проверка «в адресе есть /company» объявила
+  // двадцать городов из двадцати одного «кабинет увёл не туда», хотя
+  // приложение стояло ровно там, где надо. Заголовок вкладки честнее: на этой
+  // странице он всегда «Личный кабинет 2ГИС: Данные о компании — …».
+  const title = norm(document.title || '');
+  const path = (location.pathname || '');
+  const onCompany = /данные\s+о\s+компании/i.test(title)
+                 || /\/company(\/|$)/.test(path)
+                 || /\/branches\//.test(path);
+  // Карточку удалили из справочника – подтверждать нечего, и это не поломка
+  // приложения, а состояние карточки. Кабинет пишет об этом прямым текстом.
+  const deleted = /(удален[аоы]\s+из\s+справочника|компания\s+удалена)/i.test(seen);
   return {
     spot: spot,
     banner: banner,
     toast: DONE_RX.test(seen),
-    onCompany: /\/company(\/|$)/.test(location.pathname || ''),
-    path: (location.pathname || '') + (location.search || ''),
+    onCompany: onCompany,
+    deleted: deleted,
+    title: title.slice(0, 120),
+    path: path + (location.search || ''),
     size: seen.length,
     roots: ROOTS.length,
     seen: seen.slice(0, 400),
@@ -1155,27 +1174,31 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
     had_banner = bool(look.get("banner"))
 
     if not spot:
-        # Что именно мы видели – в лог. Без этого разбор «а плашка-то была»
-        # превращается в переписку со скриншотами: отчёт говорит «нет», глаза
-        # говорят «есть», и проверить нечем.
-        if look and (had_banner or not look.get("onCompany") or int(look.get("size") or 0) < 200):
-            warn(f"  🔎 {label}: адрес {look.get('path') or '?'}, "
-                 f"текста {look.get('size')} знаков, плашка "
-                 f"{'есть' if had_banner else 'не видна'}. Начало страницы: "
-                 f"{(look.get('seen') or '')[:160]}")
-            if look.get("markup"):
-                # Разметка самой плашки. По ней видно, чем на самом деле
-                # оказалась надпись, – и следующая правка делается сразу,
-                # без ещё одного круга со скриншотами.
-                warn(f"  🔎 {label}: разметка плашки {look['markup']}")
         if not look:
             return finish("failed", "Страницу «Данные о компании» прочитать не вышло "
                                     "(браузер не ответил). Попробуйте ещё раз")
+        # Карточки нет в справочнике – это состояние карточки, а не поломка.
+        if look.get("deleted"):
+            out = finish("failed", "Карточка удалена из справочника 2ГИС – "
+                                   "подтверждать нечего. Проверьте статус в КП")
+            warn(f"  🗑 {label}: {out['reason']}")
+            return out
         if not look.get("onCompany"):
+            # Строка для разбора – короткая и по делу. Раньше сюда валился
+            # кусок страницы на сто шестьдесят знаков, и это выглядело
+            # страшнее любой настоящей беды.
+            warn(f"  🔎 {label}: открылась не та страница – "
+                 f"«{look.get('title') or 'без заголовка'}» ({look.get('path') or '?'})")
             return finish("failed",
-                          f"Кабинет увёл на {look.get('path') or 'другую страницу'} вместо "
-                          "раздела «Данные о компании» – подтвердить не смогли")
+                          f"Открылась не страница «Данные о компании», а «{look.get('title') or '?'}» "
+                          f"({look.get('path') or 'адрес неизвестен'}) – подтвердить не смогли")
         if had_banner:
+            # Единственный по-настоящему непонятный случай: плашка есть, а
+            # надписи не видно. Только здесь и нужна разметка в логе.
+            warn(f"  🔎 {label}: плашка на странице есть, а надписи «Данные верны» "
+                 "на ней не нашлось")
+            if look.get("markup"):
+                warn(f"  🔎 {label}: разметка плашки {look['markup']}")
             return finish("failed",
                           "Плашка «Данные о компании не обновлялись» на странице есть, "
                           "а надпись «Данные верны» на ней не нашлась. Подтвердите вручную")

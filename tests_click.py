@@ -1682,8 +1682,32 @@ def gis_actualize_checks(gis, page) -> None:
         check("разметка плашки уходит в лог – разбирать будет по чему",
               "CQydym6f" in (blind.get("markup") or ""), (blind.get("markup") or "")[:120])
 
+        # ── Организация с филиалами: адрес меняется, страница та же ──
+        #
+        # Кабинет уводит с `/company` на `/orgs/<id>/branches/<филиал>` – и это
+        # ТА ЖЕ страница «Данные о компании», только конкретного филиала.
+        # Проверка «в адресе есть /company» объявила двадцать городов из
+        # двадцати одного «увели не туда», хотя стояли ровно где надо.
+        serve(GIS_BANNER + """<script>
+              document.title = 'Личный кабинет 2ГИС: Данные о компании — МетПромИнтекс';
+              history.replaceState({}, '', '/orgs/70000001079192862/branches/70000001079192863');
+              </script>""")
+        branch = gis.actualize_city(page, task)
+        eq("филиал – это не «увели не туда»", branch["status"], "actualized")
+
+        # ── Карточку удалили из справочника ────────────────────────
+        serve("""<script>document.title = 'Личный кабинет 2ГИС';
+                 history.replaceState({}, '', '/orgs/70000001079192862/restore')</script>
+                 <div>Компания «МетПромИнтекс» удалена из справочника 2ГИС.
+                 Не нашли вашу компанию?</div>""")
+        gone = gis.actualize_city(page, task)
+        eq("удалённая карточка – отдельный случай", gone["status"], "failed")
+        check("и сказано человеческими словами",
+              "удалена из справочника" in gone["reason"], gone["reason"])
+
         # ── Кабинет увёл на другую страницу ────────────────────────
-        serve("""<script>history.replaceState({}, '', '/orgs/70000001079192862/dashboard')</script>
+        serve("""<script>document.title = 'Личный кабинет 2ГИС: Обзор';
+                 history.replaceState({}, '', '/orgs/70000001079192862/dashboard')</script>
                  <div>Обзор организации, показатели и рейтинг за последний месяц</div>""")
         away = gis.actualize_city(page, task)
         eq("увели – не молчим", away["status"], "failed")
@@ -2232,6 +2256,21 @@ def test_run_logs(tmp: Path) -> None:
            "actualize-2026-08-04T10-00-00.log")
         eq("лога нет – пустая строка, а не падение",
            runner.read_run_log(pid, "publish", "report-нет-такого.json"), "")
+
+        # То же самое для 2ГИС. Здесь была своя строчка с двумя вариантами,
+        # про 2ГИС она не знала: лог ложился рядом с отчётом 2ГИС, а искался
+        # в папке Яндекса – и кнопка «Лог (.txt)» была вечно серой.
+        runner._append_log(pid, "INFO", "строка 2ГИС", kind="actualize-gis")  # noqa: SLF001
+        gis_report = (runner.p_reports_actualize(pid, runner.GIS)
+                      / "actualize-2026-08-06T19-12-04.json")
+        gis_report.parent.mkdir(parents=True, exist_ok=True)
+        gis_report.write_text("{}", encoding="utf-8")
+        runner._snapshot_log(pid, gis_report, kind="actualize-gis")  # noqa: SLF001
+        got = runner.read_run_log(pid, "actualize-gis", gis_report.name)
+        check("лог 2ГИС читается там же, где сохранён", "строка 2ГИС" in got, got[:80])
+        eq("и лежит он в папке 2ГИС",
+           runner.run_log_path(pid, "actualize-gis", gis_report.name).parent.name,
+           runner.p_reports_actualize(pid, runner.GIS).name)
     finally:
         runner.USERS_DATA = paths.data_root()
 

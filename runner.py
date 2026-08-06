@@ -495,9 +495,15 @@ def request_stop(project_id: str, kind: str | None = None) -> None:
 
 
 def run_log_path(project_id: str, kind: str, report_name: str) -> Path:
-    """Файл лога рядом с отчётом: имя то же, расширение .log."""
-    folder = p_reports(project_id) if kind == "publish" else p_reports_actualize(project_id)
-    return folder / (Path(report_name).name.replace(".json", "") + ".log")
+    """
+    Файл лога рядом с отчётом: имя то же, расширение .log.
+
+    Папку берём той же функцией, что и сам отчёт. Здесь стояла своя строчка
+    с двумя вариантами – и про 2ГИС она не знала: лог сохранялся рядом с
+    отчётом 2ГИС, а искался в папке Яндекса. Кнопка «Лог (.txt)» получалась
+    вечно серой, с перечёркнутым курсором.
+    """
+    return _report_folder(project_id, kind) / (Path(report_name).name.replace(".json", "") + ".log")
 
 
 def _snapshot_log(project_id: str, report_path: Path, kind: str | None = None) -> None:

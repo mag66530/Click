@@ -327,7 +327,183 @@
       ]
     }
   ],
+  "countriesGis": [
+    {
+      "id": "c-MPI-gis-0-россия",
+      "name": "Россия",
+      "cities": [
+        {
+          "id": "ct-MPI-gis-0-0-москва",
+          "name": "Москва",
+          "url": "https://account.2gis.com/orgs/70000001058778085/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-1-санкт-петербург",
+          "name": "Санкт-Петербург",
+          "url": "https://account.2gis.com/orgs/70000001081104278/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-2-новосибирск",
+          "name": "Новосибирск",
+          "url": "https://account.2gis.com/orgs/70000001067280332/branches/70000001067280333"
+        },
+        {
+          "id": "ct-MPI-gis-0-3-екатеринбург",
+          "name": "Екатеринбург",
+          "url": "https://account.2gis.com/orgs/70000001051648544/branches"
+        },
+        {
+          "id": "ct-MPI-gis-0-4-красноярск",
+          "name": "Красноярск",
+          "url": "https://account.2gis.com/orgs/70000001081112295/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-5-нижний-новгород",
+          "name": "Нижний Новгород",
+          "url": "https://account.2gis.com/orgs/70000001081103691/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-6-челябинск",
+          "name": "Челябинск",
+          "url": "https://account.2gis.com/orgs/70000001081116563/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-7-уфа",
+          "name": "Уфа",
+          "url": "https://account.2gis.com/orgs/70000001081104805/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-8-самара",
+          "name": "Самара",
+          "url": "https://account.2gis.com/orgs/70000001081103893/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-9-ростов-на-дону",
+          "name": "Ростов-на-Дону",
+          "url": "https://account.2gis.com/orgs/70000001081129462/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-10-омск",
+          "name": "Омск",
+          "url": "https://account.2gis.com/orgs/70000001076859555/branches/70000001076859560"
+        },
+        {
+          "id": "ct-MPI-gis-0-11-воронеж",
+          "name": "Воронеж",
+          "url": "https://account.2gis.com/orgs/70000001081102633/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-12-пермь",
+          "name": "Пермь",
+          "url": "https://account.2gis.com/orgs/70000001080962734/branches/70000001080962735"
+        },
+        {
+          "id": "ct-MPI-gis-0-13-барнаул",
+          "name": "Барнаул",
+          "url": "https://account.2gis.com/orgs/70000001080794279/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-14-ижевск",
+          "name": "Ижевск",
+          "url": "https://account.2gis.com/orgs/70000001081105249/branches/70000001081105250"
+        },
+        {
+          "id": "ct-MPI-gis-0-15-иркутск",
+          "name": "Иркутск",
+          "url": "https://account.2gis.com/orgs/70000001081111440/branches/70000001081111443"
+        },
+        {
+          "id": "ct-MPI-gis-0-16-ярославль",
+          "name": "Ярославль",
+          "url": "https://account.2gis.com/orgs/70000001080825524/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-17-набережные-челны",
+          "name": "Набережные Челны",
+          "url": "https://account.2gis.com/orgs/70000001081103611/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-18-новокузнецк",
+          "name": "Новокузнецк",
+          "url": "https://account.2gis.com/orgs/70000001081112926/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-19-рязань",
+          "name": "Рязань",
+          "url": "https://account.2gis.com/orgs/70000001081210489/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-0-20-сургут",
+          "name": "Сургут",
+          "url": "https://account.2gis.com/orgs/70000001081104797/dashboard"
+        }
+      ]
+    },
+    {
+      "id": "c-MPI-gis-1-казахстан",
+      "name": "Казахстан",
+      "cities": [
+        {
+          "id": "ct-MPI-gis-1-0-астана",
+          "name": "Астана",
+          "url": "https://account.2gis.com/orgs/70000001018105029/branches/70000001018105030"
+        },
+        {
+          "id": "ct-MPI-gis-1-1-шымкент",
+          "name": "Шымкент",
+          "url": "https://account.2gis.com/orgs/70000001081112793/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-1-2-актобе",
+          "name": "Актобе",
+          "url": "https://account.2gis.com/orgs/70000001094798575/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-1-3-павлодар",
+          "name": "Павлодар",
+          "url": "https://account.2gis.com/orgs/70000001096242285/branches"
+        },
+        {
+          "id": "ct-MPI-gis-1-4-атырау",
+          "name": "Атырау",
+          "url": "https://account.2gis.com/orgs/70000001094800974/branches/70000001094800975"
+        },
+        {
+          "id": "ct-MPI-gis-1-5-семей",
+          "name": "Семей",
+          "url": "https://account.2gis.com/orgs/70000001097008662/dashboard"
+        },
+        {
+          "id": "ct-MPI-gis-1-6-костанай",
+          "name": "Костанай",
+          "url": "https://account.2gis.com/orgs/70000001096236442/dashboard"
+        }
+      ]
+    },
+    {
+      "id": "c-MPI-gis-2-беларусь",
+      "name": "Беларусь",
+      "cities": [
+        {
+          "id": "ct-MPI-gis-2-0-минск",
+          "name": "Минск",
+          "url": "https://account.2gis.com/orgs/70000001058778085/dashboard"
+        }
+      ]
+    },
+    {
+      "id": "c-MPI-gis-3-узбекистан",
+      "name": "Узбекистан",
+      "cities": [
+        {
+          "id": "ct-MPI-gis-3-0-ташкент",
+          "name": "Ташкент",
+          "url": "https://account.2gis.com/orgs/70000001105294907/dashboard"
+        }
+      ]
+    }
+  ],
   "email": "metpromintex@yandex.ru",
   "kpSheetUrl": "https://docs.google.com/spreadsheets/d/1Hb7R1scmyhSPyROUa2mWMzD4jDcdgBcs1IGu0WQ48O4/edit?gid=0#gid=0",
-  "kpSyncedAt": "2026-08-04T09:17:39.227317+00:00"
+  "kpSyncedAt": "2026-08-06T09:31:34.322435+00:00"
 }

@@ -754,45 +754,88 @@ def extra_rows(result: dict) -> list[list[str]]:
 
 
 def double_rows(result: dict) -> list[list[str]]:
-    """Города с несколькими карточками – по строке на карточку, чтобы выбрать лишнюю."""
+    """
+    Города с несколькими карточками – по строке на карточку, чтобы выбрать лишнюю.
+
+    Правило заказчика простое: один и тот же город дважды в «Организациях» –
+    это дубль. Улица роли не играет, есть город в КП или нет – тоже, и на
+    какую строку КП карточка села – тоже.
+
+    Поэтому карточки объединяем по двум признакам сразу и не привязываемся
+    к сопоставлению:
+
+      • сели на одну строку КП – один город;
+      • город из адреса совпал – один город, даже если строки КП разные
+        или её нет вовсе.
+
+    Оба признака работают вместе: «Астана» и «Нур-Султан» – один город по
+    первому признаку, а карточка, не севшая ни на одну строку, подтянется
+    ко второму. Сетевые карточки («сеть, все города») в счёт не идут: они
+    и должны быть одни на всех.
+    """
     def строка(страна: str, город: str, n: int, co: dict) -> list[str]:
         return [страна, город, str(n), co.get("name", ""), co.get("address", ""),
                 _join(co.get("sites") or []), _join(co.get("phones") or []),
                 _join(co.get("emails") or []), card_url(str(co.get("id") or ""))]
 
-    # Карточки, не севшие ни на один город КП, раскладываем по городу из
-    # адреса: два Красноярска в «Организациях» – это дубль, даже если один
-    # из них по адресу не опознался и в КП города нет вовсе.
-    свободные: dict[str, list[dict]] = {}
+    карточки: list[dict] = []
+    строка_кп: list[dict | None] = []      # строка КП у каждой карточки, если села
+    for it in result.get("items") or []:
+        for co in it.get("companies") or []:
+            карточки.append(co)
+            строка_кп.append(it)
     for co in result.get("extra") or []:
-        ключ = norm_city(guess_city(co.get("address", "")))
-        if ключ:
-            свободные.setdefault(ключ, []).append(co)
+        карточки.append(co)
+        строка_кп.append(None)
+
+    # Объединение множеств: две карточки в одной группе, если совпал город.
+    родитель = list(range(len(карточки)))
+
+    def корень(i: int) -> int:
+        while родитель[i] != i:
+            родитель[i] = родитель[родитель[i]]
+            i = родитель[i]
+        return i
+
+    def слить(a: int, b: int) -> None:
+        ra, rb = корень(a), корень(b)
+        if ra != rb:
+            родитель[max(ra, rb)] = min(ra, rb)
+
+    первый_по_ключу: dict[str, int] = {}
+
+    def запомнить(ключ: str, i: int) -> None:
+        if not ключ:
+            return
+        if ключ in первый_по_ключу:
+            слить(первый_по_ключу[ключ], i)
+        else:
+            первый_по_ключу[ключ] = i
+
+    for i, (co, it) in enumerate(zip(карточки, строка_кп)):
+        if it is not None:
+            # Все написания города из КП – один ключ: «Астана/Нур-Султан».
+            for v in city_variants(it.get("city", "")):
+                запомнить("кп:" + str(it.get("rowIdx", "")), i)
+                запомнить("город:" + v, i)
+        запомнить("город:" + norm_city(guess_city(co.get("address", ""))), i)
+
+    группы: dict[int, list[int]] = {}
+    for i in range(len(карточки)):
+        группы.setdefault(корень(i), []).append(i)
 
     out = [list(DOUBLE_HEADERS)]
-    занятые: set[str] = set()
-    for it in result.get("items") or []:
-        cos = list(it.get("companies") or [])
-        # Карточка могла не сесть на строку КП (адрес записан странно), но по
-        # городу из адреса это тот же город – значит, у него всё равно два.
-        for v in city_variants(it.get("city", "")):
-            if v in свободные:
-                cos += свободные[v]
-                занятые.add(v)
-        if len(cos) < 2:
+    for голова in sorted(группы, key=lambda k: (строка_кп[k] is None, k)):
+        пачка = группы[голова]
+        if len(пачка) < 2:
             continue
-        for n, co in enumerate(cos, 1):
-            out.append(строка(it.get("country", ""), it.get("city", ""), n, co))
-
-    # Города, которых в КП нет, но карточек у них больше одной.
-    for ключ, пачка in свободные.items():
-        if ключ in занятые or len(пачка) < 2:
-            continue
-        город = guess_city(пачка[0].get("address", "")) or ключ
-        for n, co in enumerate(пачка, 1):
-            out.append(строка("(города нет в КП)", город, n, co))
+        it = next((строка_кп[i] for i in пачка if строка_кп[i] is not None), None)
+        страна = it.get("country", "") if it else "(города нет в КП)"
+        город = (it.get("city", "") if it else
+                 guess_city(карточки[пачка[0]].get("address", "")) or "город не определён")
+        for n, i in enumerate(пачка, 1):
+            out.append(строка(страна, город, n, карточки[i]))
     return out
-
 
 def diff_rows(result: dict) -> list[list[str]]:
     """Расхождения по полям – по строке на поле, рядом оба значения."""

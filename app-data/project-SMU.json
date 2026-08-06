@@ -628,7 +628,213 @@
       ]
     }
   ],
+  "countriesGis": [
+    {
+      "id": "c-SMU-gis-0-россия",
+      "name": "Россия",
+      "cities": [
+        {
+          "id": "ct-SMU-gis-0-0-москва",
+          "name": "Москва",
+          "url": "https://account.2gis.com/orgs/70000001077855513/"
+        },
+        {
+          "id": "ct-SMU-gis-0-1-екатеринбург",
+          "name": "Екатеринбург",
+          "url": "https://account.2gis.com/orgs/70000001056078518/"
+        },
+        {
+          "id": "ct-SMU-gis-0-2-челябинск",
+          "name": "Челябинск",
+          "url": "https://account.2gis.com/orgs/70000001028034593/"
+        },
+        {
+          "id": "ct-SMU-gis-0-3-самара",
+          "name": "Самара",
+          "url": "https://account.2gis.com/orgs/70000001061161106/"
+        },
+        {
+          "id": "ct-SMU-gis-0-4-ростов-на-дону",
+          "name": "Ростов-на-Дону",
+          "url": "https://account.2gis.com/orgs/70000001061172573/"
+        },
+        {
+          "id": "ct-SMU-gis-0-5-краснодар",
+          "name": "Краснодар",
+          "url": "https://account.2gis.com/orgs/70000001060441666/"
+        },
+        {
+          "id": "ct-SMU-gis-0-6-воронеж",
+          "name": "Воронеж",
+          "url": "https://account.2gis.com/orgs/70000001061140625/"
+        },
+        {
+          "id": "ct-SMU-gis-0-7-пермь",
+          "name": "Пермь",
+          "url": "https://account.2gis.com/orgs/70000001035695881/"
+        },
+        {
+          "id": "ct-SMU-gis-0-8-волгоград",
+          "name": "Волгоград",
+          "url": "https://account.2gis.com/orgs/70000001060440635/"
+        },
+        {
+          "id": "ct-SMU-gis-0-9-саратов",
+          "name": "Саратов",
+          "url": "https://account.2gis.com/orgs/70000001061164629/"
+        },
+        {
+          "id": "ct-SMU-gis-0-10-барнаул",
+          "name": "Барнаул",
+          "url": "https://account.2gis.com/orgs/70000001077862786/"
+        },
+        {
+          "id": "ct-SMU-gis-0-11-хабаровск",
+          "name": "Хабаровск",
+          "url": "https://account.2gis.com/orgs/70000001061178050/"
+        },
+        {
+          "id": "ct-SMU-gis-0-12-ульяновск",
+          "name": "Ульяновск",
+          "url": "https://account.2gis.com/orgs/70000001061195272/"
+        },
+        {
+          "id": "ct-SMU-gis-0-13-ярославль",
+          "name": "Ярославль",
+          "url": "https://account.2gis.com/orgs/70000001061168277/"
+        },
+        {
+          "id": "ct-SMU-gis-0-14-ставрополь",
+          "name": "Ставрополь",
+          "url": "https://account.2gis.com/orgs/70000001061161227/"
+        },
+        {
+          "id": "ct-SMU-gis-0-15-кемерово",
+          "name": "Кемерово",
+          "url": "https://account.2gis.com/orgs/70000001061211112/"
+        },
+        {
+          "id": "ct-SMU-gis-0-16-набережные-челны",
+          "name": "Набережные Челны",
+          "url": "https://account.2gis.com/orgs/70000001061161070/"
+        },
+        {
+          "id": "ct-SMU-gis-0-17-оренбург",
+          "name": "Оренбург",
+          "url": "https://account.2gis.com/orgs/70000001061161843/"
+        },
+        {
+          "id": "ct-SMU-gis-0-18-чебоксары",
+          "name": "Чебоксары",
+          "url": "https://account.2gis.com/orgs/70000001061171185/"
+        },
+        {
+          "id": "ct-SMU-gis-0-19-калининград",
+          "name": "Калининград",
+          "url": "https://account.2gis.com/orgs/70000001061171669/"
+        },
+        {
+          "id": "ct-SMU-gis-0-20-липецк",
+          "name": "Липецк",
+          "url": "https://account.2gis.com/orgs/70000001061163835/"
+        },
+        {
+          "id": "ct-SMU-gis-0-21-киров",
+          "name": "Киров",
+          "url": "https://account.2gis.com/orgs/70000001061169402/"
+        },
+        {
+          "id": "ct-SMU-gis-0-22-тула",
+          "name": "Тула",
+          "url": "https://account.2gis.com/orgs/70000001061163278/"
+        },
+        {
+          "id": "ct-SMU-gis-0-23-тверь",
+          "name": "Тверь",
+          "url": "https://account.2gis.com/orgs/70000001092519643/"
+        },
+        {
+          "id": "ct-SMU-gis-0-24-калуга",
+          "name": "Калуга",
+          "url": "https://account.2gis.com/orgs/70000001061167813/"
+        },
+        {
+          "id": "ct-SMU-gis-0-25-вологда",
+          "name": "Вологда",
+          "url": "https://account.2gis.com/orgs/70000001061163432/"
+        },
+        {
+          "id": "ct-SMU-gis-0-26-орёл",
+          "name": "Орёл",
+          "url": "https://account.2gis.com/orgs/70000001061369159/"
+        },
+        {
+          "id": "ct-SMU-gis-0-27-нижневартовск",
+          "name": "Нижневартовск",
+          "url": "https://account.2gis.com/orgs/70000001026738793/"
+        },
+        {
+          "id": "ct-SMU-gis-0-28-новороссийск",
+          "name": "Новороссийск",
+          "url": "https://account.2gis.com/orgs/70000001061199731/"
+        },
+        {
+          "id": "ct-SMU-gis-0-29-тамбов",
+          "name": "Тамбов",
+          "url": "https://account.2gis.com/orgs/70000001061170288/"
+        },
+        {
+          "id": "ct-SMU-gis-0-30-таганрог",
+          "name": "Таганрог",
+          "url": "https://account.2gis.com/orgs/70000001061189711/"
+        },
+        {
+          "id": "ct-SMU-gis-0-31-великий-новгород",
+          "name": "Великий Новгород",
+          "url": "https://account.2gis.com/orgs/70000001061281810/"
+        },
+        {
+          "id": "ct-SMU-gis-0-32-сыктывкар",
+          "name": "Сыктывкар",
+          "url": "https://account.2gis.com/orgs/70000001061194494/"
+        }
+      ]
+    },
+    {
+      "id": "c-SMU-gis-1-казахстан",
+      "name": "Казахстан",
+      "cities": [
+        {
+          "id": "ct-SMU-gis-1-0-астана",
+          "name": "Астана",
+          "url": "https://account.2gis.com/orgs/70000001061180682/"
+        }
+      ]
+    },
+    {
+      "id": "c-SMU-gis-2-кыргызстан",
+      "name": "Кыргызстан",
+      "cities": [
+        {
+          "id": "ct-SMU-gis-2-0-ош",
+          "name": "Ош",
+          "url": "https://account.2gis.com/orgs/70000001079192862/company"
+        }
+      ]
+    },
+    {
+      "id": "c-SMU-gis-3-узбекистан",
+      "name": "Узбекистан",
+      "cities": [
+        {
+          "id": "ct-SMU-gis-3-0-ташкент",
+          "name": "Ташкент",
+          "url": "https://account.2gis.com/orgs/70000001077465424/"
+        }
+      ]
+    }
+  ],
   "email": "stalmetural19@yandex.ru",
   "kpSheetUrl": "https://docs.google.com/spreadsheets/d/1ltH-I3E6pjNn-DIdEopp6mD0rnhTTxoY/edit?gid=900939693#gid=900939693",
-  "kpSyncedAt": "2026-08-05T15:21:52.547353+00:00"
+  "kpSyncedAt": "2026-08-06T15:43:28.131046+00:00"
 }

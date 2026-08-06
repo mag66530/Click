@@ -382,6 +382,83 @@ def test_parallel_runs(tmp: Path) -> None:
         runner.p_stop(pid, k).unlink(missing_ok=True)
 
 
+
+def test_secrets_local(tmp: Path) -> None:
+    """
+    Ключи к веб-сервисам, вписанные в приложении.
+
+    Локально секретов Streamlit нет, и без этого на своём компьютере не
+    работало ничего, что ходит в интернет: черновики отзывов, таблица КП,
+    хранение данных. Порядок источников менять нельзя – окружение и секреты
+    остаются главнее, иначе в облаке поле в настройках перебило бы секрет.
+    """
+    import base64
+    import json as _json
+    import os as _os
+    import importlib
+
+    import paths as _paths
+    print("\n▸ Ключи к веб-сервисам")
+    было = _os.environ.get("CLICK_DATA_DIR")
+    _os.environ["CLICK_DATA_DIR"] = str(tmp / "keys")
+    try:
+        import secrets_local as SL
+        importlib.reload(SL)
+
+        eq("пока ничего не вписано", SL.load(), {})
+        eq("и источника нет", SL.source_of("gemini_api_key"), "")
+
+        SL.save({"gemini_api_key": "AIzaTEST1234567890"})
+        eq("ключ сохранился", SL.get("gemini_api_key"), "AIzaTEST1234567890")
+        eq("источник – настройки", SL.source_of("gemini_api_key"), "настройки приложения")
+        check("файл лежит вне папки Click", "Click" not in str(SL.path().parent.name)
+              or str(tmp) in str(SL.path()), str(SL.path()))
+
+        import llm
+        importlib.reload(llm)
+        check("Gemini видит ключ из настроек", llm.is_configured())
+
+        # Окружение главнее: в облаке настройка не должна перебивать секрет.
+        _os.environ["GEMINI_API_KEY"] = "AIzaFROMENV000000"
+        importlib.reload(llm)
+        eq("окружение главнее настроек", llm.api_keys()[0], "AIzaFROMENV000000")
+        eq("и это видно человеку", SL.source_of("gemini_api_key"), "переменная окружения")
+        del _os.environ["GEMINI_API_KEY"]
+
+        # Пустое поле стирает ключ, а не пишет пустую строку.
+        SL.save({"gemini_api_key": ""})
+        eq("пустое поле стёрло ключ", SL.get("gemini_api_key"), "")
+        importlib.reload(llm)
+        check("и Gemini снова не настроен", not llm.is_configured())
+
+        # Ключ Google понимаем и как JSON, и как base64.
+        sa = {"type": "service_account", "project_id": "click-test"}
+        import kp_sheet as KS
+        importlib.reload(KS)
+        SL.save({"gcp_service_account_b64": _json.dumps(sa)})
+        eq("JSON целиком", (KS.service_account_info() or {}).get("project_id"), "click-test")
+        SL.save({"gcp_service_account_b64":
+                 base64.b64encode(_json.dumps(sa).encode()).decode()})
+        eq("и base64", (KS.service_account_info() or {}).get("project_id"), "click-test")
+
+        import repo_store as RS
+        importlib.reload(RS)
+        SL.save({"github_token": "ghp_test0000000000"})
+        check("GitHub видит токен из настроек", RS.is_configured())
+
+        eq("маска не показывает ключ целиком",
+           SL.masked("AIzaSyD-1234567890abcdef"), "AIzaSy…cdef (24 знаков)")
+        eq("пустое не маскируем", SL.masked(""), "")
+    finally:
+        if было is None:
+            _os.environ.pop("CLICK_DATA_DIR", None)
+        else:
+            _os.environ["CLICK_DATA_DIR"] = было
+        for имя in ("secrets_local", "llm", "kp_sheet", "repo_store", "paths"):
+            if имя in sys.modules:
+                importlib.reload(sys.modules[имя])
+
+
 def test_task_format(tmp: Path) -> None:
     import runner
     runner.USERS_DATA = tmp
@@ -3681,6 +3758,7 @@ def main() -> int:
         test_ledger_and_lock(tmp)
         test_run_state(tmp)
         test_parallel_runs(tmp)
+        test_secrets_local(tmp)
         test_task_format(tmp)
         test_report_render()
         test_yandex_domain()

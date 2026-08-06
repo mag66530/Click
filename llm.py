@@ -123,8 +123,17 @@ def _secret(name: str) -> str:
         return v
     try:
         import streamlit as st
-        return str(st.secrets.get(name) or "").strip()
+        v = str(st.secrets.get(name) or "").strip()
+        if v:
+            return v
     except Exception:  # noqa: BLE001 – вне Streamlit секретов просто нет
+        pass
+    # Последняя очередь – ключи, вписанные в самом приложении. Локально
+    # секретов Streamlit нет, и без этого черновики отзывов не работали.
+    try:
+        import secrets_local
+        return secrets_local.get(name)
+    except Exception:  # noqa: BLE001
         return ""
 
 

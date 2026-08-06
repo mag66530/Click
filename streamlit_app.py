@@ -32,6 +32,7 @@ import llm
 import paths
 import projects_data as pdata
 import repo_store
+import secrets_local
 import reviews as rv
 import runner
 import ui_theme as T
@@ -3116,6 +3117,9 @@ def tab_settings(project_id: str, config: dict) -> None:
     _gis_login_block(project_id, config)
 
     st.divider()
+    _web_keys_block()
+
+    st.divider()
     _reviews_settings_block(project_id)
 
     st.divider()
@@ -3144,6 +3148,86 @@ def tab_settings(project_id: str, config: dict) -> None:
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
             st.rerun()
+
+
+def _web_keys_block() -> None:
+    """
+    Ключи к веб-сервисам – прямо в приложении.
+
+    В облаке они лежат в секретах Streamlit, и это удобно. Локально того же
+    самого нет: надо руками создать `.streamlit/secrets.toml`, знать его
+    формат и не ошибиться. Поэтому на своём компьютере не работало ничего,
+    что ходит в интернет – черновики отзывов, таблица КП, хранение данных.
+
+    Здесь ключи вписываются полями. Лежат они вне папки Click, рядом с
+    сессией Яндекса, поэтому переживают обновление и в репозиторий попасть
+    не могут. Секреты и переменные окружения остаются главнее: в облаке
+    всё работает как раньше, а поля показывают, что ключ уже задан оттуда.
+    """
+    html('<div class="card-title">🌐 Ключи к веб-сервисам</div>')
+
+    сервисы = (
+        ("Gemini – черновики ответов на отзывы", llm.is_configured(),
+         ("gemini_api_key", "gemini_api_key_2", "gemini_api_key_3"),
+         "Берётся бесплатно в Google AI Studio. Ключей можно несколько: лимит "
+         "запросов считается на каждый отдельно, два ключа – вдвое быстрее."),
+        ("Google – таблица КП", kp_sheet.service_account_info() is not None,
+         ("gcp_service_account_b64",),
+         "JSON-ключ сервисного аккаунта: вставьте его целиком или в base64. "
+         "Таблицу нужно расшарить на этот аккаунт как Читателя."),
+        ("GitHub – хранение данных между перезапусками", repo_store.is_configured(),
+         ("github_token", "github_repo"),
+         "Нужен только в облаке: там файловая система временная. На своём "
+         "компьютере данные и так лежат на диске."),
+    )
+    подписи = {n: (t, h) for n, t, h in secrets_local.KNOWN}
+
+    for имя, готов, ключи, пояснение in сервисы:
+        значок = "✅" if готов else "⚠️"
+        with st.expander(f"{значок} {имя}", expanded=not готов):
+            st.caption(пояснение)
+            новые = {}
+            for ключ in ключи:
+                заголовок = подписи.get(ключ, (ключ, ""))[0]
+                откуда = secrets_local.source_of(ключ)
+                if откуда and откуда != "настройки приложения":
+                    st.caption(f"**{заголовок}** — задан через «{откуда}», поле не нужно.")
+                    continue
+                есть = secrets_local.get(ключ)
+                новые[ключ] = st.text_area(
+                    заголовок, value=есть, key=f"secret-{ключ}",
+                    height=90 if "gcp" in ключ else 70,
+                    placeholder="вставьте сюда" + (" JSON или base64" if "gcp" in ключ else ""),
+                    help="Пустое поле стирает ключ.")
+                if есть:
+                    st.caption(f"сейчас: {secrets_local.masked(есть)}")
+            if новые and st.button("💾 Сохранить ключи", key=f"secret-save-{ключи[0]}",
+                                   type="primary"):
+                try:
+                    куда = secrets_local.save(новые)
+                    _forget_caches()
+                    st.success(f"Сохранено: {куда}")
+                    time.sleep(0.6)
+                    st.rerun()
+                except Exception as e:  # noqa: BLE001
+                    st.error(f"Не сохранилось: {e}")
+
+    st.caption(f"Ключи хранятся в файле `{secrets_local.path()}` — вне папки Click, "
+               "поэтому обновление программы их не тронет и в репозиторий они не "
+               "попадут. Файл обычный, без шифрования: там же лежит и сохранённая "
+               "сессия Яндекса.")
+
+
+def _forget_caches() -> None:
+    """Сбросить кэши, которые могли запомнить «ключа нет»."""
+    for имя in ("audit-cache",):
+        st.session_state.pop(имя, None)
+    try:
+        import repo_store as _rs
+        _rs._cache.clear()          # noqa: SLF001 – данные могли не читаться без токена
+    except Exception:  # noqa: BLE001
+        pass
+    st.cache_data.clear()
 
 
 def _reviews_settings_block(project_id: str) -> None:

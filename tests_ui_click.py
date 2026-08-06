@@ -565,6 +565,25 @@ def main() -> int:
             # Заказчик: «сделаем плашки кликабельными, чтобы не дублировались
             # кнопки». Раньше под цветными плашками стоял второй ряд кнопок с
             # теми же названиями.
+            # ── Ключи к веб-сервисам вписываются в приложении ──
+            # Локально секретов Streamlit нет, и всё, что ходит в интернет,
+            # не работало вовсе: черновики отзывов, таблица КП, хранение.
+            print("\n▸ Настройки: ключи к веб-сервисам")
+            page.get_by_text("⚙️ Настройки", exact=False).first.click()
+            page.wait_for_timeout(4000)
+            check("раздел «Ключи к веб-сервисам» есть",
+                  page.get_by_text("Ключи к веб-сервисам", exact=False).count() > 0)
+            check("Gemini среди сервисов",
+                  page.get_by_text("Gemini – черновики", exact=False).count() > 0)
+            check("Google среди сервисов",
+                  page.get_by_text("Google – таблица КП", exact=False).count() > 0)
+            check("сказано, где лежит файл ключей",
+                  page.get_by_text("вне папки Click", exact=False).count() > 0)
+            _поля = page.get_by_placeholder("вставьте сюда", exact=False)
+            check("есть поле для ключа", _поля.count() > 0, str(_поля.count()))
+            check("кнопка сохранения на месте",
+                  page.get_by_role("button", name="Сохранить ключи", exact=False).count() > 0)
+
             print("\n▸ Отчёт: цветные плашки работают как фильтры")
             import json as _js
             rep = _paths.data_root() / "SMU" / "reports-actualize"

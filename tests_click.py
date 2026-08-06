@@ -1172,6 +1172,39 @@ def test_kp_autosync(tmp: Path) -> None:
         st.session_state.clear()
 
 
+def test_skipped_comes_back() -> None:
+    """
+    Пропущенный отзыв возвращается следующим прогоном.
+
+    Заказчик: «если я один раз пропускаю, при следующем прогоне он же всё
+    равно найдёт этот отзыв – надо чтобы был». И правда: «Убрать из списка»
+    убирает отзыв с глаз, а в кабинете он так и остался без ответа.
+    Отвеченные так не возвращаются – они и не соберутся, у них ответ есть.
+    """
+    import reviews as rv
+    print("\n▸ Пропущенный отзыв возвращается")
+
+    def item(rid, status, draft=""):
+        return {"reviewId": rid, "status": status, "draft": draft, "text": "старый текст"}
+
+    was = [item("r1", rv.SKIPPED, "прошлый черновик"),
+           item("r2", rv.ANSWERED),
+           item("r3", rv.DRAFTED, "ждёт подтверждения")]
+    fresh = [{"reviewId": "r1", "status": rv.DRAFTED, "draft": "свежий черновик",
+              "text": "свежий текст"},
+             {"reviewId": "r2", "status": rv.DRAFTED, "draft": "не нужен"},
+             {"reviewId": "r3", "status": rv.DRAFTED, "draft": "тоже свежий"},
+             {"reviewId": "r4", "status": rv.DRAFTED, "draft": "новый отзыв"}]
+    got = {it["reviewId"]: it for it in rv.merge(was, fresh)}
+
+    eq("всего записей", len(got), 4)
+    eq("пропущенный вернулся с новым черновиком", got["r1"]["status"], rv.DRAFTED)
+    eq("и текст у него свежий", got["r1"]["text"], "свежий текст")
+    eq("отвеченный остался отвеченным", got["r2"]["status"], rv.ANSWERED)
+    eq("ждущий подтверждения не перезаписан", got["r3"]["draft"], "ждёт подтверждения")
+    check("новый отзыв добавлен", "r4" in got)
+
+
 def test_gis_login_fields() -> None:
     """
     Поля входа 2ГИС ищутся разбором, а не селектором по типу.
@@ -1501,9 +1534,39 @@ def test_gis_answer_and_actualize() -> None:
             check("клик попал именно в неё", page.evaluate("() => window.__ok === 1"))
             check("плашка подтверждения замечена", page.evaluate(gis._ACTUALIZE_TOAST_JS))  # noqa: SLF001
 
-            page.set_content("<html><body><div>Данные о компании</div></body></html>")
+            page.set_content("""
+            <html><body><h1>Данные о компании</h1>
+              <div>Название и филиалы</div><div>Сферы деятельности</div></body></html>""")
+            look = gis._mark_ok_button(page)  # noqa: SLF001
             check("плашки нет – подтверждать нечего, и это не ошибка",
-                  gis._mark_ok_button(page) is None)  # noqa: SLF001
+                  not look["found"] and not look["banner"] and look["ready"], str(look))
+
+            # Надпись спрятана глубже – всё равно находим.
+            page.set_content("""
+            <html><body style="margin:0"><h1>Данные о компании</h1>
+              <div class="banner">Данные о компании не обновлялись достаточно давно,
+                они не изменились?
+                <a href="#"><span><span>Данные верны</span></span></a>
+              </div></body></html>""")
+            deep = gis._mark_ok_button(page)  # noqa: SLF001
+            check("вложенная надпись «Данные верны» найдена", deep["found"], str(deep))
+            eq("для клика взята ссылка целиком",
+               page.locator('[data-click-ok="1"]').evaluate("el => el.tagName"), "A")
+
+            # Плашка есть, а кнопку опознать не вышло – это НЕ «нечего делать».
+            page.set_content("""
+            <html><body><h1>Данные о компании</h1>
+              <div>Данные о компании не обновлялись достаточно давно, они не изменились?</div>
+              <div>Подтвердить</div></body></html>""")
+            odd = gis._mark_ok_button(page)  # noqa: SLF001
+            check("плашка замечена, даже когда кнопка не опознана",
+                  odd["banner"] and not odd["found"], str(odd))
+
+            # Пустая страница – не «подтверждать нечего», а «не дорисовалась».
+            page.set_content("<html><body><div id='root'></div></body></html>")
+            blank = gis._mark_ok_button(page)  # noqa: SLF001
+            check("пустая страница опознана как недорисованная",
+                  not blank["ready"] and not blank["found"], str(blank))
         finally:
             browser.close()
 
@@ -3659,6 +3722,7 @@ def main() -> int:
         test_kp_autosync(tmp)
         test_gis_urls_and_session(tmp)
         test_gis_login_fields()
+        test_skipped_comes_back()
         test_gis_reviews_on_real_page()
         test_gis_answer_and_actualize()
     finally:

@@ -1280,7 +1280,8 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
     out["found"] = len(box["unanswered"]) + len(foreign)
 
     if not box["unanswered"] and not foreign:
-        out["summary"] = f"отзывов {total}, все с ответом"
+        out["summary"] = ("отзывов пока нет" if not total
+                          else f"отзывов {total}, все с ответом")
         _append_log(project_id, "INFO", f"  💬 {city}: {out['summary']}")
         return out
 

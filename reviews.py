@@ -613,15 +613,30 @@ def merge(existing: list[dict], fresh: list[dict]) -> list[dict]:
     Долить свежесобранное, не трогая то, что человек уже разобрал.
     Ключ – reviewId: повторный прогон по тому же городу не плодит дубли
     и не затирает уже написанный вручную ответ.
+
+    Исключение – пропущенные. «Убрать из списка» убирает отзыв с ГЛАЗ, а не
+    из жизни: в кабинете он так и остался без ответа. Поэтому следующий
+    прогон приносит его снова, уже со свежим черновиком. Заказчик попросила
+    прямо: «если я один раз пропускаю, при следующем прогоне он же всё равно
+    найдёт этот отзыв – надо чтобы был». Отвеченные так не возвращаются:
+    они и не соберутся, у них в кабинете уже есть ответ.
     """
     by_id = {it.get("reviewId"): it for it in existing if it.get("reviewId")}
     out = list(existing)
     for it in fresh:
         rid = it.get("reviewId")
-        if not rid or rid in by_id:
+        if not rid:
             continue
-        by_id[rid] = it
-        out.append(it)
+        was = by_id.get(rid)
+        if was is None:
+            by_id[rid] = it
+            out.append(it)
+            continue
+        if was.get("status") == SKIPPED:
+            # Пропущенный возвращается: подменяем запись свежей, чтобы
+            # черновик и текст были сегодняшними, а не прошлогодними.
+            out[out.index(was)] = it
+            by_id[rid] = it
     return out
 
 

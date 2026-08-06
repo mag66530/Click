@@ -770,26 +770,37 @@ def _mark_button(page: Page, rx: str) -> dict | None:
 # «Данные верны». Нажали – слева внизу всплывает «Спасибо за подтверждение
 # данных». Плашки нет – значит, подтверждать нечего, и это не ошибка.
 
+# Возвращаем не только «нашли кнопку», но и что вообще на странице: есть ли
+# плашка и дорисовалась ли она. Без этого «кнопку не нашли» и «подтверждать
+# нечего» неотличимы – и прогон писал «плашки нет» там, где она была.
 _ACTUALIZE_BTN_JS = r"""
 () => {
   const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  const OK_RX = /^данные\s+верны[.!]?$/i;
+  const BANNER_RX = /данные\s+о\s+компании\s+не\s+обновлял/i;
+
   document.querySelectorAll('[data-click-ok]').forEach(n => n.removeAttribute('data-click-ok'));
-  // Надпись может быть и кнопкой, и ссылкой, и просто раскрашенным div –
-  // берём самый глубокий элемент с этим текстом, чтобы не поймать всю плашку.
-  const hits = [];
-  for (const el of document.querySelectorAll('button, a, [role="button"], span, div')) {
-    if (!/^данные\s+верны$/i.test(norm(el.textContent))) continue;
-    if (Array.from(el.querySelectorAll('*')).some(
-        c => /^данные\s+верны$/i.test(norm(c.textContent)))) continue;
-    const r = el.getBoundingClientRect();
-    if (r.width < 20 || r.height < 8) continue;
-    hits.push(el);
+  const body = norm(document.body.innerText || document.body.textContent);
+  const banner = BANNER_RX.test(body);
+  // Страница дорисована, если видно её заголовок или хоть что-то из карточки.
+  const ready = /данные\s+о\s+компании|название\s+и\s+филиал|сферы\s+деятельности/i.test(body);
+
+  // Надпись бывает и кнопкой, и ссылкой, и раскрашенным div – ищем по ВСЕМ
+  // элементам и берём самый глубокий, чтобы не поймать плашку целиком.
+  let el = null;
+  for (const cand of document.querySelectorAll('*')) {
+    const t = norm(cand.textContent);
+    if (!OK_RX.test(t)) continue;
+    if (Array.from(cand.querySelectorAll('*')).some(c => OK_RX.test(norm(c.textContent)))) continue;
+    const r = cand.getBoundingClientRect();
+    if (r.width < 10 || r.height < 6) continue;
+    el = cand;
+    break;
   }
-  if (!hits.length) return null;
-  const el = hits[0];
+  if (!el) return { found: false, banner, ready, seen: body.slice(0, 160) };
   const target = el.closest('button, a, [role="button"]') || el;
   target.setAttribute('data-click-ok', '1');
-  return { text: norm(el.textContent).slice(0, 40) };
+  return { found: true, banner, ready, text: norm(el.textContent).slice(0, 40) };
 }
 """
 
@@ -830,15 +841,31 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
     if looks_like_login_page(page):
         return finish("no-session", "Сессия 2ГИС не активна: открылась страница входа")
 
-    btn = None
-    deadline = time.time() + 6
+    # Ждём не «шесть секунд и хватит», а пока страница дорисуется. В облаке
+    # тяжёлая React-страница с картой поднимается заметно дольше, и прежний
+    # короткий срок давал «плашки нет» там, где она была.
+    look = {}
+    deadline = time.time() + 25
     while time.time() < deadline:
-        btn = _mark_ok_button(page)
-        if btn:
+        look = _mark_ok_button(page) or {}
+        if look.get("found"):
             break
-        page.wait_for_timeout(500)
+        # Страница готова, плашки в ней нет – ждать больше нечего.
+        if look.get("ready") and not look.get("banner") and time.time() - started > 6:
+            break
+        page.wait_for_timeout(700)
 
-    if not btn:
+    if not look.get("found"):
+        if look.get("banner"):
+            # Плашка на странице ЕСТЬ – значит подтвердить надо, а мы не смогли.
+            # Молча записать «не требуется» нельзя: это неправда в отчёте.
+            return finish("failed",
+                          "Плашка «Данные о компании не обновлялись» на странице есть, "
+                          "а кнопку «Данные верны» опознать не вышло. Подтвердите вручную")
+        if not look.get("ready"):
+            return finish("failed",
+                          "Страница «Данные о компании» не дорисовалась – "
+                          "подтвердить не смогли. Попробуйте ещё раз")
         out = finish("not-needed", "Плашки «Данные верны» нет – подтверждать нечего")
         info(f"  ✓ {label}: {out['reason']} ({out['durationMs'] / 1000:.1f} сек)")
         return out

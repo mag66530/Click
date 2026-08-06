@@ -81,81 +81,11 @@
       "sameSite": "None"
     },
     {
-      "name": "sso_status",
-      "value": "sso.passport.yandex.ru:synchronized",
-      "domain": ".ya.ru",
-      "path": "/",
-      "expires": 1785845840,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
       "name": "yabs-sid",
       "value": "1014634841785833922",
       "domain": "mc.yandex.com",
       "path": "/",
       "expires": -1,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "yandexuid",
-      "value": "9004329451785833918",
-      "domain": ".yandex.com",
-      "path": "/",
-      "expires": 1820393923.867,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "yuidss",
-      "value": "9004329451785833918",
-      "domain": ".yandex.com",
-      "path": "/",
-      "expires": 1820393923.867,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "i",
-      "value": "PtAVSUQYUyqgsJ1V3jXUp5Jl5RmPfrp6Hep+YL56L1B4lzSRAs3S0U5mEdKbouxr1+C72jKwW57AYDkJMQ1N1099Iso=",
-      "domain": ".yandex.com",
-      "path": "/",
-      "expires": 1820393923.867,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "yp",
-      "value": "1785920323.yu.9112792871785833922",
-      "domain": ".yandex.com",
-      "path": "/",
-      "expires": 1820393923.867,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "ymex",
-      "value": "1788425923.oyu.9112792871785833922#1817369922.yrts.1785833922#1817369922.yrtsi.1785833922",
-      "domain": ".yandex.com",
-      "path": "/",
-      "expires": 1817369923,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "sync_cookie_ok",
-      "value": "synced",
-      "domain": ".mc.yandex.com",
-      "path": "/",
-      "expires": 1785920323,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -171,11 +101,81 @@
       "sameSite": "None"
     },
     {
+      "name": "sync_cookie_csrf",
+      "value": "819580092fake",
+      "domain": ".mc.yandex.com",
+      "path": "/",
+      "expires": 1786004749,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
       "name": "bh",
-      "value": "YIfZxtMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "value": "YLWF0dMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1820394631,
+      "expires": 1820564149.741,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "yandexuid",
+      "value": "9004329451785833918",
+      "domain": ".yandex.com",
+      "path": "/",
+      "expires": 1820564150.125,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "yuidss",
+      "value": "9004329451785833918",
+      "domain": ".yandex.com",
+      "path": "/",
+      "expires": 1820564150.125,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "i",
+      "value": "PtAVSUQYUyqgsJ1V3jXUp5Jl5RmPfrp6Hep+YL56L1B4lzSRAs3S0U5mEdKbouxr1+C72jKwW57AYDkJMQ1N1099Iso=",
+      "domain": ".yandex.com",
+      "path": "/",
+      "expires": 1820564150.125,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "yp",
+      "value": "1786090550.yu.9004329451785833918",
+      "domain": ".yandex.com",
+      "path": "/",
+      "expires": 1820564150.125,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "ymex",
+      "value": "1788596150.oyu.9004329451785833918#1817369922.yrts.1785833922#1817369922.yrtsi.1785833922",
+      "domain": ".yandex.com",
+      "path": "/",
+      "expires": 1817540150,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "sync_cookie_ok",
+      "value": "synced",
+      "domain": ".mc.yandex.com",
+      "path": "/",
+      "expires": 1786090550,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -185,7 +185,7 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817371046,
+      "expires": 1817540738,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -261,91 +261,71 @@
       "sameSite": "None"
     },
     {
-      "name": "_ym_isad",
-      "value": "2",
-      "domain": ".yandex.ru",
+      "name": "mda2_domains",
+      "value": "ya.ru",
+      "domain": ".passport.yandex.ru",
       "path": "/",
-      "expires": 1785905978,
+      "expires": 1820395039.858,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "bh",
-      "value": "YIbZxtMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "value": "YLSF0dMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1820394630.7,
+      "expires": 1820564148,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ym_isad",
+      "value": "2",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1786076149,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "sync_cookie_csrf",
+      "value": "792283895fake",
+      "domain": ".mc.yandex.ru",
+      "path": "/",
+      "expires": 1786004749,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "sessar",
-      "value": "1.1977778.CiC4QAUJBT2YE5OFhwzeqAS77CQXwSUjms1wuwXRr2WrfQ.evDpWO6-4Atq0N6U6EvMQdDdR4Z1gNPvJZucgaVOVi8",
+      "value": "1.1977778.CiApsrBW3oZMr2gAGZpKY1B0BT7-Nf-1bpwNVnqF9IzFrQ.y4aeyHNtdMbLMAZmrLp0ccaQniVfyoTRv-gvYuCgRc8",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1820395038.337,
+      "expires": 1820564733.124,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "sessguard",
-      "value": "1.1785835038.1785835038204:ZSF_Ig:2766..3.500:2089403.m-FafVW6.vmlR56ulVyGdzaNVYcj04SUskGE",
+      "value": "1.1786004732.1786004732986:2bBTIg:a12a..3.500:2093870.1Li-Twwq._B64F3UgkF0vxaKK1CG5y4QSQg4",
       "domain": ".passport.yandex.ru",
       "path": "/",
-      "expires": 1820395038.337,
+      "expires": 1820564733.124,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "yp",
-      "value": "2101195038.udn.cDrQnNCf0Jg%3D",
+      "value": "2101364733.udn.cDrQnNCf0Jg%3D",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1820395038.337,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "L",
-      "value": "YAlZQltHaFQOUGVFSE1fYAx2RAhPUn12ADEEEhckGVktJVMN.1785835038.2081230.381529.04e60130ba19093ea86cc3a24d89cbec",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1820395038.337,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "lah",
-      "value": "2:1848907038.12089339.oOpCD5uedO2_7q1z.HigcKceIjKHfgOPFm1i6LINeLUfPAwyCzvHT5ZBEEPuEn6tPOrLjsyrD-vuIdzZi22rk-zWriiA.sO9si4K06YK0Y2ADX6illg",
-      "domain": ".passport.yandex.ru",
-      "path": "/",
-      "expires": 1820395038.337,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "mda2_beacon",
-      "value": "1785835038224",
-      "domain": ".passport.yandex.ru",
-      "path": "/",
-      "expires": 1820395038.337,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_yasc",
-      "value": "0MLVzFrY+WgViXaHErqzwqU096wx9rqJiUjfm72jDSz/23gjlfCHwaR6el3Xjt/SUyYF8pejnI9hbekE3JeJfVz4VltZcrgrQ43mfqqfwaWhvQ==",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1820395038.618,
+      "expires": 1820564733.124,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -361,11 +341,41 @@
       "sameSite": "None"
     },
     {
-      "name": "mda2_domains",
-      "value": "ya.ru",
+      "name": "L",
+      "value": "AEtzSAJ4ZwV1RQJcW1dwRnJBakFQBWNzXxAbJD8HNxE8Fh8r.1786004733.2085887.391653.0ca58e9bb6021752ab47d28ab9d64e70",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1820564733.124,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "lah",
+      "value": "2:1849076733.12093806.MaH-MOXb6364x2Sg.9yVMpC7ukFkOKUJAmJqQbWkXr-S_9yHeyhwEgCH0jn88V8MX9h3skiQr7g.bgowDagJyNmoWIYtQFL63g",
       "domain": ".passport.yandex.ru",
       "path": "/",
-      "expires": 1820395039.858,
+      "expires": 1820564733.124,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "mda2_beacon",
+      "value": "1786004733012",
+      "domain": ".passport.yandex.ru",
+      "path": "/",
+      "expires": 1820564733.124,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_yasc",
+      "value": "foJgSjy0afSnIXpLY+48M3MGvcdR5R45UD1ZOfMpe53F8qvD/E2WlQpa6ECn2fGaF0fsLZofLtbGGzsNtr+gRU+p2MQ+mV9TRD48WPR+XvQrOQ==",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1820564737.693,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -375,7 +385,7 @@
       "value": "0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817371046,
+      "expires": 1817540740,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"

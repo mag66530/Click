@@ -2027,6 +2027,14 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
     if is_404(page):
         return finish("failed", f"Страница не найдена (404): {edit_url}")
 
+    # Сессия слетела – Яндекс отдаёт страницу входа. Без этой проверки кнопки
+    # на ней, разумеется, нет, и город получал «актуализация не требуется»:
+    # неправда, которая повторялась для каждого города и попадала в отчёт как
+    # успех. Публикация так умеет давно, актуализация – не умела.
+    if looks_like_login_page(page):
+        error("  ❌ Открылась страница входа Яндекса – сессия не активна")
+        return finish("no-session", "Сессия Яндекса не активна: открылась страница входа")
+
     btn = None
     deadline = time.time() + 4
     while time.time() < deadline:
@@ -2154,6 +2162,7 @@ def read_reviews(page: Page, url: str, navigate: bool = True) -> dict:
 
         if looks_like_login_page(page):
             out["reason"] = "Яндекс увёл на страницу входа – сессия не действует"
+            out["noSession"] = True     # прогону это знак остановиться, а не идти дальше
             return out
 
     data = None

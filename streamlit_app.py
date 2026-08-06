@@ -1673,7 +1673,8 @@ def _review_regenerate(project_id: str, item: dict) -> None:
     fake = {"text": item.get("text"), "author": item.get("author"),
             "rating": item.get("rating"), "answered": False}
     try:
-        item["draft"] = rv.clean_draft(llm.generate(rv.build_prompt(prompt, fake)), project_id)
+        item["draft"] = rv.clean_draft(
+            llm.generate(rv.build_prompt(prompt, fake, project_id)), project_id)
         item["status"] = rv.DRAFTED
         item["note"] = ""
     except Exception as e:  # noqa: BLE001
@@ -2937,7 +2938,7 @@ def _reviews_settings_block(project_id: str) -> None:
         with st.spinner("Прошу у Gemini ответ на пробный отзыв…"):
             try:
                 answer = rv.clean_draft(
-                    llm.generate(rv.build_prompt(rv.project_prompt(project_id), sample)),
+                    llm.generate(rv.build_prompt(rv.project_prompt(project_id), sample, project_id)),
                     project_id)
             except Exception as e:  # noqa: BLE001
                 answer = None

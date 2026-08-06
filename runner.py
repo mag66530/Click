@@ -1165,6 +1165,7 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
     data = yb.read_reviews(page, url)
     if not data["ok"]:
         out["summary"] = data["reason"]
+        out["noSession"] = bool(data.get("noSession"))   # прогону – знак остановиться
         _append_log(project_id, "WARN", f"  💬 {city}: отзывы не прочитаны – {data['reason']}")
         return out
 
@@ -1223,7 +1224,7 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
         try:
             import llm
             t0 = time.time()
-            draft = rv.clean_draft(llm.generate(rv.build_prompt(prompt, item)), project_id)
+            draft = rv.clean_draft(llm.generate(rv.build_prompt(prompt, item, project_id)), project_id)
             add(item, rv.DRAFTED, draft=draft)
             out["drafted"] += 1
             # Замер в лог: без него «долго генерирует» не отличить от
@@ -1376,6 +1377,23 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                            "status": "failed", "reason": f"Критическая ошибка: {e}", "durationMs": 0}
                 res["country"] = country
                 res["package"] = country
+
+                # Сессия слетела – дальше идти незачем: остальные города упрутся
+                # в ту же страницу входа. Раньше прогон честно обходил все 58
+                # городов, писал каждому «актуализация не требуется» (кнопки на
+                # странице входа нет) и складывал эту неправду в отчёт.
+                if res["status"] == "no-session":
+                    results.append(res)
+                    counters["failed"] += 1
+                    _append_log(project_id, "ERROR",
+                                "❌ ОСТАНОВКА: сессия Яндекса не активна – вместо кабинета "
+                                "открывается страница входа")
+                    save_report("finished")
+                    push_state("error", task.get("cityName", ""),
+                               "Сессия Яндекса не активна: вместо кабинета открывается страница "
+                               "входа. Зайдите в «Настройки» и войдите в Яндекс заново.")
+                    return
+
                 # Отзывы – отдельным шагом ПОСЛЕ актуализации: он опциональный
                 # и не должен влиять на её статус, что бы там ни случилось.
                 if with_reviews:
@@ -1390,6 +1408,20 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                     res["reviews"] = rr["summary"]
                     for k in review_totals:
                         review_totals[k] += rr.get(k, 0)
+                    # Тот же случай, но обнаружился на шаге отзывов: страница
+                    # «Данные» ещё открывалась, а отзывы уже уводят на вход.
+                    if rr.get("noSession"):
+                        results.append(res)
+                        counters[{"actualized": "actualized",
+                                  "not-needed": "notNeeded"}.get(res["status"], "failed")] += 1
+                        _append_log(project_id, "ERROR",
+                                    "❌ ОСТАНОВКА: сессия Яндекса не действует – раздел отзывов "
+                                    "открывает страницу входа")
+                        save_report("finished")
+                        push_state("error", task.get("cityName", ""),
+                                   "Сессия Яндекса не действует: вместо отзывов открывается "
+                                   "страница входа. Зайдите в «Настройки» и войдите заново.")
+                        return
                     if rr["items"]:
                         collected.extend(rr["items"])
                         # Пишем локально после каждого города: оборванный прогон

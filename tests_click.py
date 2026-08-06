@@ -1388,6 +1388,10 @@ def test_gis_reviews_on_real_page() -> None:
                   and long_one["text"].endswith("привезли в срок"), long_one["text"])
             check("шва посреди слова нет", "Садыков Сергей" in long_one["text"],
                   long_one["text"])
+            check("многоточие свёртки в текст не попало", "…" not in long_one["text"],
+                  long_one["text"])
+            check("скрытый остаток прочитан, а не только видимая часть",
+                  len(long_one["text"]) > 90, f"длина {len(long_one['text'])}")
             check("свежие отзывы по-прежнему без ответа", not items[0]["answered"])
 
             # Страница ещё не дорисована: карточек нет – это не «ноль отзывов».

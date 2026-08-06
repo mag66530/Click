@@ -267,6 +267,27 @@ _READ_REVIEWS_JS = r"""
       : null;
     const answerRoot = answerBox ? answerBox.closest('div, li, section') : null;
 
+    // Текст берём ПО КУСКАМ из разметки, а не с экрана.
+    //
+    // Свёрнутый отзыв 2ГИС хранит так: видимая часть, отдельный узел с
+    // многоточием и скрытый остаток. На экране (innerText) видно только
+    // начало – «…Менеджер С…»; скрытый остаток при этом в разметке лежит.
+    // Склеиваем куски ВПЛОТНУЮ, без пробела: свёртка режет строку прямо
+    // посреди слова, и «Менеджер С» + «адыков Адиль» должны снова стать
+    // «Менеджер Садыков Адиль». Многоточие свёртки выбрасываем.
+    const whole = el => {
+      const parts = [];
+      const walk = n => {
+        if (n.nodeType === 3) { parts.push(n.nodeValue || ''); return; }
+        if (n.nodeType !== 1) return;
+        const t = (n.textContent || '').trim();
+        if (t === '…' || t === '...' || t === '..') return;
+        for (const c of n.childNodes) walk(c);
+      };
+      walk(el);
+      return norm(parts.join(''));
+    };
+
     let text = '';
     for (const el of card.querySelectorAll('div, p, span')) {
       if (el.closest('a, button, svg, [role="button"]')) continue;
@@ -278,7 +299,7 @@ _READ_REVIEWS_JS = r"""
       if (dates.some(d => el.contains(d))) continue;
       if (badge && el.contains(badge)) continue;
       if (el.querySelector('[class*="rating__front"]')) continue;
-      const t = norm(el.innerText || el.textContent);
+      const t = whole(el);
       if (!t || t === author || PLATFORMS.includes(t) || /^\d+$/.test(t)) continue;
       if (t.length > text.length) text = t;
     }
@@ -326,8 +347,12 @@ def review_id(org_id: str | None, item: dict) -> str:
     Нужен, чтобы очередь на подтверждение не плодила дубли при повторном
     прогоне по тому же городу.
     """
+    # По НАЧАЛУ текста, а не по всему: свёрнутый отзыв читается то целиком,
+    # то обрезанным, и от полного текста номер скакал бы – в очереди
+    # появлялись бы двойники одного и того же отзыва.
     raw = "|".join([str(org_id or ""), item.get("author") or "",
-                    item.get("dateText") or "", (item.get("text") or "")[:200]])
+                    item.get("dateText") or "", str(item.get("rating") or 0),
+                    (item.get("text") or "")[:40]])
     return "gis-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 

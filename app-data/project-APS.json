@@ -105,272 +105,287 @@
           "url": "https://yandex.ru/sprav/23397644/edit/main"
         },
         {
-          "id": "ct-APS-0-20-иркутск",
+          "id": "ct-APS-0-20-ульяновск",
+          "name": "Ульяновск",
+          "url": "https://yandex.ru/sprav/110172200486/p/edit/main"
+        },
+        {
+          "id": "ct-APS-0-21-иркутск",
           "name": "Иркутск",
           "url": "https://yandex.ru/sprav/15351553/edit/main"
         },
         {
-          "id": "ct-APS-0-21-махачкала",
+          "id": "ct-APS-0-22-махачкала",
           "name": "Махачкала",
           "url": "https://yandex.ru/sprav/165824565707/p/edit/main"
         },
         {
-          "id": "ct-APS-0-22-кемерово",
+          "id": "ct-APS-0-23-владивосток",
+          "name": "Владивосток",
+          "url": "https://yandex.ru/sprav/41770792252/p/edit/main"
+        },
+        {
+          "id": "ct-APS-0-24-севастополь",
+          "name": "Севастополь",
+          "url": "https://yandex.ru/sprav/215914235035/p/edit/main"
+        },
+        {
+          "id": "ct-APS-0-25-кемерово",
           "name": "Кемерово",
           "url": "https://yandex.ru/sprav/21144078/edit/main"
         },
         {
-          "id": "ct-APS-0-23-томск",
+          "id": "ct-APS-0-26-томск",
           "name": "Томск",
           "url": "https://yandex.ru/sprav/23771439/edit/main"
         },
         {
-          "id": "ct-APS-0-24-новокузнецк",
+          "id": "ct-APS-0-27-новокузнецк",
           "name": "Новокузнецк",
           "url": "https://yandex.ru/sprav/22126255/edit/main"
         },
         {
-          "id": "ct-APS-0-25-оренбург",
+          "id": "ct-APS-0-28-оренбург",
           "name": "Оренбург",
           "url": "https://yandex.ru/sprav/22070291/edit/main"
         },
         {
-          "id": "ct-APS-0-26-балашиха",
+          "id": "ct-APS-0-29-балашиха",
           "name": "Балашиха",
           "url": "https://yandex.ru/sprav/15817232938/p/edit/main"
         },
         {
-          "id": "ct-APS-0-27-калининград",
+          "id": "ct-APS-0-30-калининград",
           "name": "Калининград",
           "url": "https://yandex.ru/sprav/54940381636/p/edit/main"
         },
         {
-          "id": "ct-APS-0-28-липецк",
+          "id": "ct-APS-0-31-липецк",
           "name": "Липецк",
           "url": "https://yandex.ru/sprav/232542467240/p/edit/main"
         },
         {
-          "id": "ct-APS-0-29-киров",
+          "id": "ct-APS-0-32-киров",
           "name": "Киров",
           "url": "https://yandex.ru/sprav/79912116456/p/edit/main"
         },
         {
-          "id": "ct-APS-0-30-астрахань",
+          "id": "ct-APS-0-33-астрахань",
           "name": "Астрахань",
           "url": "https://yandex.ru/sprav/123425966212/p/edit/main"
         },
         {
-          "id": "ct-APS-0-31-тула",
+          "id": "ct-APS-0-34-тула",
           "name": "Тула",
           "url": "https://yandex.ru/sprav/23691050/edit"
         },
         {
-          "id": "ct-APS-0-32-курск",
+          "id": "ct-APS-0-35-курск",
           "name": "Курск",
           "url": "https://yandex.ru/sprav/81648603694/p/edit/main"
         },
         {
-          "id": "ct-APS-0-33-мариуполь",
+          "id": "ct-APS-0-36-мариуполь",
           "name": "Мариуполь",
           "url": "https://yandex.ru/sprav/25755702/edit"
         },
         {
-          "id": "ct-APS-0-34-сургут",
+          "id": "ct-APS-0-37-сургут",
           "name": "Сургут",
           "url": "https://yandex.ru/sprav/23666081/edit/"
         },
         {
-          "id": "ct-APS-0-35-луганск",
+          "id": "ct-APS-0-38-луганск",
           "name": "Луганск",
           "url": "https://yandex.ru/sprav/25755305/edit/main"
         },
         {
-          "id": "ct-APS-0-36-магнитогорск",
+          "id": "ct-APS-0-39-магнитогорск",
           "name": "Магнитогорск",
           "url": "https://yandex.ru/sprav/167988713550/p/edit/main"
         },
         {
-          "id": "ct-APS-0-37-иваново",
+          "id": "ct-APS-0-40-иваново",
           "name": "Иваново",
           "url": "https://yandex.ru/sprav/149057236343/p/edit/main"
         },
         {
-          "id": "ct-APS-0-38-калуга",
+          "id": "ct-APS-0-41-калуга",
           "name": "Калуга",
           "url": "https://yandex.ru/sprav/54216947938/p/edit/main"
         },
         {
-          "id": "ct-APS-0-39-белгород",
+          "id": "ct-APS-0-42-белгород",
           "name": "Белгород",
           "url": "https://yandex.ru/sprav/204922049893/p/edit/main"
         },
         {
-          "id": "ct-APS-0-40-курган",
+          "id": "ct-APS-0-43-курган",
           "name": "Курган",
           "url": "https://yandex.ru/sprav/137373411557/p/edit/main"
         },
         {
-          "id": "ct-APS-0-41-архангельск",
+          "id": "ct-APS-0-44-архангельск",
           "name": "Архангельск",
           "url": "https://yandex.ru/sprav/195049814303/p/edit/main"
         },
         {
-          "id": "ct-APS-0-42-нижневартовск",
+          "id": "ct-APS-0-45-нижневартовск",
           "name": "Нижневартовск",
           "url": "https://yandex.ru/sprav/23021185/edit/main?utm_source=maps&utm_medium=org_card&utm_campaign=owner-button"
         },
         {
-          "id": "ct-APS-0-43-херсон",
+          "id": "ct-APS-0-46-херсон",
           "name": "Херсон",
           "url": "https://yandex.ru/sprav/25756934/edit"
         },
         {
-          "id": "ct-APS-0-44-йошкар-ола",
+          "id": "ct-APS-0-47-йошкар-ола",
           "name": "Йошкар-Ола",
           "url": "https://yandex.ru/sprav/187296247479/p/edit/main"
         },
         {
-          "id": "ct-APS-0-45-кострома",
+          "id": "ct-APS-0-48-кострома",
           "name": "Кострома",
           "url": "https://yandex.ru/sprav/157804514684/p/edit/main"
         },
         {
-          "id": "ct-APS-0-46-благовещенск",
+          "id": "ct-APS-0-49-благовещенск",
           "name": "Благовещенск",
           "url": "https://yandex.ru/sprav/210578955949/p/edit/main"
         },
         {
-          "id": "ct-APS-0-47-комсомольск-на-амуре",
+          "id": "ct-APS-0-50-комсомольск-на-амуре",
           "name": "Комсомольск-на-Амуре",
           "url": "https://yandex.ru/sprav/167777906638/p/edit/main"
         },
         {
-          "id": "ct-APS-0-48-королёв",
+          "id": "ct-APS-0-51-королёв",
           "name": "Королёв",
           "url": "https://yandex.ru/sprav/106104969628/p/edit/main"
         },
         {
-          "id": "ct-APS-0-49-братск",
+          "id": "ct-APS-0-52-братск",
           "name": "Братск",
           "url": "https://yandex.ru/sprav/146061799795/p/edit/main"
         },
         {
-          "id": "ct-APS-0-50-люберцы",
+          "id": "ct-APS-0-53-люберцы",
           "name": "Люберцы",
           "url": "https://yandex.ru/sprav/180546993655/p/edit/main"
         },
         {
-          "id": "ct-APS-0-51-бийск",
+          "id": "ct-APS-0-54-бийск",
           "name": "Бийск",
           "url": "https://yandex.ru/sprav/13968797615/p/edit/main"
         },
         {
-          "id": "ct-APS-0-52-балаково",
+          "id": "ct-APS-0-55-балаково",
           "name": "Балаково",
           "url": "https://yandex.ru/sprav/178521513389/p/edit/"
         },
         {
-          "id": "ct-APS-0-53-красногорск",
+          "id": "ct-APS-0-56-красногорск",
           "name": "Красногорск",
           "url": "https://yandex.ru/sprav/217061179891/p/edit/main"
         },
         {
-          "id": "ct-APS-0-54-каменск-уральский",
+          "id": "ct-APS-0-57-каменск-уральский",
           "name": "Каменск-Уральский",
           "url": "https://yandex.ru/sprav/169642969893/p/edit/main"
         },
         {
-          "id": "ct-APS-0-55-златоуст",
+          "id": "ct-APS-0-58-златоуст",
           "name": "Златоуст",
           "url": "https://yandex.ru/sprav/233837985761/p/edit/main"
         },
         {
-          "id": "ct-APS-0-56-керчь",
+          "id": "ct-APS-0-59-керчь",
           "name": "Керчь",
           "url": "https://yandex.ru/sprav/102318931888/p/edit/main"
         },
         {
-          "id": "ct-APS-0-57-копейск",
+          "id": "ct-APS-0-60-копейск",
           "name": "Копейск",
           "url": "https://yandex.ru/sprav/211624166545/p/edit/main"
         },
         {
-          "id": "ct-APS-0-58-мелитополь",
+          "id": "ct-APS-0-61-мелитополь",
           "name": "Мелитополь",
           "url": "https://yandex.ru/sprav/25755984/edit"
         },
         {
-          "id": "ct-APS-0-59-миасс",
+          "id": "ct-APS-0-62-миасс",
           "name": "Миасс",
           "url": "https://yandex.ru/sprav/181820002445/p/edit/main"
         },
         {
-          "id": "ct-APS-0-60-майкоп",
+          "id": "ct-APS-0-63-майкоп",
           "name": "Майкоп",
           "url": "https://yandex.ru/sprav/69844828771/p/edit/main"
         },
         {
-          "id": "ct-APS-0-61-коломна",
+          "id": "ct-APS-0-64-коломна",
           "name": "Коломна",
           "url": "https://yandex.ru/sprav/171406614637/p/edit/main"
         },
         {
-          "id": "ct-APS-0-62-березники",
+          "id": "ct-APS-0-65-березники",
           "name": "Березники",
           "url": "https://yandex.ru/sprav/128367635353/p/edit/main"
         },
         {
-          "id": "ct-APS-0-63-ковров",
+          "id": "ct-APS-0-66-ковров",
           "name": "Ковров",
           "url": "https://yandex.ru/sprav/195095211701/p/edit/main"
         },
         {
-          "id": "ct-APS-0-64-каспийск",
+          "id": "ct-APS-0-67-каспийск",
           "name": "Каспийск",
           "url": "https://yandex.ru/sprav/60054259141/p/edit/main"
         },
         {
-          "id": "ct-APS-0-65-кисловодск",
+          "id": "ct-APS-0-68-кисловодск",
           "name": "Кисловодск",
           "url": "https://yandex.ru/sprav/171599463428/p/edit/main"
         },
         {
-          "id": "ct-APS-0-66-батайск",
+          "id": "ct-APS-0-69-батайск",
           "name": "Батайск",
           "url": "https://yandex.ru/sprav/6349428425/p/edit/main"
         },
         {
-          "id": "ct-APS-0-67-кызыл",
+          "id": "ct-APS-0-70-кызыл",
           "name": "Кызыл",
           "url": "https://yandex.ru/sprav/193142813873/p/edit/main"
         },
         {
-          "id": "ct-APS-0-68-ессентуки",
+          "id": "ct-APS-0-71-ессентуки",
           "name": "Ессентуки",
           "url": "https://yandex.ru/sprav/92685556982/p/edit/main"
         },
         {
-          "id": "ct-APS-0-69-жуковский",
+          "id": "ct-APS-0-72-жуковский",
           "name": "Жуковский",
           "url": "https://yandex.ru/sprav/220756427179/p/edit/main"
         },
         {
-          "id": "ct-APS-0-70-артём",
+          "id": "ct-APS-0-73-артём",
           "name": "Артём",
           "url": "https://yandex.ru/sprav/113911932443/p/edit/main"
         },
         {
-          "id": "ct-APS-0-71-бердск",
+          "id": "ct-APS-0-74-бердск",
           "name": "Бердск",
           "url": "https://yandex.ru/sprav/2883461537/p/edit/main"
         },
         {
-          "id": "ct-APS-0-72-арзамас",
+          "id": "ct-APS-0-75-арзамас",
           "name": "Арзамас",
           "url": "https://yandex.ru/sprav/100640982006/p/edit/main"
         },
         {
-          "id": "ct-APS-0-73-камышин",
+          "id": "ct-APS-0-76-камышин",
           "name": "Камышин",
           "url": "https://yandex.ru/sprav/238013877655/p/edit/main"
         }
@@ -386,8 +401,8 @@
           "url": "https://yandex.ru/sprav/15350818/edit/main/"
         },
         {
-          "id": "ct-APS-1-1-астана-нур-султан",
-          "name": "Астана/Нур-Султан",
+          "id": "ct-APS-1-1-астана",
+          "name": "Астана",
           "url": "https://yandex.ru/sprav/25279047/edit"
         },
         {
@@ -548,7 +563,209 @@
       ]
     }
   ],
+  "countriesGis": [
+    {
+      "id": "c-APS-gis-0-россия",
+      "name": "Россия",
+      "cities": [
+        {
+          "id": "ct-APS-gis-0-0-москва",
+          "name": "Москва",
+          "url": "https://account.2gis.com/orgs/70000001033946143/dashboard"
+        },
+        {
+          "id": "ct-APS-gis-0-1-санкт-петербург",
+          "name": "Санкт-Петербург",
+          "url": "https://account.2gis.com/orgs/70000001047639125/branches/70000001047639126"
+        },
+        {
+          "id": "ct-APS-gis-0-2-новосибирск",
+          "name": "Новосибирск",
+          "url": "https://account.2gis.com/orgs/70000001047613259/branches/70000001047613260"
+        },
+        {
+          "id": "ct-APS-gis-0-3-екатеринбург",
+          "name": "Екатеринбург",
+          "url": "https://account.2gis.com/orgs/70000001033774343/branches/70000001033774344"
+        },
+        {
+          "id": "ct-APS-gis-0-4-казань",
+          "name": "Казань",
+          "url": "https://account.2gis.com/orgs/70000001047561224/branches/70000001047561225"
+        },
+        {
+          "id": "ct-APS-gis-0-5-красноярск",
+          "name": "Красноярск",
+          "url": "https://account.2gis.com/orgs/70000001047590503/dashboard"
+        },
+        {
+          "id": "ct-APS-gis-0-6-нижний-новгород",
+          "name": "Нижний Новгород",
+          "url": "https://account.2gis.com/orgs/70000001047614564/branches/70000001047614565"
+        },
+        {
+          "id": "ct-APS-gis-0-7-челябинск",
+          "name": "Челябинск",
+          "url": "https://account.2gis.com/orgs/70000001045737559/branches/70000001045737560"
+        },
+        {
+          "id": "ct-APS-gis-0-8-уфа",
+          "name": "Уфа",
+          "url": "https://account.2gis.com/orgs/70000001043325182/branches/70000001043325183"
+        },
+        {
+          "id": "ct-APS-gis-0-9-ростов-на-дону",
+          "name": "Ростов-на-Дону",
+          "url": "https://account.2gis.com/orgs/70000001036115347/branches/70000001036115348"
+        },
+        {
+          "id": "ct-APS-gis-0-10-омск",
+          "name": "Омск",
+          "url": "https://account.2gis.com/orgs/70000001047637246/branches/70000001047637247"
+        },
+        {
+          "id": "ct-APS-gis-0-11-воронеж",
+          "name": "Воронеж",
+          "url": "https://account.2gis.com/orgs/70000001047575400/dashboard"
+        },
+        {
+          "id": "ct-APS-gis-0-12-пермь",
+          "name": "Пермь",
+          "url": "https://account.2gis.com/orgs/70000001021596782/branches/70000001021596783"
+        },
+        {
+          "id": "ct-APS-gis-0-13-волгоград",
+          "name": "Волгоград",
+          "url": "https://account.2gis.com/orgs/70000001047564288/branches/70000001047564289"
+        },
+        {
+          "id": "ct-APS-gis-0-14-саратов",
+          "name": "Саратов",
+          "url": "https://account.2gis.com/orgs/70000001047642177/branches/70000001047642178"
+        },
+        {
+          "id": "ct-APS-gis-0-15-тюмень",
+          "name": "Тюмень",
+          "url": "https://account.2gis.com/orgs/70000001047641457/branches/70000001047641458"
+        },
+        {
+          "id": "ct-APS-gis-0-16-тольятти",
+          "name": "Тольятти",
+          "url": "https://account.2gis.com/orgs/70000001047640240/branches/70000001047640241"
+        },
+        {
+          "id": "ct-APS-gis-0-17-барнаул",
+          "name": "Барнаул",
+          "url": "https://account.2gis.com/orgs/70000001047561210/dashboard"
+        },
+        {
+          "id": "ct-APS-gis-0-18-ижевск",
+          "name": "Ижевск",
+          "url": "https://account.2gis.com/orgs/70000001047584931/dashboard"
+        },
+        {
+          "id": "ct-APS-gis-0-19-иркутск",
+          "name": "Иркутск",
+          "url": "https://account.2gis.com/orgs/70000001047582144/branches/70000001047582145"
+        },
+        {
+          "id": "ct-APS-gis-0-20-кемерово",
+          "name": "Кемерово",
+          "url": "https://account.2gis.com/orgs/70000001047563505/dashboard"
+        },
+        {
+          "id": "ct-APS-gis-0-21-новокузнецк",
+          "name": "Новокузнецк",
+          "url": "https://account.2gis.com/orgs/70000001047614988/branches/70000001047614989"
+        },
+        {
+          "id": "ct-APS-gis-0-22-оренбург",
+          "name": "Оренбург",
+          "url": "https://account.2gis.com/orgs/70000001047638393/branches/70000001047638394"
+        },
+        {
+          "id": "ct-APS-gis-0-23-тула",
+          "name": "Тула",
+          "url": "https://account.2gis.com/orgs/70000001047653983/branches/70000001047653984"
+        },
+        {
+          "id": "ct-APS-gis-0-24-нижневартовск",
+          "name": "Нижневартовск",
+          "url": "https://account.2gis.com/orgs/70000001047615655/dashboard"
+        }
+      ]
+    },
+    {
+      "id": "c-APS-gis-1-казахстан",
+      "name": "Казахстан",
+      "cities": [
+        {
+          "id": "ct-APS-gis-1-0-алматы",
+          "name": "Алматы",
+          "url": "https://account.2gis.com/orgs/70000001047590727/dashboard"
+        },
+        {
+          "id": "ct-APS-gis-1-1-тараз",
+          "name": "Тараз",
+          "url": "https://account.2gis.com/orgs/70000001063456459/branches/70000001063456460"
+        },
+        {
+          "id": "ct-APS-gis-1-2-усть-каменогорск",
+          "name": "Усть-Каменогорск",
+          "url": "https://account.2gis.com/orgs/70000001056690051/dashboard"
+        },
+        {
+          "id": "ct-APS-gis-1-3-павлодар",
+          "name": "Павлодар",
+          "url": "https://account.2gis.com/orgs/70000001056663641/branches/70000001056663642"
+        },
+        {
+          "id": "ct-APS-gis-1-4-семей",
+          "name": "Семей",
+          "url": "https://account.2gis.com/orgs/70000001063471759/branches/70000001063471760"
+        },
+        {
+          "id": "ct-APS-gis-1-5-актау",
+          "name": "Актау",
+          "url": "https://account.2gis.com/orgs/70000001063445277/branches/70000001063445278"
+        }
+      ]
+    },
+    {
+      "id": "c-APS-gis-2-азербайджан",
+      "name": "Азербайджан",
+      "cities": [
+        {
+          "id": "ct-APS-gis-2-0-баку",
+          "name": "Баку",
+          "url": "https://account.2gis.com/orgs/70000001077187774/dashboard"
+        }
+      ]
+    },
+    {
+      "id": "c-APS-gis-3-беларусь",
+      "name": "Беларусь",
+      "cities": [
+        {
+          "id": "ct-APS-gis-3-0-минск",
+          "name": "Минск",
+          "url": "https://account.2gis.com/orgs/70000001058997858/branches/70000001058997859"
+        }
+      ]
+    },
+    {
+      "id": "c-APS-gis-4-узбекистан",
+      "name": "Узбекистан",
+      "cities": [
+        {
+          "id": "ct-APS-gis-4-0-ташкент",
+          "name": "Ташкент",
+          "url": "https://account.2gis.com/orgs/70000001069567504/dashboard"
+        }
+      ]
+    }
+  ],
   "email": "aviastalru@yandex.ru",
   "kpSheetUrl": "https://docs.google.com/spreadsheets/d/17G2YlY7g0LKOV7IBDsrX7uulwqh0wsaFOqKGw9bLVEc/edit?gid=1223548196#gid=1223548196",
-  "kpSyncedAt": "2026-08-05T13:07:17.884520+00:00"
+  "kpSyncedAt": "2026-08-06T11:31:54.977472+00:00"
 }

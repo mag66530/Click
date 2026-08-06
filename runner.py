@@ -35,6 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+import apptime
 import paths
 import yb_playwright as yb
 
@@ -281,9 +282,92 @@ MEM_START_MB = 1200      # выше – новый прогон не начин�
 MEM_SOFT_MB = 1500       # выше – перезапускаем браузер прямо посреди прогона
 MEM_HARD_MB = 1900       # выше – останавливаем прогон, сохранив сделанное
 
+CGROUP_ROOT = Path("/sys/fs/cgroup")
+
+
+def _stat_key(path: Path, key: str) -> int:
+    """Значение по ключу из файла вида «ключ число» построчно. 0 – не вышло."""
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            name, _, value = line.partition(" ")
+            if name == key:
+                return int(value.strip())
+    except (OSError, ValueError):
+        pass
+    return 0
+
+
+def container_memory_mb(root: Path | None = None) -> int:
+    """
+    Память ВСЕГО контейнера в мегабайтах. 0 – спросить не у кого.
+
+    Берём именно «живую» память (anon / total_rss), а не memory.current:
+    в последнюю входит файловый кэш, а его в этой машине бывает гигабайт.
+    По кэшу сторож бил бы тревогу на ровном месте.
+    """
+    root = root or CGROUP_ROOT
+    for path, key in ((root / "memory.stat", "anon"),                  # cgroup v2
+                      (root / "memory" / "memory.stat", "total_rss")):  # cgroup v1
+        got = _stat_key(path, key)
+        if got:
+            return got // (1024 * 1024)
+    return 0
+
+
+def _tree_memory_mb() -> int:
+    """
+    Своё дерево процессов по /proc. Запасной путь, если cgroup не видно.
+
+    Считаем себя и потомков – браузер запускается отдельным процессом и
+    сидит именно там. Чужие процессы не трогаем: на общей машине они не
+    наши, и мешать из-за них работе нельзя.
+    """
+    try:
+        pids = [int(d.name) for d in Path("/proc").iterdir() if d.name.isdigit()]
+    except OSError:
+        return 0
+    parent, rss = {}, {}
+    for pid in pids:
+        try:
+            text = Path(f"/proc/{pid}/status").read_text(encoding="utf-8")
+        except (OSError, ValueError):
+            continue
+        for line in text.splitlines():
+            if line.startswith("PPid:"):
+                parent[pid] = int(line.split()[1])
+            elif line.startswith("VmRSS:"):
+                rss[pid] = int(line.split()[1])
+    mine = {os.getpid()}
+    # Несколько проходов: дети могут перечисляться раньше родителей.
+    for _ in range(4):
+        for pid, ppid in parent.items():
+            if ppid in mine:
+                mine.add(pid)
+    return sum(rss.get(pid, 0) for pid in mine) // 1024
+
 
 def memory_mb() -> int:
-    """Сколько памяти занимает приложение прямо сейчас, в мегабайтах."""
+    """
+    Сколько памяти занято ПРЯМО СЕЙЧАС, в мегабайтах.
+
+    Здесь была слепота, из-за которой сторож памяти не срабатывал почти
+    никогда. Замер брался из /proc/self/status – это память интерпретатора
+    Python. А браузер Playwright живёт ОТДЕЛЬНЫМ процессом, и его 400–500 МБ
+    в замер не попадали вовсе. Приложение видело «занято 300 МБ», спокойно
+    пускало второй прогон, облако считало полтора гигабайта и убивало всё
+    целиком – со страницей «Oh no» и без единой строчки в логе.
+
+    Поэтому спрашиваем у контейнера: он считает всех своих. Не вышло –
+    складываем своё дерево процессов. И только в последнюю очередь
+    возвращаемся к собственной памяти.
+    """
+    for measure in (container_memory_mb, _tree_memory_mb):
+        try:
+            got = measure()
+        except Exception:  # noqa: BLE001 – замер не должен мешать работе
+            got = 0
+        if got:
+            return got
     try:
         with open("/proc/self/status", encoding="utf-8") as f:
             for line in f:
@@ -297,6 +381,44 @@ def memory_mb() -> int:
         return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024
     except Exception:  # noqa: BLE001 – без замера просто не мешаем работать
         return 0
+
+
+def memory_limit_mb(root: Path | None = None) -> int:
+    """Потолок памяти контейнера в мегабайтах. 0 – не задан или не виден."""
+    root = root or CGROUP_ROOT
+    for path in (root / "memory.max",                       # cgroup v2
+                 root / "memory" / "memory.limit_in_bytes"):  # cgroup v1
+        try:
+            raw = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if raw == "max":
+            continue
+        try:
+            value = int(raw)
+        except ValueError:
+            continue
+        # «Без ограничения» пишут гигантским числом – это не потолок.
+        if 0 < value < (1 << 62):
+            return value // (1024 * 1024)
+    return 0
+
+
+def mem_gates() -> tuple[int, int, int]:
+    """
+    Пороги сторожа: (не начинать, перезапустить браузер, остановиться).
+
+    Если контейнер сам называет свой потолок – считаем от него и берём то,
+    что строже. Числа в константах проверены на нынешнем тарифе; окажется
+    тариф скромнее – пороги опустятся сами, а не будут ждать, пока облако
+    убьёт приложение.
+    """
+    cap = memory_limit_mb()
+    if not cap:
+        return MEM_START_MB, MEM_SOFT_MB, MEM_HARD_MB
+    return (min(MEM_START_MB, int(cap * 0.55)),
+            min(MEM_SOFT_MB, int(cap * 0.68)),
+            min(MEM_HARD_MB, int(cap * 0.82)))
 
 
 def live_runs_everywhere() -> list[tuple[str, str]]:
@@ -355,7 +477,8 @@ def busy_reason(project_id: str, kind: str) -> str:
     # И отдельно – по факту занятой памяти. Прогонов может быть мало, а память
     # уже на исходе: сотня городов ест куда больше десятка.
     used = memory_mb()
-    if used and used > MEM_START_MB:
+    start_at, _, _ = mem_gates()
+    if used and used > start_at:
         return (f"Сейчас занято {used} МБ памяти – для нового прогона это много, "
                 "приложение может не выдержать. Дождитесь окончания текущих "
                 "или обновите страницу через минуту.")
@@ -372,9 +495,15 @@ def request_stop(project_id: str, kind: str | None = None) -> None:
 
 
 def run_log_path(project_id: str, kind: str, report_name: str) -> Path:
-    """Файл лога рядом с отчётом: имя то же, расширение .log."""
-    folder = p_reports(project_id) if kind == "publish" else p_reports_actualize(project_id)
-    return folder / (Path(report_name).name.replace(".json", "") + ".log")
+    """
+    Файл лога рядом с отчётом: имя то же, расширение .log.
+
+    Папку берём той же функцией, что и сам отчёт. Здесь стояла своя строчка
+    с двумя вариантами – и про 2ГИС она не знала: лог сохранялся рядом с
+    отчётом 2ГИС, а искался в папке Яндекса. Кнопка «Лог (.txt)» получалась
+    вечно серой, с перечёркнутым курсором.
+    """
+    return _report_folder(project_id, kind) / (Path(report_name).name.replace(".json", "") + ".log")
 
 
 def _snapshot_log(project_id: str, report_path: Path, kind: str | None = None) -> None:
@@ -418,7 +547,7 @@ def read_live_log(project_id: str, kind: str | None = None, tail: int = 40_000) 
 
 def _append_log(project_id: str, level: str, msg: str, kind: str | None = None) -> None:
     kind = _kind(kind)
-    line = f"[{datetime.now().strftime('%H:%M:%S')}] [{level}] {msg}\n"
+    line = f"[{apptime.stamp()}] [{level}] {msg}\n"
     _touch_lock(project_id, kind)
     try:
         live = p_live_log(project_id, kind)
@@ -432,7 +561,7 @@ def _append_log(project_id: str, level: str, msg: str, kind: str | None = None) 
         pass
     try:
         p_logs(project_id).mkdir(parents=True, exist_ok=True)
-        day = datetime.now().strftime("%Y-%m-%d")
+        day = apptime.stamp("%Y-%m-%d")
         with (p_logs(project_id) / f"{kind}-{day}.log").open("a", encoding="utf-8") as f:
             f.write(line)
     except OSError:
@@ -670,7 +799,7 @@ def _publish_worker(
 
     started_at = _now_iso()
     start_ts = time.time()
-    report_name = f"report-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.json"
+    report_name = f"report-{apptime.stamp('%Y-%m-%dT%H-%M-%S')}.json"
     report_path = p_reports(project_id) / report_name
 
     results: list[dict] = []
@@ -776,6 +905,29 @@ def _publish_worker(
                     stopped = True
                     _append_log(project_id, "INFO", "⏹  Получен сигнал остановки – завершаю")
                     break
+
+                # Сторож памяти. У актуализации он стоял с самого начала, а у
+                # публикации его не было вовсе – и падала она молча: облако
+                # убивало приложение целиком, в логе ни строчки, на экране
+                # «Oh no». Сторож один и тот же: перевалило за мягкий порог –
+                # перезапускаем браузер, за жёсткий – аккуратно встаём.
+                used = memory_mb()
+                _, soft_at, hard_at = mem_gates()
+                if used > hard_at:
+                    stopped = True
+                    _append_log(project_id, "WARN",
+                                f"⏹  ПАМЯТЬ · занято {used} МБ – останавливаюсь, чтобы не "
+                                "уронить приложение. Отправленное сохранено в отчёте, "
+                                "оставшиеся города можно догнать следующим прогоном.")
+                    break
+                if used > soft_at:
+                    _append_log(project_id, "WARN",
+                                f"  ♻️ ПАМЯТЬ · занято {used} МБ – перезапускаю браузер, "
+                                "это вернёт несколько сотен мегабайт")
+                    try:
+                        browser.restart()
+                    except Exception as e:  # noqa: BLE001 – перезапуск не должен ронять прогон
+                        _append_log(project_id, "WARN", f"  ♻️ перезапуск не вышел: {e}")
 
                 processed += 1
                 city = task.get("cityName", "?")
@@ -942,7 +1094,7 @@ def p_screenshots(project_id: str) -> Path:
 def _save_failure_screenshot(project_id: str, browser, city: str) -> Path | None:
     try:
         safe = re.sub(r"[^\w\-]+", "-", city or "город")[:30]
-        fp = p_screenshots(project_id) / f"{datetime.now().strftime('%H-%M-%S')}-{safe}.png"
+        fp = p_screenshots(project_id) / f"{apptime.stamp('%H-%M-%S')}-{safe}.png"
         browser.page.screenshot(path=str(fp))
         return fp
     except Exception:  # noqa: BLE001
@@ -1405,7 +1557,7 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
     yb.set_logger(lambda level, msg: _append_log(project_id, level, msg, kind=kind))
     started_at = _now_iso()
     start_ts = time.time()
-    report_name = f"actualize-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.json"
+    report_name = f"actualize-{apptime.stamp('%Y-%m-%dT%H-%M-%S')}.json"
     report_path = p_reports_actualize(project_id, platform) / report_name
 
     results: list[dict] = []
@@ -1502,14 +1654,15 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                 # логе, со всеми чужими вкладками заодно. Теперь беда видна
                 # заранее и лечится по-хорошему.
                 used = memory_mb()
-                if used > MEM_HARD_MB:
+                _, soft_at, hard_at = mem_gates()
+                if used > hard_at:
                     stopped = True
                     _append_log(project_id, "WARN",
                                 f"⏹  ПАМЯТЬ · занято {used} МБ – останавливаюсь, чтобы не "
                                 "уронить приложение. Сделанное сохранено в отчёте, "
                                 "оставшиеся города можно догнать следующим прогоном.")
                     break
-                if used > MEM_SOFT_MB:
+                if used > soft_at:
                     _append_log(project_id, "WARN",
                                 f"  ♻️ ПАМЯТЬ · занято {used} МБ – перезапускаю браузер, "
                                 "это вернёт несколько сотен мегабайт")
@@ -1526,6 +1679,15 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                            "status": "failed", "reason": f"Критическая ошибка: {e}", "durationMs": 0}
                 res["country"] = country
                 res["package"] = country
+
+                # Снимок экрана на неудачу. Разбирать «плашка была или нет» по
+                # одной строчке в отчёте невозможно: отчёт говорит «нет», глаза
+                # говорят «есть», и проверить нечем. По картинке – минута.
+                if res.get("status") == "failed":
+                    shot = _save_failure_screenshot(project_id, browser, task.get("cityName", ""))
+                    if shot:
+                        res["screenshot"] = shot.name
+                        _append_log(project_id, "INFO", f"  📸 Скриншот сбоя: {shot.name}")
 
                 # Сессия слетела – дальше идти незачем: остальные города упрутся
                 # в ту же страницу входа. Раньше прогон честно обходил все 58

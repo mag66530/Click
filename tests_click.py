@@ -1595,57 +1595,219 @@ def test_gis_answer_and_actualize() -> None:
             eq("без подтверждения ответ успешным не считается", silent["status"], "failed")
             check("и человеку сказано, что делать", "вручную" in silent["reason"], silent["reason"])
 
-            # ── «Данные верны» ──────────────────────────────────────
-            page.set_content("""
-            <html><body style="margin:0">
-              <div style="height:900px">много контента</div>
-              <div class="banner">Данные о компании не обновлялись достаточно давно,
-                они не изменились?
-                <a href="#" onclick="window.__ok=1;document.body.insertAdjacentHTML('beforeend',
-                   '<div>Спасибо за подтверждение данных</div>');return false">Данные верны</a>
-              </div>
-            </body></html>""")
-            found = gis._mark_ok_button(page)  # noqa: SLF001
-            check("кнопка «Данные верны» найдена", bool(found), str(found))
-            page.locator('[data-click-ok="1"]').first.click()
-            check("клик попал именно в неё", page.evaluate("() => window.__ok === 1"))
-            check("плашка подтверждения замечена", page.evaluate(gis._ACTUALIZE_TOAST_JS))  # noqa: SLF001
-
-            page.set_content("""
-            <html><body><h1>Данные о компании</h1>
-              <div>Название и филиалы</div><div>Сферы деятельности</div></body></html>""")
-            look = gis._mark_ok_button(page)  # noqa: SLF001
-            check("плашки нет – подтверждать нечего, и это не ошибка",
-                  not look["found"] and not look["banner"] and look["ready"], str(look))
-
-            # Надпись спрятана глубже – всё равно находим.
-            page.set_content("""
-            <html><body style="margin:0"><h1>Данные о компании</h1>
-              <div class="banner">Данные о компании не обновлялись достаточно давно,
-                они не изменились?
-                <a href="#"><span><span>Данные верны</span></span></a>
-              </div></body></html>""")
-            deep = gis._mark_ok_button(page)  # noqa: SLF001
-            check("вложенная надпись «Данные верны» найдена", deep["found"], str(deep))
-            eq("для клика взята ссылка целиком",
-               page.locator('[data-click-ok="1"]').evaluate("el => el.tagName"), "A")
-
-            # Плашка есть, а кнопку опознать не вышло – это НЕ «нечего делать».
-            page.set_content("""
-            <html><body><h1>Данные о компании</h1>
-              <div>Данные о компании не обновлялись достаточно давно, они не изменились?</div>
-              <div>Подтвердить</div></body></html>""")
-            odd = gis._mark_ok_button(page)  # noqa: SLF001
-            check("плашка замечена, даже когда кнопка не опознана",
-                  odd["banner"] and not odd["found"], str(odd))
-
-            # Пустая страница – не «подтверждать нечего», а «не дорисовалась».
-            page.set_content("<html><body><div id='root'></div></body></html>")
-            blank = gis._mark_ok_button(page)  # noqa: SLF001
-            check("пустая страница опознана как недорисованная",
-                  not blank["ready"] and not blank["found"], str(blank))
+            gis_actualize_checks(gis, page)
         finally:
             browser.close()
+
+
+# Страница «Данные о компании» из живого кабинета: слева меню (в нём тоже
+# написано «Данные о компании» – на этом прежняя проверка готовности и
+# ломалась), справа карточка, сверху плашка.
+GIS_COMPANY_PAGE = """
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;font:14px sans-serif">
+  <nav style="float:left;width:220px">
+    <div>Обзор</div><div>Данные о компании</div><div>Отзывы</div><div>Фотографии</div>
+  </nav>
+  <div style="margin-left:240px">
+    <h1>Данные о компании</h1>
+    __BANNER__
+    <div>Название и филиал: Стальметурал, Пермь</div>
+    <div>Сферы деятельности: металлопрокат, трубы, профнастил</div>
+    <div>Контакты: +7 (342) 000-00-00, office@example.ru</div>
+    <div>Время работы: пн–пт 08:00–17:00, сб 09:00–14:00</div>
+    <div>Адрес: улица Героев Хасана, 105, корпус 3, офис 210</div>
+  </div>
+  <script>
+    function confirmData() {
+      window.__ok = (window.__ok || 0) + 1;
+      const b = document.querySelector('.CQydym6f');
+      if (b) b.remove();
+      document.body.insertAdjacentHTML('beforeend',
+        '<div class="toast">Спасибо за подтверждение данных</div>');
+    }
+  </script>
+</body></html>
+"""
+
+# Плашка ровно такая, как в кабинете: обычный div, роли нет, фокуса нет.
+# Два вида, и ни один прежний поиск не находил.
+#
+#   • одной строкой – вопрос и надпись в ОДНОМ текстовом узле (в браузере
+#     заказчика это блок 620×20 с классами wkjaALol / -ykFvMpD);
+#   • надпись отдельным словом, но не «Данные верны», а «Да, данные верны».
+GIS_BANNERS = (
+    ("одной строкой", """
+    <div class="CQydym6f WOncRph6 withLeftItem" style="padding:12px;background:#FFF7E6">
+      <div class="wkjaALol -ykFvMpD" onclick="confirmData()">Данные о компании не
+        обновлялись достаточно давно, они не изменились? Данные верны</div>
+    </div>
+"""),
+    ("надпись отдельно", """
+    <div class="CQydym6f WOncRph6 withLeftItem" style="padding:12px;background:#FFF7E6">
+      <div class="wkjaALol -ykFvMpD">Данные о компании не обновлялись достаточно давно,
+        они не изменились?
+        <span class="act" style="color:#D97F00" onclick="confirmData()">Да, данные верны</span>
+      </div>
+    </div>
+"""),
+)
+GIS_BANNER = GIS_BANNERS[0][1]
+
+
+def gis_actualize_checks(gis, page) -> None:
+    """
+    Подтверждение данных 2ГИС – на странице, устроенной как настоящая.
+
+    Здесь дважды ломалось одно и то же, и оба раза прогон писал «плашки нет»
+    на все города подряд:
+      • готовность страницы определяли по словам «Данные о компании», а так
+        называется пункт меню слева – проверка была истинной всегда;
+      • надпись искали как элемент, весь текст которого равен «Данные верны»,
+        а в кабинете это кусок строки внутри обычного div.
+    Поэтому проверки ниже идут по живому адресу и по живой вёрстке.
+    """
+    print("\n▸ 2ГИС: подтверждение данных на странице как в кабинете")
+    box = {"html": ""}
+    page.route("**/*", lambda route: route.fulfill(
+        status=200, content_type="text/html; charset=utf-8", body=box["html"]))
+    task = {"cityName": "Пермь", "gisUrl": "https://account.2gis.com/orgs/70000001079192862/"}
+
+    def serve(banner: str) -> None:
+        box["html"] = GIS_COMPANY_PAGE.replace("__BANNER__", banner)
+
+    def open_page() -> None:
+        page.goto("https://account.2gis.com/orgs/70000001079192862/company")
+        page.wait_for_timeout(200)
+
+    # Тесту незачем ждать облачные тридцать секунд: проверяем логику, а не
+    # терпение. Сроки берём из тех же констант, что и прогон.
+    was = (gis.ACTUALIZE_WAIT_MS, gis.ACTUALIZE_PROOF_MS)
+    gis.ACTUALIZE_WAIT_MS, gis.ACTUALIZE_PROOF_MS = 4_000, 3_000
+    try:
+        # ── Главное: плашка из кабинета, обе её разновидности ───────
+        for name, banner in GIS_BANNERS:
+            serve(banner)
+            open_page()
+            whole = page.evaluate(r"""() => {
+              const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+              return Array.from(document.querySelectorAll('*'))
+                .filter(el => /^данные\s+верны[.!]?$/i.test(norm(el.textContent))).length;
+            }""")
+            eq(f"{name}: отдельного элемента «Данные верны» на странице НЕТ", whole, 0)
+            look = gis.look_at_page(page)
+            check(f"{name}: место надписи всё равно найдено", bool(look.get("spot")),
+                  str(look)[:200])
+            check(f"{name}: и плашка замечена", look.get("banner"), str(look)[:200])
+
+            serve(banner)
+            res = gis.actualize_city(page, task)
+            eq(f"{name}: данные подтверждены", res["status"], "actualized")
+            eq(f"{name}: нажали ровно один раз", page.evaluate("() => window.__ok"), 1)
+            check(f"{name}: успех доказан, а не предположен",
+                  "Спасибо за подтверждение" in res["reason"] or "убрал" in res["reason"],
+                  res["reason"])
+
+        # ── Плашка в теневом корне: innerText её не видит ───────────
+        serve("""<div id="host"></div><script>
+          document.getElementById('host').attachShadow({mode:'open'}).innerHTML =
+            '<div style="padding:12px">Данные о компании не обновлялись достаточно давно, ' +
+            'они не изменились? <span style="color:#D97F00" ' +
+            'onclick="window.confirmData()">Данные верны</span></div>';
+        </script>""")
+        open_page()
+        eq("обычный innerText в теневой корень не заглядывает",
+           page.evaluate("() => /не обновлялись/i.test(document.body.innerText)"), False)
+        deep = gis.look_at_page(page)
+        check("а мы плашку в теневом корне видим", deep.get("banner"), str(deep)[:200])
+        check("и надпись в нём находим", bool(deep.get("spot")), str(deep)[:200])
+
+        # ── Плашки нет – подтверждать нечего, и это не ошибка ───────
+        serve("")
+        none = gis.actualize_city(page, task)
+        eq("без плашки – «не требуется»", none["status"], "not-needed")
+
+        # ── Кабинет сменил слова на надписи – ищем внутри плашки ────
+        serve("""<div class="CQydym6f" style="padding:12px">Данные о компании не обновлялись
+                 достаточно давно, они не изменились?
+                 <span style="color:#D97F00" onclick="confirmData()">Всё верно</span></div>""")
+        open_page()
+        other = gis.look_at_page(page)
+        check("другие слова внутри плашки тоже находим",
+              (other.get("spot") or {}).get("near"), str(other.get("spot")))
+        serve("""<div class="CQydym6f" style="padding:12px">Данные о компании не обновлялись
+                 достаточно давно, они не изменились?
+                 <span style="color:#D97F00" onclick="confirmData()">Всё верно</span></div>""")
+        alt = gis.actualize_city(page, task)
+        eq("и подтверждаем ими", alt["status"], "actualized")
+
+        # Но по всей странице – не ищем: «всё верно» бывает и в отзыве.
+        serve("""<div>Отзыв: всё верно и в срок, спасибо</div>""")
+        stray = gis.look_at_page(page)
+        eq("вне плашки запасные слова не ловим", bool(stray.get("spot")), False)
+
+        # ── Плашка есть, надписи нет – это НЕ «нечего делать» ───────
+        serve("""<div class="CQydym6f">Данные о компании не обновлялись достаточно давно,
+                 они не изменились? <span>Обновить</span></div>""")
+        odd = gis.actualize_city(page, task)
+        eq("плашка без надписи – честный отказ", odd["status"], "failed")
+        check("и человеку сказано, что делать", "вручную" in odd["reason"], odd["reason"])
+        serve("""<div class="CQydym6f">Данные о компании не обновлялись достаточно давно,
+                 они не изменились? <span>Обновить</span></div>""")
+        open_page()
+        blind = gis.look_at_page(page)
+        check("разметка плашки уходит в лог – разбирать будет по чему",
+              "CQydym6f" in (blind.get("markup") or ""), (blind.get("markup") or "")[:120])
+
+        # ── Организация с филиалами: адрес меняется, страница та же ──
+        #
+        # Кабинет уводит с `/company` на `/orgs/<id>/branches/<филиал>` – и это
+        # ТА ЖЕ страница «Данные о компании», только конкретного филиала.
+        # Проверка «в адресе есть /company» объявила двадцать городов из
+        # двадцати одного «увели не туда», хотя стояли ровно где надо.
+        serve(GIS_BANNER + """<script>
+              document.title = 'Личный кабинет 2ГИС: Данные о компании — МетПромИнтекс';
+              history.replaceState({}, '', '/orgs/70000001079192862/branches/70000001079192863');
+              </script>""")
+        branch = gis.actualize_city(page, task)
+        eq("филиал – это не «увели не туда»", branch["status"], "actualized")
+
+        # ── Карточку удалили из справочника ────────────────────────
+        serve("""<script>document.title = 'Личный кабинет 2ГИС';
+                 history.replaceState({}, '', '/orgs/70000001079192862/restore')</script>
+                 <div>Компания «МетПромИнтекс» удалена из справочника 2ГИС.
+                 Не нашли вашу компанию?</div>""")
+        gone = gis.actualize_city(page, task)
+        eq("удалённая карточка – отдельный случай", gone["status"], "failed")
+        check("и сказано человеческими словами",
+              "удалена из справочника" in gone["reason"], gone["reason"])
+
+        # ── Кабинет увёл на другую страницу ────────────────────────
+        serve("""<script>document.title = 'Личный кабинет 2ГИС: Обзор';
+                 history.replaceState({}, '', '/orgs/70000001079192862/dashboard')</script>
+                 <div>Обзор организации, показатели и рейтинг за последний месяц</div>""")
+        away = gis.actualize_city(page, task)
+        eq("увели – не молчим", away["status"], "failed")
+        check("и написано куда", "dashboard" in away["reason"], away["reason"])
+
+        # ── Пустая страница – «не дорисовалась», а не «нечего делать» ──
+        box["html"] = "<html><body><div id='root'></div></body></html>"
+        blank = gis.actualize_city(page, task)
+        eq("пустая страница – не «не требуется»", blank["status"], "failed")
+        check("сказано, что не дорисовалась", "дорисов" in blank["reason"], blank["reason"])
+
+        # ── Надпись перекрыта чужим блоком – жмём по элементу ───────
+        serve(GIS_BANNER + """<div style="position:fixed;left:0;top:0;right:0;bottom:0;
+              background:rgba(0,0,0,.2)"></div>""")
+        open_page()
+        over = gis.look_at_page(page)
+        check("перекрытие замечено", over.get("spot", {}).get("covered"), str(over.get("spot")))
+        how = gis._click_spot(page, over["spot"], mouse=False)  # noqa: SLF001
+        check("сквозь перекрытие всё равно нажали", bool(how), how)
+        eq("и обработчик сработал", page.evaluate("() => window.__ok"), 1)
+    finally:
+        gis.ACTUALIZE_WAIT_MS, gis.ACTUALIZE_PROOF_MS = was
+        page.unroute("**/*")
 
 
 def yb_extract(url: str):
@@ -2171,6 +2333,21 @@ def test_run_logs(tmp: Path) -> None:
            "actualize-2026-08-04T10-00-00.log")
         eq("лога нет – пустая строка, а не падение",
            runner.read_run_log(pid, "publish", "report-нет-такого.json"), "")
+
+        # То же самое для 2ГИС. Здесь была своя строчка с двумя вариантами,
+        # про 2ГИС она не знала: лог ложился рядом с отчётом 2ГИС, а искался
+        # в папке Яндекса – и кнопка «Лог (.txt)» была вечно серой.
+        runner._append_log(pid, "INFO", "строка 2ГИС", kind="actualize-gis")  # noqa: SLF001
+        gis_report = (runner.p_reports_actualize(pid, runner.GIS)
+                      / "actualize-2026-08-06T19-12-04.json")
+        gis_report.parent.mkdir(parents=True, exist_ok=True)
+        gis_report.write_text("{}", encoding="utf-8")
+        runner._snapshot_log(pid, gis_report, kind="actualize-gis")  # noqa: SLF001
+        got = runner.read_run_log(pid, "actualize-gis", gis_report.name)
+        check("лог 2ГИС читается там же, где сохранён", "строка 2ГИС" in got, got[:80])
+        eq("и лежит он в папке 2ГИС",
+           runner.run_log_path(pid, "actualize-gis", gis_report.name).parent.name,
+           runner.p_reports_actualize(pid, runner.GIS).name)
     finally:
         runner.USERS_DATA = paths.data_root()
 
@@ -3041,13 +3218,52 @@ def test_two_people_at_once(tmp: Path) -> None:
     # Замер памяти должен работать по-настоящему, а не возвращать ноль.
     check("память измеряется", r.memory_mb() > 0, r.memory_mb())
 
+    # И считать он должен ВЕСЬ контейнер, а не только себя. Здесь была
+    # слепота: браузер – отдельный процесс, его полгигабайта в замер не
+    # попадали, сторож молчал, а облако убивало приложение целиком.
+    import inspect
+    src = inspect.getsource(r.memory_mb)
+    check("замер смотрит шире своего процесса",
+          "container_memory_mb" in src and "_tree_memory_mb" in src, src[:200])
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "memory").mkdir()
+        (root / "memory" / "memory.stat").write_text(
+            "cache 1083813888\ntotal_rss 337223680\ntotal_cache 1083813888\n", encoding="utf-8")
+        eq("cgroup v1: берём живую память, а не кэш", r.container_memory_mb(root), 321)
+        (root / "memory.stat").write_text("anon 524288000\nfile 900000000\n", encoding="utf-8")
+        eq("cgroup v2: тоже живую", r.container_memory_mb(root), 500)
+        (root / "memory.max").write_text("max\n", encoding="utf-8")
+        eq("потолок «max» – это не потолок", r.memory_limit_mb(root), 0)
+        (root / "memory.max").write_text(str(1024 * 1024 * 1024), encoding="utf-8")
+        eq("потолок читается", r.memory_limit_mb(root), 1024)
+
+    # Пороги подстраиваются под потолок контейнера, но строже, а не мягче.
+    saved_limit = r.memory_limit_mb
+    try:
+        r.memory_limit_mb = lambda *a, **k: 0
+        eq("потолка не видно – пороги прежние", r.mem_gates(),
+           (r.MEM_START_MB, r.MEM_SOFT_MB, r.MEM_HARD_MB))
+        r.memory_limit_mb = lambda *a, **k: 1024
+        gates = r.mem_gates()
+        check("тариф скромный – пороги опустились", gates[2] < r.MEM_HARD_MB, str(gates))
+        check("и по-прежнему по возрастанию", gates[0] < gates[1] < gates[2], str(gates))
+        r.memory_limit_mb = lambda *a, **k: 8192
+        eq("тариф щедрый – прежние числа, а не выше", r.mem_gates(),
+           (r.MEM_START_MB, r.MEM_SOFT_MB, r.MEM_HARD_MB))
+    finally:
+        r.memory_limit_mb = saved_limit
+
     # Внутри прогона память тоже сторожится: мягкий порог – перезапуск
     # браузера, жёсткий – аккуратная остановка с сохранённым отчётом.
-    import inspect
-    loop = inspect.getsource(r._actualize_worker)
-    check("в прогоне есть сторож памяти", "MEM_HARD_MB" in loop and "MEM_SOFT_MB" in loop)
-    check("жёсткий порог останавливает прогон", "stopped = True" in loop)
-    check("мягкий порог перезапускает браузер", "browser.restart()" in loop)
+    # У ПУБЛИКАЦИИ сторожа не было вовсе – она падала молча.
+    for name, loop in (("актуализации", inspect.getsource(r._actualize_worker)),
+                       ("публикации", inspect.getsource(r._publish_worker))):
+        check(f"в прогоне {name} есть сторож памяти",
+              "mem_gates()" in loop and "memory_mb()" in loop)
+        check(f"жёсткий порог останавливает прогон {name}", "stopped = True" in loop)
+        check(f"мягкий порог перезапускает браузер в прогоне {name}",
+              "browser.restart()" in loop)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -3455,7 +3671,7 @@ def test_module_attrs_exist() -> None:
 
     watched = ("llm", "reviews", "yb_playwright", "runner", "repo_store",
                "projects_data", "ui_theme", "paths", "build", "kp_audit",
-               "kp_sheet", "playwright_worker")
+               "kp_sheet", "playwright_worker", "apptime", "gis_playwright")
     mods = {}
     for name in watched:
         try:
@@ -3659,6 +3875,7 @@ def test_one_build() -> None:
     один поток перезагружал модули, а другой их импортировал. Ту же работу
     Streamlit делает сам и делает безопасно.
     """
+    import apptime
     import build
     import kp_audit
     import kp_sheet
@@ -3675,6 +3892,7 @@ def test_one_build() -> None:
     print("\n▸ Одна метка сборки на всё приложение")
 
     mods = {
+        "apptime": apptime,
         "kp_audit": kp_audit, "kp_sheet": kp_sheet, "llm": llm, "paths": _paths,
         "playwright_worker": playwright_worker, "projects_data": projects_data,
         "repo_store": repo_store, "reviews": reviews, "runner": runner,
@@ -3726,26 +3944,49 @@ def test_yandex_domain() -> None:
 
 def test_local_time() -> None:
     """
-    Время отчёта показываем по часам человека.
+    Время показывается по Екатеринбургу, а не по часам сервера.
 
-    В файл оно пишется в UTC, и в шапке стояло «07:33», когда в логе рядом
-    было «12:33» – выглядело как посторонний старый отчёт.
+    Заказчик: «пусть время показывает актуально на момент прогона по
+    Екатеринбургу». В облаке сервер живёт по UTC, и в логе стояло 11:56,
+    когда в Екатеринбурге было почти 17:00. Дата при этом совпадала – и
+    выглядело так, будто открыт какой-то посторонний прогон.
     """
-    from datetime import datetime, timezone
-    import streamlit_app as app
-    print("\n▸ Время отчёта")
+    from datetime import datetime, timedelta, timezone
 
-    iso = "2026-08-04T07:33:44.123456+00:00"
-    got = app.local_time(iso)
-    expect = datetime.fromisoformat(iso).astimezone().strftime("%d.%m.%Y, %H:%M:%S")
-    eq("время переведено в местное", got, expect)
-    check("формат как в оригинале (дд.мм.гггг)", got.count(".") >= 2 and ", " in got, got)
+    import apptime
+    import streamlit_app as app
+    print("\n▸ Время по Екатеринбургу")
+
+    eq("часовой пояс – плюс пять", apptime.TZ.utcoffset(None), timedelta(hours=5))
+    check("имя пояса человеческое", "катеринбург" in apptime.TZ_NAME.lower(), apptime.TZ_NAME)
+
+    # UTC-время из файла отчёта показывается плюс пять часов.
+    eq("11:56 UTC показывается как 16:56",
+       app.local_time("2026-08-06T11:56:01+00:00"), "06.08.2026, 16:56:01")
+    eq("время без пояса считаем UTC",
+       app.local_time("2026-08-06T11:56:01"), "06.08.2026, 16:56:01")
+    eq("чужой пояс тоже переводится",
+       app.local_time("2026-08-06T14:56:01+03:00"), "06.08.2026, 16:56:01")
+    eq("дата переходит через полночь правильно",
+       app.local_time("2026-08-06T21:30:00+00:00"), "07.08.2026, 02:30:00")
+
     eq("пустое значение не ломает", app.local_time(None), "")
     eq("мусор отдаётся как есть", app.local_time("не дата"), "не дата")
-    check("время без часового пояса считаем UTC",
-          app.local_time("2026-08-04T07:33:44")
-          == datetime(2026, 8, 4, 7, 33, 44, tzinfo=timezone.utc).astimezone()
-             .strftime("%d.%m.%Y, %H:%M:%S"))
+
+    # Отметка для лога и имён файлов – тоже по Екатеринбургу.
+    now_utc = datetime.now(timezone.utc)
+    hh = apptime.stamp("%H")
+    expect = (now_utc + timedelta(hours=5)).strftime("%H")
+    check("отметка лога взята по Екатеринбургу", hh == expect, f"{hh} против {expect}")
+
+    # Строка живого лога и имя отчёта идут через apptime, а не через часы машины.
+    import inspect
+
+    import runner
+    src = inspect.getsource(runner)
+    check("в логе прогона нет времени машины",
+          "datetime.now().strftime" not in src,
+          "где-то осталось datetime.now().strftime")
 
 
 def main() -> int:

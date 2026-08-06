@@ -410,8 +410,12 @@ _PAGE_READY_JS = r"""
 }
 """
 
+# Кабинет может написать «нет отзывов» по-разному, и угадывать формулировку –
+# то же самое, что угадывать классы. Поэтому это подсказка, а не приговор:
+# главный признак пустого списка – страница устоялась, а карточек нет.
 _EMPTY_LIST_JS = r"""
-() => /(нет\s+отзывов|отзывов\s+нет|ничего\s+не\s+найдено|пока\s+нет)/i.test(document.body.innerText || '')
+() => /(нет\s+отзывов|отзывов\s+нет|ничего\s+не\s+найдено|пока\s+нет|все\s+отзывы)/i
+       .test(document.body.innerText || '')
 """
 
 
@@ -447,33 +451,51 @@ def read_reviews(page: Page, url: str, navigate: bool = True,
     # адреса. Первый заход хватал предварительный список – и в очередь
     # попадали отзывы, на которые давно ответили. Считаем список готовым,
     # когда два чтения подряд дают одно и то же число карточек.
-    data, ready, same, was = None, False, 0, -1
+    #
+    # Пустой список узнаём так же – по устоявшейся странице, а не по словам
+    # «нет отзывов». Формулировку кабинет волен сменить, и тогда города, где
+    # всё отвечено, получали пугающее «кабинет не отдал список»: прогон ждал
+    # двадцать секунд знакомой надписи, не дожидался и объявлял поломку.
+    data, same, was = None, 0, -1
     deadline = time.time() + (REVIEWS_WAIT_MS / 1000 if navigate else 5)
     while time.time() < deadline:
         fresh = _reviews_on_page(page, org_id)
+        count = len(fresh["items"]) if fresh else -1
+        same = same + 1 if count == was and count >= 0 else 0
+        was = count
         if fresh and fresh["items"]:
-            data = fresh
-            same = same + 1 if len(fresh["items"]) == was else 0
-            was = len(fresh["items"])
+            data = fresh                    # пригодится, если время выйдет
             if same >= 1:
                 break
-        try:
-            ready = bool(page.evaluate(_PAGE_READY_JS)) and bool(page.evaluate(_EMPTY_LIST_JS))
-        except Exception:  # noqa: BLE001
-            ready = False
-        if ready and not data:
+        # Карточек нет, страница устоялась и раздел отзывов на месте – значит,
+        # отвечать действительно нечего. Но если разметку карточек мы просто
+        # не разобрали (skipped), пустотой это считать нельзя.
+        if count == 0 and same >= 2 and not (fresh or {}).get("skipped") and _reviews_ready(page):
             data = {"items": [], "skipped": 0}
             break
         page.wait_for_timeout(700)
 
     if data is None:
-        out["reason"] = ("Страница отзывов не открылась – кабинет 2ГИС не отдал список. "
-                         "Проверьте вход в 2ГИС в «Настройках»")
+        where = ""
+        try:
+            where = f" (открыт адрес {page.url})"
+        except Exception:  # noqa: BLE001
+            where = ""
+        out["reason"] = ("Страница отзывов не открылась – кабинет 2ГИС не отдал список"
+                         f"{where}. Проверьте вход в 2ГИС в «Настройках»")
         return out
 
     out.update(ok=True, items=data["items"], shown=len(data["items"]),
                skipped=data.get("skipped", 0))
     return out
+
+
+def _reviews_ready(page: Page) -> bool:
+    """Раздел отзывов на месте: либо кабинет сам сказал «пусто», либо виден список."""
+    try:
+        return bool(page.evaluate(_EMPTY_LIST_JS)) or bool(page.evaluate(_PAGE_READY_JS))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def looks_like_login_page(page: Page) -> bool:
@@ -769,52 +791,359 @@ def _mark_button(page: Page, rx: str) -> dict | None:
 # компании не обновлялись достаточно давно, они не изменились?» с кнопкой
 # «Данные верны». Нажали – слева внизу всплывает «Спасибо за подтверждение
 # данных». Плашки нет – значит, подтверждать нечего, и это не ошибка.
+#
+# Здесь дважды была ОДНА И ТА ЖЕ ошибка, и оба раза прогон писал в отчёт
+# «плашки нет» на все города подряд, хотя плашка висела на экране.
+#
+#   1. Готовность страницы определялась по словам «Данные о компании» в
+#      тексте. Но так называется и пункт меню слева – он есть на ЛЮБОЙ
+#      странице кабинета. Проверка была истинной всегда, прогон считал
+#      страницу дорисованной через шесть секунд и уходил дальше. А плашку
+#      кабинет забирает отдельным запросом и рисует позже – в облаке
+#      заметно позже. Отсюда 6.5–9.3 секунды на город в логе.
+#
+#   2. Надпись искалась как элемент, ВЕСЬ текст которого равен «Данные
+#      верны». В живом кабинете это обычный div без роли и без фокуса,
+#      и надпись легко оказывается куском строки подлиннее («…они не
+#      изменились? Данные верны») или, наоборот, разрезанной на узлы.
+#      Тогда такого элемента не существует, и находить нечего.
+#
+# Лечим корень, а не симптом:
+#   • готовность – это не «нашли слово», а «страница перестала меняться»;
+#   • текст читаем по ВСЕМ корням (документ, теневые корни, свои кадры);
+#   • ищем не элемент, а МЕСТО на экране, где нарисована фраза, и кликаем
+#     в него мышью – ровно как человек;
+#   • успех – только доказанный: всплыла плашка «Спасибо за подтверждение»
+#     или исчез вопрос. Ничего не доказано – так и пишем.
 
-# Возвращаем не только «нашли кнопку», но и что вообще на странице: есть ли
-# плашка и дорисовалась ли она. Без этого «кнопку не нашли» и «подтверждать
-# нечего» неотличимы – и прогон писал «плашки нет» там, где она была.
-_ACTUALIZE_BTN_JS = r"""
-() => {
-  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
-  const OK_RX = /^данные\s+верны[.!]?$/i;
-  const BANNER_RX = /данные\s+о\s+компании\s+не\s+обновлял/i;
+# ── Общий кусок JS: увидеть страницу так, как её видит человек ──────
+#
+# document.body.innerText сюда не годится: он не заглядывает ни в теневые
+# корни веб-компонентов, ни во врезанные кадры, а кабинет 2ГИС собран
+# именно так. querySelector по тексту не годится тем более – см. пункт 2
+# выше.
+#
+# Поэтому: собираем все корни, склеиваем их текст в одну строку и помним,
+# из какого узла какой кусок пришёл. Найдя фразу регуляркой, строим по
+# карте Range ровно на её буквах и спрашиваем у браузера прямоугольник –
+# то самое место, куда указывает палец человека.
+_DEEP_JS = r"""
+  const HIDDEN = /[\u00ad\u200b\u200c\u200d\ufeff]/g;
+  const norm = s => (s || '').replace(HIDDEN, '').replace(/\s+/g, ' ').trim();
 
-  document.querySelectorAll('[data-click-ok]').forEach(n => n.removeAttribute('data-click-ok'));
-  const body = norm(document.body.innerText || document.body.textContent);
-  const banner = BANNER_RX.test(body);
-  // Страница дорисована, если видно её заголовок или хоть что-то из карточки.
-  const ready = /данные\s+о\s+компании|название\s+и\s+филиал|сферы\s+деятельности/i.test(body);
-
-  // Надпись бывает и кнопкой, и ссылкой, и раскрашенным div – ищем по ВСЕМ
-  // элементам и берём самый глубокий, чтобы не поймать плашку целиком.
-  let el = null;
-  for (const cand of document.querySelectorAll('*')) {
-    const t = norm(cand.textContent);
-    if (!OK_RX.test(t)) continue;
-    if (Array.from(cand.querySelectorAll('*')).some(c => OK_RX.test(norm(c.textContent)))) continue;
-    const r = cand.getBoundingClientRect();
-    if (r.width < 10 || r.height < 6) continue;
-    el = cand;
-    break;
+  function docOf(root) {
+    return root.nodeType === 9 ? root : (root.ownerDocument || document);
   }
-  if (!el) return { found: false, banner, ready, seen: body.slice(0, 160) };
-  const target = el.closest('button, a, [role="button"]') || el;
-  target.setAttribute('data-click-ok', '1');
-  return { found: true, banner, ready, text: norm(el.textContent).slice(0, 40) };
-}
+
+  // Все места, где может лежать текст: сам документ, теневые корни и свои
+  // (не чужого домена) кадры. Для кадра запоминаем сдвиг: координаты
+  // внутри него считаются от его собственного левого верхнего угла.
+  function collect() {
+    const out = [], seen = new Set();
+    const add = (root, dx, dy) => {
+      if (!root || seen.has(root)) return;
+      seen.add(root);
+      out.push({ root: root, dx: dx, dy: dy });
+      let all = [];
+      try { all = root.querySelectorAll('*'); } catch (e) { return; }
+      for (const el of all) {
+        if (el.shadowRoot) add(el.shadowRoot, dx, dy);
+        if (el.tagName === 'IFRAME') {
+          let doc = null;
+          try { doc = el.contentDocument; } catch (e) { doc = null; }
+          if (!doc) continue;
+          const r = el.getBoundingClientRect();
+          add(doc, dx + r.left, dy + r.top);
+        }
+      }
+    };
+    add(document, 0, 0);
+    return out;
+  }
+
+  // Текст корня одной строкой + карта «этот кусок пришёл из этого узла».
+  function flatten(entry) {
+    const walker = docOf(entry.root).createTreeWalker(entry.root, NodeFilter.SHOW_TEXT, null);
+    const chunks = [];
+    let text = '', node;
+    while ((node = walker.nextNode())) {
+      const parent = node.parentElement;
+      if (!parent) continue;
+      const tag = parent.tagName;
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEMPLATE') continue;
+      const value = node.nodeValue || '';
+      if (!value.trim()) continue;
+      if (text && !/\s$/.test(text)) text += ' ';
+      chunks.push({ node: node, start: text.length, len: value.length });
+      text += value;
+    }
+    entry.text = text;
+    entry.chunks = chunks;
+    return entry;
+  }
+
+  const ROOTS = collect().map(flatten);
+  const TEXT = ROOTS.map(e => e.text).join(' \n ');
+
+  // Буква под номером i – в каком узле и на каком месте.
+  function place(chunks, i) {
+    for (const c of chunks) {
+      if (i <= c.start) return { node: c.node, offset: 0 };
+      if (i <= c.start + c.len) return { node: c.node, offset: i - c.start };
+    }
+    const last = chunks[chunks.length - 1];
+    return last ? { node: last.node, offset: last.len } : null;
+  }
+
+  // Первый непустой прямоугольник. Пусто – текста на экране нет
+  // (display:none, свёрнутый блок): кликать в него нельзя.
+  function boxOf(range) {
+    const rects = Array.from(range.getClientRects()).filter(r => r.width > 1 && r.height > 1);
+    return rects.length ? rects[0] : null;
+  }
+
+  function spotFor(entry, from, to) {
+    const a = place(entry.chunks, from), b = place(entry.chunks, to);
+    if (!a || !b) return null;
+    const range = docOf(entry.root).createRange();
+    try {
+      range.setStart(a.node, Math.min(a.offset, (a.node.nodeValue || '').length));
+      range.setEnd(b.node, Math.min(b.offset, (b.node.nodeValue || '').length));
+    } catch (e) { return null; }
+    let box = boxOf(range);
+    if (!box) return null;
+    const host = a.node.parentElement;
+    const view = docOf(entry.root).defaultView || window;
+    // Фраза за краем экрана – подводим её к середине: мышь бьёт по видимому.
+    if (box.top < 4 || box.bottom > view.innerHeight - 4) {
+      try { host.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (e) {}
+      box = boxOf(range) || box;
+    }
+    const cx = box.left + box.width / 2, cy = box.top + box.height / 2;
+    // Кто на самом деле лежит сверху в этой точке. Если чужой блок – мышью
+    // не попадём, и Python нажмёт по элементу.
+    let over = null;
+    try { over = docOf(entry.root).elementFromPoint(cx, cy); } catch (e) { over = null; }
+    const clear = !!over && (over === host || host.contains(over) || over.contains(host));
+    const target = (host.closest && host.closest('button, a, [role="button"]')) || host;
+    try { target.setAttribute('data-click-ok', '1'); } catch (e) {}
+    return {
+      x: cx + entry.dx, y: cy + entry.dy,
+      w: box.width, h: box.height,
+      covered: !clear,
+      over: over ? norm(over.tagName + ' ' + (over.className || '')).slice(0, 60) : '',
+      tag: (target.tagName || '').toLowerCase(),
+      label: norm(host.textContent).slice(0, 60),
+    };
+  }
+
+  function find(rx) {
+    for (const entry of ROOTS) {
+      rx.lastIndex = 0;
+      let m;
+      while ((m = rx.exec(entry.text)) !== null) {
+        const s = spotFor(entry, m.index, m.index + m[0].length);
+        if (s) return s;
+        if (!rx.global) break;
+        if (rx.lastIndex <= m.index) rx.lastIndex = m.index + 1;
+      }
+    }
+    return null;
+  }
+
+  // Та же охота, но только рядом с вопросом. Нужна на случай, когда кабинет
+  // сменит слова на кнопке: внутри плашки короткий ответ на вопрос – это она
+  // и есть, а вот по всей странице так искать нельзя.
+  function findNear(rx, anchorRx, span) {
+    for (const entry of ROOTS) {
+      anchorRx.lastIndex = 0;
+      const a = anchorRx.exec(entry.text);
+      if (!a) continue;
+      const from = a.index, to = Math.min(entry.text.length, a.index + a[0].length + span);
+      rx.lastIndex = 0;
+      let m;
+      while ((m = rx.exec(entry.text)) !== null) {
+        if (m.index >= from && m.index < to) {
+          const s = spotFor(entry, m.index, m.index + m[0].length);
+          if (s) { s.near = norm(m[0]); return s; }
+        }
+        if (rx.lastIndex <= m.index) rx.lastIndex = m.index + 1;
+      }
+    }
+    return null;
+  }
+
+  // Разметка плашки – в лог. Если надпись когда-нибудь снова не найдётся,
+  // разбираться будем по этой строчке, а не по переписке со скриншотами.
+  function markupOf(rx) {
+    let best = null;
+    for (const entry of ROOTS) {
+      let all = [];
+      try { all = entry.root.querySelectorAll('*'); } catch (e) { continue; }
+      for (const el of all) {
+        if (!rx.test(norm(el.textContent))) continue;
+        const len = (el.textContent || '').length;
+        if (!best || len < best.len) best = { el: el, len: len };
+      }
+    }
+    if (!best) return '';
+    try { return (best.el.outerHTML || '').replace(/\s+/g, ' ').slice(0, 700); }
+    catch (e) { return ''; }
+  }
+
+  function clean() {
+    for (const entry of ROOTS) {
+      try {
+        entry.root.querySelectorAll('[data-click-ok]')
+          .forEach(n => n.removeAttribute('data-click-ok'));
+      } catch (e) {}
+    }
+  }
 """
 
-_ACTUALIZE_TOAST_JS = r"""
-() => /спасибо\s+за\s+подтверждение|данные\s+подтвержден/i.test(document.body.innerText || '')
-"""
+# Один взгляд на страницу: где мы, что на ней написано, видна ли плашка,
+# всплыло ли подтверждение и куда нажимать. Всё сразу – чтобы решение
+# принималось по одному снимку, а не по четырём разным.
+_ACTUALIZE_LOOK_JS = "() => {\n" + _DEEP_JS + r"""
+  clean();
+
+  // Ищем ВХОЖДЕНИЕ, а не «весь текст элемента равен». «Да, данные верны»,
+  // «Данные верны» с иконкой, надпись внутри длинной строки – всё подходит.
+  const OK_RX = /данные\s+верны/gi;
+  const BANNER_RX = /(не\s+обновлял\w*\s+достаточно\s+давно|данные\s+о\s+компании\s+не\s+обновлял|они\s+не\s+изменил)/i;
+  const BANNER_G = new RegExp(BANNER_RX.source, 'gi');
+  // Запасные слова – только внутри плашки и только если основных нет.
+  const ALT_RX = /(вс[её]\s+верно|данные\s+актуальны|подтвердить\s+данные|да,\s*верно)/gi;
+  const DONE_RX = /(спасибо\s+за\s+подтверждение|данные\s+подтвержден)/i;
+
+  const seen = norm(TEXT);
+  const banner = BANNER_RX.test(seen);
+  const spot = find(OK_RX) || (banner ? findNear(ALT_RX, BANNER_G, 200) : null);
+
+  // Где мы – спрашиваем у САМОЙ страницы, а не у адреса.
+  //
+  // Адрес обманул: у организации с филиалами кабинет уводит с `/company` на
+  // `/orgs/<id>/branches/<филиал>` – и это ТА ЖЕ страница «Данные о компании»,
+  // только конкретного филиала. Проверка «в адресе есть /company» объявила
+  // двадцать городов из двадцати одного «кабинет увёл не туда», хотя
+  // приложение стояло ровно там, где надо. Заголовок вкладки честнее: на этой
+  // странице он всегда «Личный кабинет 2ГИС: Данные о компании — …».
+  const title = norm(document.title || '');
+  const path = (location.pathname || '');
+  const onCompany = /данные\s+о\s+компании/i.test(title)
+                 || /\/company(\/|$)/.test(path)
+                 || /\/branches\//.test(path);
+  // Карточку удалили из справочника – подтверждать нечего, и это не поломка
+  // приложения, а состояние карточки. Кабинет пишет об этом прямым текстом.
+  const deleted = /(удален[аоы]\s+из\s+справочника|компания\s+удалена)/i.test(seen);
+  return {
+    spot: spot,
+    banner: banner,
+    toast: DONE_RX.test(seen),
+    onCompany: onCompany,
+    deleted: deleted,
+    title: title.slice(0, 120),
+    path: path + (location.search || ''),
+    size: seen.length,
+    roots: ROOTS.length,
+    seen: seen.slice(0, 400),
+    // Разметку плашки достаём, только когда надпись не нашлась: это
+    // единственный случай, когда она нужна, а строка длинная.
+    markup: (!spot && banner) ? markupOf(BANNER_RX) : '',
+  };
+}"""
+
+ACTUALIZE_WAIT_MS = 30_000       # плашка приходит отдельным запросом, позже страницы
+ACTUALIZE_QUIET = 3              # столько одинаковых чтений подряд = страница устоялась
+ACTUALIZE_PROOF_MS = 12_000      # столько ждём ответа кабинета после нажатия
+
+
+def look_at_page(page: Page) -> dict:
+    """Снимок страницы «Данные о компании» глазами человека. Сбой – пустой снимок."""
+    try:
+        return page.evaluate(_ACTUALIZE_LOOK_JS) or {}
+    except Exception:  # noqa: BLE001 – React перерисовывает, прочитаем в следующий заход
+        return {}
+
+
+def _settle(page: Page) -> dict:
+    """
+    Дождаться, пока страница перестанет меняться, – и только потом судить.
+
+    Не «нашли слово – значит готово»: слово «Данные о компании» написано в
+    меню слева и на пустой странице тоже. Готовность – это когда текст
+    несколько чтений подряд один и тот же.
+    """
+    look, same, was = {}, 0, -1
+    deadline = time.time() + ACTUALIZE_WAIT_MS / 1000
+    while time.time() < deadline:
+        fresh = look_at_page(page)
+        look = fresh or look
+        if look.get("spot"):
+            return look
+        size = int(look.get("size") or 0)
+        same = same + 1 if size == was and size > 200 else 0
+        was = size
+        # Страница устоялась, мы на нужном разделе, плашки нет – ждать нечего.
+        if same >= ACTUALIZE_QUIET and look.get("onCompany") and not look.get("banner"):
+            break
+        page.wait_for_timeout(700)
+    return look
+
+
+def _click_spot(page: Page, spot: dict, mouse: bool = True) -> str:
+    """
+    Нажать туда, где нарисована надпись. Возвращает, чем нажали (пусто – никак).
+
+    Порядок: мышью по точке (так делает человек, и SPA получает настоящие
+    события) → по размеченному элементу → событием. Три попытки нужны:
+    у надписи может не быть ни кнопки-предка, ни собственного размера, а
+    поверх неё может лежать чужой блок.
+    """
+    x, y = spot.get("x"), spot.get("y")
+    if mouse and not spot.get("covered") and x is not None and y is not None:
+        try:
+            page.mouse.click(float(x), float(y))
+            return "мышью"
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        page.locator('[data-click-ok="1"]').first.click(timeout=5_000)
+        return "по элементу"
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        page.eval_on_selector('[data-click-ok="1"]', "el => el.click()")
+        return "событием"
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _confirmed(page: Page, had_banner: bool, seconds: float | None = None) -> str:
+    """
+    Доказательство, что подтверждение прошло, – или пустая строка.
+
+    Доказательств два: всплывающая плашка «Спасибо за подтверждение данных»
+    и исчезнувший вопрос. Второе засчитываем, только если вопрос БЫЛ: иначе
+    «его нет» – не доказательство, а тавтология.
+    """
+    deadline = time.time() + (ACTUALIZE_PROOF_MS / 1000 if seconds is None else seconds)
+    while time.time() < deadline:
+        page.wait_for_timeout(400)
+        look = look_at_page(page)
+        if look.get("toast"):
+            return "плашка «Спасибо за подтверждение данных»"
+        if had_banner and look and not look.get("banner"):
+            return "вопрос со страницы убрался"
+    return ""
 
 
 def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict:
     """
     Статусы – те же, что у Яндекса, чтобы отчёт был общий:
-      'actualized' – кнопку «Данные верны» нажали
+      'actualized' – кнопку «Данные верны» нажали, и кабинет это подтвердил
       'not-needed' – плашки нет, подтверждать нечего (это НЕ ошибка)
-      'failed'     – страница не открылась или клик не прошёл
+      'failed'     – страница не открылась, кнопка не нашлась или клик не прошёл
     """
     started = time.time()
     label = f"[{idx + 1}/{total}] {task.get('cityName', '?')}"
@@ -834,35 +1163,46 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
 
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=40_000)
-        page.wait_for_timeout(2500)          # React рисует плашку не сразу
     except Exception as e:  # noqa: BLE001
         return finish("failed", f"Не удалось открыть страницу: {yb._short_error(e)}")
 
     if looks_like_login_page(page):
         return finish("no-session", "Сессия 2ГИС не активна: открылась страница входа")
 
-    # Ждём не «шесть секунд и хватит», а пока страница дорисуется. В облаке
-    # тяжёлая React-страница с картой поднимается заметно дольше, и прежний
-    # короткий срок давал «плашки нет» там, где она была.
-    look = {}
-    deadline = time.time() + 25
-    while time.time() < deadline:
-        look = _mark_ok_button(page) or {}
-        if look.get("found"):
-            break
-        # Страница готова, плашки в ней нет – ждать больше нечего.
-        if look.get("ready") and not look.get("banner") and time.time() - started > 6:
-            break
-        page.wait_for_timeout(700)
+    look = _settle(page)
+    spot = look.get("spot")
+    had_banner = bool(look.get("banner"))
 
-    if not look.get("found"):
-        if look.get("banner"):
-            # Плашка на странице ЕСТЬ – значит подтвердить надо, а мы не смогли.
-            # Молча записать «не требуется» нельзя: это неправда в отчёте.
+    if not spot:
+        if not look:
+            return finish("failed", "Страницу «Данные о компании» прочитать не вышло "
+                                    "(браузер не ответил). Попробуйте ещё раз")
+        # Карточки нет в справочнике – это состояние карточки, а не поломка.
+        if look.get("deleted"):
+            out = finish("failed", "Карточка удалена из справочника 2ГИС – "
+                                   "подтверждать нечего. Проверьте статус в КП")
+            warn(f"  🗑 {label}: {out['reason']}")
+            return out
+        if not look.get("onCompany"):
+            # Строка для разбора – короткая и по делу. Раньше сюда валился
+            # кусок страницы на сто шестьдесят знаков, и это выглядело
+            # страшнее любой настоящей беды.
+            warn(f"  🔎 {label}: открылась не та страница – "
+                 f"«{look.get('title') or 'без заголовка'}» ({look.get('path') or '?'})")
+            return finish("failed",
+                          f"Открылась не страница «Данные о компании», а «{look.get('title') or '?'}» "
+                          f"({look.get('path') or 'адрес неизвестен'}) – подтвердить не смогли")
+        if had_banner:
+            # Единственный по-настоящему непонятный случай: плашка есть, а
+            # надписи не видно. Только здесь и нужна разметка в логе.
+            warn(f"  🔎 {label}: плашка на странице есть, а надписи «Данные верны» "
+                 "на ней не нашлось")
+            if look.get("markup"):
+                warn(f"  🔎 {label}: разметка плашки {look['markup']}")
             return finish("failed",
                           "Плашка «Данные о компании не обновлялись» на странице есть, "
-                          "а кнопку «Данные верны» опознать не вышло. Подтвердите вручную")
-        if not look.get("ready"):
+                          "а надпись «Данные верны» на ней не нашлась. Подтвердите вручную")
+        if int(look.get("size") or 0) < 200:
             return finish("failed",
                           "Страница «Данные о компании» не дорисовалась – "
                           "подтвердить не смогли. Попробуйте ещё раз")
@@ -870,34 +1210,23 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
         info(f"  ✓ {label}: {out['reason']} ({out['durationMs'] / 1000:.1f} сек)")
         return out
 
-    try:
-        page.locator('[data-click-ok="1"]').first.click(timeout=8_000)
-    except Exception as e:  # noqa: BLE001
-        return finish("failed", f"Ошибка клика «Данные верны»: {yb._short_error(e)}")
+    how = _click_spot(page, spot)
+    proof = _confirmed(page, had_banner) if how else ""
+    if not proof:
+        # Мышь могла попасть в перекрытие – второй заход по самому элементу.
+        again = _click_spot(page, spot, mouse=False)
+        if again:
+            how, proof = again, _confirmed(page, had_banner, ACTUALIZE_PROOF_MS / 1500)
 
-    toast = False
-    deadline = time.time() + 8
-    while time.time() < deadline:
-        try:
-            toast = bool(page.evaluate(_ACTUALIZE_TOAST_JS))
-        except Exception:  # noqa: BLE001
-            toast = False
-        if toast:
-            break
-        page.wait_for_timeout(400)
+    if not proof:
+        return finish("failed",
+                      "Надпись «Данные верны» нашли и нажали, но кабинет ничего не ответил: "
+                      "ни плашки «Спасибо за подтверждение данных», ни исчезнувшего вопроса. "
+                      "Подтвердите вручную")
 
-    out = finish("actualized",
-                 "Данные подтверждены (плашка ответила)" if toast
-                 else "Клик прошёл (плашка не появилась, но кнопка нажата)")
-    info(f"  {'✅' if toast else '🟡'} {label}: {out['reason']} ({out['durationMs'] / 1000:.1f} сек)")
+    out = finish("actualized", f"Данные подтверждены – {proof}")
+    info(f"  ✅ {label}: {out['reason']} (нажали {how}, {out['durationMs'] / 1000:.1f} сек)")
     return out
-
-
-def _mark_ok_button(page: Page) -> dict | None:
-    try:
-        return page.evaluate(_ACTUALIZE_BTN_JS)
-    except Exception:  # noqa: BLE001
-        return None
 
 
 # ════════════════════════════════════════════════════════════════════

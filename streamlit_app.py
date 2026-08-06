@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -25,20 +26,58 @@ from pathlib import Path
 import streamlit as st
 import streamlit.components.v1 as components
 
-import gis_playwright as gis
-import kp_audit
-import kp_sheet
-import llm
-import paths
-import projects_data as pdata
-import repo_store
-import secrets_local
-import reviews as rv
-import runner
-import ui_theme as T
-import yb_playwright as yb
-import playwright_worker
-from playwright_worker import PlaywrightWorker
+# ── Свои модули ─────────────────────────────────────────────────────
+#
+# Сначала прогреваем их по списку, и только потом импортируем обычными
+# строками. Выглядит лишним – но именно из-за отсутствия этого шага
+# приложение падало страницей «Oh no» каждый раз, когда код обновлялся.
+#
+# Облако обновляет файлы под работающим приложением, а Streamlit в этот
+# момент выселяет изменённые модули из sys.modules – так он заставляет
+# страницу подхватить новый код. Если в ту же секунду другой поток (вторая
+# вкладка, идущий прогон) импортирует такой модуль, импорт падает на ровном
+# месте: KeyError: 'paths', следом 'yb_playwright', 'runner', 'llm'.
+# Приложение умирает целиком, а человек видит «Oh no» и не понимает, при
+# чём тут он: он всего лишь запустил публикацию.
+#
+# Лечится ожиданием: выселение занимает мгновение, повтор проходит. А после
+# прогрева обычные import'ы – это уже просто взгляд в словарь, они успевают
+# проскочить между двумя выселениями.
+_OWN_MODULES = ("build", "apptime", "paths", "projects_data", "repo_store", "ui_theme",
+                "llm", "reviews", "kp_sheet", "kp_audit", "secrets_local",
+                "yb_playwright", "gis_playwright", "playwright_worker", "runner")
+
+
+def _settle_imports() -> None:
+    """Прогреть свои модули, пережив обновление кода на ходу."""
+    for attempt in range(5):
+        try:
+            for name in _OWN_MODULES:
+                importlib.import_module(name)
+            return
+        except KeyError:          # sys.modules подменили посреди импорта
+            time.sleep(0.2 * (attempt + 1))
+    # Не вышло за секунду с лишним – пусть падает обычный импорт ниже,
+    # с настоящей ошибкой, а не с нашей.
+
+
+_settle_imports()
+
+import apptime  # noqa: E402
+import gis_playwright as gis  # noqa: E402
+import kp_audit  # noqa: E402
+import kp_sheet  # noqa: E402
+import llm  # noqa: E402
+import paths  # noqa: E402
+import projects_data as pdata  # noqa: E402
+import repo_store  # noqa: E402
+import secrets_local  # noqa: E402
+import reviews as rv  # noqa: E402
+import runner  # noqa: E402
+import ui_theme as T  # noqa: E402
+import yb_playwright as yb  # noqa: E402
+import playwright_worker  # noqa: E402
+from playwright_worker import PlaywrightWorker  # noqa: E402
 
 # Метка сборки. Показывается человеку и служит ключом кэша для CSS.
 #
@@ -387,19 +426,15 @@ def _ru_domain(email: str) -> str:
 
 def local_time(iso: str | None) -> str:
     """
-    Время отчёта – по часам человека. В файлы оно пишется в UTC, и в шапке
-    отчёта стояло «07:33», когда в логе рядом было «12:33»: выглядело так,
-    будто показан какой-то посторонний, старый отчёт.
+    Время отчёта – по Екатеринбургу, а не по часам сервера.
+
+    В файлы время пишется в UTC. Раньше показывалось «время машины»: у
+    заказчика на локальной машине это совпадало с её часами, а в облаке –
+    нет, там UTC. В логе стояло 11:56, когда в Екатеринбурге было почти
+    17:00, и выглядело это как чужой, старый прогон. Часовой пояс задан в
+    apptime и один на всё приложение.
     """
-    if not iso:
-        return ""
-    try:
-        dt = datetime.fromisoformat(iso)
-    except ValueError:
-        return str(iso)[:19].replace("T", " ")
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone().strftime("%d.%m.%Y, %H:%M:%S")
+    return apptime.human(iso)
 
 
 def can_show_browser() -> bool:
@@ -2695,8 +2730,8 @@ def _cities_source_block(project_id: str, config: dict) -> None:
             time.sleep(1.2)
             st.rerun()
 
-        synced = (config.get("kpSyncedAt") or "")[:19].replace("T", " ")
-        c2.caption(f"Последняя загрузка: {synced} UTC" if synced else
+        synced = local_time(config.get("kpSyncedAt"))
+        c2.caption(f"Последняя загрузка: {synced}" if synced else
                    "Города из таблицы ещё не загружались.")
         st.caption(f"Загружается само: если с последней загрузки прошло больше "
                    f"{KP_SYNC_TTL_HOURS} часов, Click перечитает таблицу при открытии проекта. "
@@ -2900,6 +2935,32 @@ def _report_notes(data: dict, totals: dict) -> list[str]:
     return notes
 
 
+def _report_shots(project_id: str, data: dict) -> None:
+    """
+    Снимки экрана в момент сбоя – прямо в отчёте.
+
+    Прогон их сохранял и раньше, но добраться до них было нельзя: в логе
+    стояло имя файла, а файл лежал в облаке. Отчёт говорил «плашки нет»,
+    глаза говорили «есть», и рассудить их было нечем. Показываем по одному:
+    два десятка картинок разом – это лишняя память на ровном месте.
+    """
+    shots = [(r.get("cityName") or "?", r["screenshot"])
+             for r in (data.get("results") or []) if r.get("screenshot")]
+    if not shots:
+        return
+    folder = runner.p_screenshots(project_id)
+    st.markdown("---")
+    st.caption(f"📸 Снимки экрана в момент сбоя ({len(shots)}) – "
+               "что приложение видело на странице")
+    names = [c for c, _ in shots]
+    picked = st.selectbox("Город", names, key="shot-city", label_visibility="collapsed")
+    fp = folder / dict(shots)[picked]
+    if fp.exists():
+        st.image(str(fp), use_container_width=True)
+    else:
+        st.caption("Снимок не сохранился – облако могло перезапуститься с тех пор.")
+
+
 def _report_csv(data: dict) -> bytes:
     rows = ["Страна;Город;Статус;Причина;Время_сек;URL"]
     for r in data.get("results") or []:
@@ -3058,6 +3119,7 @@ def tab_report(project_id: str) -> None:
             if not run_log:
                 st.caption("Лог этого прогона не сохранён – он появится у прогонов, "
                            "запущенных начиная с этой версии.")
+            _report_shots(project_id, data)
 
         # ─── Отзывы того же прогона – отдельным разделом того же отчёта ───
         if review_rows:
@@ -4034,7 +4096,7 @@ def _audit_details(result: dict, current: str, title: str, rows: list[list[str]]
 
     st.markdown("**Выгрузка**")
     d1, d2, _ = st.columns([1, 1, 3])
-    stamp = datetime.now().strftime("%Y-%m-%d")
+    stamp = apptime.stamp("%Y-%m-%d")
     try:
         blob = kp_audit.to_xlsx(rows, result, title, collected_at=collected_at)
         d1.download_button("⬇ Отчёт (.xlsx)", data=blob,

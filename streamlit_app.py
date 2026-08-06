@@ -2455,6 +2455,11 @@ def reviews_queue_block(project_id: str, platform: str = rv.YANDEX) -> None:
                 if bad:
                     st.warning("В ответе есть слова, которые промпт запрещает: "
                                + ", ".join(f"«{w}»" for w in bad))
+                casual = rv.casual_words(text)
+                if casual:
+                    st.warning("Разговорные слова в ответе от лица компании: "
+                               + ", ".join(f"«{w}»" for w in casual)
+                               + " – нажмите «Переписать» или поправьте руками.")
                 if rv.looks_broken(text):
                     st.warning("Черновик не получился – оборван или в нём остались "
                                "служебные заметки модели. Нажмите «Переписать».")

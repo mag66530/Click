@@ -1528,6 +1528,15 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                 res["country"] = country
                 res["package"] = country
 
+                # Снимок экрана на неудачу. Разбирать «плашка была или нет» по
+                # одной строчке в отчёте невозможно: отчёт говорит «нет», глаза
+                # говорят «есть», и проверить нечем. По картинке – минута.
+                if res.get("status") == "failed":
+                    shot = _save_failure_screenshot(project_id, browser, task.get("cityName", ""))
+                    if shot:
+                        res["screenshot"] = shot.name
+                        _append_log(project_id, "INFO", f"  📸 Скриншот сбоя: {shot.name}")
+
                 # Сессия слетела – дальше идти незачем: остальные города упрутся
                 # в ту же страницу входа. Раньше прогон честно обходил все 58
                 # городов, писал каждому «актуализация не требуется» (кнопки на

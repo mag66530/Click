@@ -1518,57 +1518,170 @@ def test_gis_answer_and_actualize() -> None:
             eq("без подтверждения ответ успешным не считается", silent["status"], "failed")
             check("и человеку сказано, что делать", "вручную" in silent["reason"], silent["reason"])
 
-            # ── «Данные верны» ──────────────────────────────────────
-            page.set_content("""
-            <html><body style="margin:0">
-              <div style="height:900px">много контента</div>
-              <div class="banner">Данные о компании не обновлялись достаточно давно,
-                они не изменились?
-                <a href="#" onclick="window.__ok=1;document.body.insertAdjacentHTML('beforeend',
-                   '<div>Спасибо за подтверждение данных</div>');return false">Данные верны</a>
-              </div>
-            </body></html>""")
-            found = gis._mark_ok_button(page)  # noqa: SLF001
-            check("кнопка «Данные верны» найдена", bool(found), str(found))
-            page.locator('[data-click-ok="1"]').first.click()
-            check("клик попал именно в неё", page.evaluate("() => window.__ok === 1"))
-            check("плашка подтверждения замечена", page.evaluate(gis._ACTUALIZE_TOAST_JS))  # noqa: SLF001
-
-            page.set_content("""
-            <html><body><h1>Данные о компании</h1>
-              <div>Название и филиалы</div><div>Сферы деятельности</div></body></html>""")
-            look = gis._mark_ok_button(page)  # noqa: SLF001
-            check("плашки нет – подтверждать нечего, и это не ошибка",
-                  not look["found"] and not look["banner"] and look["ready"], str(look))
-
-            # Надпись спрятана глубже – всё равно находим.
-            page.set_content("""
-            <html><body style="margin:0"><h1>Данные о компании</h1>
-              <div class="banner">Данные о компании не обновлялись достаточно давно,
-                они не изменились?
-                <a href="#"><span><span>Данные верны</span></span></a>
-              </div></body></html>""")
-            deep = gis._mark_ok_button(page)  # noqa: SLF001
-            check("вложенная надпись «Данные верны» найдена", deep["found"], str(deep))
-            eq("для клика взята ссылка целиком",
-               page.locator('[data-click-ok="1"]').evaluate("el => el.tagName"), "A")
-
-            # Плашка есть, а кнопку опознать не вышло – это НЕ «нечего делать».
-            page.set_content("""
-            <html><body><h1>Данные о компании</h1>
-              <div>Данные о компании не обновлялись достаточно давно, они не изменились?</div>
-              <div>Подтвердить</div></body></html>""")
-            odd = gis._mark_ok_button(page)  # noqa: SLF001
-            check("плашка замечена, даже когда кнопка не опознана",
-                  odd["banner"] and not odd["found"], str(odd))
-
-            # Пустая страница – не «подтверждать нечего», а «не дорисовалась».
-            page.set_content("<html><body><div id='root'></div></body></html>")
-            blank = gis._mark_ok_button(page)  # noqa: SLF001
-            check("пустая страница опознана как недорисованная",
-                  not blank["ready"] and not blank["found"], str(blank))
+            gis_actualize_checks(gis, page)
         finally:
             browser.close()
+
+
+# Страница «Данные о компании» из живого кабинета: слева меню (в нём тоже
+# написано «Данные о компании» – на этом прежняя проверка готовности и
+# ломалась), справа карточка, сверху плашка.
+GIS_COMPANY_PAGE = """
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;font:14px sans-serif">
+  <nav style="float:left;width:220px">
+    <div>Обзор</div><div>Данные о компании</div><div>Отзывы</div><div>Фотографии</div>
+  </nav>
+  <div style="margin-left:240px">
+    <h1>Данные о компании</h1>
+    __BANNER__
+    <div>Название и филиал: Стальметурал, Пермь</div>
+    <div>Сферы деятельности: металлопрокат, трубы, профнастил</div>
+    <div>Контакты: +7 (342) 000-00-00, office@example.ru</div>
+    <div>Время работы: пн–пт 08:00–17:00, сб 09:00–14:00</div>
+    <div>Адрес: улица Героев Хасана, 105, корпус 3, офис 210</div>
+  </div>
+  <script>
+    function confirmData() {
+      window.__ok = (window.__ok || 0) + 1;
+      const b = document.querySelector('.CQydym6f');
+      if (b) b.remove();
+      document.body.insertAdjacentHTML('beforeend',
+        '<div class="toast">Спасибо за подтверждение данных</div>');
+    }
+  </script>
+</body></html>
+"""
+
+# Плашка ровно такая, как в кабинете: обычный div, роли нет, фокуса нет.
+# Два вида, и ни один прежний поиск не находил.
+#
+#   • одной строкой – вопрос и надпись в ОДНОМ текстовом узле (в браузере
+#     заказчика это блок 620×20 с классами wkjaALol / -ykFvMpD);
+#   • надпись отдельным словом, но не «Данные верны», а «Да, данные верны».
+GIS_BANNERS = (
+    ("одной строкой", """
+    <div class="CQydym6f WOncRph6 withLeftItem" style="padding:12px;background:#FFF7E6">
+      <div class="wkjaALol -ykFvMpD" onclick="confirmData()">Данные о компании не
+        обновлялись достаточно давно, они не изменились? Данные верны</div>
+    </div>
+"""),
+    ("надпись отдельно", """
+    <div class="CQydym6f WOncRph6 withLeftItem" style="padding:12px;background:#FFF7E6">
+      <div class="wkjaALol -ykFvMpD">Данные о компании не обновлялись достаточно давно,
+        они не изменились?
+        <span class="act" style="color:#D97F00" onclick="confirmData()">Да, данные верны</span>
+      </div>
+    </div>
+"""),
+)
+GIS_BANNER = GIS_BANNERS[0][1]
+
+
+def gis_actualize_checks(gis, page) -> None:
+    """
+    Подтверждение данных 2ГИС – на странице, устроенной как настоящая.
+
+    Здесь дважды ломалось одно и то же, и оба раза прогон писал «плашки нет»
+    на все города подряд:
+      • готовность страницы определяли по словам «Данные о компании», а так
+        называется пункт меню слева – проверка была истинной всегда;
+      • надпись искали как элемент, весь текст которого равен «Данные верны»,
+        а в кабинете это кусок строки внутри обычного div.
+    Поэтому проверки ниже идут по живому адресу и по живой вёрстке.
+    """
+    print("\n▸ 2ГИС: подтверждение данных на странице как в кабинете")
+    box = {"html": ""}
+    page.route("**/*", lambda route: route.fulfill(
+        status=200, content_type="text/html; charset=utf-8", body=box["html"]))
+    task = {"cityName": "Пермь", "gisUrl": "https://account.2gis.com/orgs/70000001079192862/"}
+
+    def serve(banner: str) -> None:
+        box["html"] = GIS_COMPANY_PAGE.replace("__BANNER__", banner)
+
+    def open_page() -> None:
+        page.goto("https://account.2gis.com/orgs/70000001079192862/company")
+        page.wait_for_timeout(200)
+
+    # Тесту незачем ждать облачные тридцать секунд: проверяем логику, а не
+    # терпение. Сроки берём из тех же констант, что и прогон.
+    was = (gis.ACTUALIZE_WAIT_MS, gis.ACTUALIZE_PROOF_MS)
+    gis.ACTUALIZE_WAIT_MS, gis.ACTUALIZE_PROOF_MS = 4_000, 3_000
+    try:
+        # ── Главное: плашка из кабинета, обе её разновидности ───────
+        for name, banner in GIS_BANNERS:
+            serve(banner)
+            open_page()
+            whole = page.evaluate(r"""() => {
+              const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+              return Array.from(document.querySelectorAll('*'))
+                .filter(el => /^данные\s+верны[.!]?$/i.test(norm(el.textContent))).length;
+            }""")
+            eq(f"{name}: отдельного элемента «Данные верны» на странице НЕТ", whole, 0)
+            look = gis.look_at_page(page)
+            check(f"{name}: место надписи всё равно найдено", bool(look.get("spot")),
+                  str(look)[:200])
+            check(f"{name}: и плашка замечена", look.get("banner"), str(look)[:200])
+
+            serve(banner)
+            res = gis.actualize_city(page, task)
+            eq(f"{name}: данные подтверждены", res["status"], "actualized")
+            eq(f"{name}: нажали ровно один раз", page.evaluate("() => window.__ok"), 1)
+            check(f"{name}: успех доказан, а не предположен",
+                  "Спасибо за подтверждение" in res["reason"] or "убрал" in res["reason"],
+                  res["reason"])
+
+        # ── Плашка в теневом корне: innerText её не видит ───────────
+        serve("""<div id="host"></div><script>
+          document.getElementById('host').attachShadow({mode:'open'}).innerHTML =
+            '<div style="padding:12px">Данные о компании не обновлялись достаточно давно, ' +
+            'они не изменились? <span style="color:#D97F00" ' +
+            'onclick="window.confirmData()">Данные верны</span></div>';
+        </script>""")
+        open_page()
+        eq("обычный innerText в теневой корень не заглядывает",
+           page.evaluate("() => /не обновлялись/i.test(document.body.innerText)"), False)
+        deep = gis.look_at_page(page)
+        check("а мы плашку в теневом корне видим", deep.get("banner"), str(deep)[:200])
+        check("и надпись в нём находим", bool(deep.get("spot")), str(deep)[:200])
+
+        # ── Плашки нет – подтверждать нечего, и это не ошибка ───────
+        serve("")
+        none = gis.actualize_city(page, task)
+        eq("без плашки – «не требуется»", none["status"], "not-needed")
+
+        # ── Плашка есть, надписи нет – это НЕ «нечего делать» ───────
+        serve("""<div class="CQydym6f">Данные о компании не обновлялись достаточно давно,
+                 они не изменились? <span>Обновить</span></div>""")
+        odd = gis.actualize_city(page, task)
+        eq("плашка без надписи – честный отказ", odd["status"], "failed")
+        check("и человеку сказано, что делать", "вручную" in odd["reason"], odd["reason"])
+
+        # ── Кабинет увёл на другую страницу ────────────────────────
+        serve("""<script>history.replaceState({}, '', '/orgs/70000001079192862/dashboard')</script>
+                 <div>Обзор организации, показатели и рейтинг за последний месяц</div>""")
+        away = gis.actualize_city(page, task)
+        eq("увели – не молчим", away["status"], "failed")
+        check("и написано куда", "dashboard" in away["reason"], away["reason"])
+
+        # ── Пустая страница – «не дорисовалась», а не «нечего делать» ──
+        box["html"] = "<html><body><div id='root'></div></body></html>"
+        blank = gis.actualize_city(page, task)
+        eq("пустая страница – не «не требуется»", blank["status"], "failed")
+        check("сказано, что не дорисовалась", "дорисов" in blank["reason"], blank["reason"])
+
+        # ── Надпись перекрыта чужим блоком – жмём по элементу ───────
+        serve(GIS_BANNER + """<div style="position:fixed;left:0;top:0;right:0;bottom:0;
+              background:rgba(0,0,0,.2)"></div>""")
+        open_page()
+        over = gis.look_at_page(page)
+        check("перекрытие замечено", over.get("spot", {}).get("covered"), str(over.get("spot")))
+        how = gis._click_spot(page, over["spot"], mouse=False)  # noqa: SLF001
+        check("сквозь перекрытие всё равно нажали", bool(how), how)
+        eq("и обработчик сработал", page.evaluate("() => window.__ok"), 1)
+    finally:
+        gis.ACTUALIZE_WAIT_MS, gis.ACTUALIZE_PROOF_MS = was
+        page.unroute("**/*")
 
 
 def yb_extract(url: str):

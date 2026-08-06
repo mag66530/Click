@@ -232,10 +232,10 @@
     },
     {
       "name": "bh",
-      "value": "YPCO0dMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "value": "YLGl0dMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1820565360,
+      "expires": 1820568241,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -245,7 +245,7 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817541458,
+      "expires": 1817544242,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -451,16 +451,6 @@
       "sameSite": "None"
     },
     {
-      "name": "_yasc",
-      "value": "qUiO/ejtmEJfYWnP3B9W10yt9DZ02/SPuCuGEvKjlokauheNEbEbLej79ZUeYxD5JLALnAWSO7SaBiwj6EJLeK+zLcMrL73yairXeuXKV5UAIm1bWvO91g3c",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1820564772.627,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "my",
       "value": "YwA=",
       "domain": ".yandex.ru",
@@ -531,32 +521,32 @@
       "sameSite": "None"
     },
     {
-      "name": "_ym_visorc",
-      "value": "b",
+      "name": "_yasc",
+      "value": "aevMMZa0a1q0Br+KUSp4DKgBSLQuz8RL/UfCmNh+Vyei3IYMAaSANJJpzAwOeTsjthjdbJkR3ziyf9gCJGvKs9wR0Z+e4d+GH/fMULVBCGETi6dtKlnkBMP7",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1786007258,
+      "expires": 1820568236.227,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "bh",
-      "value": "YNaP0dMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "value": "YKul0dMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1820565462,
+      "expires": 1820568235.227,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
-      "name": "cycada",
-      "value": "XhAhDCnH2xiknbFT5v3+4CfA5hjy39BWIgnQZ/gtJxs=",
+      "name": "pu",
+      "value": "2134429341786008237",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1787215063.39,
-      "httpOnly": false,
+      "expires": 1820568237.392,
+      "httpOnly": true,
       "secure": true,
       "sameSite": "None"
     },
@@ -565,7 +555,7 @@
       "value": "1",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817541465,
+      "expires": 1817544239,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -575,7 +565,27 @@
       "value": "0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817541465,
+      "expires": 1817544241,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ym_visorc",
+      "value": "b",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1786010041,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "cycada",
+      "value": "WH6HsjCDxOGz4PB4D2y6RyfA5hjy39BWIgnQZ/gtJxs=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1787217852.518,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -602,8 +612,8 @@
           "value": "1"
         },
         {
-          "name": "_ym98892916:0_reqNum",
-          "value": "1"
+          "name": "maps_analytics_event_index",
+          "value": "{\"1786005456455580-8319274485833751652-balancer-l7leveler-kubr-yp-klg-8-BAL\":117}"
         },
         {
           "name": "_ym100040809:0_reqNum",
@@ -611,7 +621,7 @@
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "159"
+          "value": "161"
         },
         {
           "name": "_ym_wv2rf:85710618:0",
@@ -650,6 +660,10 @@
           "value": "188734270059"
         },
         {
+          "name": "_ym46231566:0_reqNum",
+          "value": "318"
+        },
+        {
           "name": "_ym39321485_lastHit",
           "value": "1786004951625"
         },
@@ -659,7 +673,7 @@
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "1249"
+          "value": "1264"
         },
         {
           "name": "_ym104859823:0_reqNum",
@@ -691,11 +705,15 @@
         },
         {
           "name": "_ym_retryReqs",
-          "value": "{\"1\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/39321485\",\"time\":1786005465505,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/100468945922/p/edit/reviews\",\"charset\":\"utf-8\",\"exp\":\"a6BGpcXpC8RDEVDllaTrMw,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":1,\"dp\":0,\"ls\":1257362596350,\"hid\":1048089862,\"z\":0,\"i\":\"20260806083745\",\"et\":1786005465,\"c\":1,\"rn\":482416110,\"rqn\":1249,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1637,\"wv\":2,\"ds\":\"0,0,746,8,521,514,1,361,1,,,,2003\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1786005463389,\"t\":\"Отзывы\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786005466},\"counterId\":39321485,\"ghid\":1048089862,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}},\"2\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/56213845\",\"time\":1786005465505,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/100468945922/p/edit/reviews\",\"charset\":\"utf-8\",\"exp\":\"a6BGpcXpC8RDEVDllaTrMw,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":1082420648799,\"hid\":1048089862,\"z\":0,\"i\":\"20260806083745\",\"et\":1786005465,\"c\":1,\"rn\":1042544443,\"rqn\":1145,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1637,\"wv\":2,\"ds\":\"0,0,746,8,521,514,1,361,1,,,,2003\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1786005463389,\"t\":\"Отзывы\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786005466},\"counterId\":56213845,\"ghid\":1048089862,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"p-1\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}},\"3\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/46231566\",\"time\":1786005465505,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/100468945922/p/edit/reviews\",\"charset\":\"utf-8\",\"exp\":\"a6BGpcXpC8RDEVDllaTrMw,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":3,\"dp\":0,\"ls\":439814455673,\"hid\":1048089862,\"z\":0,\"i\":\"20260806083745\",\"et\":1786005466,\"c\":1,\"rn\":749703672,\"rqn\":315,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1637,\"wv\":2,\"ds\":\"0,0,746,8,521,514,1,361,1,,,,2003\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1786005463389,\"t\":\"Отзывы\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786005466},\"counterId\":46231566,\"ghid\":1048089862,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"p-2\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}}}"
+          "value": "{}"
         },
         {
           "name": "_ym_wv2rf:46231566:0",
           "value": "1"
+        },
+        {
+          "name": "_ym104859823_lsid",
+          "value": "1507527509796"
         },
         {
           "name": "_ym58051849_lsid",
@@ -708,10 +726,6 @@
         {
           "name": "_ym92205484:0_reqNum",
           "value": "1"
-        },
-        {
-          "name": "_ym46231566_lsid",
-          "value": "439814455673"
         },
         {
           "name": "_ym60211288_lsid",
@@ -734,24 +748,20 @@
           "value": "1786004951640"
         },
         {
-          "name": "_ym98973702:0_reqNum",
-          "value": "1"
-        },
-        {
-          "name": "_ym_uid",
-          "value": "\"1785833922567756647\""
-        },
-        {
           "name": "_ym98973698_lsid",
           "value": "1537436620712"
         },
         {
-          "name": "_ym104859823_lsid",
-          "value": "1507527509796"
+          "name": "_ym98973702:0_reqNum",
+          "value": "1"
         },
         {
-          "name": "_ym56213845_lastHit",
-          "value": "1786004951633"
+          "name": "_ym100040809_lsid",
+          "value": "685019606560"
+        },
+        {
+          "name": "_ym102272633:0_reqNum",
+          "value": "1"
         },
         {
           "name": "_ym99007174:0_reqNum",
@@ -786,6 +796,10 @@
           "value": "{\"uid\":\"332781678\",\"rootFolder\":{\"id\":\"the_root_folder\",\"title\":\"\",\"children\":[{\"id\":\"the_favorites_folder\",\"title\":\"Избранное\",\"children\":[],\"tags\":[\"show-on-map\"]}]}}"
         },
         {
+          "name": "_ym46231566_lsid",
+          "value": "439814455673"
+        },
+        {
           "name": "_ym60211288:0_reqNum",
           "value": "1"
         },
@@ -802,15 +816,11 @@
           "value": "112730117129"
         },
         {
-          "name": "maps_analytics_event_index",
-          "value": "{\"1786005456455580-8319274485833751652-balancer-l7leveler-kubr-yp-klg-8-BAL\":117}"
-        },
-        {
           "name": "_ym99007174_lsid",
           "value": "508499025258"
         },
         {
-          "name": "_ym102272633:0_reqNum",
+          "name": "_ym98892916:0_reqNum",
           "value": "1"
         },
         {
@@ -826,8 +836,8 @@
           "value": "910422199579"
         },
         {
-          "name": "_ym46231566:0_reqNum",
-          "value": "315"
+          "name": "_ym56213845_lastHit",
+          "value": "1786004951633"
         },
         {
           "name": "_ym92205484_lsid",
@@ -843,15 +853,15 @@
         },
         {
           "name": "_ym56213845:0_reqNum",
-          "value": "1145"
+          "value": "1159"
         },
         {
           "name": "_ym22555771_lsid",
           "value": "1686879048786"
         },
         {
-          "name": "_ym100040809_lsid",
-          "value": "685019606560"
+          "name": "_ym_uid",
+          "value": "\"1785833922567756647\""
         },
         {
           "name": "maps_fonts_by_family",
@@ -900,12 +910,12 @@
           "value": "337750228411"
         },
         {
-          "name": "_ym_synced",
-          "value": "{\"com\":29766735}"
+          "name": "_ym784657_lastHit",
+          "value": "1786004164540"
         },
         {
-          "name": "_ym_uid",
-          "value": "\"1785833922567756647\""
+          "name": "_ym_synced",
+          "value": "{\"com\":29766735}"
         },
         {
           "name": "_ym784657:0_reqNum",
@@ -916,8 +926,8 @@
           "value": "{}"
         },
         {
-          "name": "_ym784657_lastHit",
-          "value": "1786004164540"
+          "name": "_ym_uid",
+          "value": "\"1785833922567756647\""
         }
       ]
     }

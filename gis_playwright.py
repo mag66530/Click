@@ -41,6 +41,7 @@ import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urljoin
 
 from playwright.sync_api import Page
 
@@ -1267,9 +1268,14 @@ def build_media_url(url: str | None) -> str | None:
 _MEDIA_LOOK_JS = r"""
 () => {
   const norm = s => (s || '').replace(/\s+/g, ' ').trim();
-  const link = Array.from(document.querySelectorAll('a[href]'))
-    .map(a => a.getAttribute('href') || '')
-    .find(h => /\/media(\/|$|\?)/.test(h) && /\/orgs\//.test(h)) || '';
+  // Берём a.href, а не сам атрибут: в живом кабинете ссылка записана
+  // относительной («/orgs/…/media»), а Playwright такой адрес не принимает
+  // вовсе – «Invalid url». a.href браузер уже развернул в полный.
+  const link = (Array.from(document.querySelectorAll('a[href]'))
+    .find(a => {
+      const h = a.getAttribute('href') || '';
+      return /\/media(\/|$|\?)/.test(h) && /\/orgs\//.test(h);
+    }) || {}).href || '';
 
   let tiles = 0;
   for (const img of document.querySelectorAll('img')) {
@@ -1323,17 +1329,27 @@ def _media_look(page: Page) -> dict:
 
 
 def _media_settle(page: Page, want_field: bool = True) -> dict:
-    """Дождаться, пока раздел дорисуется: те же правила, что и у актуализации."""
+    """
+    Дождаться, пока раздел дорисуется: те же правила, что и у актуализации.
+
+    Ждём не «страница перестала расти», а то, ЗА ЧЕМ пришли: поле загрузки или
+    ссылку на раздел в меню. Разница видна на живом кабинете: у Екатеринбурга
+    в отчёте стояло «в кабинете не нашлась ссылка на раздел «Фото и видео»» –
+    а ссылка там есть, просто меню дорисовывается после остального, и Click
+    успевал уйти раньше. Поэтому пока искомого нет, тишина считается вдвое
+    строже: страница затихла – ждём ещё, вдруг это пауза, а не конец.
+    """
     look, same, was = {}, 0, -1
     deadline = time.time() + MEDIA_WAIT_MS / 1000
     while time.time() < deadline:
         look = _media_look(page) or look
-        if want_field and look.get("hasField"):
+        found = look.get("hasField") if want_field else (look.get("link") or look.get("onMedia"))
+        if found:
             return look
         size = int(look.get("size") or 0)
         same = same + 1 if size == was and size > 200 else 0
         was = size
-        if same >= ACTUALIZE_QUIET:
+        if same >= ACTUALIZE_QUIET * 2:
             break
         page.wait_for_timeout(700)
     return look
@@ -1390,6 +1406,10 @@ def upload_media(page: Page, gis_url: str | None, files: list[str], label: str =
         if not link:
             out["reason"] = "В кабинете 2ГИС не нашлась ссылка на раздел «Фото и видео»"
             return out
+        # Страховка на случай, если ссылка всё же придёт относительной:
+        # Playwright такой адрес не принимает («Invalid url»), а мы бы списали
+        # это на недоступный раздел.
+        link = urljoin(page.url or ACCOUNT_HOST, link)
         try:
             page.goto(link, wait_until="domcontentloaded", timeout=40_000)
         except Exception as e:  # noqa: BLE001

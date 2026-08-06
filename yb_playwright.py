@@ -576,9 +576,16 @@ class YbBrowser:
 
         Контекст создаётся один раз и живёт до конца прогона: открывать и
         закрывать его на каждый город – это лишние секунды на ровном месте.
+        Но переживает он не всё: перезапуск браузера (сторож памяти, зависший
+        Chrome) уносит вкладку с собой, и тогда она заводится заново. Сам
+        вопрос «жива ли вкладка» может упасть – у закрытого Playwright нет
+        даже цикла событий, – поэтому спрашиваем осторожно.
         """
-        if self._side_page and not self._side_page.is_closed():
-            return self._side_page
+        try:
+            if self._side_page and not self._side_page.is_closed():
+                return self._side_page
+        except Exception:  # noqa: BLE001 – вкладка от прошлого браузера
+            self._side, self._side_page = None, None
         if self.browser is None:
             raise RuntimeError("Браузер не запущен")
         self._side_file = session_file

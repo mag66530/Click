@@ -847,9 +847,14 @@ def _gis_photos_for_city(project_id: str, browser, task: dict, local: list[str],
         return out
 
     try:
-        if box.get("page") is None:
-            box["page"] = browser.side_page(gis.session_path(project_id))
-        res = gis.upload_media(box["page"], gis_url, local, label=f"{city}: ")
+        # Вкладку 2ГИС спрашиваем у браузера КАЖДЫЙ РАЗ, а не помним её сами.
+        # Своя память тут уже стоила прогона: сторож памяти перезапустил
+        # браузер на пятом городе, вкладка вместе с ним умерла – и все
+        # оставшиеся 55 городов получили «Кабинет 2ГИС не открылся: Event loop
+        # is closed». Браузер помнит вкладку сам и после перезапуска заводит
+        # новую; здесь достаточно её попросить.
+        res = gis.upload_media(browser.side_page(gis.session_path(project_id)),
+                               gis_url, local, label=f"{city}: ")
     except Exception as e:  # noqa: BLE001 – шаг не должен ронять публикацию
         out["reason"] = f"Сбой шага 2ГИС: {e}"
         _append_log(project_id, "WARN", f"  📸 {city}: {out['reason']}")

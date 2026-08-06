@@ -1578,8 +1578,11 @@ def tab_compose(project_id: str, config: dict) -> None:
               help="Берутся те же файлы. Город без карточки 2ГИС просто пропускается – "
                    "в отчёте будет «Нет карточки в 2ГИС». 2ГИС не принимает gif.")
           if gis_photos != bool(config.get("gisPhotosDefault")):
+              # save_config берёт конфиг из session_state, а config – это его же
+              # под-проект: правка выше уже в нём. Лишний второй аргумент ронял
+              # всю вкладку с TypeError ровно на щелчке по галочке.
               config["gisPhotosDefault"] = gis_photos
-              save_config(project_id, config)
+              save_config(project_id)
 
     image_urls = [u.strip() for u in (image_urls_raw or "").splitlines() if u.strip()]
     product_photos = [u.strip() for u in (product_photos_raw or "").splitlines() if u.strip()]

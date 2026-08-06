@@ -10,6 +10,12 @@
 
   Классы (Uytl-ev-, AQPw70nB) оставлены как в кабинете – но искать по ним
   нельзя: со следующей сборкой 2ГИС они станут другими.
+
+  Ссылки в меню записаны ОТНОСИТЕЛЬНЫМИ («/orgs/…/media») – ровно так их
+  отдаёт живой кабинет. Сохранённая страница пришла с развёрнутыми адресами,
+  и из-за этого фикстура не показывала беду: Click брал href как есть и
+  получал от Playwright «Invalid url», а в отчёте у всех городов стояло
+  «Раздел «Фото и видео» не открылся».
 -->
 <html><head><meta charset="utf-8">
 <title>Личный кабинет 2ГИС: Фото и видео — МетПромИнтекс, производственная компания</title>
@@ -17,12 +23,12 @@
 <body style="margin:0;font:14px sans-serif">
 
 <nav style="float:left;width:220px">
-  <a href="https://account.2gis.com/orgs/70000001081103893/dashboard">Главная</a>
-  <a href="https://account.2gis.com/orgs/70000001081103893/branches/70000001081103894/attributes">Дополнительные атрибуты</a>
-  <a href="https://account.2gis.com/orgs/70000001081103893/reviews">Отзывы</a>
-  <a href="https://account.2gis.com/orgs/70000001081103893/vacancies">Вакансии</a>
-  <a class="gmcYaKQ4" href="https://account.2gis.com/orgs/70000001081103893/branches/70000001081103894/media">Фото и видео</a>
-  <a href="https://account.2gis.com/orgs/70000001081103893/products">Товары и услуги</a>
+  <a href="/orgs/70000001081103893/dashboard">Главная</a>
+  <a href="/orgs/70000001081103893/branches/70000001081103894/attributes">Дополнительные атрибуты</a>
+  <a href="/orgs/70000001081103893/reviews">Отзывы</a>
+  <a href="/orgs/70000001081103893/vacancies">Вакансии</a>
+  <a class="gmcYaKQ4" href="/orgs/70000001081103893/branches/70000001081103894/media">Фото и видео</a>
+  <a href="/orgs/70000001081103893/products">Товары и услуги</a>
 </nav>
 
 <div style="margin-left:240px">

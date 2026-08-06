@@ -1570,6 +1570,14 @@ def test_gis_media_upload() -> None:
                 check("ссылка на раздел найдена в меню",
                       "/branches/70000001081103894/media" in (look.get("link") or ""),
                       str(look.get("link")))
+                # В живом кабинете ссылка записана относительной, а Playwright
+                # такой адрес не принимает вовсе: «Invalid url». Боевой прогон
+                # так и лёг – у всех городов «Раздел «Фото и видео» не открылся».
+                check("ссылка развёрнута в полный адрес",
+                      (look.get("link") or "").startswith("http"), str(look.get("link")))
+                check("а в разметке она относительная – как в кабинете",
+                      page.evaluate("() => document.querySelector('.gmcYaKQ4')"
+                                    ".getAttribute('href')").startswith("/"))
 
                 # Альбом не вырос – успехом это не считаем.
                 box["html"] = page_html.replace(
@@ -1601,6 +1609,26 @@ def test_gis_media_upload() -> None:
                 nowhere = gis.upload_media(page, None, shots[:1])
                 check("без ссылки 2ГИС – честный отказ",
                       "кабинет 2ГИС" in nowhere["reason"], nowhere["reason"])
+
+                # Меню кабинета дорисовывается после остального содержимого.
+                # У Екатеринбурга Click уходил раньше, чем оно появлялось, и
+                # писал «в кабинете не нашлась ссылка» – а ссылка там есть.
+                page.goto("https://account.2gis.com/orgs/70000001081103893/company")
+                page.set_content("""<html><head><meta charset="utf-8"></head><body>
+                  <div id="app">Личный кабинет 2ГИС. Данные о компании загружаются,
+                     меню дорисуется следом – ровно так ведёт себя живой кабинет.</div>
+                  <script>setTimeout(() => {
+                    const a = document.createElement('a');
+                    a.href = '/orgs/70000001081103893/branches/70000001081103894/media';
+                    a.textContent = 'Фото и видео';
+                    document.body.appendChild(a);
+                  }, 2500)</script></body></html>""")
+                page.wait_for_timeout(300)
+                рано = gis._media_look(page)  # noqa: SLF001
+                check("сразу ссылки в меню нет", not рано.get("link"), str(рано.get("link")))
+                поздно = gis._media_settle(page, want_field=False)  # noqa: SLF001
+                check("но Click её дожидается", (поздно.get("link") or "").endswith("/media"),
+                      str(поздно.get("link")))
             finally:
                 browser.close()
 
@@ -4017,6 +4045,139 @@ def test_module_attrs_exist() -> None:
           not bad, "; ".join(sorted(set(bad))[:8]))
 
 
+def test_side_page_after_restart() -> None:
+    """
+    Вкладка 2ГИС переживает перезапуск браузера – точнее, заводится заново.
+
+    Из боевого прогона: сторож памяти перезапустил браузер на пятом городе из
+    шестидесяти, и все оставшиеся города получили «Кабинет 2ГИС не открылся:
+    Event loop is closed! Is Playwright already stopped?». У закрытого
+    Playwright нет даже цикла событий – падает сам вопрос «жива ли вкладка»,
+    поэтому спрашивать его надо осторожно.
+    """
+    import yb_playwright as yb
+    print("\n▸ Вторая сессия и перезапуск браузера")
+
+    class МёртваяВкладка:
+        def is_closed(self):
+            raise RuntimeError("Event loop is closed! Is Playwright already stopped?")
+
+    class ЖиваяВкладка:
+        def is_closed(self):
+            return False
+
+    class Контекст:
+        def __init__(self):
+            self.page = ЖиваяВкладка()
+
+        def set_default_timeout(self, *a):
+            return None
+
+        def set_default_navigation_timeout(self, *a):
+            return None
+
+        def new_page(self):
+            return self.page
+
+    class Браузер:
+        def __init__(self):
+            self.contexts = 0
+
+        def new_context(self, **kw):
+            self.contexts += 1
+            return Контекст()
+
+    нет_файла = Path(tempfile.gettempdir()) / "click-нет-такой-сессии.json"
+
+    b = yb.YbBrowser("TEST")
+    b.browser = Браузер()                      # type: ignore[assignment]
+    b._side_page = МёртваяВкладка()            # type: ignore[assignment] # noqa: SLF001
+    page = b.side_page(нет_файла)
+    check("мёртвая вкладка не выдаётся за живую", isinstance(page, ЖиваяВкладка))
+    eq("для неё заведён новый контекст", b.browser.contexts, 1)  # type: ignore[union-attr]
+
+    # А живую вкладку не пересоздаём: контекст на каждый город – это лишние
+    # секунды на ровном месте.
+    again = b.side_page(нет_файла)
+    check("живая вкладка остаётся той же", again is page)
+    eq("второй контекст не заводился", b.browser.contexts, 1)  # type: ignore[union-attr]
+
+
+def test_call_arity() -> None:
+    """
+    Свою функцию зовут с тем числом аргументов, которое она принимает.
+
+    Живой случай: галочка «Опубликовать эти фото ещё и в 2ГИС» вызывала
+    save_config(project_id, config), а save_config принимает ОДИН аргумент –
+    и вкладка «Публикация» падала с TypeError ровно на щелчке по галочке.
+    Заказчик видела красную плашку «This app has encountered an error».
+
+    Питон такие вещи заранее не проверяет: ошибка вылезает, только когда до
+    строки дойдёт выполнение, – а дойдёт она у заказчика. Проверка та же по
+    смыслу, что и «обращения к модулям» выше, только про вызовы.
+    """
+    import ast
+    print("\n▸ Число аргументов в вызовах")
+
+    bad: list[str] = []
+    for src in sorted(Path(".").glob("*.py")):
+        if src.name.startswith("tests_"):
+            continue
+        tree = ast.parse(src.read_text(encoding="utf-8"), filename=src.name)
+
+        # Берём только функции самого модуля. Методы классов сюда не годятся:
+        # у них первым идёт self, и вызов по голому имени – это не они.
+        in_class: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                for sub in node.body:
+                    if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        in_class.add(sub.name)
+
+        known: dict[str, ast.arguments] = {}
+        skip: set[str] = set(in_class)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                # Имя определено дважды или обёрнуто декоратором – сигнатура
+                # уже не та, что написана. Такие не трогаем.
+                if node.name in known or node.decorator_list:
+                    skip.add(node.name)
+                known[node.name] = node.args
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+                skip.add(node.id)     # имя переприсваивают – это уже не функция
+            elif isinstance(node, ast.arg):
+                skip.add(node.arg)    # это параметр, а не функция модуля
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            sig = known.get(node.func.id)
+            if sig is None or node.func.id in skip:
+                continue
+            # Звёздочки в определении или в вызове – считать нечего.
+            if sig.vararg or sig.kwarg:
+                continue
+            if any(isinstance(a, ast.Starred) for a in node.args) or \
+               any(k.arg is None for k in node.keywords):
+                continue
+
+            slots = [a.arg for a in (getattr(sig, "posonlyargs", []) + sig.args)]
+            given = len(node.args)
+            by_name = {k.arg for k in node.keywords}
+            need = len(slots) - len(sig.defaults)
+            need_kw = {a.arg for a, d in zip(sig.kwonlyargs, sig.kw_defaults) if d is None}
+            where = f"{src.name}:{node.lineno} – {node.func.id}()"
+            if given > len(slots):
+                bad.append(f"{where}: дано {given} аргументов, принимает {len(slots)}")
+            elif given + len(by_name & set(slots)) < need:
+                bad.append(f"{where}: обязательных аргументов {need}, а передано меньше")
+            elif need_kw - by_name:
+                bad.append(f"{where}: не передан {', '.join(sorted(need_kw - by_name))}")
+
+    check("свои функции зовут с правильным числом аргументов",
+          not bad, "; ".join(sorted(set(bad))[:6]))
+
+
 # ════════════════════════════════════════════════════════════════════
 def test_batch_browser_survives_rerun() -> None:
     """
@@ -4316,6 +4477,8 @@ def main() -> int:
         test_report_with_reviews()
         test_queue_resets_between_runs()
         test_module_attrs_exist()
+        test_call_arity()
+        test_side_page_after_restart()
         test_batch_browser_survives_rerun()
         test_one_build()
         test_actualize_selection()

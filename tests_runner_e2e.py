@@ -48,6 +48,9 @@ def eq(name: str, got, expected) -> None:
 # ─── Заглушки браузера ──────────────────────────────────────────────
 class FakePage:
     url = "https://yandex.ru/sprav/1/p/edit/posts/"
+    # Вкладка, пережившая перезапуск браузера, живой не бывает: любое действие
+    # на ней падает «Event loop is closed! Is Playwright already stopped?».
+    dead = False
 
     def goto(self, *a, **k): return None
     def wait_for_timeout(self, *a, **k): return None
@@ -63,20 +66,32 @@ class FakeBrowser:
         self.started = 0
         self.side_opened = 0
         self.side_closed = 0
+        self._side = None
 
     def start(self): self.started += 1
     def new_page(self): return self.page
     def save_session(self): return None
-    def restart(self): self.started += 1
     def close(self): return None
+
+    def restart(self):
+        # Перезапуск уносит с собой ВСЕ вкладки, включая вторую сессию: у
+        # настоящего браузера после него нет даже цикла событий. Модель тут
+        # честная нарочно – на этом прогон 2ГИС однажды и лёг.
+        self.started += 1
+        if self._side is not None:
+            self._side.dead = True
+        self._side = None
 
     # Вторая сессия (2ГИС) в том же браузере – см. yb.YbBrowser.side_page.
     def side_page(self, session_file):
-        self.side_opened += 1
-        return self.page
+        if self._side is None:
+            self.side_opened += 1
+            self._side = FakePage()
+        return self._side
 
     def close_side(self):
         self.side_closed += 1
+        self._side = None
 
 
 CALLS: list[str] = []
@@ -1005,6 +1020,76 @@ def scenario_gis_photos(pid: str) -> None:
         gis.upload_media = was                # type: ignore[assignment]
 
 
+def scenario_gis_photos_after_restart(pid: str) -> None:
+    """
+    Сторож памяти перезапустил браузер – фото в 2ГИС идут дальше.
+
+    Из боевого прогона: на пятом городе занято 1553 МБ, сторож перезапустил
+    браузер – и все оставшиеся 55 городов получили «Кабинет 2ГИС не открылся:
+    Event loop is closed! Is Playwright already stopped?». Прогон помнил
+    вкладку 2ГИС сам, а она умерла вместе с браузером.
+    """
+    print("\n▸ Сценарий: перезапуск браузера посреди прогона с фото в 2ГИС")
+    CALLS.clear(); SCRIPT.clear()
+    runner.clear_ledger(pid)
+    import gis_playwright as gis
+    ушло: list[str] = []
+
+    def fake_upload(page, gis_url, files, label=""):
+        if getattr(page, "dead", False):
+            return {"requested": len(files), "uploaded": 0, "skipped": 0,
+                    "reason": "Кабинет 2ГИС не открылся: Event loop is closed!"}
+        ушло.append(gis_url)
+        return {"requested": len(files), "uploaded": len(files), "skipped": 0, "reason": ""}
+
+    # Память «кончается» ровно один раз – когда первый город уже отработал,
+    # а второй ещё не начался. Считаем по числу опубликованных городов, а не
+    # по числу замеров: замер делается и до прогона тоже. Значение – между
+    # мягким порогом (перезапуск браузера) и жёстким (остановка прогона):
+    # нам нужен именно перезапуск.
+    _, мягкий, жёсткий = runner.mem_gates()
+    was_upload, was_mem = gis.upload_media, runner.memory_mb
+    gis.upload_media = fake_upload             # type: ignore[assignment]
+    runner.memory_mb = lambda: ((мягкий + жёсткий) // 2 if len(CALLS) == 1 else 10)  # type: ignore[assignment]
+    try:
+        folder = runner.p_tasks(pid)
+        folder.mkdir(parents=True, exist_ok=True)
+        shot = Path(tempfile.mkdtemp()) / "отгрузка.jpg"
+        shot.write_bytes(b"\xff\xd8\xff" + b"y" * 32)
+        города = [
+            ("Самара", "501", "https://account.2gis.com/orgs/70000001081103893/"),
+            ("Тула", "502", "https://account.2gis.com/orgs/70000001081103895/"),
+            ("Омск", "503", "https://account.2gis.com/orgs/70000001081103897/"),
+        ]
+        (folder / f"03-Россия-{int(time.time() * 1000)}.json").write_text(json.dumps({
+            "credentials": {"email": "test@yandex.ru", "password": "x"},
+            "projectName": "TEST", "country": "Россия",
+            "tasks": [{"cityName": c, "companyUrl": f"https://yandex.ru/sprav/{i}/p/edit/posts/",
+                       "companyId": i, "postText": f"Отгрузка в {c}",
+                       "productPhotos": [str(shot)], "gisPhotos": True, "gisUrl": u}
+                      for c, i, u in города],
+        }, ensure_ascii=False), encoding="utf-8")
+
+        ok, msg = runner.start_publish(pid, delay_between_posts_s=0,
+                                       expected_email="test@yandex.ru")
+        check("прогон стартовал", ok, msg)
+        wait_done(pid); settle(pid)
+
+        live = runner.read_live_log(pid, "publish")
+        check("сторож памяти сработал", "перезапускаю браузер" in live, live[-300:])
+        eq("фото ушли во ВСЕ три города, а не только в первый", len(ушло), 3)
+        rows = {r["cityName"]: r for r in latest_report(pid)["results"]}
+        for город, *_ in города:
+            eq(f"{город}: снимок доехал",
+               (rows[город].get("gisPhotos") or {}).get("uploaded"), 1)
+        check("мёртвой вкладки в отчёте нет",
+              not any("Event loop" in ((r.get("gisPhotos") or {}).get("reason") or "")
+                      for r in rows.values()))
+    finally:
+        gis.upload_media = was_upload          # type: ignore[assignment]
+        runner.memory_mb = was_mem             # type: ignore[assignment]
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="click-e2e-"))
     runner.USERS_DATA = tmp
@@ -1031,6 +1116,7 @@ def main() -> int:
         scenario_reviews_page_broken(pid)
         scenario_gis_actualize(pid)
         scenario_gis_photos(pid)
+        scenario_gis_photos_after_restart(pid)
         scenario_collect(pid)
         scenario_parallel(pid)
         scenario_dead_session(pid)

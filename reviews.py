@@ -328,6 +328,7 @@ def fix_mpi_shape(text: str) -> str:
     if sentences and _MPI_FAREWELL_RX.search(sentences[-1]):
         sentences.pop()
     body = " ".join(s.strip() for s in sentences if s.strip()).strip()
+    body = _mpi_wording(body)
     body = (body + " " + tail).strip() if body else tail
 
     return f"{pdata.REVIEW_MPI_OPENER}\n\n{body}\n\n{pdata.REVIEW_MPI_SIGN}"
@@ -343,6 +344,33 @@ _MPI_FAREWELL_RX = re.compile(
 _MPI_DOUBLE_THANKS_RX = re.compile(
     r"^(благодарим|спасибо)\b[^.!?]{0,70}(отзыв|мнени|обратн\w+ связ|доверие)"
     r"[^.!?]{0,40}[.!]?$", re.I)
+
+# Обороты, которых заказчик в ответах МПИ не хочет: «Нам очень приятно» звучит
+# натужно, а слово «очень» она просила не использовать вовсе. Пишем замены
+# строчными – заглавные буквы расставит проход по началам предложений.
+_MPI_PRIYATNO_RX = re.compile(r"\bнам\s+(?:очень\s+)?приятно\b", re.I)
+_MPI_WORDING = (
+    (re.compile(r"\b(?:мы\s+)?очень\s+рады\b", re.I), "мы рады"),
+)
+# Оставшееся «очень» просто убираем: перед прилагательным оно ничего не держит.
+# «не очень» не трогаем – там без него получится бессмыслица.
+_MPI_OCHEN_RX = re.compile(r"(?<!не )\bочень\s+", re.I)
+# Первая буква предложения – заглавная.
+_SENTENCE_HEAD_RX = re.compile(r"(^|[.!?]\s+)([а-яёa-z])")
+
+
+def _mpi_wording(body: str) -> str:
+    """Убрать обороты, которых заказчик в ответах МПИ не хочет."""
+    # «Приятно слышать» хорошо звучит в начале абзаца и только один раз: два
+    # таких оборота подряд читаются как заевшая пластинка. В середине
+    # «Нам очень приятно» заменяем на «мы рады».
+    body = _MPI_PRIYATNO_RX.sub(
+        lambda m: "приятно слышать" if m.start() == 0 else "мы рады", body)
+    for rx, repl in _MPI_WORDING:
+        body = rx.sub(repl, body)
+    body = _MPI_OCHEN_RX.sub("", body)
+    body = re.sub(r"\s{2,}", " ", body).strip()
+    return _SENTENCE_HEAD_RX.sub(lambda m: m.group(1) + m.group(2).upper(), body)
 
 
 def clean_draft(text: str, project_id: str = "") -> str:

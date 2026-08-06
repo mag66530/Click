@@ -3736,6 +3736,35 @@ def _audit_sheet_rows(project_id: str, config: dict, title: str) -> list[list[st
         lambda: kp_sheet.read_sheet(project_id, title, (config.get("kpSheetUrl") or "").strip()))
 
 
+def _kp_card_ids(project_id: str, config: dict) -> list[str]:
+    """
+    Номера карточек, на которые ссылается КП.
+
+    Нужны сборщику: список организаций Яндекса отдаёт не всё. У заказчика
+    в разделе «Организации» два Красноярска, а список приносит один –
+    второй заведён онлайн-организацией и в выдачу не попадает. Сколько ни
+    перечитывай, дубль не найдётся. Зато в КП у города записана прямая
+    ссылка на карточку: по ней Click откроет её сам.
+
+    Таблицу читаем из кэша вкладки; не вышло – возвращаем пусто и просто
+    собираем как раньше.
+    """
+    title = st.session_state.get("audit-sheet")
+    if not title:
+        return []
+    try:
+        rows = _audit_sheet_rows(project_id, config, title)
+        sheet = kp_audit.parse_sheet(rows)
+        out = []
+        for it in sheet.get("items") or []:
+            cid = kp_audit.company_id_from_url(it.get("link", ""))
+            if cid:
+                out.append(cid)
+        return list(dict.fromkeys(out))
+    except Exception:  # noqa: BLE001 – без таблицы соберём просто список
+        return []
+
+
 def _audit_pick_sheet(titles: list[str], prefer: str) -> str:
     """Какой лист предлагать: указанный ссылкой, потом «Лист20», потом «кп»."""
     saved = st.session_state.get("audit-sheet")
@@ -3775,7 +3804,8 @@ def tab_audit(project_id: str, config: dict) -> None:
                      use_container_width=True):
             ok, msg = runner.start_collect(project_id,
                                            headless=bool(get_settings(project_id)["headless"]),
-                                           with_cards=bool(st.session_state.get("audit-cards")))
+                                           with_cards=bool(st.session_state.get("audit-cards")),
+                                           must_ids=_kp_card_ids(project_id, config))
             (st.toast if ok else st.error)(msg)
             time.sleep(0.6)
             st.rerun()
@@ -3849,7 +3879,8 @@ def tab_audit(project_id: str, config: dict) -> None:
                      "Нажмите «Прочитать организации в Яндексе» – это займёт около минуты."))
         return
 
-    result = kp_audit.build(rows, companies)
+    result = kp_audit.build(rows, companies,
+                            yandex_total=int(stored.get("yandexTotal") or 0))
     if result.get("error"):
         st.error(result["error"] + f" (лист «{title}»)")
         return

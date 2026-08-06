@@ -1684,7 +1684,8 @@ def _save_companies(project_id: str, payload: dict) -> str:
 
 
 def start_collect(project_id: str, headless: bool = True, with_cards: bool = False,
-                  card_ids: list[str] | None = None) -> tuple[bool, str]:
+                  card_ids: list[str] | None = None,
+                  must_ids: list[str] | None = None) -> tuple[bool, str]:
     """
     Собрать организации аккаунта из раздела «Организации».
 
@@ -1714,7 +1715,8 @@ def start_collect(project_id: str, headless: bool = True, with_cards: bool = Fal
             "totals": {}, "error": None,
         })
         t = threading.Thread(target=_collect_worker,
-                             args=(project_id, run_id, headless, with_cards, list(card_ids or [])),
+                             args=(project_id, run_id, headless, with_cards,
+                                   list(card_ids or []), list(must_ids or [])),
                              daemon=True, name=f"click-collect-{project_id}")
         _threads[(project_id, "collect")] = t
         t.start()
@@ -1722,7 +1724,8 @@ def start_collect(project_id: str, headless: bool = True, with_cards: bool = Fal
 
 
 def _collect_worker(project_id: str, run_id: str, headless: bool,
-                    with_cards: bool, card_ids: list[str]) -> None:
+                    with_cards: bool, card_ids: list[str],
+                    must_ids: list[str] | None = None) -> None:
     _CUR.kind = "collect"
     yb.set_logger(lambda level, msg: _append_log(project_id, level, msg, kind="collect"))
     started_at = _now_iso()
@@ -1743,9 +1746,46 @@ def _collect_worker(project_id: str, run_id: str, headless: bool,
         _append_log(project_id, "INFO", "СБОР ОРГАНИЗАЦИЙ · читаю раздел «Организации»")
         browser.start()
         page = browser.page
-        companies = yb.collect_companies(page, log_every=1)
+        сколько_обещал = {}
+        companies = yb.collect_companies(page, log_every=1, stats=сколько_обещал)
         _append_log(project_id, "INFO", f"СОБРАНО · организаций: {len(companies)}")
         push_state("running", len(companies), len(companies), "")
+
+        # Список организаций Яндекса отдаёт НЕ ВСЁ. У заказчика в разделе
+        # «Организации» два Красноярска, а список приносит один: второй
+        # заведён как онлайн-организация и в выдачу не попадает. Сколько
+        # ни перечитывай – его там не будет, и дубль не найдётся никогда.
+        #
+        # Поэтому добираем поимённо: в КП у города записана ссылка на
+        # карточку, её номер и берём. Нет такого номера среди собранных –
+        # открываем карточку напрямую и дописываем в список.
+        известные: set[str] = set()
+        for co in companies:
+            известные |= {str(co.get(k) or "") for k in ("id", "permanentId", "tycoonId")}
+        известные.discard("")
+        добрать = [i for i in dict.fromkeys(must_ids or []) if i and i not in известные]
+        if добрать:
+            _append_log(project_id, "INFO",
+                        f"ДОБИРАЮ · в списке нет {len(добрать)} карточек из КП – "
+                        "открываю их по ссылкам")
+        for n, cid in enumerate(добрать, 1):
+            if p_stop(project_id).exists():
+                break
+            card = yb.read_company_card(page, f"https://yandex.ru/sprav/{cid}/p/edit/")
+            if card.get("error"):
+                _append_log(project_id, "WARN", f"  🟡 карточка {cid} · {card['error']}")
+                continue
+            card.setdefault("id", cid)
+            card["fromCard"] = True
+            card["fromLink"] = True          # пришла по ссылке, а не из списка
+            companies.append(card)
+            _append_log(project_id, "INFO",
+                        f"  ➕ {n}/{len(добрать)} · {card.get('name', '')} · "
+                        f"{card.get('address', '')[:60]}")
+            _sleep_interruptible(0.4, lambda: p_stop(project_id).exists())
+        if добрать:
+            _append_log(project_id, "INFO", f"ВСЕГО · организаций: {len(companies)}")
+            push_state("running", len(companies), len(companies), "")
 
         # Карточки открываем по просьбе – это долго, по 3-4 секунды на каждую.
         wanted = [c for c in companies
@@ -1766,7 +1806,12 @@ def _collect_worker(project_id: str, run_id: str, headless: bool,
             _sleep_interruptible(0.4, lambda: p_stop(project_id).exists())
 
         payload = {"collectedAt": _now_iso(), "count": len(companies),
-                   "withCards": bool(wanted), "companies": companies}
+                   "withCards": bool(wanted), "companies": companies,
+                   # Сколько организаций насчитал сам Яндекс. Если меньше, чем
+                   # видно в кабинете, – список отдал не всё, и это надо
+                   # показать в отчёте, а не гадать.
+                   "yandexTotal": int(сколько_обещал.get("total") or 0),
+                   "build": BUILD}
         where = _save_companies(project_id, payload)
         _append_log(project_id, "INFO", f"ИТОГИ · организаций {len(companies)} · {where}")
         browser.save_session()

@@ -640,7 +640,7 @@ def scenario_collect(pid: str) -> None:
          "phones": [], "rubrics": [], "noAccess": False},
     ]
     opened: list[str] = []
-    yb.collect_companies = lambda page, log_every=0, page_limit=50: [dict(c) for c in listed]  # type: ignore
+    yb.collect_companies = lambda page, log_every=0, page_limit=50, stats=None: [dict(c) for c in listed]  # type: ignore
     yb.read_company_card = (lambda page, url: opened.append(url) or  # type: ignore
                             {"emails": ["shahty@aviastal.ru"]})
 
@@ -668,7 +668,7 @@ def scenario_collect(pid: str) -> None:
     eq("почта из карточки попала в данные", saved["companies"][0]["emails"], ["shahty@aviastal.ru"])
 
     # Сессия кончилась – прогон падает понятно, а не молча отдаёт пустой список.
-    def boom(page, log_every=0, page_limit=50):
+    def boom(page, log_every=0, page_limit=50, stats=None):
         raise RuntimeError("Яндекс открыл страницу входа – сессия закончилась.")
 
     yb.collect_companies = boom  # type: ignore
@@ -709,7 +709,7 @@ def scenario_parallel(pid: str) -> None:
         return {"cityName": task["cityName"], "companyUrl": task["companyUrl"],
                 "status": "actualized", "reason": "клик прошёл", "durationMs": 10}
 
-    def slow_collect(page, log_every=0, page_limit=50):
+    def slow_collect(page, log_every=0, page_limit=50, stats=None):
         both_live.wait(timeout=10)
         return [{"id": "9", "type": "ordinal", "publishing": "publish", "name": "Тест",
                  "address": "Земля", "site": "", "sites": [], "social": {}, "emails": [],
@@ -855,6 +855,65 @@ def scenario_dead_session(pid: str) -> None:
           "страница входа" in (state.get("error") or "").lower(), state.get("error", ""))
 
 
+
+def scenario_collect_missing(pid: str) -> None:
+    """
+    Список организаций Яндекса отдаёт НЕ ВСЁ – недостающее добираем по КП.
+
+    У заказчика в разделе «Организации» два Красноярска, а список приносит
+    один: второй заведён онлайн-организацией и в выдачу не попадает. Она
+    трижды перечитывала организации – карточки всё равно нет, и дубль не
+    находился. В КП у города записана прямая ссылка на карточку: по её
+    номеру Click открывает карточку сам.
+    """
+    print("\n▸ Карточка есть в КП, но список её не отдал")
+
+    из_списка = [{"id": "1", "tycoonId": "", "permanentId": "1", "type": "ordinal",
+                  "publishing": "publish", "name": "МетПромИнтекс",
+                  "address": "Красноярский край, городской округ Красноярск, Красноярск, "
+                             "Тамбовская улица, 5",
+                  "site": "", "sites": [], "social": {}, "emails": [], "phones": [],
+                  "rubrics": [], "noAccess": False}]
+    открыты: list[str] = []
+
+    def карточка_по_ссылке(page, url):
+        открыты.append(url)
+        if "218208924466" not in url:
+            return {"error": "Страница карточки не найдена (404)", "url": url}
+        return {"id": "218208924466", "type": "ordinal", "publishing": "publish",
+                "name": "Метпромитнекс", "address": "Красноярск",
+                "site": "https://krasnoyarsk.metprointex.ru/",
+                "sites": ["https://krasnoyarsk.metprointex.ru/"], "social": {},
+                "emails": [], "phones": [], "rubrics": [], "noAccess": False, "url": url}
+
+    yb.collect_companies = lambda page, log_every=0, page_limit=50, stats=None: [dict(c) for c in из_списка]  # type: ignore
+    yb.read_company_card = карточка_по_ссылке    # type: ignore[assignment]
+
+    ok, msg = runner.start_collect(pid, headless=True, must_ids=["218208924466", "1"])
+    check("сбор стартовал", ok, msg)
+    state = wait_done(pid); settle(pid)
+    eq("сбор завершился", state.get("status"), "done")
+
+    saved = runner.load_companies(pid)
+    ids = [c["id"] for c in saved.get("companies") or []]
+    eq("в списке обе карточки", sorted(ids), sorted(["1", "218208924466"]))
+    eq("по ссылке открывали только недостающую", len(открыты), 1)
+    check("и именно её", "218208924466" in открыты[0], открыты[0])
+    check("карточка помечена как пришедшая по ссылке",
+          any(c.get("fromLink") for c in saved["companies"]))
+    log = runner.read_live_log(pid, "collect")
+    check("в логе видно, что добирали", "ДОБИРАЮ" in log, log[-300:])
+
+    # И главное: теперь сверка видит дубль.
+    import kp_audit
+    кп = [["Страна", "Город", "Сайт", "Ссылка", "", "", "", ""],
+          ["Россия", "Красноярск", "https://krasnoyarsk.metprointex.ru/",
+           "https://yandex.ru/sprav/218208924466/", "", "", "", ""]]
+    res = kp_audit.build(кп, saved["companies"])
+    eq("у Красноярска две карточки", (res["items"][0]["cmp"] or {}).get("status"), "несколько")
+    eq("и обе на листе «Дубли»", len(kp_audit.double_rows(res)) - 1, 2)
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="click-e2e-"))
     runner.USERS_DATA = tmp
@@ -883,6 +942,7 @@ def main() -> int:
         scenario_collect(pid)
         scenario_parallel(pid)
         scenario_dead_session(pid)
+        scenario_collect_missing(pid)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

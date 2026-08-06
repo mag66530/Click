@@ -1882,7 +1882,8 @@ def _companies_page(page: Page, num: int, limit: int) -> dict | None:
     return page.evaluate(_COMPANIES_JS)
 
 
-def collect_companies(page: Page, log_every: int = 0, page_limit: int = 50) -> list[dict]:
+def collect_companies(page: Page, log_every: int = 0, page_limit: int = 50,
+                      stats: dict | None = None) -> list[dict]:
     """
     Все организации аккаунта из раздела «Организации».
 
@@ -1917,6 +1918,9 @@ def collect_companies(page: Page, log_every: int = 0, page_limit: int = 50) -> l
             items.append(co)
         if log_every:
             info(f"  📃 Прочитано {len(items)} из {total}…")
+    if stats is not None:
+        stats["total"] = total          # сколько насчитал САМ Яндекс
+        stats["read"] = len(items)
     if len(items) < total:
         warn(f"  🟡 Прочитано {len(items)} организаций из {total}, которые обещал Яндекс")
     return items

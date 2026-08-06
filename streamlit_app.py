@@ -2352,6 +2352,31 @@ def reviews_queue_block(project_id: str, platform: str = rv.YANDEX) -> None:
 
         _send_all_block(project_id, pending, running, platform)
 
+        # Список можно вычистить целиком. Нужно после неудачного сбора: пока
+        # 2ГИС отдавал вперемешку и отвеченные отзывы, список набивался тем,
+        # что разбирать не надо, а «Убрать из списка» по одному – это долго.
+        if pending and not running:
+            if st.session_state.get("rv-drop-all-asked"):
+                st.warning(f"Убрать из списка все {len(pending)} отзывов? "
+                           "В кабинете ничего не изменится – список просто "
+                           "очистится, и следующий прогон соберёт их заново.")
+                y, n = st.columns(2)
+                if n.button("Отмена", key="rv-drop-all-no", use_container_width=True):
+                    st.session_state.pop("rv-drop-all-asked", None)
+                    st.rerun()
+                if y.button(f"Да, убрать {len(pending)}", key="rv-drop-all-yes",
+                            type="primary", use_container_width=True):
+                    for it in pending:
+                        it["status"] = rv.SKIPPED
+                        it["note"] = ""
+                    _review_queue_save(project_id, platform=platform)
+                    st.session_state.pop("rv-drop-all-asked", None)
+                    st.rerun()
+            elif st.button("🧹 Очистить список", key="rv-drop-all",
+                           use_container_width=True):
+                st.session_state["rv-drop-all-asked"] = True
+                st.rerun()
+
         for n, item in enumerate(pending):
             label = _REVIEW_LABELS.get(item.get("status"), "–")
             stars = "★" * int(item.get("rating") or 0)
@@ -2451,7 +2476,7 @@ def tab_actualize(project_id: str, config: dict) -> None:
     countries = platform_countries(config, platform)
     if not countries:
         if platform == rv.GIS:
-            html(T.empty("🗺", "Городов 2ГИС нет",
+            html(T.empty("📍", "Городов 2ГИС нет",
                          "Загрузите города из КП во вкладке «Города»: они берутся из "
                          "блока «2ГИС» той же таблицы. Город попадает сюда, если у него "
                          "есть ссылка на кабинет и статус не «Удалена»."))
@@ -2474,7 +2499,7 @@ def tab_actualize(project_id: str, config: dict) -> None:
     drawn: list[str] = []          # чьи галочки реально нарисованы в этот проход
     with st.container(border=True):
         if platform == rv.GIS:
-            html('<div class="card-title">🗺 Актуализация 2ГИС</div>')
+            html('<div class="card-title">🔄 Актуализация 2ГИС</div>')
             html('<div class="hint" style="margin-bottom:12px">Click зайдёт в раздел '
                  '<b>«Данные о компании»</b> каждого города и нажмёт <b>«Данные верны»</b>, '
                  'если 2ГИС просит подтвердить, что данные не изменились. Плашки нет – '
@@ -2892,7 +2917,7 @@ def _report_csv(data: dict) -> bytes:
 
 
 _REPORT_KINDS = {"publish": "📤 Публикация", "actualize": "🔄 Актуализация",
-                 "actualize-gis": "🗺 2ГИС"}
+                 "actualize-gis": "2ГИС"}
 
 
 def _last_run_kind(project_id: str) -> str:
@@ -3237,7 +3262,7 @@ def _gis_login_block(project_id: str, config: dict) -> None:
     поэтому после перезапуска облака вход обычно не нужен.
     """
     worker = get_worker()
-    html('<div class="card-title">🗺 Вход в 2ГИС</div>')
+    html('<div class="card-title">🔐 Вход в 2ГИС</div>')
 
     c1, c2 = st.columns(2)
     email = c1.text_input("Почта кабинета 2ГИС", value=config.get("gisEmail", ""),
@@ -3266,6 +3291,9 @@ def _gis_login_block(project_id: str, config: dict) -> None:
             st.caption("Впишите почту и пароль кабинета 2ГИС – и Click войдёт сам. "
                        "Одна учётка на проект: в ней все города.")
             return
+        if can_show_browser():
+            st.caption("Локально можно смотреть, как Click входит: включите "
+                       "«Показывать окно браузера» в блоке входа в Яндекс выше.")
         if st.button("🔑 Войти в 2ГИС", type="primary", key="gis-login",
                      use_container_width=True):
             try:
@@ -3281,8 +3309,13 @@ def _gis_login_block(project_id: str, config: dict) -> None:
         return
 
     state = st.session_state.get("gis_state") or {}
+    # Сначала словами, что случилось, и только потом снимок: человеку нужен
+    # ответ на «почему не пустило», а не картинка без подписи.
+    if state.get("note"):
+        st.warning(state["note"])
     if state.get("screenshot"):
         st.image(state["screenshot"], use_container_width=True)
+        st.caption("Это то, что видит Click в кабинете 2ГИС прямо сейчас.")
 
     if state.get("step") == "done":
         try:
@@ -3304,7 +3337,7 @@ def _gis_login_block(project_id: str, config: dict) -> None:
         if st.button("Подтвердить", key="gis-code-go", type="primary") and code.strip():
             st.session_state["gis_state"] = worker.call(flow.submit_code, code.strip())
             st.rerun()
-    else:
+    elif not state.get("note"):
         st.warning("Кабинет не пустил с этой парой почта/пароль – проверьте их выше "
                    "и попробуйте снова. На снимке видно, что показывает 2ГИС.")
 

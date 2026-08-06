@@ -1271,6 +1271,8 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
     foreign = []
     if platform == GIS:
         import gis_playwright as gis
+        # Отвеченные сюда попадать не должны вовсе – ни свои, ни чужие.
+        items = [it for it in items if not it.get("answered")]
         foreign = [it for it in items if not gis.is_own(it)]
         items = [it for it in items if gis.is_own(it)]
 

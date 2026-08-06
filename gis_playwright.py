@@ -221,8 +221,17 @@ _READ_REVIEWS_JS = r"""
     }
 
     const all = leaves(card);
-    const dateEl = all.find(el => DATE_RX.test(textOf(el)));
+    const dates = all.filter(el => DATE_RX.test(textOf(el)));
+    const dateEl = dates[0] || null;
     const dateText = dateEl ? textOf(dateEl) : '';
+
+    // Ответ компании уже стоит? Кнопка «Ответить» на такой карточке
+    // ОСТАЁТСЯ (2ГИС разрешает ответить ещё раз), поэтому опознаём ответ по
+    // двум надёжным приметам: у ответа своя дата – в карточке становится две –
+    // и рядом с ним появляются «Удалить» и «Отображать как основной».
+    const answerMark = Array.from(card.querySelectorAll('button, [role="button"], a, span, div'))
+      .some(el => /^(удалить|отображать как основной|скрыть ответ)$/i.test(textOf(el)));
+    const answered = answerMark || dates.length > 1;
 
     // Автор – соседняя с площадкой подпись; если площадки нет, первый
     // короткий листок до даты.
@@ -242,21 +251,63 @@ _READ_REVIEWS_JS = r"""
       }
     }
 
-    // Текст отзыва – самый длинный листок, не считая служебных: ссылок
-    // (там адрес филиала), кнопок, счётчиков, даты и имени.
+    // Текст отзыва – самый длинный БЛОК, а не самый длинный листок.
+    //
+    // Листок не годится: длинный отзыв 2ГИС показывает свёрнутым (line="3"),
+    // и текст в разметке разбит на несколько кусков. «Самый длинный листок»
+    // брал один из них – в очередь попадал обрывок, начинавшийся с середины
+    // слова: «адыков Адиль! То не берет телефон…». Берём элемент целиком:
+    // его innerText склеивает куски обратно.
+    //
+    // Блок с ответом компании пропускаем: там текст длиннее самого отзыва,
+    // и он бы победил.
+    const answerBox = answerMark
+      ? (Array.from(card.querySelectorAll('button, [role="button"], a, span, div'))
+          .find(el => /^(удалить|отображать как основной)$/i.test(textOf(el))) || null)
+      : null;
+    const answerRoot = answerBox ? answerBox.closest('div, li, section') : null;
+
+    // Текст берём ПО КУСКАМ из разметки, а не с экрана.
+    //
+    // Свёрнутый отзыв 2ГИС хранит так: видимая часть, отдельный узел с
+    // многоточием и скрытый остаток. На экране (innerText) видно только
+    // начало – «…Менеджер С…»; скрытый остаток при этом в разметке лежит.
+    // Склеиваем куски ВПЛОТНУЮ, без пробела: свёртка режет строку прямо
+    // посреди слова, и «Менеджер С» + «адыков Адиль» должны снова стать
+    // «Менеджер Садыков Адиль». Многоточие свёртки выбрасываем.
+    const whole = el => {
+      const parts = [];
+      const walk = n => {
+        if (n.nodeType === 3) { parts.push(n.nodeValue || ''); return; }
+        if (n.nodeType !== 1) return;
+        const t = (n.textContent || '').trim();
+        if (t === '…' || t === '...' || t === '..') return;
+        for (const c of n.childNodes) walk(c);
+      };
+      walk(el);
+      return norm(parts.join(''));
+    };
+
     let text = '';
-    for (const el of all) {
+    for (const el of card.querySelectorAll('div, p, span')) {
       if (el.closest('a, button, svg, [role="button"]')) continue;
-      const t = textOf(el);
-      if (!t || el === dateEl || el === badge) continue;
-      if (t === author || PLATFORMS.includes(t) || /^\d+$/.test(t)) continue;
+      // Обёртка вокруг кнопки – не текст. Без этого у отзыва из одних звёзд
+      // «текстом» становилось слово «Ответить».
+      if (el.querySelector('a, button, [role="button"]')) continue;
+      if (answerRoot && (answerRoot.contains(el) || el.contains(answerRoot))) continue;
+      // Обёртки, в которые попали имя, дата или оценка, – это не текст отзыва.
+      if (dates.some(d => el.contains(d))) continue;
+      if (badge && el.contains(badge)) continue;
+      if (el.querySelector('[class*="rating__front"]')) continue;
+      const t = whole(el);
+      if (!t || t === author || PLATFORMS.includes(t) || /^\d+$/.test(t)) continue;
       if (t.length > text.length) text = t;
     }
 
     const branch = card.querySelector('a[href*="/reviews/"]');
     const foreign = foreignLink(card);
     items.push({
-      author, rating, text, dateText,
+      author, rating, text, dateText, answered,
       platform: platform || (foreign ? norm(foreign.textContent).replace(/^посмотреть\s+на\s+/i, '') : ''),
       canAnswer: !!answerButton(card),
       foreignUrl: foreign ? foreign.href : '',
@@ -296,8 +347,12 @@ def review_id(org_id: str | None, item: dict) -> str:
     Нужен, чтобы очередь на подтверждение не плодила дубли при повторном
     прогоне по тому же городу.
     """
+    # По НАЧАЛУ текста, а не по всему: свёрнутый отзыв читается то целиком,
+    # то обрезанным, и от полного текста номер скакал бы – в очереди
+    # появлялись бы двойники одного и того же отзыва.
     raw = "|".join([str(org_id or ""), item.get("author") or "",
-                    item.get("dateText") or "", (item.get("text") or "")[:200]])
+                    item.get("dateText") or "", str(item.get("rating") or 0),
+                    (item.get("text") or "")[:40]])
     return "gis-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
@@ -317,8 +372,10 @@ def normalize(item: dict, org_id: str | None = None) -> dict:
         "rating": int(item.get("rating") or 0),
         "text": (item.get("text") or "").strip(),
         "time_created": parse_date(item.get("dateText") or ""),
-        # Список открыт с фильтром «Без ответа»: всё, что здесь, – без ответа.
-        "answered": False,
+        # Смотрим на саму карточку, а не на фильтр в адресе. Фильтр «Без
+        # ответа» кабинет применяет уже после отрисовки списка, и первым
+        # заходом видно ВСЕ отзывы – в очередь попадали уже отвеченные.
+        "answered": bool(item.get("answered")),
         "platform": item.get("platform") or "",
         "canAnswer": bool(item.get("canAnswer")),
         "foreignUrl": item.get("foreignUrl") or "",
@@ -384,20 +441,30 @@ def read_reviews(page: Page, url: str, navigate: bool = True,
             out["noSession"] = True
             return out
 
-    data, ready = None, False
-    deadline = time.time() + (REVIEWS_WAIT_MS / 1000 if navigate else 4)
+    # Ждём, пока список УСТОИТСЯ, а не первую попавшуюся отрисовку.
+    #
+    # Кабинет сначала рисует все отзывы и только потом применяет фильтр из
+    # адреса. Первый заход хватал предварительный список – и в очередь
+    # попадали отзывы, на которые давно ответили. Считаем список готовым,
+    # когда два чтения подряд дают одно и то же число карточек.
+    data, ready, same, was = None, False, 0, -1
+    deadline = time.time() + (REVIEWS_WAIT_MS / 1000 if navigate else 5)
     while time.time() < deadline:
-        data = _reviews_on_page(page, org_id)
-        if data and data["items"]:
-            break
+        fresh = _reviews_on_page(page, org_id)
+        if fresh and fresh["items"]:
+            data = fresh
+            same = same + 1 if len(fresh["items"]) == was else 0
+            was = len(fresh["items"])
+            if same >= 1:
+                break
         try:
             ready = bool(page.evaluate(_PAGE_READY_JS)) and bool(page.evaluate(_EMPTY_LIST_JS))
         except Exception:  # noqa: BLE001
             ready = False
-        if ready:
-            data = data or {"items": [], "skipped": 0}
+        if ready and not data:
+            data = {"items": [], "skipped": 0}
             break
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(700)
 
     if data is None:
         out["reason"] = ("Страница отзывов не открылась – кабинет 2ГИС не отдал список. "
@@ -840,8 +907,17 @@ class GisLoginFlow:
                 viewport={"width": 1000, "height": 760}, user_agent=yb.UA,
                 locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS)
             self.page = self.context.new_page()
-            self.page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=40_000)
-            self.page.wait_for_timeout(1500)
+            # Сначала корень: кабинет сам уводит на форму входа. Если формы
+            # не появилось – пробуем явный адрес. Порядок такой, потому что
+            # у заказчика в адресной строке было именно account.2gis.com.
+            self.page.goto(ACCOUNT_HOST, wait_until="domcontentloaded", timeout=40_000)
+            self.page.wait_for_timeout(2500)
+            if not self._fields()["hasPass"]:
+                try:
+                    self.page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=40_000)
+                    self.page.wait_for_timeout(2500)
+                except Exception:  # noqa: BLE001 – останемся на корне, снимок покажет что там
+                    pass
             return self.state()
         except Exception:
             self.close()
@@ -886,25 +962,67 @@ class GisLoginFlow:
         except Exception:  # noqa: BLE001
             return None
 
-    def submit_credentials(self, email: str, password: str) -> dict:
-        """Вписать почту и пароль и нажать «Войти»."""
-        page = self.page
-        mail = page.locator('input[type="email"], input[name="email"], '
-                            'input[type="text"]:not([type="password"])').first
-        mail.click()
+    def _fields(self) -> dict:
+        """Что за поля на странице входа. Ничего не бросает – только смотрит."""
         try:
-            mail.fill("")
+            return self.page.evaluate(_FIND_LOGIN_FIELDS_JS)
         except Exception:  # noqa: BLE001
-            pass
-        mail.type(email, delay=30)
-        pw = page.locator('input[type="password"]').first
-        pw.click()
-        pw.type(password, delay=30)
-        page.wait_for_timeout(300)
-        if not yb._click_exact_button(page, ["войти", "log in", "sign in"]):
-            pw.press("Enter")
-        page.wait_for_timeout(3500)
-        return self.state()
+            return {"inputs": [], "hasMail": False, "hasPass": False}
+
+    def submit_credentials(self, email: str, password: str) -> dict:
+        """
+        Вписать почту и пароль и нажать «Войти».
+
+        Поля ищем СВОИМ разбором, а не селектором по типу. У 2ГИС поля –
+        самодельные компоненты, и атрибута type у них может не быть вовсе
+        (в разметке кабинета встречается голое `<input class="…"
+        placeholder="Поиск">`). Первый заход это и уронил: селектор
+        `input[type=text]` не нашёл ничего, и вместо понятного сообщения
+        человек увидел «Locator.click: Timeout 30000ms exceeded».
+
+        Ничего наружу не бросаем: любая неудача возвращается снимком экрана
+        и словами, что именно на странице увидели. Слепой таймаут не
+        объясняет ничего, а снимок объясняет сразу.
+        """
+        page = self.page
+        found = self._fields()
+        if not (found.get("hasMail") and found.get("hasPass")):
+            st = self.state()
+            st["note"] = _no_fields_note(found)
+            return st
+
+        try:
+            mail = page.locator('[data-click-login="mail"]').first
+            mail.click(timeout=8_000)
+            try:
+                mail.fill("")
+            except Exception:  # noqa: BLE001 – самодельное поле может не поддерживать fill
+                pass
+            mail.type(email, delay=30)
+
+            pw = page.locator('[data-click-login="pass"]').first
+            pw.click(timeout=8_000)
+            try:
+                pw.fill("")
+            except Exception:  # noqa: BLE001
+                pass
+            pw.type(password, delay=30)
+            page.wait_for_timeout(400)
+            if not yb._click_exact_button(page, ["войти", "log in", "sign in"]):
+                pw.press("Enter")
+        except Exception as e:  # noqa: BLE001
+            st = self.state()
+            st["note"] = f"Не получилось заполнить форму входа: {yb._short_error(e)}"
+            return st
+
+        page.wait_for_timeout(4000)
+        st = self.state()
+        if st.get("step") == "login":
+            # Форма осталась – значит 2ГИС не пустил. Причина обычно написана
+            # прямо на странице, поэтому показываем её текст.
+            st["note"] = _page_complaint(page) or ("2ГИС остался на форме входа – "
+                                                   "проверьте почту и пароль.")
+        return st
 
     def submit_code(self, code: str) -> dict:
         page = self.page
@@ -916,6 +1034,72 @@ class GisLoginFlow:
             field.press("Enter")
         page.wait_for_timeout(3000)
         return self.state()
+
+
+# Поля входа ищем разбором, а не селектором: у 2ГИС это самодельные
+# компоненты, и атрибута type у них может не быть.
+_FIND_LOGIN_FIELDS_JS = r"""
+() => {
+  const seen = el => {
+    const r = el.getBoundingClientRect();
+    const st = getComputedStyle(el);
+    return r.width > 40 && r.height > 8 && st.visibility !== 'hidden' && st.display !== 'none';
+  };
+  const all = Array.from(document.querySelectorAll('input')).filter(seen);
+  const kind = el => (el.getAttribute('type') || '').toLowerCase();
+  const label = el => [el.placeholder, el.name, el.id,
+                       el.getAttribute('aria-label')].filter(Boolean).join(' ');
+
+  const pass = all.find(el => kind(el) === 'password') || null;
+  const MAIL = /(почт|mail|логин|login|телефон|phone)/i;
+  const SEARCH = /(поиск|search)/i;
+  let mail = all.find(el => el !== pass && kind(el) !== 'password' && MAIL.test(label(el)));
+  if (!mail) mail = all.find(el => el !== pass && kind(el) !== 'password' && !SEARCH.test(label(el)));
+
+  document.querySelectorAll('[data-click-login]').forEach(
+    n => n.removeAttribute('data-click-login'));
+  if (mail) mail.setAttribute('data-click-login', 'mail');
+  if (pass) pass.setAttribute('data-click-login', 'pass');
+  return {
+    hasMail: !!mail, hasPass: !!pass,
+    inputs: all.map(el => ({ type: kind(el), label: label(el).slice(0, 40) })),
+  };
+}
+"""
+
+# Текст жалобы со страницы: 2ГИС пишет причину прямо в форме.
+_COMPLAINT_JS = r"""
+() => {
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  const RX = /(невер|не найден|ошибк|попроб|заблокир|подтверд|не совпад|некоррект)/i;
+  let best = '';
+  for (const el of document.querySelectorAll('body *')) {
+    const t = norm(el.textContent);
+    if (!t || t.length > 200 || !RX.test(t)) continue;
+    if (Array.from(el.querySelectorAll('*')).some(c => RX.test(norm(c.textContent)))) continue;
+    if (!best || t.length < best.length) best = t;
+  }
+  return best;
+}
+"""
+
+
+def _no_fields_note(found: dict) -> str:
+    """Что сказать человеку, если полей входа на странице не видно."""
+    inputs = found.get("inputs") or []
+    if not inputs:
+        return ("На странице входа 2ГИС не видно ни одного поля. Возможно, кабинет "
+                "показал что-то другое – капчу, согласие или ошибку. Посмотрите снимок ниже.")
+    seen = ", ".join(f"«{i.get('label') or i.get('type') or '?'}»" for i in inputs[:5])
+    return (f"Поля входа не опознаны. На странице видно полей: {len(inputs)} ({seen}). "
+            "Пришлите снимок ниже – поправим поиск полей.")
+
+
+def _page_complaint(page: Page) -> str:
+    try:
+        return (page.evaluate(_COMPLAINT_JS) or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 _LOGIN_STATE_JS = r"""

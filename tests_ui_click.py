@@ -410,6 +410,77 @@ def main() -> int:
                 check("галочка пережила переход на «Публикацию»",
                       cb.count() > 0 and cb.first.is_checked(), "сбросилась")
 
+            # ── Выбор городов в РАЗНЫХ странах не сбрасывает соседние ──
+            # Заказчик: «Выбираю все в КЗ, хочу ещё выбрать РБ – сбрасывается
+            # КЗ». Проверяется только настоящими кликами: ломалось это на
+            # устройстве Streamlit – «Снять все» писало значение и тем
+            # галочкам, которых нет на экране (страна свёрнута), а потом эта
+            # старая запись вылезала и читалась как «человек снял галочку».
+            print("\n▸ Выбор городов: соседние страны не сбрасываются")
+            go("🔄 Актуализация")
+            page.wait_for_timeout(2500)
+
+            def picked() -> int:
+                body = page.inner_text("body")
+                i = body.find("Выбрано:")
+                if i < 0:
+                    return -1
+                return int("".join(ch for ch in body[i:i + 24].split("/")[0] if ch.isdigit()) or -1)
+
+            def press(name: str) -> bool:
+                """Нажать кнопку по надписи, подведя её под курсор."""
+                btn = page.get_by_role("button", name=name, exact=True).first
+                if btn.count() == 0:
+                    return False
+                btn.scroll_into_view_if_needed(timeout=5000)
+                page.wait_for_timeout(300)
+                btn.click(timeout=10000)
+                page.wait_for_timeout(2200)
+                return True
+
+            rows = probe(page, "tile-row-act-", "Страны актуализации")
+            if len(rows) < 2 or picked() < 0:
+                check("выбор городов: у проекта меньше двух стран – пропускаю", True)
+            else:
+                # Кнопка одна и подписана по состоянию: «Снять все», когда
+                # выбраны все, иначе «Выбрать все». Приводим к нулю в любом случае.
+                if not press("Снять все"):
+                    press("Выбрать все")
+                    press("Снять все")
+                check("«Снять все» снимает всё", picked() == 0, f"осталось {picked()}")
+
+                # Первая страна: выбрать все в ней
+                page.locator(f'[class*="{rows[0]["key"]}"] button').first.click()
+                page.wait_for_timeout(2000)
+                press("Выбрать все в стране")
+                first_n = picked()
+                check("в первой стране города выбрались", first_n > 0, f"выбрано {first_n}")
+
+                # Вторая страна: раскрыть и отметить один город
+                page.locator(f'[class*="{rows[1]["key"]}"] button').first.click()
+                page.wait_for_timeout(2000)
+                check("после раскрытия соседней страны выбор цел",
+                      picked() == first_n, f"было {first_n}, стало {picked()}")
+                boxes = page.locator('[class*="city-grid"] label')
+                if boxes.count() == 0:
+                    check("во второй стране нет городов – пропускаю", True)
+                else:
+                    boxes.first.click()
+                    page.wait_for_timeout(2500)
+                    check("галочка в другой стране НЕ сбрасывает первую",
+                          picked() == first_n + 1,
+                          f"ждали {first_n + 1}, получили {picked()}")
+
+                # И назад: снятая галочка тоже считается
+                    boxes = page.locator('[class*="city-grid"] label')
+                    boxes.first.click()
+                    page.wait_for_timeout(2500)
+                    check("снятая галочка возвращает счётчик",
+                          picked() == first_n, f"ждали {first_n}, получили {picked()}")
+
+                press("Выбрать все")
+                check("«Выбрать все» возвращает всех", picked() > first_n, f"выбрано {picked()}")
+
             # ── ГЛАВНОЕ: живая панель обновляется САМА ──
             # Заказчик: «нажала актуализацию, а там как будто зависло на первом
             # городе. Нажала остановить, а там оказывается 18 городов уже

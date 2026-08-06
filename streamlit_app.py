@@ -1704,14 +1704,26 @@ def _act_set(city_ids: list[str], value: bool, prefix: str = "act") -> None:
     Вызывается ТОЛЬКО из on_click кнопки: в этот момент виджеты ещё не созданы,
     поэтому их состояние можно переписать. Держим в согласии свой набор и сами
     галочки – иначе «Выбрать все» меняло бы счётчик, а галочки нет.
+
+    Но трогаем ТОЛЬКО те галочки, которые сейчас на экране. Живой случай
+    заказчика: «Снять все» → раскрыть Казахстан → «Выбрать все в стране» (7 из
+    30) → раскрыть Беларусь → отметить Минск – и Казахстан слетал, оставалась
+    одна галочка. Причина: «Снять все» писало значение ВСЕМ тридцати городам,
+    в том числе свёрнутым, у которых виджета на странице нет. Для Streamlit
+    это обычная запись в session_state, она там и оставалась; потом города
+    Казахстана рисовались, их значения становились виджетными, а при
+    сворачивании страны виджет исчезал – и наружу вылезала та самая старая
+    запись False. Подбор ниже честно читал её как «человек снял галочку».
     """
     sel = st.session_state.setdefault(f"{prefix}-selected", set())
     if value:
         sel.update(city_ids)
     else:
         sel.difference_update(city_ids)
+    drawn = set(st.session_state.get(f"{prefix}-drawn") or ())
     for cid in city_ids:
-        st.session_state[f"{prefix}-cb-{cid}"] = value
+        if cid in drawn:
+            st.session_state[f"{prefix}-cb-{cid}"] = value
 
 
 def _act_toggle(city_id: str, widget_key: str, prefix: str = "act") -> None:
@@ -1740,7 +1752,11 @@ def _act_sync_widgets(all_ids: list[str], prefix: str = "act") -> None:
     моменту запуска скрипта Streamlit уже положил присланное в session_state.
     """
     sel = st.session_state.setdefault(f"{prefix}-selected", set())
-    for cid in all_ids:
+    # Только те города, чьи галочки в прошлый проход РИСОВАЛИСЬ. У остальных
+    # в session_state может лежать давняя запись от «Снять все» – читать её
+    # как «человек снял галочку» нельзя (см. _act_set).
+    drawn = [cid for cid in st.session_state.get(f"{prefix}-drawn") or () if cid in set(all_ids)]
+    for cid in drawn:
         key = f"{prefix}-cb-{cid}"
         if key not in st.session_state:
             continue
@@ -2446,6 +2462,7 @@ def tab_actualize(project_id: str, config: dict) -> None:
     running = state.get("status") == "running"
     busy = runner.busy_reason(project_id, kind)   # пусто – запускать можно
 
+    drawn: list[str] = []          # чьи галочки реально нарисованы в этот проход
     with st.container(border=True):
         if platform == rv.GIS:
             html('<div class="card-title">🗺 Актуализация 2ГИС</div>')
@@ -2500,8 +2517,20 @@ def tab_actualize(project_id: str, config: dict) -> None:
                         cols = st.columns(per_row)
                         for col, ct in zip(cols, c["cities"][start_i:start_i + per_row]):
                             wkey = f"{prefix}-cb-{ct['id']}"
-                            col.checkbox(ct["name"], value=ct["id"] in chosen, key=wkey,
+                            # Источник правды – набор выбранных, галочка лишь
+                            # его отражение. Через value= это не сделать: у
+                            # виджета есть key, и Streamlit берёт значение из
+                            # session_state, а value молча игнорирует.
+                            want = ct["id"] in chosen
+                            if st.session_state.get(wkey) != want:
+                                st.session_state[wkey] = want
+                            col.checkbox(ct["name"], key=wkey,
                                          on_change=_act_toggle, args=(ct["id"], wkey, prefix))
+                drawn.extend(ids)
+
+    # Что нарисовали – помним до следующего прохода: подбор значений и
+    # «Выбрать все» имеют право трогать только эти галочки.
+    st.session_state[f"{prefix}-drawn"] = drawn
 
     logged_in = (gis.has_saved_session(project_id) if platform == rv.GIS
                  else yb.has_saved_session(project_id))

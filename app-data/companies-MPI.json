@@ -1,7 +1,7 @@
 {
-  "collectedAt": "2026-08-06T12:51:23.518373+00:00",
+  "collectedAt": "2026-08-06T13:04:45.770824+00:00",
   "count": 51,
-  "withCards": false,
+  "withCards": true,
   "companies": [
     {
       "id": "228071058652",
@@ -28,7 +28,11 @@
       ],
       "rubrics": [],
       "noAccess": false,
-      "rating": null
+      "rating": null,
+      "fromDom": true,
+      "url": "https://yandex.ru/sprav/228071058652/p/edit/",
+      "companyId": "228071058652",
+      "fromCard": true
     },
     {
       "id": "2242836430",
@@ -48,9 +52,9 @@
         "https://chelyabinsk.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+79191236830",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79191236830",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+79191236830"
       },
       "emails": [
         "chelyabinsk@metpromintex.ru"
@@ -58,9 +62,16 @@
       "phones": [
         "+7 (351) 223-68-30"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/2242836430/p/edit/",
+      "companyId": "2242836430",
+      "fromCard": true
     },
     {
       "id": "11457141140",
@@ -90,9 +101,15 @@
       "phones": [
         "+7 (342) 259-20-26"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Цветные металлы",
+        "Чёрная металлургия"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/11457141140/p/edit/",
+      "companyId": "11457141140",
+      "fromCard": true
     },
     {
       "id": "14915550819",
@@ -112,9 +129,9 @@
         "https://vladivostok.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/79628298578",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79628298578",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/79628298578"
       },
       "emails": [
         "vladivostok@metpromintex.ru"
@@ -124,9 +141,16 @@
         "+7 (962) 829-85-78",
         "+7 (423) 254-13-38"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Чёрная металлургия",
+        "Цветные металлы",
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 4.3
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/14915550819/p/edit/",
+      "companyId": "14915550819",
+      "fromCard": true
     },
     {
       "id": "17020848852",
@@ -146,9 +170,9 @@
         "https://saratov.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/79521480493",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79521480493",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/79521480493"
       },
       "emails": [
         "saratov@metpromintex.ru",
@@ -157,9 +181,16 @@
       "phones": [
         "+7 (8452) 53-11-57"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.3
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/17020848852/p/edit/",
+      "companyId": "17020848852",
+      "fromCard": true
     },
     {
       "id": "18815611671",
@@ -180,9 +211,9 @@
         "https://habarovsk.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+79628298578",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79628298578",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+79628298578"
       },
       "emails": [
         "khabarovsk@metpromintex.ru"
@@ -190,9 +221,16 @@
       "phones": [
         "+7 (4212) 60-30-28"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/18815611671/p/edit/",
+      "companyId": "18815611671",
+      "fromCard": true
     },
     {
       "id": "19001859314",
@@ -212,9 +250,9 @@
         "https://izhevsk.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+7(964)+190-20-26",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+7(964)+190-20-26",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+7(964)+190-20-26"
       },
       "emails": [
         "izhevsk@metpromintex.ru"
@@ -222,9 +260,16 @@
       "phones": [
         "+7 (3412) 32-27-95"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/19001859314/p/edit/",
+      "companyId": "19001859314",
+      "fromCard": true
     },
     {
       "id": "22290680107",
@@ -243,9 +288,9 @@
       "site": "",
       "sites": [],
       "social": {
-        "whatsapp": "https://wa.me/+996224076737",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+996224076737",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+996224076737"
       },
       "emails": [
         "info@metpromintex.kg"
@@ -253,9 +298,16 @@
       "phones": [
         "+996 224 07 67 37"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Цветные металлы",
+        "Чёрная металлургия"
+      ],
       "noAccess": false,
-      "rating": 4.6
+      "rating": 4.6,
+      "url": "https://yandex.ru/sprav/22290680107/p/edit/",
+      "companyId": "22290680107",
+      "fromCard": true
     },
     {
       "id": "32551844686",
@@ -275,8 +327,8 @@
         "https://kaliningrad.metpromintex.ru/"
       ],
       "social": {
-        "telegram": "https://t.me/metpromintex",
-        "vkontakte": "https://vk.ru/public217252669"
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/metpromintex"
       },
       "emails": [
         "info@metpromintex.ru"
@@ -284,9 +336,16 @@
       "phones": [
         "+7 (495) 729-83-58"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.3
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/32551844686/p/edit/",
+      "companyId": "32551844686",
+      "fromCard": true
     },
     {
       "id": "37668240676",
@@ -320,9 +379,16 @@
       "phones": [
         "+7 (727) 354-08-28"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Чёрная металлургия",
+        "Цветные металлы",
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 4.9
+      "rating": 4.9,
+      "url": "https://yandex.ru/sprav/37668240676/p/edit/",
+      "companyId": "37668240676",
+      "fromCard": true
     },
     {
       "id": "39431836400",
@@ -351,9 +417,16 @@
       "phones": [
         "8 (800) 080-88-85"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.8
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/39431836400/p/edit/",
+      "companyId": "39431836400",
+      "fromCard": true
     },
     {
       "id": "44240920366",
@@ -373,9 +446,9 @@
         "https://kazan.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+7903-602-40-91",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+7+903-602-40-91",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+7903-602-40-91"
       },
       "emails": [
         "kazan@metpromintex.ru",
@@ -384,9 +457,16 @@
       "phones": [
         "+7 (843) 216-39-54"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/44240920366/p/edit/",
+      "companyId": "44240920366",
+      "fromCard": true
     },
     {
       "id": "53213490561",
@@ -406,9 +486,9 @@
         "https://stavropol.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+79034116458",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79034116458",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+79034116458"
       },
       "emails": [
         "saratov@metpromintex.ru",
@@ -418,9 +498,16 @@
         "+7 (8652) 69-31-88",
         "+7 (906) 479-31-88"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.3
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/53213490561/p/edit/",
+      "companyId": "53213490561",
+      "fromCard": true
     },
     {
       "id": "54663899184",
@@ -456,9 +543,16 @@
       "phones": [
         "8 (800) 080-88-85"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.8
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/54663899184/p/edit/",
+      "companyId": "54663899184",
+      "fromCard": true
     },
     {
       "id": "63116183185",
@@ -478,9 +572,9 @@
         "https://surgut.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+79521480493",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79521480493",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+79521480493"
       },
       "emails": [
         "surgut@metpromintex.ru"
@@ -488,9 +582,16 @@
       "phones": [
         "+7 (3462) 71-89-88"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/63116183185/p/edit/",
+      "companyId": "63116183185",
+      "fromCard": true
     },
     {
       "id": "66977463270",
@@ -510,9 +611,9 @@
         "https://sochi.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+79521480493",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79521480493",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+79521480493"
       },
       "emails": [
         "info@metpromintex.ru"
@@ -520,9 +621,16 @@
       "phones": [
         "8 (800) 700-08-06"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.4
+      "rating": 4.4,
+      "url": "https://yandex.ru/sprav/66977463270/p/edit/",
+      "companyId": "66977463270",
+      "fromCard": true
     },
     {
       "id": "69155052413",
@@ -542,9 +650,9 @@
         "https://tumen.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+79634523251",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79634523251",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+79634523251"
       },
       "emails": [
         "tyumen@metpromintex.ru"
@@ -552,9 +660,16 @@
       "phones": [
         "+7 (3452) 53-32-51"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/69155052413/p/edit/",
+      "companyId": "69155052413",
+      "fromCard": true
     },
     {
       "id": "80678098651",
@@ -574,9 +689,9 @@
         "https://novorossiysk.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+7952-148-04-93",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+7952-148-04-93",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+7952-148-04-93"
       },
       "emails": [
         "info@metpromintex.ru"
@@ -584,9 +699,16 @@
       "phones": [
         "8 (800) 700-08-06"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Цветные металлы",
+        "Чёрная металлургия",
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/80678098651/p/edit/",
+      "companyId": "80678098651",
+      "fromCard": true
     },
     {
       "id": "99042513897",
@@ -607,9 +729,9 @@
         "https://omsk.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/79628298578",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79628298578",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/79628298578"
       },
       "emails": [
         "omsk@metpromintex.ru",
@@ -618,9 +740,16 @@
       "phones": [
         "+7 (3812) 63-38-09"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.7
+      "rating": 4.7,
+      "url": "https://yandex.ru/sprav/99042513897/p/edit/",
+      "companyId": "99042513897",
+      "fromCard": true
     },
     {
       "id": "100468945922",
@@ -642,8 +771,8 @@
         "https://metpromintex.az/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+994+51+895+96+88",
-        "telegram": "https://t.me/+994+51+895+96+88"
+        "telegram": "https://t.me/+994+51+895+96+88",
+        "whatsapp": "https://wa.me/+994+51+895+96+88"
       },
       "emails": [
         "baku@metpromintex.az"
@@ -651,9 +780,14 @@
       "phones": [
         "+994 51 895 96 88"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 4.8
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/100468945922/p/edit/",
+      "companyId": "100468945922",
+      "fromCard": true
     },
     {
       "id": "100812834531",
@@ -673,9 +807,9 @@
         "https://orenburg.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+7952-148-04-93",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+7952-148-04-93",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+7952-148-04-93"
       },
       "emails": [
         "orenburg@metpromintex.ru"
@@ -684,9 +818,16 @@
         "+7 (3532) 20-16-65",
         "+7 (903) 360-16-65"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/100812834531/p/edit/",
+      "companyId": "100812834531",
+      "fromCard": true
     },
     {
       "id": "101290914440",
@@ -706,9 +847,9 @@
         "https://voronezh.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+7952-148-04-93",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+7952-148-04-93",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+7952-148-04-93"
       },
       "emails": [
         "voronezh@metpromintex.ru",
@@ -718,9 +859,16 @@
         "+7 (903) 651-66-80",
         "+7 (473) 251-66-80"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.7
+      "rating": 4.7,
+      "url": "https://yandex.ru/sprav/101290914440/p/edit/",
+      "companyId": "101290914440",
+      "fromCard": true
     },
     {
       "id": "105566351638",
@@ -740,9 +888,9 @@
         "https://cheboksary.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+79521480493",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79521480493",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+79521480493"
       },
       "emails": [
         "info@metpromintex.ru"
@@ -750,9 +898,16 @@
       "phones": [
         "8 (800) 700-08-06"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.3
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/105566351638/p/edit/",
+      "companyId": "105566351638",
+      "fromCard": true
     },
     {
       "id": "115354684625",
@@ -772,8 +927,8 @@
         "https://metpromintex.by/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+375296669780",
-        "telegram": "https://t.me/+375296669780"
+        "telegram": "https://t.me/+375296669780",
+        "whatsapp": "https://wa.me/+375296669780"
       },
       "emails": [
         "minsk@metpromintex.ru"
@@ -781,9 +936,16 @@
       "phones": [
         "+375 29 666-97-80"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Цветные металлы",
+        "Чёрная металлургия"
+      ],
       "noAccess": false,
-      "rating": 4.8
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/115354684625/p/edit/",
+      "companyId": "115354684625",
+      "fromCard": true
     },
     {
       "id": "120135683005",
@@ -810,9 +972,16 @@
         "8 (800) 080-88-85",
         "+7 (708) 486-28-81"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Цветные металлы",
+        "Чёрная металлургия"
+      ],
       "noAccess": false,
-      "rating": 4.8
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/120135683005/p/edit/",
+      "companyId": "120135683005",
+      "fromCard": true
     },
     {
       "id": "123915935454",
@@ -832,9 +1001,9 @@
         "https://irkutsk.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/79628298578",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79628298578",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/79628298578"
       },
       "emails": [
         "irkutsk@metpromintex.ru",
@@ -843,9 +1012,16 @@
       "phones": [
         "+7 (3952) 57-93-86"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Чёрная металлургия",
+        "Цветные металлы",
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 4.4
+      "rating": 4.4,
+      "url": "https://yandex.ru/sprav/123915935454/p/edit/",
+      "companyId": "123915935454",
+      "fromCard": true
     },
     {
       "id": "124286843199",
@@ -868,9 +1044,9 @@
         "https://barnaul.metpromintex.ru/"
       ],
       "social": {
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79628298578",
-        "whatsapp": "https://wa.me/+79628298578",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+79628298578"
       },
       "emails": [
         "barnaul@metpromintex.ru"
@@ -878,9 +1054,16 @@
       "phones": [
         "+7 (3852) 25-13-69"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/124286843199/p/edit/",
+      "companyId": "124286843199",
+      "fromCard": true
     },
     {
       "id": "125395344546",
@@ -903,9 +1086,9 @@
         "https://nn.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+7+903-602-40-91",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+7+903-602-40-91",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+7+903-602-40-91"
       },
       "emails": [
         "nn@metpromintex.ru"
@@ -913,9 +1096,16 @@
       "phones": [
         "+7 (831) 414-40-91"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.7
+      "rating": 4.7,
+      "url": "https://yandex.ru/sprav/125395344546/p/edit/",
+      "companyId": "125395344546",
+      "fromCard": true
     },
     {
       "id": "132025289983",
@@ -935,9 +1125,9 @@
         "https://ulyanovsk.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+79036024091",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79036024091",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+79036024091"
       },
       "emails": [
         "ulyanovsk@metpromintex.ru"
@@ -946,9 +1136,16 @@
         "+7 (905) 349-16-08",
         "+7 (8422) 73-16-08"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/132025289983/p/edit/",
+      "companyId": "132025289983",
+      "fromCard": true
     },
     {
       "id": "134626991081",
@@ -970,8 +1167,8 @@
         "http://metpromintex.uz/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+7+998-90-005-00-98",
-        "telegram": "https://t.me/metpromintex"
+        "telegram": "https://t.me/metpromintex",
+        "whatsapp": "https://wa.me/+7+998-90-005-00-98"
       },
       "emails": [
         "info@metpromintex.uz"
@@ -979,9 +1176,16 @@
       "phones": [
         "+998 90 005 00 98"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Цветные металлы",
+        "Чёрная металлургия",
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 4.8
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/134626991081/p/edit/",
+      "companyId": "134626991081",
+      "fromCard": true
     },
     {
       "id": "147052672676",
@@ -1001,9 +1205,9 @@
         "https://ryazan.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+7952-148-04-93",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+7952-148-04-93",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+7952-148-04-93"
       },
       "emails": [
         "ryazan@metpromintex.ru"
@@ -1011,9 +1215,16 @@
       "phones": [
         "+7 (4912) 99-07-17"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/147052672676/p/edit/",
+      "companyId": "147052672676",
+      "fromCard": true
     },
     {
       "id": "152968553063",
@@ -1033,8 +1244,8 @@
         "https://volgograd.metpromintex.ru/"
       ],
       "social": {
-        "telegram": "https://t.me/metpromintex",
-        "vkontakte": "https://vk.ru/public217252669"
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/metpromintex"
       },
       "emails": [
         "volgograd@metpromintex.ru"
@@ -1042,9 +1253,16 @@
       "phones": [
         "+7 (8442) 60-57-71"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.4
+      "rating": 4.4,
+      "url": "https://yandex.ru/sprav/152968553063/p/edit/",
+      "companyId": "152968553063",
+      "fromCard": true
     },
     {
       "id": "154312758780",
@@ -1074,9 +1292,16 @@
       "phones": [
         "8 (800) 080-88-85"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Кровельные работы",
+        "Чёрная металлургия"
+      ],
       "noAccess": false,
-      "rating": 4.7
+      "rating": 4.7,
+      "url": "https://yandex.ru/sprav/154312758780/p/edit/",
+      "companyId": "154312758780",
+      "fromCard": true
     },
     {
       "id": "171754043558",
@@ -1099,8 +1324,8 @@
         "https://krasnoyarsk.metpromintex.ru/"
       ],
       "social": {
-        "telegram": "https://t.me/+79628298578",
-        "vkontakte": "https://vk.ru/public217252669"
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79628298578"
       },
       "emails": [
         "krasnoyarsk@metpromintex.ru"
@@ -1109,9 +1334,16 @@
         "+7 (965) 517-86-77",
         "+7 (391) 271-75-47"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Цветные металлы",
+        "Металлоконструкции"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/171754043558/p/edit/",
+      "companyId": "171754043558",
+      "fromCard": true
     },
     {
       "id": "178428228288",
@@ -1141,9 +1373,16 @@
       "phones": [
         "8 (800) 080-88-85"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.7
+      "rating": 4.7,
+      "url": "https://yandex.ru/sprav/178428228288/p/edit/",
+      "companyId": "178428228288",
+      "fromCard": true
     },
     {
       "id": "178830091875",
@@ -1163,9 +1402,9 @@
         "https://tomsk.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+79628298578",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79628298578",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+79628298578"
       },
       "emails": [
         "tomsk@metpromintex.ru"
@@ -1173,9 +1412,16 @@
       "phones": [
         "+7 (3822) 22-62-31"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/178830091875/p/edit/",
+      "companyId": "178830091875",
+      "fromCard": true
     },
     {
       "id": "184438240545",
@@ -1195,9 +1441,9 @@
         "https://chelny.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+7+952-148-04-93",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+7+952-148-04-93",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+7+952-148-04-93"
       },
       "emails": [
         "info@metpromintex.ru"
@@ -1205,9 +1451,16 @@
       "phones": [
         "8 (800) 700-08-06"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/184438240545/p/edit/",
+      "companyId": "184438240545",
+      "fromCard": true
     },
     {
       "id": "194483940056",
@@ -1237,9 +1490,14 @@
         "+7 (708) 486-28-81",
         "+7 (725) 022-42-10"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 4.3
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/194483940056/p/edit/",
+      "companyId": "194483940056",
+      "fromCard": true
     },
     {
       "id": "197839128384",
@@ -1259,9 +1517,9 @@
         "https://kemerovo.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+7962-829-85-78",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+7962-829-85-78",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+7962-829-85-78"
       },
       "emails": [
         "kemerovo@metpromintex.ru"
@@ -1269,9 +1527,16 @@
       "phones": [
         "+7 (3842) 24-02-56"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.6
+      "rating": 4.6,
+      "url": "https://yandex.ru/sprav/197839128384/p/edit/",
+      "companyId": "197839128384",
+      "fromCard": true
     },
     {
       "id": "199944128836",
@@ -1291,9 +1556,9 @@
         "https://kirov.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+7952+148+04+93",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+7952+148+04+93",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+7952+148+04+93"
       },
       "emails": [
         "kirov@metpromintex.ru"
@@ -1301,9 +1566,16 @@
       "phones": [
         "+7 (8332) 20-68-86"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Цветные металлы",
+        "Чёрная металлургия",
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/199944128836/p/edit/",
+      "companyId": "199944128836",
+      "fromCard": true
     },
     {
       "id": "56644785259",
@@ -1330,9 +1602,14 @@
         "8 (800) 080-88-85",
         "+7 (708) 486-28-81"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/56644785259/p/edit/",
+      "companyId": "56644785259",
+      "fromCard": true
     },
     {
       "id": "86874149923",
@@ -1359,9 +1636,14 @@
         "8 (800) 080-88-85",
         "+7 (708) 486-28-81"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/86874149923/p/edit/",
+      "companyId": "86874149923",
+      "fromCard": true
     },
     {
       "id": "200618379073",
@@ -1381,9 +1663,9 @@
         "https://ufa.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/79521480493",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79521480493",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/79521480493"
       },
       "emails": [
         "ufa@metpromintex.ru"
@@ -1391,9 +1673,16 @@
       "phones": [
         "+7 (347) 299-64-47"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.4
+      "rating": 4.4,
+      "url": "https://yandex.ru/sprav/200618379073/p/edit/",
+      "companyId": "200618379073",
+      "fromCard": true
     },
     {
       "id": "203880344000",
@@ -1425,9 +1714,16 @@
       "phones": [
         "+7 (7172) 62-76-38"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Чёрная металлургия",
+        "Цветные металлы",
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 4.8
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/203880344000/p/edit/",
+      "companyId": "203880344000",
+      "fromCard": true
     },
     {
       "id": "218013586325",
@@ -1456,9 +1752,14 @@
       "phones": [
         "8 (800) 080-88-85"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 4.8
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/218013586325/p/edit/",
+      "companyId": "218013586325",
+      "fromCard": true
     },
     {
       "id": "219161630357",
@@ -1478,8 +1779,8 @@
         "https://metpromintex-karaganda.kz/"
       ],
       "social": {
-        "telegram": "https://t.me/+77084862881",
-        "whatsapp": "https://wa.me/77084862881"
+        "whatsapp": "https://wa.me/77084862881",
+        "telegram": "https://t.me/+77084862881"
       },
       "emails": [
         "karaganda@metpromintex.kz"
@@ -1488,9 +1789,16 @@
         "8 (800) 080-88-85",
         "+7 (965) 517-86-77"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.8
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/219161630357/p/edit/",
+      "companyId": "219161630357",
+      "fromCard": true
     },
     {
       "id": "220951297138",
@@ -1521,9 +1829,16 @@
       "phones": [
         "+7 (7252) 61-21-28"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.9
+      "rating": 4.9,
+      "url": "https://yandex.ru/sprav/220951297138/p/edit/",
+      "companyId": "220951297138",
+      "fromCard": true
     },
     {
       "id": "221193047030",
@@ -1543,9 +1858,9 @@
         "https://tula.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+79521480493",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79521480493",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+79521480493"
       },
       "emails": [
         "tula@metpromintex.ru"
@@ -1554,9 +1869,16 @@
         "+7 (4872) 71-68-38",
         "+7 (967) 431-68-38"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 4.3
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/221193047030/p/edit/",
+      "companyId": "221193047030",
+      "fromCard": true
     },
     {
       "id": "230218067121",
@@ -1576,9 +1898,9 @@
         "https://novokuznetsk.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+7962-829-85-78",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+7962-829-85-78",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+7962-829-85-78"
       },
       "emails": [
         "novokuznetsk@metpromintex.ru",
@@ -1587,9 +1909,16 @@
       "phones": [
         "+7 (3843) 20-99-84"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/230218067121/p/edit/",
+      "companyId": "230218067121",
+      "fromCard": true
     },
     {
       "id": "237222413555",
@@ -1609,9 +1938,9 @@
         "https://yaroslavl.metpromintex.ru/"
       ],
       "social": {
-        "whatsapp": "https://wa.me/+79521480493",
+        "vkontakte": "https://vk.ru/public217252669",
         "telegram": "https://t.me/+79521480493",
-        "vkontakte": "https://vk.ru/public217252669"
+        "whatsapp": "https://wa.me/+79521480493"
       },
       "emails": [
         "yaroslavl@metpromintex.ru"
@@ -1619,9 +1948,16 @@
       "phones": [
         "+7 (4852) 66-25-09"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
       "noAccess": false,
-      "rating": 0
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/237222413555/p/edit/",
+      "companyId": "237222413555",
+      "fromCard": true
     },
     {
       "id": "239295588745",
@@ -1650,9 +1986,14 @@
       "phones": [
         "8 (800) 080-88-85"
       ],
-      "rubrics": [],
+      "rubrics": [
+        "Металлопрокат"
+      ],
       "noAccess": false,
-      "rating": 4.8
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/239295588745/p/edit/",
+      "companyId": "239295588745",
+      "fromCard": true
     }
   ]
 }

@@ -3378,7 +3378,7 @@ def test_module_attrs_exist() -> None:
 
     watched = ("llm", "reviews", "yb_playwright", "runner", "repo_store",
                "projects_data", "ui_theme", "paths", "build", "kp_audit",
-               "kp_sheet", "playwright_worker")
+               "kp_sheet", "playwright_worker", "apptime", "gis_playwright")
     mods = {}
     for name in watched:
         try:
@@ -3582,6 +3582,7 @@ def test_one_build() -> None:
     один поток перезагружал модули, а другой их импортировал. Ту же работу
     Streamlit делает сам и делает безопасно.
     """
+    import apptime
     import build
     import kp_audit
     import kp_sheet
@@ -3598,6 +3599,7 @@ def test_one_build() -> None:
     print("\n▸ Одна метка сборки на всё приложение")
 
     mods = {
+        "apptime": apptime,
         "kp_audit": kp_audit, "kp_sheet": kp_sheet, "llm": llm, "paths": _paths,
         "playwright_worker": playwright_worker, "projects_data": projects_data,
         "repo_store": repo_store, "reviews": reviews, "runner": runner,
@@ -3649,26 +3651,49 @@ def test_yandex_domain() -> None:
 
 def test_local_time() -> None:
     """
-    Время отчёта показываем по часам человека.
+    Время показывается по Екатеринбургу, а не по часам сервера.
 
-    В файл оно пишется в UTC, и в шапке стояло «07:33», когда в логе рядом
-    было «12:33» – выглядело как посторонний старый отчёт.
+    Заказчик: «пусть время показывает актуально на момент прогона по
+    Екатеринбургу». В облаке сервер живёт по UTC, и в логе стояло 11:56,
+    когда в Екатеринбурге было почти 17:00. Дата при этом совпадала – и
+    выглядело так, будто открыт какой-то посторонний прогон.
     """
-    from datetime import datetime, timezone
-    import streamlit_app as app
-    print("\n▸ Время отчёта")
+    from datetime import datetime, timedelta, timezone
 
-    iso = "2026-08-04T07:33:44.123456+00:00"
-    got = app.local_time(iso)
-    expect = datetime.fromisoformat(iso).astimezone().strftime("%d.%m.%Y, %H:%M:%S")
-    eq("время переведено в местное", got, expect)
-    check("формат как в оригинале (дд.мм.гггг)", got.count(".") >= 2 and ", " in got, got)
+    import apptime
+    import streamlit_app as app
+    print("\n▸ Время по Екатеринбургу")
+
+    eq("часовой пояс – плюс пять", apptime.TZ.utcoffset(None), timedelta(hours=5))
+    check("имя пояса человеческое", "катеринбург" in apptime.TZ_NAME.lower(), apptime.TZ_NAME)
+
+    # UTC-время из файла отчёта показывается плюс пять часов.
+    eq("11:56 UTC показывается как 16:56",
+       app.local_time("2026-08-06T11:56:01+00:00"), "06.08.2026, 16:56:01")
+    eq("время без пояса считаем UTC",
+       app.local_time("2026-08-06T11:56:01"), "06.08.2026, 16:56:01")
+    eq("чужой пояс тоже переводится",
+       app.local_time("2026-08-06T14:56:01+03:00"), "06.08.2026, 16:56:01")
+    eq("дата переходит через полночь правильно",
+       app.local_time("2026-08-06T21:30:00+00:00"), "07.08.2026, 02:30:00")
+
     eq("пустое значение не ломает", app.local_time(None), "")
     eq("мусор отдаётся как есть", app.local_time("не дата"), "не дата")
-    check("время без часового пояса считаем UTC",
-          app.local_time("2026-08-04T07:33:44")
-          == datetime(2026, 8, 4, 7, 33, 44, tzinfo=timezone.utc).astimezone()
-             .strftime("%d.%m.%Y, %H:%M:%S"))
+
+    # Отметка для лога и имён файлов – тоже по Екатеринбургу.
+    now_utc = datetime.now(timezone.utc)
+    hh = apptime.stamp("%H")
+    expect = (now_utc + timedelta(hours=5)).strftime("%H")
+    check("отметка лога взята по Екатеринбургу", hh == expect, f"{hh} против {expect}")
+
+    # Строка живого лога и имя отчёта идут через apptime, а не через часы машины.
+    import inspect
+
+    import runner
+    src = inspect.getsource(runner)
+    check("в логе прогона нет времени машины",
+          "datetime.now().strftime" not in src,
+          "где-то осталось datetime.now().strftime")
 
 
 def main() -> int:

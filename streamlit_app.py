@@ -25,6 +25,7 @@ from pathlib import Path
 import streamlit as st
 import streamlit.components.v1 as components
 
+import apptime
 import gis_playwright as gis
 import kp_audit
 import kp_sheet
@@ -386,19 +387,15 @@ def _ru_domain(email: str) -> str:
 
 def local_time(iso: str | None) -> str:
     """
-    Время отчёта – по часам человека. В файлы оно пишется в UTC, и в шапке
-    отчёта стояло «07:33», когда в логе рядом было «12:33»: выглядело так,
-    будто показан какой-то посторонний, старый отчёт.
+    Время отчёта – по Екатеринбургу, а не по часам сервера.
+
+    В файлы время пишется в UTC. Раньше показывалось «время машины»: у
+    заказчика на локальной машине это совпадало с её часами, а в облаке –
+    нет, там UTC. В логе стояло 11:56, когда в Екатеринбурге было почти
+    17:00, и выглядело это как чужой, старый прогон. Часовой пояс задан в
+    apptime и один на всё приложение.
     """
-    if not iso:
-        return ""
-    try:
-        dt = datetime.fromisoformat(iso)
-    except ValueError:
-        return str(iso)[:19].replace("T", " ")
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone().strftime("%d.%m.%Y, %H:%M:%S")
+    return apptime.human(iso)
 
 
 def can_show_browser() -> bool:
@@ -2694,8 +2691,8 @@ def _cities_source_block(project_id: str, config: dict) -> None:
             time.sleep(1.2)
             st.rerun()
 
-        synced = (config.get("kpSyncedAt") or "")[:19].replace("T", " ")
-        c2.caption(f"Последняя загрузка: {synced} UTC" if synced else
+        synced = local_time(config.get("kpSyncedAt"))
+        c2.caption(f"Последняя загрузка: {synced}" if synced else
                    "Города из таблицы ещё не загружались.")
         st.caption(f"Загружается само: если с последней загрузки прошло больше "
                    f"{KP_SYNC_TTL_HOURS} часов, Click перечитает таблицу при открытии проекта. "
@@ -3919,7 +3916,7 @@ def _audit_details(result: dict, current: str, title: str, rows: list[list[str]]
 
     st.markdown("**Выгрузка**")
     d1, d2, _ = st.columns([1, 1, 3])
-    stamp = datetime.now().strftime("%Y-%m-%d")
+    stamp = apptime.stamp("%Y-%m-%d")
     try:
         blob = kp_audit.to_xlsx(rows, result, title, collected_at=collected_at)
         d1.download_button("⬇ Отчёт (.xlsx)", data=blob,

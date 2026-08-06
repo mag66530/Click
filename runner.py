@@ -35,6 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+import apptime
 import paths
 import yb_playwright as yb
 
@@ -418,7 +419,7 @@ def read_live_log(project_id: str, kind: str | None = None, tail: int = 40_000) 
 
 def _append_log(project_id: str, level: str, msg: str, kind: str | None = None) -> None:
     kind = _kind(kind)
-    line = f"[{datetime.now().strftime('%H:%M:%S')}] [{level}] {msg}\n"
+    line = f"[{apptime.stamp()}] [{level}] {msg}\n"
     _touch_lock(project_id, kind)
     try:
         live = p_live_log(project_id, kind)
@@ -432,7 +433,7 @@ def _append_log(project_id: str, level: str, msg: str, kind: str | None = None) 
         pass
     try:
         p_logs(project_id).mkdir(parents=True, exist_ok=True)
-        day = datetime.now().strftime("%Y-%m-%d")
+        day = apptime.stamp("%Y-%m-%d")
         with (p_logs(project_id) / f"{kind}-{day}.log").open("a", encoding="utf-8") as f:
             f.write(line)
     except OSError:
@@ -670,7 +671,7 @@ def _publish_worker(
 
     started_at = _now_iso()
     start_ts = time.time()
-    report_name = f"report-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.json"
+    report_name = f"report-{apptime.stamp('%Y-%m-%dT%H-%M-%S')}.json"
     report_path = p_reports(project_id) / report_name
 
     results: list[dict] = []
@@ -942,7 +943,7 @@ def p_screenshots(project_id: str) -> Path:
 def _save_failure_screenshot(project_id: str, browser, city: str) -> Path | None:
     try:
         safe = re.sub(r"[^\w\-]+", "-", city or "город")[:30]
-        fp = p_screenshots(project_id) / f"{datetime.now().strftime('%H-%M-%S')}-{safe}.png"
+        fp = p_screenshots(project_id) / f"{apptime.stamp('%H-%M-%S')}-{safe}.png"
         browser.page.screenshot(path=str(fp))
         return fp
     except Exception:  # noqa: BLE001
@@ -1405,7 +1406,7 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
     yb.set_logger(lambda level, msg: _append_log(project_id, level, msg, kind=kind))
     started_at = _now_iso()
     start_ts = time.time()
-    report_name = f"actualize-{datetime.now().strftime('%Y-%m-%dT%H-%M-%S')}.json"
+    report_name = f"actualize-{apptime.stamp('%Y-%m-%dT%H-%M-%S')}.json"
     report_path = p_reports_actualize(project_id, platform) / report_name
 
     results: list[dict] = []

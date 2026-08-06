@@ -221,16 +221,6 @@
       "sameSite": "None"
     },
     {
-      "name": "_yasc",
-      "value": "8Pt/K1LN6tpeTjg+O/M6I5ve9ohXRnnF8NH/ZQYE75z6gg3L5Yortc0dkZ2JE20rpQzwc60=",
-      "domain": ".yandex.com",
-      "path": "/",
-      "expires": 1820564760.998,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "bh",
       "value": "YLGl0dMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
       "domain": ".yandex.com",
@@ -245,8 +235,18 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817544298,
+      "expires": 1817544366,
       "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_yasc",
+      "value": "jxPiJt0EUG7lsPKdEeydBBbejdgblxl46NolpBij7rPyAS1yQnL4Tm5aV/q512tHEM5djXk=",
+      "domain": ".yandex.com",
+      "path": "/",
+      "expires": 1820568366.375,
+      "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
@@ -541,16 +541,6 @@
       "sameSite": "None"
     },
     {
-      "name": "receive-cookie-deprecation",
-      "value": "1",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1817544296,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "_yasc",
       "value": "mY//fCAacz5u+bh5jQJXCVVtJX4S226z8VzQ49Mcx53RefiR0TSXld8dXVGv3gZEtc9ijvIuB4cofb9ukaQKInnrUHGCWCpW92e9draz6+E7Dk2Rocvw/MSg",
       "domain": ".yandex.ru",
@@ -561,11 +551,21 @@
       "sameSite": "None"
     },
     {
+      "name": "receive-cookie-deprecation",
+      "value": "1",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1817544365,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
       "name": "gdpr",
       "value": "0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817544298,
+      "expires": 1817544367,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -575,17 +575,17 @@
       "value": "b",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1786010098,
+      "expires": 1786010167,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "cycada",
-      "value": "lHTNUunicDu26dhU+KqvzCfA5hjy39BWIgnQZ/gtJxs=",
+      "value": "fUH7ekDwvI9A9GIggo1aRifA5hjy39BWIgnQZ/gtJxs=",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1787217909.03,
+      "expires": 1787217977.596,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -621,7 +621,7 @@
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "163"
+          "value": "165"
         },
         {
           "name": "_ym_wv2rf:85710618:0",
@@ -660,6 +660,10 @@
           "value": "188734270059"
         },
         {
+          "name": "_ym46231566:0_reqNum",
+          "value": "324"
+        },
+        {
           "name": "_ym39321485_lastHit",
           "value": "1786004951625"
         },
@@ -669,7 +673,7 @@
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "1279"
+          "value": "1294"
         },
         {
           "name": "_ym104859823:0_reqNum",
@@ -677,6 +681,10 @@
         },
         {
           "name": "_ym105001275:0_reqNum",
+          "value": "1"
+        },
+        {
+          "name": "_ym98892916:0_reqNum",
           "value": "1"
         },
         {
@@ -728,10 +736,6 @@
           "value": "1555903260945"
         },
         {
-          "name": "_ym98973702_lsid",
-          "value": "910422199579"
-        },
-        {
           "name": "_ym98973686:0_reqNum",
           "value": "1"
         },
@@ -748,10 +752,6 @@
           "value": "1786004951640"
         },
         {
-          "name": "_ym_uid",
-          "value": "\"1785833922567756647\""
-        },
-        {
           "name": "_ym98973698_lsid",
           "value": "1537436620712"
         },
@@ -760,8 +760,8 @@
           "value": "1"
         },
         {
-          "name": "_ym56213845_lastHit",
-          "value": "1786004951633"
+          "name": "_ym100040809_lsid",
+          "value": "685019606560"
         },
         {
           "name": "_ym99007174:0_reqNum",
@@ -820,7 +820,7 @@
           "value": "508499025258"
         },
         {
-          "name": "_ym98892916:0_reqNum",
+          "name": "_ym102272633:0_reqNum",
           "value": "1"
         },
         {
@@ -832,12 +832,12 @@
           "value": "{\"com\":29766745}"
         },
         {
-          "name": "_ym102272633:0_reqNum",
-          "value": "1"
+          "name": "_ym98973702_lsid",
+          "value": "910422199579"
         },
         {
-          "name": "_ym46231566:0_reqNum",
-          "value": "321"
+          "name": "_ym56213845_lastHit",
+          "value": "1786004951633"
         },
         {
           "name": "_ym92205484_lsid",
@@ -853,15 +853,15 @@
         },
         {
           "name": "_ym56213845:0_reqNum",
-          "value": "1173"
+          "value": "1187"
         },
         {
           "name": "_ym22555771_lsid",
           "value": "1686879048786"
         },
         {
-          "name": "_ym100040809_lsid",
-          "value": "685019606560"
+          "name": "_ym_uid",
+          "value": "\"1785833922567756647\""
         },
         {
           "name": "maps_fonts_by_family",
@@ -910,12 +910,12 @@
           "value": "337750228411"
         },
         {
-          "name": "_ym_uid",
-          "value": "\"1785833922567756647\""
+          "name": "_ym_synced",
+          "value": "{\"com\":29766735}"
         },
         {
-          "name": "_ym784657_lastHit",
-          "value": "1786004164540"
+          "name": "_ym_uid",
+          "value": "\"1785833922567756647\""
         },
         {
           "name": "_ym784657:0_reqNum",
@@ -926,8 +926,8 @@
           "value": "{}"
         },
         {
-          "name": "_ym_synced",
-          "value": "{\"com\":29766735}"
+          "name": "_ym784657_lastHit",
+          "value": "1786004164540"
         }
       ]
     }

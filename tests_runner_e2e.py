@@ -61,12 +61,22 @@ class FakeBrowser:
         self.project_id = project_id
         self.page = FakePage()
         self.started = 0
+        self.side_opened = 0
+        self.side_closed = 0
 
     def start(self): self.started += 1
     def new_page(self): return self.page
     def save_session(self): return None
     def restart(self): self.started += 1
     def close(self): return None
+
+    # Вторая сессия (2ГИС) в том же браузере – см. yb.YbBrowser.side_page.
+    def side_page(self, session_file):
+        self.side_opened += 1
+        return self.page
+
+    def close_side(self):
+        self.side_closed += 1
 
 
 CALLS: list[str] = []
@@ -100,6 +110,8 @@ def install_fakes() -> None:
     yb.verify_account = fake_verify_account  # type: ignore[assignment]
     yb.check_post_already_exists = lambda page, text: {"found": False, "fresh": False, "reason": ""}  # type: ignore
     yb.upload_product_photos = lambda *a, **k: {"uploaded": 0, "failed": 0, "errors": []}  # type: ignore
+    # Файлы «скачиваются» без сети: пути отдаются как есть.
+    yb.fetch_photos = lambda urls, tmp: ([str(u) for u in (urls or [])], [])  # type: ignore
 
 
 # ─── Хелперы ────────────────────────────────────────────────────────
@@ -914,6 +926,85 @@ def scenario_collect_missing(pid: str) -> None:
     eq("и обе на листе «Дубли»", len(kp_audit.double_rows(res)) - 1, 2)
 
 
+def scenario_gis_photos(pid: str) -> None:
+    """
+    Фото отгрузки уходят и в 2ГИС – прогоном публикации, вторым контекстом.
+
+    Проверяем склейку целиком: город с карточкой 2ГИС фото получает, город без
+    неё – спокойную пометку, повтор прогона второй раз не заливает, а сессия
+    2ГИС закрывается вместе с браузером.
+    """
+    print("\n▸ Сценарий: фото отгрузки ещё и в 2ГИС")
+    CALLS.clear(); SCRIPT.clear()
+    runner.clear_ledger(pid)
+    import gis_playwright as gis
+    seen: list[tuple[str, int]] = []
+
+    def fake_upload(page, gis_url, files, label=""):
+        seen.append((gis_url, len(files)))
+        return {"requested": len(files), "uploaded": len(files), "skipped": 0, "reason": ""}
+
+    was = gis.upload_media
+    gis.upload_media = fake_upload            # type: ignore[assignment]
+    try:
+        folder = runner.p_tasks(pid)
+        folder.mkdir(parents=True, exist_ok=True)
+        shot = Path(tempfile.mkdtemp()) / "отгрузка.jpg"
+        shot.write_bytes(b"\xff\xd8\xff" + b"x" * 32)
+        payload = {
+            "credentials": {"email": "test@yandex.ru", "password": "x"},
+            "projectName": "TEST", "country": "Россия",
+            "tasks": [
+                {"cityName": "Самара", "companyUrl": "https://yandex.ru/sprav/501/p/edit/posts/",
+                 "companyId": "501", "postText": "Отгрузка в Самару",
+                 "productPhotos": [str(shot)], "gisPhotos": True,
+                 "gisUrl": "https://account.2gis.com/orgs/70000001081103893/"},
+                {"cityName": "Тула", "companyUrl": "https://yandex.ru/sprav/502/p/edit/posts/",
+                 "companyId": "502", "postText": "Отгрузка в Тулу",
+                 "productPhotos": [str(shot)], "gisPhotos": True, "gisUrl": None},
+            ],
+        }
+        (folder / f"01-Россия-{int(time.time() * 1000)}.json").write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+        ok, msg = runner.start_publish(pid, delay_between_posts_s=0,
+                                       expected_email="test@yandex.ru")
+        check("прогон стартовал", ok, msg)
+        wait_done(pid); settle(pid)
+        report = latest_report(pid)
+        rows = {r["cityName"]: r for r in report["results"]}
+
+        eq("в 2ГИС ушёл один город", len(seen), 1)
+        eq("и это Самара", seen[0][0], "https://account.2gis.com/orgs/70000001081103893/")
+        eq("снимок доехал", (rows["Самара"].get("gisPhotos") or {}).get("uploaded"), 1)
+        eq("у города без карточки – спокойная пометка",
+           (rows["Тула"].get("gisPhotos") or {}).get("reason"), "Нет карточки в 2ГИС")
+        check("и это не поломка публикации", rows["Тула"]["status"] in ("ok", "no-image"),
+              rows["Тула"]["status"])
+        live = runner.read_live_log(pid, "publish")
+        check("в итогах есть строка про 2ГИС", "ФОТО В 2ГИС" in live, live[-300:])
+
+        # Второй прогон тем же постом: пост-то дубль, а вот фото проверяем
+        # отдельным реестром – он не должен заливать их второй раз.
+        seen.clear()
+        eq("реестр помнит снимки",
+           bool(runner.recent_gis_photos(pid, payload["tasks"][0]["gisUrl"], [str(shot)])), True)
+        (folder / f"02-Россия-{int(time.time() * 1000)}.json").write_text(
+            json.dumps({**payload, "tasks": [payload["tasks"][0]]}, ensure_ascii=False),
+            encoding="utf-8")
+        ok, msg = runner.start_publish(pid, delay_between_posts_s=0,
+                                       expected_email="test@yandex.ru", dedup_window_hours=0)
+        check("второй прогон стартовал", ok, msg)
+        wait_done(pid); settle(pid)
+        eq("те же снимки второй раз не заливаются", len(seen), 0)
+        again = {r["cityName"]: r for r in latest_report(pid)["results"]}
+        check("и в отчёте сказано почему",
+              "уже заливали" in ((again["Самара"].get("gisPhotos") or {}).get("reason") or ""),
+              str(again["Самара"].get("gisPhotos")))
+    finally:
+        gis.upload_media = was                # type: ignore[assignment]
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="click-e2e-"))
     runner.USERS_DATA = tmp
@@ -939,6 +1030,7 @@ def main() -> int:
         scenario_reviews_llm_down(pid)
         scenario_reviews_page_broken(pid)
         scenario_gis_actualize(pid)
+        scenario_gis_photos(pid)
         scenario_collect(pid)
         scenario_parallel(pid)
         scenario_dead_session(pid)

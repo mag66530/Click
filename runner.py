@@ -608,6 +608,37 @@ def _ledger_add(project_id: str, key: str, task: dict, status: str, run_id: str)
         pass
 
 
+def _photo_key(city_url: str | None, files: list[str]) -> str:
+    """
+    Ключ «эти снимки → эта карточка». Считаем по СОДЕРЖИМОМУ файлов, а не по
+    именам: одна и та же фотография, скачанная дважды, ложится во временную
+    папку под разными именами, и по именам защита от дублей не сработала бы.
+    """
+    h = hashlib.sha1()
+    for fp in sorted(files):
+        try:
+            h.update(hashlib.sha1(Path(fp).read_bytes()).digest())
+        except OSError:
+            h.update(str(fp).encode("utf-8"))
+    return f"gisphoto:{gis_org_id(city_url)}:{h.hexdigest()[:16]}"
+
+
+def gis_org_id(url: str | None) -> str:
+    import gis_playwright as gis
+    return gis.extract_org_id(url) or (url or "")
+
+
+def recent_gis_photos(project_id: str, city_url: str | None, files: list[str],
+                      window_hours: float = 24 * 30) -> dict | None:
+    """Заливали ли уже ЭТИ снимки в ЭТУ карточку 2ГИС. Окно – месяц."""
+    rec = _read_ledger(project_id).get(_photo_key(city_url, files))
+    if not rec:
+        return None
+    if time.time() - float(rec.get("ts") or 0) > window_hours * 3600:
+        return None
+    return rec
+
+
 def recent_publication(project_id: str, task: dict, window_hours: float = DEDUP_WINDOW_HOURS) -> dict | None:
     """Был ли этот же текст уже отправлен в этот же город за последние N часов."""
     key = _text_key(task.get("companyId"), task.get("companyUrl"), task.get("postText", ""))
@@ -783,6 +814,59 @@ def start_publish(
         return True, f"Публикация запущена: {total} городов."
 
 
+def _gis_photos_for_city(project_id: str, browser, task: dict, local: list[str],
+                         run_id: str, box: dict) -> dict:
+    """
+    Те же снимки отгрузки – ещё и в «Фото и видео» 2ГИС.
+
+    Шаг полностью отдельный: что бы здесь ни случилось, статус публикации
+    поста не меняется. Так же устроены «Товары» Яндекса – пост уже стоит в
+    карточке, и объявлять его неудачным из-за фотографии было бы неправдой.
+    """
+    import gis_playwright as gis
+    city = task.get("cityName", "?")
+    out = {"requested": len(local), "uploaded": 0, "skipped": 0, "reason": ""}
+
+    gis_url = task.get("gisUrl")
+    if not gis_url:
+        out["reason"] = "Нет карточки в 2ГИС"
+        _append_log(project_id, "INFO", f"  📸 {city}: нет карточки в 2ГИС – фото не отправляли")
+        return out
+
+    # Сессия слетела на прошлом городе – остальные упрутся в ту же страницу
+    # входа. Один раз сказали, дальше молча пропускаем.
+    if box.get("off"):
+        out["reason"] = box["off"]
+        return out
+
+    was = recent_gis_photos(project_id, gis_url, local)
+    if was:
+        when = str(was.get("at", ""))[:19].replace("T", " ")
+        out["reason"] = f"Эти снимки уже заливали в 2ГИС {when} UTC – повтор пропущен"
+        _append_log(project_id, "INFO", f"  ⏭ {city}: {out['reason']}")
+        return out
+
+    try:
+        if box.get("page") is None:
+            box["page"] = browser.side_page(gis.session_path(project_id))
+        res = gis.upload_media(box["page"], gis_url, local, label=f"{city}: ")
+    except Exception as e:  # noqa: BLE001 – шаг не должен ронять публикацию
+        out["reason"] = f"Сбой шага 2ГИС: {e}"
+        _append_log(project_id, "WARN", f"  📸 {city}: {out['reason']}")
+        return out
+
+    out.update(uploaded=res.get("uploaded", 0), skipped=res.get("skipped", 0),
+               reason=res.get("reason", ""))
+    if res.get("noSession"):
+        box["off"] = "Сессия 2ГИС не действует – войдите в «Настройках»"
+        _append_log(project_id, "WARN",
+                    "  📸 Сессия 2ГИС не действует – фото в 2ГИС до конца прогона "
+                    "не отправляем. Публикация в Яндекс идёт как обычно.")
+    elif out["uploaded"]:
+        _ledger_add(project_id, _photo_key(gis_url, local), task, "gis-photos", run_id)
+    return out
+
+
 def _publish_worker(
     project_id: str,
     run_id: str,
@@ -811,6 +895,10 @@ def _publish_worker(
 
     def should_stop() -> bool:
         return p_stop(project_id).exists()
+
+    # Вторая вкладка с сессией 2ГИС открывается лениво – только если в задачах
+    # есть фото и галочка «ещё в 2ГИС». Пустой прогон лишней памяти не берёт.
+    gis_box: dict = {"page": None, "off": ""}
 
     def save_report(state: str) -> None:
         report = {
@@ -965,13 +1053,22 @@ def _publish_worker(
                 # Фото в раздел «Товары» – только после успешной публикации, изолированно
                 photos = task.get("productPhotos") or []
                 if photos and res["status"] in ("ok", "no-image"):
+                    # Качаем ОДИН раз: те же файлы уходят и в «Товары» Яндекса,
+                    # и в «Фото и видео» 2ГИС.
+                    local, dl_errors = yb.fetch_photos(list(photos), p_temp(project_id))
                     try:
-                        pr = yb.upload_product_photos(browser.page, task, list(photos), p_temp(project_id))
+                        pr = yb.upload_product_photos(browser.page, task, list(photos),
+                                                      p_temp(project_id), local_files=local)
+                        pr["failed"] = pr.get("failed", 0) + len(dl_errors)
+                        pr.setdefault("errors", []).extend(dl_errors)
                         res["productPhotos"] = {"requested": len(photos), **pr}
                     except Exception as e:  # noqa: BLE001
                         _append_log(project_id, "WARN", f"  ⚠️ Фото в «Товары» упали: {e}")
                         res["productPhotos"] = {"requested": len(photos), "uploaded": 0,
                                                 "failed": len(photos), "errors": [str(e)]}
+                    if task.get("gisPhotos") and local:
+                        res["gisPhotos"] = _gis_photos_for_city(
+                            project_id, browser, task, local, run_id, gis_box)
 
                 icon = {"ok": "✅", "no-image": "🟡", "unknown": "⚠️"}.get(res["status"], "❌")
                 dur = f" ({res.get('durationMs', 0) / 1000:.1f} сек)"
@@ -1056,12 +1153,20 @@ def _publish_worker(
                          should_stop, save_report, lambda: push_state("running", len(results), "второй проход"))
 
         browser.save_session()
+        # Вторая сессия (2ГИС) закрывается со своими куками: 2ГИС продлевает
+        # их по ходу работы, и терять продление незачем.
+        browser.close_side()
         save_report("finished")
         push_state("stopped" if stopped else "done", len(results), "")
         _append_log(project_id, "INFO", "═" * 46)
         _append_log(project_id, "INFO",
                     f"ИТОГИ · ✅ {counters['ok']} · 🟡 {counters['noImage']} · ⚠️ {counters['unknown']} "
                     f"· ❌ {counters['failed']} · ⏭ {counters['skipped']}")
+        gis_done = sum((r.get("gisPhotos") or {}).get("uploaded", 0) for r in results)
+        gis_asked = sum(1 for r in results if r.get("gisPhotos"))
+        if gis_asked:
+            _append_log(project_id, "INFO",
+                        f"ФОТО В 2ГИС · снимков добавлено {gis_done} · городов {gis_asked}")
         _append_log(project_id, "INFO", "═" * 46)
 
     except Exception as e:  # noqa: BLE001

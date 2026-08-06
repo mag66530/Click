@@ -1189,6 +1189,12 @@ def report_row(item: dict, with_country: bool = False) -> str:
     pp = item.get("productPhotos")
     if pp:
         reason += f' · 📸 товары: {pp.get("uploaded", 0)}/{pp.get("requested", 0)}'
+    gp = item.get("gisPhotos")
+    if gp:
+        # Причина важнее счёта: «нет карточки в 2ГИС» объясняет ноль, а голый
+        # «0 из 3» выглядит поломкой.
+        reason += (f' · 📸 2ГИС: {gp["reason"]}' if gp.get("reason") and not gp.get("uploaded")
+                   else f' · 📸 2ГИС: {gp.get("uploaded", 0)}/{gp.get("requested", 0)}')
     dur = f'{item.get("durationMs", 0) / 1000:.1f} сек' if item.get("durationMs") else ""
     country = ""
     if with_country:

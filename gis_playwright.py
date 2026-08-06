@@ -1230,6 +1230,223 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
 
 
 # ════════════════════════════════════════════════════════════════════
+#  Фото в раздел «Фото и видео»
+# ════════════════════════════════════════════════════════════════════
+#
+# Те же снимки, что уходят в «Товары» Яндекса, кладём и сюда – это одна
+# отгрузка, просто на двух площадках.
+#
+# Кнопку жать не надо, и это главное. На экране добавление выглядит по-разному:
+# пустой альбом показывает синюю кнопку «Добавить» посередине, непустой –
+# круглый «плюс» в правом нижнем углу. Но в разметке и там, и там лежит один и
+# тот же настоящий `<input type="file" multiple>` внутри маленькой формы. Файлы
+# отдаём прямо ему – так же, как в Яндексе. Тогда нам всё равно, как сегодня
+# выглядит кнопка и куда её передвинули.
+#
+# Адрес раздела – `/orgs/<id>/branches/<филиал>/media`. Номер филиала в КП не
+# лежит, а складывать адрес из кусков мы уже пробовали и обожглись на
+# `/company`. Поэтому ссылку берём из меню кабинета: она там написана целиком.
+
+# 2ГИС принимает не всё: gif не примет, и молча – просто ничего не произойдёт.
+MEDIA_TYPES = (".jpg", ".jpeg", ".png", ".webp")
+MEDIA_WAIT_MS = 25_000           # столько ждём, пока снимок появится в альбоме
+
+
+def build_media_url(url: str | None) -> str | None:
+    """Куда идти за разделом «Фото и видео». Точный адрес возьмём уже на месте."""
+    oid = extract_org_id(url)
+    return f"{ACCOUNT_HOST}/orgs/{oid}/company" if oid else None
+
+
+# Ссылка на раздел + сколько снимков сейчас в альбоме.
+#
+# Считаем не по классам (они хешированные и меняются со сборкой), а по тому,
+# что видно человеку: плитка альбома – это картинка заметного размера. Иконки
+# и значки рисуются через svg и под этот счёт не попадают. Заодно снимаем
+# число со вкладки «Все фото и видео N» – как второй свидетель.
+_MEDIA_LOOK_JS = r"""
+() => {
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  const link = Array.from(document.querySelectorAll('a[href]'))
+    .map(a => a.getAttribute('href') || '')
+    .find(h => /\/media(\/|$|\?)/.test(h) && /\/orgs\//.test(h)) || '';
+
+  let tiles = 0;
+  for (const img of document.querySelectorAll('img')) {
+    if (!img.getAttribute('src')) continue;
+    const r = img.getBoundingClientRect();
+    if (r.width >= 60 && r.height >= 60) tiles++;
+  }
+
+  let counter = null;
+  const body = norm(document.body.innerText || '');
+  const m = body.match(/все\s+фото\s+и\s+видео\s+(\d+)/i);
+  if (m) counter = parseInt(m[1], 10);
+
+  const field = document.querySelector('input[type="file"]');
+  return {
+    link: link,
+    tiles: tiles,
+    counter: counter,
+    hasField: !!field,
+    onMedia: /\/media(\/|$)/.test(location.pathname || ''),
+    title: norm(document.title || '').slice(0, 120),
+    path: location.pathname || '',
+    size: norm(body).length,
+  };
+}
+"""
+
+# Кнопка нужна только если поля вдруг нет: на некоторых пустых карточках 2ГИС
+# рисует «Добавить» и подставляет форму уже после нажатия.
+_MEDIA_ADD_BTN_JS = r"""
+() => {
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  document.querySelectorAll('[data-click-add]').forEach(n => n.removeAttribute('data-click-add'));
+  for (const el of document.querySelectorAll('button, a, [role="button"], [class*="button__basic"]')) {
+    if (!/^(добавить|добавить\s+фото)$/i.test(norm(el.textContent))) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 10 || r.height < 10) continue;
+    el.setAttribute('data-click-add', '1');
+    return true;
+  }
+  return false;
+}
+"""
+
+
+def _media_look(page: Page) -> dict:
+    try:
+        return page.evaluate(_MEDIA_LOOK_JS) or {}
+    except Exception:  # noqa: BLE001 – React перерисовывает, прочитаем ещё раз
+        return {}
+
+
+def _media_settle(page: Page, want_field: bool = True) -> dict:
+    """Дождаться, пока раздел дорисуется: те же правила, что и у актуализации."""
+    look, same, was = {}, 0, -1
+    deadline = time.time() + MEDIA_WAIT_MS / 1000
+    while time.time() < deadline:
+        look = _media_look(page) or look
+        if want_field and look.get("hasField"):
+            return look
+        size = int(look.get("size") or 0)
+        same = same + 1 if size == was and size > 200 else 0
+        was = size
+        if same >= ACTUALIZE_QUIET:
+            break
+        page.wait_for_timeout(700)
+    return look
+
+
+def suitable_photos(paths: list[str]) -> tuple[list[str], list[str]]:
+    """Что 2ГИС примет и что отбросит. Отброшенное называем по имени файла."""
+    good, bad = [], []
+    for p in paths:
+        (good if Path(str(p)).suffix.lower() in MEDIA_TYPES else bad).append(str(p))
+    return good, bad
+
+
+def upload_media(page: Page, gis_url: str | None, files: list[str], label: str = "") -> dict:
+    """
+    Положить снимки в «Фото и видео» карточки 2ГИС.
+
+    Возвращает {'uploaded', 'requested', 'skipped', 'reason'}. Ошибка здесь
+    НЕ влияет на публикацию поста: это отдельный шаг, и статус города за него
+    не отвечает – ровно как у «Товаров» Яндекса.
+    """
+    out = {"requested": len(files or []), "uploaded": 0, "skipped": 0, "reason": ""}
+    if not files:
+        return out
+
+    good, bad = suitable_photos(files)
+    out["skipped"] = len(bad)
+    if bad:
+        names = ", ".join(Path(b).name for b in bad[:3])
+        warn(f"  📸 {label}2ГИС не принимает такие файлы (только jpg, png, webp): {names}")
+    if not good:
+        out["reason"] = "Ни один файл не подходит для 2ГИС (принимаются jpg, png, webp)"
+        return out
+
+    start = build_media_url(gis_url)
+    if not start:
+        out["reason"] = "Не удалось определить кабинет 2ГИС по ссылке из КП"
+        return out
+
+    # Заходим на карточку и берём ссылку на «Фото и видео» из меню.
+    try:
+        page.goto(start, wait_until="domcontentloaded", timeout=40_000)
+    except Exception as e:  # noqa: BLE001
+        out["reason"] = f"Кабинет 2ГИС не открылся: {yb._short_error(e)}"
+        return out
+    if looks_like_login_page(page):
+        out["reason"] = "Сессия 2ГИС не действует – войдите в «Настройках»"
+        out["noSession"] = True
+        return out
+
+    look = _media_settle(page, want_field=False)
+    if not look.get("onMedia"):
+        link = look.get("link")
+        if not link:
+            out["reason"] = "В кабинете 2ГИС не нашлась ссылка на раздел «Фото и видео»"
+            return out
+        try:
+            page.goto(link, wait_until="domcontentloaded", timeout=40_000)
+        except Exception as e:  # noqa: BLE001
+            out["reason"] = f"Раздел «Фото и видео» не открылся: {yb._short_error(e)}"
+            return out
+        look = _media_settle(page)
+
+    if not look.get("hasField"):
+        # Поля нет – возможно, 2ГИС ждёт нажатия «Добавить».
+        try:
+            if page.evaluate(_MEDIA_ADD_BTN_JS):
+                page.locator('[data-click-add="1"]').first.click(timeout=5_000)
+                page.wait_for_timeout(800)
+                look = _media_settle(page)
+        except Exception:  # noqa: BLE001
+            pass
+    if not look.get("hasField"):
+        out["reason"] = "В разделе «Фото и видео» не нашлось поле загрузки"
+        return out
+
+    before = int(look.get("tiles") or 0)
+    was_counter = look.get("counter")
+    try:
+        page.locator('input[type="file"]').first.set_input_files(good, timeout=15_000)
+    except Exception as e:  # noqa: BLE001
+        out["reason"] = f"Не удалось передать файлы: {yb._short_error(e)}"
+        return out
+
+    # Успех – только доказанный: снимки должны появиться в альбоме.
+    deadline = time.time() + MEDIA_WAIT_MS / 1000
+    grown = 0
+    while time.time() < deadline:
+        page.wait_for_timeout(700)
+        now = _media_look(page)
+        if not now:
+            continue
+        grown = max(grown, int(now.get("tiles") or 0) - before)
+        if was_counter is not None and now.get("counter") is not None:
+            grown = max(grown, int(now["counter"]) - int(was_counter))
+        if grown >= len(good):
+            break
+
+    out["uploaded"] = min(grown, len(good)) if grown > 0 else 0
+    if out["uploaded"] >= len(good):
+        info(f"  📸 {label}2ГИС: снимков добавлено {out['uploaded']} из {len(good)}")
+    elif out["uploaded"]:
+        out["reason"] = (f"В альбоме появилось {out['uploaded']} из {len(good)} – "
+                         "остальные проверьте вручную")
+        warn(f"  📸 {label}2ГИС: {out['reason']}")
+    else:
+        out["reason"] = ("Файлы переданы, но в альбоме они не появились – "
+                         "проверьте раздел «Фото и видео» вручную")
+        warn(f"  📸 {label}2ГИС: {out['reason']}")
+    return out
+
+
+# ════════════════════════════════════════════════════════════════════
 #  Вход
 # ════════════════════════════════════════════════════════════════════
 #

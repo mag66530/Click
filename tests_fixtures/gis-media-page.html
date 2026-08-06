@@ -1,0 +1,72 @@
+<!--
+  Раздел «Фото и видео» кабинета 2ГИС – вырезано из настоящих страниц
+  заказчика (МетПромИнтекс, Самара и Актобе).
+
+  Главное здесь – форма загрузки. И в пустом альбоме, и в непустом это ОДИН И
+  ТОТ ЖЕ настоящий <input type="file" multiple> внутри маленькой формы. На
+  экране он выглядит по-разному: пустой альбом рисует синюю кнопку «Добавить»
+  посередине, непустой – круглый «плюс» в правом нижнем углу. Поэтому кнопку
+  жать не надо: файлы отдаём прямо полю.
+
+  Классы (Uytl-ev-, AQPw70nB) оставлены как в кабинете – но искать по ним
+  нельзя: со следующей сборкой 2ГИС они станут другими.
+-->
+<html><head><meta charset="utf-8">
+<title>Личный кабинет 2ГИС: Фото и видео — МетПромИнтекс, производственная компания</title>
+</head>
+<body style="margin:0;font:14px sans-serif">
+
+<nav style="float:left;width:220px">
+  <a href="https://account.2gis.com/orgs/70000001081103893/dashboard">Главная</a>
+  <a href="https://account.2gis.com/orgs/70000001081103893/branches/70000001081103894/attributes">Дополнительные атрибуты</a>
+  <a href="https://account.2gis.com/orgs/70000001081103893/reviews">Отзывы</a>
+  <a href="https://account.2gis.com/orgs/70000001081103893/vacancies">Вакансии</a>
+  <a class="gmcYaKQ4" href="https://account.2gis.com/orgs/70000001081103893/branches/70000001081103894/media">Фото и видео</a>
+  <a href="https://account.2gis.com/orgs/70000001081103893/products">Товары и услуги</a>
+</nav>
+
+<div style="margin-left:240px">
+  <h1>Фото и видео</h1>
+  <div class="tabs">
+    <span>Все фото и видео 1</span>
+    <span>От владельца 1</span>
+    <span>От пользователей</span>
+    <span>Видео</span>
+    <span>Цены нет фото</span>
+    <span>Внутри нет фото</span>
+    <span>Снаружи нет фото</span>
+  </div>
+
+  <div class="grid" id="grid">
+    <div class="tile">
+      <img alt="Фотография от владельца" loading="lazy" class="_3nbtfMM0 A7QHYsSB"
+           width="220" height="220"
+           src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==">
+    </div>
+  </div>
+
+  <form class="Uytl-ev-">
+    <svg width="24" height="24" class="LHWLaY3-"><path d="M13 0h-2v11H0v2h11v11h2V13h11v-2H13V0z"/></svg>
+    <input id="file" type="file" name="file" class="AQPw70nB" multiple
+           accept="image/jpeg,image/png,image/webp,video/mp4,video/mov,video/quicktime,video/hevc">
+  </form>
+</div>
+
+<script>
+  // Кабинет добавляет плитку сам, как только файл принят. Повторяем это же:
+  // проверка должна видеть рост альбома, а не «файлы переданы».
+  document.getElementById('file').addEventListener('change', (e) => {
+    const grid = document.getElementById('grid');
+    for (const f of e.target.files) {
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+      tile.innerHTML = '<img alt="Фотография от владельца" width="220" height="220" ' +
+        'src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==">';
+      grid.appendChild(tile);
+    }
+    const tabs = document.querySelector('.tabs span');
+    const n = grid.querySelectorAll('img').length;
+    tabs.textContent = 'Все фото и видео ' + n;
+  });
+</script>
+</body></html>

@@ -1835,7 +1835,8 @@ def _review_regenerate(project_id: str, item: dict) -> None:
             "rating": item.get("rating"), "answered": False}
     try:
         item["draft"] = rv.clean_draft(
-            llm.generate(rv.build_prompt(prompt, fake, project_id)), project_id)
+            llm.generate(rv.build_prompt(prompt, fake, project_id)),
+            project_id, rv.review_text(fake))
         item["status"] = rv.DRAFTED
         item["note"] = ""
     except Exception as e:  # noqa: BLE001
@@ -3210,13 +3211,13 @@ def _reviews_settings_block(project_id: str) -> None:
             try:
                 answer = rv.clean_draft(
                     llm.generate(rv.build_prompt(rv.project_prompt(project_id), sample, project_id)),
-                    project_id)
+                    project_id, rv.review_text(sample))
             except Exception as e:  # noqa: BLE001
                 answer = None
                 st.error(str(e))
         if answer:
             stats = getattr(llm, "last_stats", {}) or {}
-            st.caption(f"Отзыв: «{sample['full_text']}» · автор Павел Филиппов "
+            st.caption(f"Отзыв: «{sample['text']}» · автор Павел Филиппов "
                        f"(в обращении – {rv.name_for_prompt('Павел Филиппов')}) · "
                        f"модель {stats.get('model') or llm.model_in_use() or '–'} · "
                        f"{stats.get('seconds', '?')} сек, запросов {stats.get('calls', 1)}, "

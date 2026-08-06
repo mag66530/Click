@@ -2,13 +2,13 @@
   "contacts": {
     "Россия": {
       "site": "metpromintex.ru",
-      "email": "",
-      "phone": ""
+      "email": "moscow@metpromintex.ru",
+      "phone": "+7 (495) 729-83-58"
     },
     "Казахстан": {
-      "site": "",
-      "email": "",
-      "phone": ""
+      "site": "https://metpromintex-astana.kz/",
+      "email": "astana@metpromintex.ru",
+      "phone": "+7 (717) 262-76-38"
     },
     "Беларусь": {
       "site": "metpromintex.by",
@@ -16,19 +16,19 @@
       "phone": "+375 (29) 666-97-80"
     },
     "Киргизия": {
-      "site": "",
-      "email": "",
-      "phone": ""
+      "site": "https://metpromintex.kg/",
+      "email": "info@metpromintex.uz",
+      "phone": "+996 (224) 07-67-37"
     },
     "Узбекистан": {
-      "site": "",
-      "email": "",
-      "phone": ""
+      "site": "https://metpromintex.uz/",
+      "email": "info@metpromintex.uz",
+      "phone": "+998 (90) 005-00-98"
     },
     "Азербайджан": {
-      "site": "",
-      "email": "",
-      "phone": ""
+      "site": "metpromintex.az",
+      "email": "baku@metpromintex.az",
+      "phone": "+994 (51) 895-96-88"
     }
   },
   "templates": {

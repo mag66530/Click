@@ -721,76 +721,6 @@
       "sameSite": "None"
     },
     {
-      "name": "dg_country_code",
-      "value": "US",
-      "domain": "account.2gis.com",
-      "path": "/",
-      "expires": 1786018968.87,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "dg_user_locale",
-      "value": "ru",
-      "domain": "account.2gis.com",
-      "path": "/",
-      "expires": 1793967709,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "_gid",
-      "value": "GA1.3.389920605.1786014633",
-      "domain": ".account.2gis.com",
-      "path": "/",
-      "expires": 1786105309,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "_gat",
-      "value": "1",
-      "domain": ".account.2gis.com",
-      "path": "/",
-      "expires": 1786018969,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "_ga",
-      "value": "GA1.3.1331260955.1786014633",
-      "domain": ".account.2gis.com",
-      "path": "/",
-      "expires": 1820578909.872,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "_gat_gtag_UA_159862647_1",
-      "value": "1",
-      "domain": ".account.2gis.com",
-      "path": "/",
-      "expires": 1786018969,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "_ga_DEN30CPV6D",
-      "value": "GS2.3.s1786014632$o1$g1$t1786018909$j60$l0$h0",
-      "domain": ".account.2gis.com",
-      "path": "/",
-      "expires": 1820578909.961,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
       "name": "banner_advert_version_reviews_70000001081104797",
       "value": "3.0",
       "domain": "account.2gis.com",
@@ -801,21 +731,91 @@
       "sameSite": "None"
     },
     {
+      "name": "_gat",
+      "value": "1",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1786020118,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "_gat_gtag_UA_159862647_1",
+      "value": "1",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1786020118,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_country_code",
+      "value": "US",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786020167.529,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_user_locale",
+      "value": "ru",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1793968909,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "_gid",
+      "value": "GA1.3.389920605.1786014633",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1786106509,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ga",
+      "value": "GA1.3.1331260955.1786014633",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1820580109.2,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ga_DEN30CPV6D",
+      "value": "GS2.3.s1786014632$o1$g1$t1786020109$j9$l0$h0",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1820580109.308,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
       "name": "__ddg8_",
-      "value": "dILKY7rU5IAMSOEQ",
+      "value": "eOGp8yWdnqjEDG8w",
       "domain": ".2gis.com",
       "path": "/",
-      "expires": 1786020112.927,
+      "expires": 1786021312.386,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
     },
     {
       "name": "__ddg10_",
-      "value": "1786018912",
+      "value": "1786020112",
       "domain": ".2gis.com",
       "path": "/",
-      "expires": 1786020112.927,
+      "expires": 1786021312.386,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
@@ -825,7 +825,7 @@
       "value": "34.127.33.101",
       "domain": ".2gis.com",
       "path": "/",
-      "expires": 1786020112.927,
+      "expires": 1786021312.386,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
@@ -835,7 +835,7 @@
       "value": "46c2de69-746f-4db4-b055-989a3dccbb8c",
       "domain": "account.2gis.com",
       "path": "/",
-      "expires": 1786020713,
+      "expires": 1786021912,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"

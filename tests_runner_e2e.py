@@ -124,22 +124,22 @@ def last_log(pid: str) -> str:
     return runner.read_log(pid, names[0]) if names else ""
 
 
-def wait_done(pid: str, timeout: float = 25) -> dict:
+def wait_done(pid: str, timeout: float = 25, kind: str | None = None) -> dict:
     end = time.time() + timeout
     while time.time() < end:
-        state = runner.read_state(pid)
+        state = runner.read_state(pid, kind)
         if state.get("status") in ("done", "error", "stopped"):
             return state
         time.sleep(0.1)
-    return runner.read_state(pid)
+    return runner.read_state(pid, kind)
 
 
-def settle(pid: str, timeout: float = 5) -> None:
+def settle(pid: str, timeout: float = 5, kind: str | None = None) -> None:
     """Дождаться, пока прогон реально отпустит лок. Между статусом «done»
     и снятием лок-файла есть окно – без этой паузы следующий старт получал
     «Уже идёт другой прогон»."""
     end = time.time() + timeout
-    while time.time() < end and runner.is_running(pid):
+    while time.time() < end and runner.is_running(pid, kind):
         time.sleep(0.05)
     # Лок снят, но поток ещё доживает свой finally – без join следующий
     # старт получает «Предыдущий прогон ещё не завершился».
@@ -539,6 +539,90 @@ def scenario_reviews_page_broken(pid: str) -> None:
     eq("в очередь ничего не добавилось", rv.load_queue(pid), [])
 
 
+def scenario_gis_actualize(pid: str) -> None:
+    """
+    Прогон по 2ГИС: свои города, свой лок, своя очередь ответов.
+
+    Браузер подменён – проверяем склейку. Главное здесь: отзыв с чужой
+    площадки (Flamp) не уходит в Gemini и не считается своим, а очередь
+    2ГИС не смешивается с яндексовой.
+    """
+    print("\n▸ 2ГИС: прогон с отзывами")
+    import gis_playwright as gis
+    import reviews as rv
+
+    folder = runner.p_tasks_actualize(pid, runner.GIS)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "01-Россия.json").write_text(json.dumps({
+        "country": "Россия", "projectName": "TEST",
+        "tasks": [{"cityName": "Краснодар",
+                   "companyUrl": "https://account.2gis.com/orgs/70000001060441666/"}],
+    }, ensure_ascii=False), encoding="utf-8")
+
+    rv.save_queue(pid, [], platform=rv.GIS)
+    rv.save_queue(pid, [{"reviewId": "ya-1", "status": rv.DRAFTED, "platform": rv.YANDEX}])
+
+    gis.browser = lambda project_id, headless=True: FakeBrowser(project_id, headless)
+    gis.actualize_city = lambda page, task, i=0, t=1: {
+        "cityName": task["cityName"], "companyUrl": task.get("companyUrl"),
+        "status": "actualized", "reason": "плашка ответила", "durationMs": 10}
+    gis.read_reviews = lambda page, url, navigate=True, org_id=None: {
+        "ok": True, "url": url, "shown": 3, "skipped": 0, "reason": "",
+        "items": [
+            {"id": "g1", "rating": 5, "text": "отличные трубы", "author": "Вера",
+             "time_created": 1720137600000, "answered": False, "platform": "2GIS",
+             "canAnswer": True, "foreignUrl": "", "branchUrl": "", "branchName": ""},
+            {"id": "g2", "rating": 3, "text": "ждал дольше", "author": "Игорь",
+             "time_created": 1720137600000, "answered": False, "platform": "2GIS",
+             "canAnswer": True, "foreignUrl": "", "branchUrl": "", "branchName": ""},
+            {"id": "g3", "rating": 5, "text": "порезали бесплатно", "author": "Марина",
+             "time_created": 1720137600000, "answered": False, "platform": "Flamp",
+             "canAnswer": False, "foreignUrl": "https://flamp.ru/firm/1/reviews",
+             "branchUrl": "", "branchName": ""},
+        ]}
+    rv.project_prompt = lambda project_id: "Ответь на отзыв. [вставить отзыв] [имя]"
+    import llm
+    asked = []
+    llm.generate = lambda prompt: asked.append(prompt) or "Уважаемая Вера! Благодарим за отзыв."
+
+    ok, msg = runner.start_actualize(pid, headless=True, delay_s=0, with_reviews=True,
+                                     platform=runner.GIS)
+    check("прогон 2ГИС стартовал", ok, msg)
+    check("в сообщении названа площадка", "2ГИС" in msg, msg)
+    wait_done(pid, kind="actualize-gis")
+    settle(pid, kind="actualize-gis")
+
+    queue = rv.load_queue(pid, rv.GIS)
+    by_id = {it["reviewId"]: it for it in queue}
+    eq("в очередь 2ГИС попали все три отзыва", len(queue), 3)
+    eq("пятёрка получила черновик", by_id["g1"]["status"], rv.DRAFTED)
+    eq("тройка ушла человеку", by_id["g2"]["status"], rv.NEEDS_HUMAN)
+    eq("отзыв с Flamp – тоже человеку", by_id["g3"]["status"], rv.NEEDS_HUMAN)
+    check("и с пояснением, куда идти", "Flamp" in (by_id["g3"]["note"] or ""), by_id["g3"]["note"])
+    eq("ссылка ведёт на Flamp", by_id["g3"]["reviewsUrl"], "https://flamp.ru/firm/1/reviews")
+    check("на чужую площадку Gemini не звали", len(asked) == 1, f"звали {len(asked)} раз")
+    check("у всех проставлена площадка", all(it.get("platform") == rv.GIS for it in queue))
+
+    yandex_queue = rv.load_queue(pid)
+    eq("яндексова очередь не тронута", [it["reviewId"] for it in yandex_queue], ["ya-1"])
+
+    reports = runner.list_reports(pid, "actualize-gis", limit=1)
+    data = runner.read_report(pid, "actualize-gis", reports[0]["name"]) if reports else {}
+    eq("отчёт знает площадку", data.get("platform"), "gis")
+    eq("город актуализирован", (data.get("totals") or {}).get("actualized"), 1)
+    # Имя отчёта – по времени с точностью до секунды, так что у площадок оно
+    # может совпасть. Важно другое: папки разные, и в яндексовой лежит
+    # яндексов прогон, а не этот.
+    check("отчёт лежит в папке 2ГИС",
+          (runner.p_reports_actualize(pid, runner.GIS) / reports[0]["name"]).exists())
+    same_name = runner.read_report(pid, "actualize", reports[0]["name"])
+    check("в яндексову папку прогон 2ГИС не записался",
+          same_name is None or same_name.get("platform") != "gis",
+          str((same_name or {}).get("platform")))
+    live = runner.read_live_log(pid, "actualize-gis")
+    check("в логе прогона названа площадка", "2ГИС" in live, live[:200])
+
+
 def scenario_collect(pid: str) -> None:
     """
     Сбор организаций для сверки: список читается, результат сохраняется,
@@ -702,6 +786,7 @@ def main() -> int:
         scenario_actualize_reviews_off(pid)
         scenario_reviews_llm_down(pid)
         scenario_reviews_page_broken(pid)
+        scenario_gis_actualize(pid)
         scenario_collect(pid)
         scenario_parallel(pid)
     finally:

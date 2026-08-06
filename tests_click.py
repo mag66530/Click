@@ -2722,12 +2722,12 @@ def test_city_checkbox_survives_collapse() -> None:
     # Подбор обязан идти ДО отрисовки галочек, иначе смысла в нём нет.
     src = inspect.getsource(app.tab_actualize)
     sync = src.find("_act_sync_widgets")
-    draw = src.find("act-cb-")
+    draw = src.find("-cb-")
     check("подбор идёт до отрисовки галочек", 0 < sync < draw, f"подбор {sync}, отрисовка {draw}")
 
     # Галочка отзывов включена по умолчанию.
     check("«заодно проверить отзывы» включена сразу",
-          'setdefault("act-reviews", True)' in src, "")
+          "st.session_state.setdefault(reviews_key, True)" in src, "")
     st.session_state.clear()
 
 
@@ -2833,15 +2833,15 @@ def test_look_and_order() -> None:
     print("\n▸ Порядок блоков и тема")
 
     src = inspect.getsource(app.tab_actualize)
-    launch = src.find("btn-actualize")
+    launch = src.find("Запустить актуализацию")
     queue = src.rfind("reviews_queue_block")
     check("очередь ответов идёт ПОСЛЕ запуска прогона", 0 < launch < queue,
           f"запуск {launch}, очередь {queue}")
 
     # Без входа в Яндекс раздел выходит раньше времени – очередь обязана
     # показаться и там, иначе готовые черновики просто исчезают с экрана.
-    head = src[:src.find("Сначала войдите в Яндекс")]
-    tail = src[src.find("Сначала войдите в Яндекс"):]
+    head = src[:src.find("Сначала войдите в")]
+    tail = src[src.find("Сначала войдите в"):]
     check("без входа в Яндекс очередь тоже показывается",
           "reviews_queue_block" in tail.split("return")[0], tail[:200])
     check("и это не единственное её место", "reviews_queue_block" in src[len(head):])
@@ -3222,12 +3222,13 @@ def test_batch_browser_survives_rerun() -> None:
         # Ручка обязана лежать в session_state: только оно переживает
         # перерисовку. Ровно этого и не было.
         box = st.session_state.get(app._BROWSER_BOX) or {}
-        check("ручка браузера живёт в session_state", "APS" in box, list(box))
+        check("ручка браузера живёт в session_state",
+              any(k.startswith("APS") for k in box), list(box))
 
         app._batch_browser_close("APS")
         eq("после пачки браузер закрыт", made["closed"], 1)
         check("и ручка убрана из session_state",
-              not (st.session_state.get(app._BROWSER_BOX) or {}).get("APS"))
+              not (st.session_state.get(app._BROWSER_BOX) or {}))
     finally:
         (app.PlaywrightWorker, yb.YbBrowser, yb.publish_review_answer,
          app.get_settings, app._review_queue_save) = keep

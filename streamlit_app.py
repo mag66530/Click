@@ -244,7 +244,7 @@ def _default_subproject(project_id: str) -> dict:
 
 # Что из конфига храним снаружи (в репозитории). Пароль от Яндекса – НИКОГДА:
 # он остаётся только в этом контейнере.
-_KEPT = ("countries", "countriesGis", "email", "kpSheetUrl", "kpSyncedAt")
+_KEPT = ("countries", "countriesGis", "email", "kpSheetUrl", "kpSyncedAt", "gisPhotosDefault")
 
 
 def load_raw_config(project_id: str) -> dict:
@@ -679,6 +679,31 @@ def build_final_text(project_id: str, country_name: str, post_type: str, body: s
 #  Очередь → файлы задач (формат читает runner.py, он же формат publish.js)
 # ════════════════════════════════════════════════════════════════════
 
+def gis_url_for_city(config: dict, country_name: str, city_name: str) -> str | None:
+    """
+    Ссылка на кабинет 2ГИС для города из списка Яндекса.
+
+    Списки площадок разные – в 2ГИС карточка заведена не везде, – а вот
+    названия городов приходят из ОДНОЙ строки КП и потому совпадают.
+    Сначала ищем в той же стране, потом по всему списку: страну в таблице
+    могли записать по-разному («РФ» и «Россия» сводятся не всегда).
+    """
+    def norm(s: str) -> str:
+        return re.sub(r"\s+", " ", (s or "").strip().lower()).replace("ё", "е")
+
+    want, in_country = norm(city_name), norm(country_name)
+    fallback = None
+    for country in config.get("countriesGis") or []:
+        same = norm(country.get("name")) == in_country
+        for city in country.get("cities") or []:
+            if norm(city.get("name")) != want:
+                continue
+            if same:
+                return city.get("url")
+            fallback = fallback or city.get("url")
+    return fallback
+
+
 def save_queue_to_tasks(project_id: str, config: dict, queue: list[dict]) -> int:
     tasks_dir = project_base(project_id) / "tasks"
     tasks_dir.mkdir(parents=True, exist_ok=True)
@@ -693,6 +718,8 @@ def save_queue_to_tasks(project_id: str, config: dict, queue: list[dict]) -> int
             city = next((c for c in country["cities"] if c["id"] == cid), None)
             if not city:
                 continue
+            # Ссылку 2ГИС кладём в саму задачу, а не ищем во время прогона:
+            # задача уезжает в файл и должна пережить перезапуск облака.
             city_tasks.append({
                 "cityName": city["name"],
                 "companyUrl": city["url"],
@@ -702,6 +729,9 @@ def save_queue_to_tasks(project_id: str, config: dict, queue: list[dict]) -> int
                 "imagePath": item.get("imagePath") or None,
                 "extraImages": item.get("extraImages") or None,
                 "productPhotos": item.get("productPhotos") or None,
+                "gisPhotos": bool(item.get("gisPhotos")),
+                "gisUrl": (gis_url_for_city(config, country["name"], city["name"])
+                           if item.get("gisPhotos") else None),
             })
         if not city_tasks:
             continue
@@ -1526,7 +1556,7 @@ def tab_compose(project_id: str, config: dict) -> None:
       # Фото в «Товары» имеют смысл только у отгрузки – так и в оригинале
       # (showProductPhotos = draft.postType === 'shipment'). У остальных типов
       # поле только путало: заливать товары к поздравлению незачем.
-      product_photos_raw, goods_files = "", None
+      product_photos_raw, goods_files, gis_photos = "", None, False
       if post_type == "shipment":
           with st.container(key="goods-row"):
               g1, g2 = st.columns([3, 1])
@@ -1539,6 +1569,17 @@ def tab_compose(project_id: str, config: dict) -> None:
                                              accept_multiple_files=True,
                                              key=f"compose-goods-files-{st.session_state.get('upl-gen', 0)}",
                                              label_visibility="collapsed")
+          # Те же снимки – ещё и в 2ГИС. Галочка помнит прошлый выбор проекта:
+          # первый раз выключена, дальше стоит так, как оставили. Ничего не
+          # уедет в 2ГИС незамеченным, но и щёлкать каждый раз не придётся.
+          gis_photos = st.checkbox(
+              "Опубликовать эти фото ещё и в 2ГИС (раздел «Фото и видео»)",
+              value=bool(config.get("gisPhotosDefault")), key="compose-gis-photos",
+              help="Берутся те же файлы. Город без карточки 2ГИС просто пропускается – "
+                   "в отчёте будет «Нет карточки в 2ГИС». 2ГИС не принимает gif.")
+          if gis_photos != bool(config.get("gisPhotosDefault")):
+              config["gisPhotosDefault"] = gis_photos
+              save_config(project_id, config)
 
     image_urls = [u.strip() for u in (image_urls_raw or "").splitlines() if u.strip()]
     product_photos = [u.strip() for u in (product_photos_raw or "").splitlines() if u.strip()]
@@ -1612,6 +1653,7 @@ def tab_compose(project_id: str, config: dict) -> None:
                         "imageUrl": all_images[0] if all_images and all_images[0].startswith("http") else None,
                         "extraImages": all_images[1:4] or None,
                         "productPhotos": product_photos or None,
+                        "gisPhotos": bool(gis_photos and product_photos),
                     })
                     added += 1
                 if added:
@@ -2967,20 +3009,35 @@ def _report_shots(project_id: str, data: dict) -> None:
         st.caption("Снимок не сохранился – облако могло перезапуститься с тех пор.")
 
 
+def _gis_photo_cell(r: dict) -> str:
+    """Колонка «Фото_2ГИС»: счёт или причина, по которой счёта нет."""
+    gp = r.get("gisPhotos")
+    if not gp:
+        return ""
+    if gp.get("uploaded"):
+        return f'{gp["uploaded"]} из {gp.get("requested", 0)}'
+    return re.sub(r"[;\r\n]", " ", gp.get("reason") or "не отправлено")
+
+
 def _report_csv(data: dict) -> bytes:
-    rows = ["Страна;Город;Статус;Причина;Время_сек;URL"]
+    has_gis = any(r.get("gisPhotos") for r in data.get("results") or [])
+    head = "Страна;Город;Статус;Причина;Время_сек;URL"
+    rows = [head + (";Фото_2ГИС" if has_gis else "")]
     for r in data.get("results") or []:
         reason = re.sub(r"[;\r\n]", " ", (r.get("reason") or ""))
         if r.get("imageError"):
             reason += f' · фото: {r["imageError"]}'
-        rows.append(";".join([
+        cells = [
             str(r.get("country") or r.get("package") or ""),
             str(r.get("cityName") or ""),
             str(r.get("status") or ""),
             reason,
             f'{(r.get("durationMs") or 0) / 1000:.1f}',
             str(r.get("companyUrl") or ""),
-        ]))
+        ]
+        if has_gis:
+            cells.append(_gis_photo_cell(r))
+        rows.append(";".join(cells))
     return ("﻿" + "\n".join(rows)).encode("utf-8")
 
 

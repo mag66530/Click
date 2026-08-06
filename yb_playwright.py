@@ -533,6 +533,10 @@ class YbBrowser:
         self.browser: Browser | None = None
         self.context: BrowserContext | None = None
         self.page: Page | None = None
+        # Вторая сессия в том же браузере – см. side_page().
+        self._side: BrowserContext | None = None
+        self._side_page: Page | None = None
+        self._side_file: Path | None = None
 
     def start(self) -> None:
         engine = resolve_engine()
@@ -560,6 +564,51 @@ class YbBrowser:
         self.page = self.context.new_page()
         return self.page
 
+    def side_page(self, session_file: Path) -> Page:
+        """
+        Вкладка с ДРУГОЙ сессией в этом же браузере.
+
+        Нужна там, где посреди прогона Яндекса надо заглянуть в 2ГИС: те же
+        снимки отгрузки уходят на обе площадки. Второй браузер поднимать
+        нельзя – это ещё полгигабайта на бесплатном облаке, и прогон падал бы
+        по памяти. А отдельный контекст внутри уже запущенного браузера – это
+        просто свой набор кук: сессии не смешиваются, процесс один.
+
+        Контекст создаётся один раз и живёт до конца прогона: открывать и
+        закрывать его на каждый город – это лишние секунды на ровном месте.
+        """
+        if self._side_page and not self._side_page.is_closed():
+            return self._side_page
+        if self.browser is None:
+            raise RuntimeError("Браузер не запущен")
+        self._side_file = session_file
+        self._side = self.browser.new_context(
+            storage_state=str(session_file) if session_file.exists() else None,
+            viewport={"width": 1280, "height": 900},
+            user_agent=UA,
+            locale=LOCALE,
+            extra_http_headers=LANG_HEADERS,
+        )
+        self._side.set_default_timeout(ACTION_TIMEOUT)
+        self._side.set_default_navigation_timeout(NAVIGATION_TIMEOUT)
+        self._side_page = self._side.new_page()
+        return self._side_page
+
+    def close_side(self) -> None:
+        """Закрыть вторую сессию, сохранив её куки: они могли продлиться."""
+        if self._side is None:
+            return
+        try:
+            if self._side_file is not None:
+                _save_storage_state(self._side, self._side_file)
+        except Exception as e:  # noqa: BLE001
+            warn(f"Не удалось сохранить вторую сессию: {e}")
+        try:
+            self._side.close()
+        except Exception:  # noqa: BLE001
+            pass
+        self._side, self._side_page = None, None
+
     def save_session(self) -> None:
         try:
             if self.context:
@@ -575,6 +624,7 @@ class YbBrowser:
         self.start()
 
     def close(self) -> None:
+        self.close_side()
         try:
             if self.browser:
                 self.browser.close()
@@ -1653,10 +1703,31 @@ _GOODS_COUNT_JS = """
 """
 
 
-def upload_product_photos(page: Page, task: dict, photo_urls: list[str], temp_dir: Path) -> dict:
+def fetch_photos(photo_urls: list[str], temp_dir: Path) -> tuple[list[str], list[str]]:
+    """
+    Ссылки и пути → файлы на диске. Возвращает (что получилось, что нет).
+
+    Вынесено из загрузки в «Товары», потому что теперь те же снимки уходят на
+    ДВЕ площадки: качать их дважды – это вдвое дольше и вдвое больше поводов
+    упереться в чужой сервер.
+    """
+    local, errors = [], []
+    for url in photo_urls or []:
+        try:
+            local.append(str(url) if Path(str(url)).exists() else download_image(str(url), temp_dir))
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"Не скачать {str(url)[:50]}: {e}")
+    return local, errors
+
+
+def upload_product_photos(page: Page, task: dict, photo_urls: list[str], temp_dir: Path,
+                          local_files: list[str] | None = None) -> dict:
     """
     Загружает фото в раздел «Фото и видео → Товары». Изолирована: любая ошибка
     здесь НЕ влияет на статус публикации поста.
+
+    local_files – уже скачанные файлы. Прогон качает их один раз и отдаёт и
+    сюда, и в 2ГИС.
     """
     result = {"uploaded": 0, "failed": 0, "errors": []}
     if not photo_urls:
@@ -1669,13 +1740,12 @@ def upload_product_photos(page: Page, task: dict, photo_urls: list[str], temp_di
         result["failed"] = len(photo_urls)
         return result
 
-    local: list[str] = []
-    for url in photo_urls:
-        try:
-            local.append(str(url) if Path(str(url)).exists() else download_image(str(url), temp_dir))
-        except Exception as e:  # noqa: BLE001
-            result["failed"] += 1
-            result["errors"].append(f"Не скачать {str(url)[:50]}: {e}")
+    if local_files is None:
+        local, errors = fetch_photos(photo_urls, temp_dir)
+        result["failed"] += len(errors)
+        result["errors"].extend(errors)
+    else:
+        local = list(local_files)
     if not local:
         return result
 

@@ -1512,6 +1512,99 @@ def test_gis_reviews_on_real_page() -> None:
             browser.close()
 
 
+def test_gis_media_upload() -> None:
+    """
+    Фото отгрузки в «Фото и видео» 2ГИС – на настоящей странице кабинета.
+
+    Главное, что тут проверяется: кнопку жать не надо. И в пустом альбоме, и в
+    непустом лежит один и тот же настоящий input[type=file] – файлы отдаём
+    прямо ему. Тогда неважно, как сегодня выглядит кнопка «Добавить» и куда
+    переехал круглый «плюс».
+    """
+    import gis_playwright as gis
+    print("\n▸ 2ГИС: фото в раздел «Фото и видео»")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    page_html = (Path(__file__).parent / "tests_fixtures" / "gis-media-page.html") \
+        .read_text(encoding="utf-8")
+
+    # Что 2ГИС примет, а что нет – проверяется без браузера.
+    good, bad = gis.suitable_photos(["/tmp/a.jpg", "/tmp/b.PNG", "/tmp/c.gif", "/tmp/d.webp"])
+    eq("gif в 2ГИС не отправляем", [Path(b).name for b in bad], ["c.gif"])
+    eq("остальное подходит", len(good), 3)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        shots = []
+        for i, name in enumerate(("отгрузка-1.jpg", "отгрузка-2.jpg", "схема.gif")):
+            fp = Path(tmp) / name
+            fp.write_bytes(b"\xff\xd8\xff" + bytes([i]) * 64)
+            shots.append(str(fp))
+
+        with sync_playwright() as pw:
+            try:
+                browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                             args=["--no-sandbox"])
+            except Exception:  # noqa: BLE001
+                browser = pw.chromium.launch()
+            try:
+                page = browser.new_context(viewport={"width": 1100, "height": 800}).new_page()
+                box = {"html": page_html}
+                page.route("**/*", lambda route: route.fulfill(
+                    status=200, content_type="text/html; charset=utf-8", body=box["html"]))
+                url = "https://account.2gis.com/orgs/70000001081103893/"
+
+                res = gis.upload_media(page, url, shots, label="Самара: ")
+                eq("оба снимка встали в альбом", res["uploaded"], 2)
+                eq("gif отброшен, а не отправлен", res["skipped"], 1)
+                eq("и это не ошибка", res["reason"], "")
+                eq("в альбоме стало три плитки",
+                   page.evaluate("() => document.querySelectorAll('#grid img').length"), 3)
+
+                # Ссылка на раздел берётся из меню, а не складывается из кусков:
+                # на складывании адреса Click уже обжёгся с «Данными о компании».
+                look = gis._media_look(page)  # noqa: SLF001
+                check("ссылка на раздел найдена в меню",
+                      "/branches/70000001081103894/media" in (look.get("link") or ""),
+                      str(look.get("link")))
+
+                # Альбом не вырос – успехом это не считаем.
+                box["html"] = page_html.replace(
+                    "grid.appendChild(tile);", "void tile;")
+                quiet = gis.upload_media(page, url, shots[:1], label="Самара: ")
+                eq("молчаливый отказ успехом не считаем", quiet["uploaded"], 0)
+                check("и человеку сказано, что делать", "вручную" in quiet["reason"], quiet["reason"])
+
+                # Поля нет, но есть кнопка «Добавить» – жмём её и ищем снова.
+                box["html"] = """<html><head><meta charset="utf-8">
+                  <title>Личный кабинет 2ГИС: Фото и видео</title></head>
+                  <body><h1>Фото и видео</h1>
+                  <div>Нет ни одного фото и видео. Станьте заметнее среди конкурентов,
+                       оформите карточку компании, загрузив фото и видео.</div>
+                  <a href="https://account.2gis.com/orgs/1/branches/2/media">Фото и видео</a>
+                  <div id="slot"></div>
+                  <button onclick="document.getElementById('slot').innerHTML =
+                     '<form><input id=file type=file multiple></form>'">Добавить</button>
+                  </body></html>"""
+                page.goto("https://account.2gis.com/orgs/1/branches/2/media")
+                page.wait_for_timeout(200)
+                empty = gis._media_look(page)  # noqa: SLF001
+                check("на пустой карточке поля сразу нет", not empty.get("hasField"), str(empty))
+                pressed = gis.upload_media(page, url, shots[:1])
+                check("после «Добавить» поле нашлось",
+                      "поле загрузки" not in (pressed["reason"] or ""), pressed["reason"])
+
+                # Нет ссылки на кабинет – не молчим.
+                nowhere = gis.upload_media(page, None, shots[:1])
+                check("без ссылки 2ГИС – честный отказ",
+                      "кабинет 2ГИС" in nowhere["reason"], nowhere["reason"])
+            finally:
+                browser.close()
+
+
 def test_gis_answer_and_actualize() -> None:
     """
     Ответ на отзыв и подтверждение данных – в настоящем браузере.
@@ -3701,6 +3794,99 @@ def test_report_with_reviews() -> None:
         rv.load_queue = keep
 
 
+def test_gis_photos_wiring() -> None:
+    """
+    Фото отгрузки едут в 2ГИС: связка города, задачи и отчёта.
+
+    Списки площадок разные – в 2ГИС карточка заведена не везде, – а названия
+    городов приходят из одной строки КП и потому совпадают. По ним и ищем.
+    Ссылку кладём в САМУ задачу: задача уезжает в файл и должна пережить
+    перезапуск облака, а искать её потом посреди прогона негде.
+    """
+    import streamlit_app as app
+    print("\n▸ Фото отгрузки ещё и в 2ГИС")
+
+    config = {
+        "countries": [{"id": "c-1", "name": "Россия", "cities": [
+            {"id": "ct-1", "name": "Самара", "url": "https://yandex.ru/sprav/501/"},
+            {"id": "ct-2", "name": "Тула", "url": "https://yandex.ru/sprav/502/"},
+        ]}],
+        "countriesGis": [
+            {"id": "c-gis-1", "name": "Россия", "cities": [
+                {"id": "ct-gis-1", "name": "Самара",
+                 "url": "https://account.2gis.com/orgs/70000001081103893/"},
+            ]},
+            {"id": "c-gis-2", "name": "Казахстан", "cities": [
+                {"id": "ct-gis-2", "name": "Актобе",
+                 "url": "https://account.2gis.com/orgs/70000001094798575/"},
+            ]},
+        ],
+    }
+    eq("город находится в своей стране",
+       app.gis_url_for_city(config, "Россия", "Самара"),
+       "https://account.2gis.com/orgs/70000001081103893/")
+    eq("города без карточки 2ГИС – нет", app.gis_url_for_city(config, "Россия", "Тула"), None)
+    # Страну в таблице пишут по-разному («РФ» и «Россия»), город – одинаково.
+    eq("страна записана иначе – город всё равно найдётся",
+       app.gis_url_for_city(config, "РФ", "Самара"),
+       "https://account.2gis.com/orgs/70000001081103893/")
+    eq("регистр и ё не мешают", app.gis_url_for_city(config, "казахстан", "актобе"),
+       "https://account.2gis.com/orgs/70000001094798575/")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        saved = app.USERS_DATA
+        app.USERS_DATA = Path(tmp)
+        try:
+            queue = [{"countryId": "c-1", "countryName": "Россия",
+                      "cityIds": ["ct-1", "ct-2"], "postType": "shipment",
+                      "text": "Отгрузка", "productPhotos": ["/tmp/a.jpg"], "gisPhotos": True}]
+            app.save_queue_to_tasks("SMU", config, queue)
+            files = list((app.project_base("SMU") / "tasks").glob("*.json"))
+            eq("файл задач записан", len(files), 1)
+            tasks = json.loads(files[0].read_text(encoding="utf-8"))["tasks"]
+            by_city = {t["cityName"]: t for t in tasks}
+            check("галочка доехала до задачи", by_city["Самара"]["gisPhotos"])
+            eq("и ссылка 2ГИС вместе с ней", by_city["Самара"]["gisUrl"],
+               "https://account.2gis.com/orgs/70000001081103893/")
+            eq("у города без карточки ссылки нет", by_city["Тула"]["gisUrl"], None)
+
+            # Галочка снята – ссылку не ищем вовсе: лишняя работа и лишний
+            # повод залить фото туда, куда не просили.
+            (app.project_base("SMU") / "tasks").rename(app.project_base("SMU") / "tasks-old")
+            app.save_queue_to_tasks("SMU", config, [{**queue[0], "gisPhotos": False}])
+            files = list((app.project_base("SMU") / "tasks").glob("*.json"))
+            off = json.loads(files[0].read_text(encoding="utf-8"))["tasks"][0]
+            check("без галочки в 2ГИС не собираемся", not off["gisPhotos"])
+            eq("и ссылку не кладём", off["gisUrl"], None)
+        finally:
+            app.USERS_DATA = saved
+
+    # Отчёт: причина важнее счёта. Голый «0 из 3» выглядит поломкой, а
+    # «нет карточки в 2ГИС» объясняет ноль.
+    import ui_theme as T
+    row = T.report_row({"cityName": "Тула", "status": "ok", "reason": "Пост опубликован",
+                        "gisPhotos": {"requested": 3, "uploaded": 0,
+                                      "reason": "Нет карточки в 2ГИС"}})
+    check("в строке отчёта видно причину", "Нет карточки в 2ГИС" in row, row[:300])
+    row2 = T.report_row({"cityName": "Самара", "status": "ok", "reason": "Пост опубликован",
+                         "gisPhotos": {"requested": 3, "uploaded": 3, "reason": ""}})
+    check("а при успехе – счёт", "2ГИС: 3/3" in row2, row2[:300])
+
+    csv = app._report_csv({"results": [
+        {"cityName": "Самара", "status": "ok", "gisPhotos": {"requested": 2, "uploaded": 2}},
+        {"cityName": "Тула", "status": "ok",
+         "gisPhotos": {"requested": 2, "uploaded": 0, "reason": "Нет карточки в 2ГИС"}},
+    ]}).decode("utf-8-sig")
+    check("в выгрузке появилась колонка", csv.splitlines()[0].endswith(";Фото_2ГИС"),
+          csv.splitlines()[0])
+    check("и в ней счёт", "2 из 2" in csv, csv[:300])
+    check("и причина", "Нет карточки в 2ГИС" in csv, csv[:300])
+    # Прогон без фото лишней колонки не получает.
+    plain = app._report_csv({"results": [{"cityName": "Омск", "status": "ok"}]}).decode("utf-8-sig")
+    check("без фото колонки нет", not plain.splitlines()[0].endswith(";Фото_2ГИС"),
+          plain.splitlines()[0])
+
+
 # ════════════════════════════════════════════════════════════════════
 def test_queue_resets_between_runs() -> None:
     """
@@ -4158,6 +4344,8 @@ def main() -> int:
         test_skipped_comes_back()
         test_gis_reviews_on_real_page()
         test_gis_answer_and_actualize()
+        test_gis_media_upload()
+        test_gis_photos_wiring()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

@@ -2829,6 +2829,9 @@ def test_city_checkbox_survives_collapse() -> None:
     chosen = app._act_selected(all_ids)
     eq("сначала выбраны все", len(chosen), 3)
 
+    # Страна была раскрыта – значит галочки в прошлый проход рисовались.
+    st.session_state["act-drawn"] = list(all_ids)
+
     # Браузер прислал снятие, но страну свернули – on_change не позвали.
     st.session_state["act-cb-ct-2"] = False
     check("без подбора значение бы потерялось", "ct-2" in chosen)
@@ -2844,8 +2847,36 @@ def test_city_checkbox_survives_collapse() -> None:
     # Города, про которые браузер ничего не присылал, не трогаем.
     st.session_state.clear()
     st.session_state["act-selected"] = {"ct-1"}
+    st.session_state["act-drawn"] = list(all_ids)
     app._act_sync_widgets(all_ids)
     eq("про что не спрашивали – то не меняем", sorted(st.session_state["act-selected"]), ["ct-1"])
+
+    # ── Обратная сторона: чужое значение подбирать НЕЛЬЗЯ ──
+    # Живой случай: «Выбираю все в КЗ, хочу ещё выбрать РБ – сбрасывается КЗ».
+    # «Снять все» писало значение и тем галочкам, которых нет на экране;
+    # запись оставалась в session_state и потом читалась как «человек снял
+    # галочку». Теперь подбор смотрит только на то, что рисовалось.
+    st.session_state.clear()
+    kz = ["ct-kz-1", "ct-kz-2"]
+    rb = ["ct-rb-1"]
+    st.session_state["act-selected"] = set(kz)
+    st.session_state["act-drawn"] = list(rb)          # на экране раскрыта Беларусь
+    for cid in kz:
+        st.session_state[f"act-cb-{cid}"] = False     # давняя запись от «Снять все»
+    st.session_state["act-cb-ct-rb-1"] = True         # человек отметил Минск
+    app._act_sync_widgets(kz + rb)
+    got = sorted(st.session_state["act-selected"])
+    eq("выбор в свёрнутой стране цел, новый город добавлен",
+       got, ["ct-kz-1", "ct-kz-2", "ct-rb-1"])
+
+    # И «Выбрать все» больше не пишет в галочки, которых нет на экране.
+    st.session_state.clear()
+    st.session_state["act-drawn"] = list(rb)
+    app._act_set(kz + rb, False, "act")
+    check("свёрнутым городам значение не пишется",
+          all(f"act-cb-{cid}" not in st.session_state for cid in kz),
+          [k for k in st.session_state if k.startswith("act-cb-")])
+    check("а видимой галочке – пишется", st.session_state.get("act-cb-ct-rb-1") is False)
 
     # Подбор обязан идти ДО отрисовки галочек, иначе смысла в нём нет.
     src = inspect.getsource(app.tab_actualize)

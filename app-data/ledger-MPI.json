@@ -101,6 +101,9 @@
     "{\"key\": \"45511216:f81fd8d8cc85d1a5\", \"at\": \"2026-08-06T16:11:16.613837+00:00\", \"ts\": 1786032676.6138544, \"status\": \"ok\", \"cityName\": \"Тараз\", \"companyUrl\": \"https://yandex.ru/sprav/45511216/edit/posts/\", \"runId\": \"run-1786031443213\"}",
     "{\"key\": \"45511245:f81fd8d8cc85d1a5\", \"at\": \"2026-08-06T16:11:40.863425+00:00\", \"ts\": 1786032700.8634408, \"status\": \"ok\", \"cityName\": \"Усть-Каменогорск\", \"companyUrl\": \"https://yandex.ru/sprav/45511245/edit/posts/\", \"runId\": \"run-1786031443213\"}",
     "{\"key\": \"36348810:f81fd8d8cc85d1a5\", \"at\": \"2026-08-06T16:12:14.096320+00:00\", \"ts\": 1786032734.0963366, \"status\": \"ok\", \"cityName\": \"Павлодар\", \"companyUrl\": \"https://yandex.ru/sprav/36348810/edit/posts/\", \"runId\": \"run-1786031443213\"}",
-    "{\"key\": \"45510949:f81fd8d8cc85d1a5\", \"at\": \"2026-08-06T16:12:50.171627+00:00\", \"ts\": 1786032770.17164, \"status\": \"ok\", \"cityName\": \"Семей\", \"companyUrl\": \"https://yandex.ru/sprav/45510949/edit/posts/\", \"runId\": \"run-1786031443213\"}"
+    "{\"key\": \"45510949:f81fd8d8cc85d1a5\", \"at\": \"2026-08-06T16:12:50.171627+00:00\", \"ts\": 1786032770.17164, \"status\": \"ok\", \"cityName\": \"Семей\", \"companyUrl\": \"https://yandex.ru/sprav/45510949/edit/posts/\", \"runId\": \"run-1786031443213\"}",
+    "{\"key\": \"194483940056:f81fd8d8cc85d1a5\", \"at\": \"2026-08-06T16:13:16.031884+00:00\", \"ts\": 1786032796.0318964, \"status\": \"ok\", \"cityName\": \"Кызылорда\", \"companyUrl\": \"https://yandex.ru/sprav/194483940056/p/edit/posts/\", \"runId\": \"run-1786031443213\"}",
+    "{\"key\": \"45307144:f81fd8d8cc85d1a5\", \"at\": \"2026-08-06T16:13:40.696072+00:00\", \"ts\": 1786032820.6960847, \"status\": \"ok\", \"cityName\": \"Актау\", \"companyUrl\": \"https://yandex.ru/sprav/45307144/edit/posts/\", \"runId\": \"run-1786031443213\"}",
+    "{\"key\": \"45375256:f81fd8d8cc85d1a5\", \"at\": \"2026-08-06T16:14:05.072160+00:00\", \"ts\": 1786032845.0721767, \"status\": \"ok\", \"cityName\": \"Костанай\", \"companyUrl\": \"https://yandex.ru/sprav/45375256/edit/posts/\", \"runId\": \"run-1786031443213\"}"
   ]
 }

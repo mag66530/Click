@@ -71,10 +71,13 @@ KIND_RU = {"publish": "Публикация", "actualize": "Актуализац
 # бы на первой же правке.
 YANDEX, GIS = "yandex", "gis"
 
+# «ru» – как называется площадка в заголовках, «short» – как её зовут в
+# обычной речи («войдите в Яндекс»), «gen» – родительный падеж («сессия
+# Яндекса»). Без падежей выходило «Сессия Яндекс.Бизнес не активна».
 PLATFORMS = {
-    YANDEX: {"kind": "actualize", "ru": "Яндекс.Бизнес",
+    YANDEX: {"kind": "actualize", "ru": "Яндекс.Бизнес", "short": "Яндекс", "gen": "Яндекса",
              "tasks": "tasks-actualize", "reports": "reports-actualize"},
-    GIS:    {"kind": "actualize-gis", "ru": "2ГИС",
+    GIS:    {"kind": "actualize-gis", "ru": "2ГИС", "short": "2ГИС", "gen": "2ГИС",
              "tasks": "tasks-actualize-gis", "reports": "reports-actualize-gis"},
 }
 
@@ -1254,6 +1257,7 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
 
     if not data["ok"]:
         out["summary"] = data["reason"]
+        out["noSession"] = bool(data.get("noSession"))   # прогону – знак остановиться
         _append_log(project_id, "WARN", f"  💬 {city}: отзывы не прочитаны – {data['reason']}")
         return out
 
@@ -1334,7 +1338,7 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
         try:
             import llm
             t0 = time.time()
-            draft = rv.clean_draft(llm.generate(rv.build_prompt(prompt, item)), project_id)
+            draft = rv.clean_draft(llm.generate(rv.build_prompt(prompt, item, project_id)), project_id)
             add(item, rv.DRAFTED, draft=draft)
             out["drafted"] += 1
             # Замер в лог: без него «долго генерирует» не отличить от
@@ -1519,6 +1523,24 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                            "status": "failed", "reason": f"Критическая ошибка: {e}", "durationMs": 0}
                 res["country"] = country
                 res["package"] = country
+
+                # Сессия слетела – дальше идти незачем: остальные города упрутся
+                # в ту же страницу входа. Раньше прогон честно обходил все 58
+                # городов, писал каждому «актуализация не требуется» (кнопки на
+                # странице входа нет) и складывал эту неправду в отчёт.
+                if res["status"] == "no-session":
+                    results.append(res)
+                    counters["failed"] += 1
+                    gen, short = PLATFORMS[platform]["gen"], PLATFORMS[platform]["short"]
+                    _append_log(project_id, "ERROR",
+                                f"❌ ОСТАНОВКА: сессия {gen} не активна – вместо кабинета "
+                                "открывается страница входа")
+                    save_report("finished")
+                    push_state("error", task.get("cityName", ""),
+                               f"Сессия {gen} не активна: вместо кабинета открывается страница "
+                               f"входа. Зайдите в «Настройки» и войдите в {short} заново.")
+                    return
+
                 # Отзывы – отдельным шагом ПОСЛЕ актуализации: он опциональный
                 # и не должен влиять на её статус, что бы там ни случилось.
                 if with_reviews:
@@ -1533,6 +1555,21 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                     res["reviews"] = rr["summary"]
                     for k in review_totals:
                         review_totals[k] += rr.get(k, 0)
+                    # Тот же случай, но обнаружился на шаге отзывов: страница
+                    # «Данные» ещё открывалась, а отзывы уже уводят на вход.
+                    if rr.get("noSession"):
+                        results.append(res)
+                        counters[{"actualized": "actualized",
+                                  "not-needed": "notNeeded"}.get(res["status"], "failed")] += 1
+                        gen = PLATFORMS[platform]["gen"]
+                        _append_log(project_id, "ERROR",
+                                    f"❌ ОСТАНОВКА: сессия {gen} не действует – раздел отзывов "
+                                    "открывает страницу входа")
+                        save_report("finished")
+                        push_state("error", task.get("cityName", ""),
+                                   f"Сессия {gen} не действует: вместо отзывов открывается "
+                                   "страница входа. Зайдите в «Настройки» и войдите заново.")
+                        return
                     if rr["items"]:
                         collected.extend(rr["items"])
                         # Пишем локально после каждого города: оборванный прогон

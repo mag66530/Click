@@ -379,6 +379,9 @@ def read_reviews(page: Page, url: str, navigate: bool = True,
             return out
         if looks_like_login_page(page):
             out["reason"] = "2ГИС увёл на страницу входа – сессия не действует"
+            # Прогону это знак остановиться, а не идти дальше: остальные города
+            # упрутся в ту же страницу входа. У Яндекса ровно так же.
+            out["noSession"] = True
             return out
 
     data, ready = None, False
@@ -758,7 +761,7 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
         return finish("failed", f"Не удалось открыть страницу: {yb._short_error(e)}")
 
     if looks_like_login_page(page):
-        return finish("failed", "2ГИС увёл на страницу входа – сессия не действует")
+        return finish("no-session", "Сессия 2ГИС не активна: открылась страница входа")
 
     btn = None
     deadline = time.time() + 6

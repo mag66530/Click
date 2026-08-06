@@ -762,6 +762,99 @@ def scenario_parallel(pid: str) -> None:
     eq("после прогонов свободно", runner.busy_reason(pid, "publish"), "")
 
 
+
+def scenario_dead_session(pid: str) -> None:
+    """
+    Сессия слетела – прогон обязан встать, а не обходить все города.
+
+    Из боевого лога: 58 городов, у каждого «Кнопка «Данные актуальны» не
+    найдена – актуализация не требуется» и «отзывы не прочитаны – Яндекс увёл
+    на страницу входа». Кнопки не было потому, что открывалась страница входа:
+    прогон писал в отчёт неправду и тратил на это полчаса.
+    """
+    print("\n▸ Слетевшая сессия останавливает прогон")
+    runner.p_stop(pid, "actualize").unlink(missing_ok=True)
+
+    (runner.p_tasks_actualize(pid)).mkdir(parents=True, exist_ok=True)
+    for old in runner.p_tasks_actualize(pid).glob("*.json"):
+        old.unlink()
+    (runner.p_tasks_actualize(pid) / "01-Россия.json").write_text(json.dumps({
+        "country": "Россия", "projectName": "TEST",
+        "tasks": [{"cityName": c, "companyId": str(700 + i),
+                   "companyUrl": f"https://yandex.ru/sprav/{700 + i}/p/edit/"}
+                  for i, c in enumerate(["Москва", "Казань", "Пермь", "Омск"])],
+    }, ensure_ascii=False), encoding="utf-8")
+
+    видели = []
+
+    def мёртвая_сессия(page, task, i=0, t=1):
+        видели.append(task["cityName"])
+        return {"cityName": task["cityName"], "companyUrl": task["companyUrl"],
+                "status": "no-session",
+                "reason": "Сессия Яндекса не активна: открылась страница входа",
+                "durationMs": 10}
+
+    yb.actualize_city = мёртвая_сессия        # type: ignore[assignment]
+
+    ok, msg = runner.start_actualize(pid, headless=True)
+    check("прогон стартовал", ok, msg)
+    state = wait_done(pid); settle(pid)
+
+    eq("прогон встал с ошибкой, а не «завершено»", state.get("status"), "error")
+    eq("дальше первого города не пошли", видели, ["Москва"])
+    check("в ошибке сказано, что делать человеку",
+          "войдите в Яндекс заново" in (state.get("error") or "").lower()
+          or "войдите в яндекс заново" in (state.get("error") or "").lower(),
+          state.get("error", ""))
+    log = runner.read_live_log(pid, "actualize")
+    check("в логе видно остановку", "ОСТАНОВКА" in log, log[-200:])
+
+    reports = runner.list_reports(pid, "actualize", limit=1)
+    data = runner.read_report(pid, "actualize", reports[0]["name"]) if reports else {}
+    eq("в отчёте один город, а не четыре", (data.get("totals") or {}).get("total"), 1)
+    check("и он не помечен как «не требуется»",
+          all(r.get("status") != "not-needed" for r in data.get("results") or []),
+          str([r.get("status") for r in data.get("results") or []]))
+
+    # Сам детектор: страница входа – это «no-session», а НЕ «кнопки нет».
+    # Именно этой проверки в актуализации и не было.
+    import yb_playwright as real_yb
+    было_404, было_login = real_yb.is_404, real_yb.looks_like_login_page
+    try:
+        real_yb.is_404 = lambda page: False                      # type: ignore[assignment]
+        real_yb.looks_like_login_page = lambda page: True        # type: ignore[assignment]
+        res = real_yb.actualize_city(
+            FakePage(), {"cityName": "Тест",
+                         "companyUrl": "https://yandex.ru/sprav/1/p/edit/"})
+        eq("страница входа – это no-session, а не «кнопки нет»", res.get("status"), "no-session")
+        check("и причина человеческая", "страница входа" in (res.get("reason") or "").lower(),
+              res.get("reason", ""))
+    finally:
+        real_yb.is_404, real_yb.looks_like_login_page = было_404, было_login
+
+    # Тот же случай, но сессия отвалилась на шаге отзывов.
+    yb.actualize_city = lambda page, task, i=0, t=1: {   # type: ignore[assignment]
+        "cityName": task["cityName"], "companyUrl": task["companyUrl"],
+        "status": "actualized", "reason": "клик прошёл", "durationMs": 10}
+    yb.read_reviews = lambda page, url: {                # type: ignore[assignment]
+        "ok": False, "url": url, "total": 0, "shown": 0, "items": [],
+        "reason": "Яндекс увёл на страницу входа – сессия не действует",
+        "noSession": True}
+    runner.p_stop(pid, "actualize").unlink(missing_ok=True)
+    (runner.p_tasks_actualize(pid) / "02-Россия.json").write_text(json.dumps({
+        "country": "Россия", "projectName": "TEST",
+        "tasks": [{"cityName": c, "companyId": str(800 + i),
+                   "companyUrl": f"https://yandex.ru/sprav/{800 + i}/p/edit/"}
+                  for i, c in enumerate(["Тула", "Курск", "Орёл"])],
+    }, ensure_ascii=False), encoding="utf-8")
+    ok, msg = runner.start_actualize(pid, headless=True, with_reviews=True)
+    check("прогон с отзывами стартовал", ok, msg)
+    state = wait_done(pid); settle(pid)
+    eq("и он тоже встал", state.get("status"), "error")
+    check("в ошибке сказано про страницу входа",
+          "страница входа" in (state.get("error") or "").lower(), state.get("error", ""))
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="click-e2e-"))
     runner.USERS_DATA = tmp
@@ -789,6 +882,7 @@ def main() -> int:
         scenario_gis_actualize(pid)
         scenario_collect(pid)
         scenario_parallel(pid)
+        scenario_dead_session(pid)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

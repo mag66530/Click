@@ -224,20 +224,21 @@ def is_custom_prompt(project_id: str) -> bool:
     return project_prompt(project_id).strip() != default_prompt(project_id).strip()
 
 
-def build_prompt(prompt_template: str, item: dict) -> str:
+def build_prompt(prompt_template: str, item: dict, project_id: str = "") -> str:
     """
     Подставить отзыв и имя в промпт проекта и добавить общие правила.
 
-    Правила (тире, обращение по полу, без разметки) идут последними и
-    одинаковы для всех пяти брендов. Держим их отдельно, чтобы правка
-    промпта в «Настройках» их не отменяла.
+    Правила (тире, обращение по полу, без разметки) идут последними и почти
+    одинаковы для всех пяти брендов. Держим их отдельно, чтобы правка промпта
+    в «Настройках» их не отменяла. Различается один пункт – про ассортиментную
+    фразу: у МПИ она внутри абзаца, у остальных отдельным абзацем.
     """
     text = review_text(item)
     name = name_for_prompt(review_author(item))
     body = (prompt_template
             .replace(pdata.REVIEW_TEXT_MARK, text)
             .replace(pdata.REVIEW_NAME_MARK, name))
-    return body.rstrip() + "\n" + pdata.REVIEW_COMMON_RULES
+    return body.rstrip() + "\n" + pdata.review_common_rules(project_id)
 
 
 ASSORTMENT_NEAR = 0.75      # насколько абзац похож на эталон, чтобы счесть его тем самым
@@ -272,6 +273,65 @@ def fix_assortment(project_id: str, text: str) -> str:
     return "\n\n".join(parts)
 
 
+# Подпись и зачин у МПИ ищем регулярками: модель ставит их то отдельной
+# строкой, то в общий поток, а иногда чуть меняет знак в конце.
+_MPI_SIGN_RX = re.compile(r"\s*С\s+уважением\b.*$", re.S | re.I)
+_MPI_OPENER_RX = re.compile(r"^\s*Спасибо[^.!?\n]*[.!]?\s*", re.I)
+_SENTENCE_SPLIT_RX = re.compile(r"(?<=[.!?])\s+")
+
+
+def fix_mpi_shape(text: str) -> str:
+    """
+    Привести ответ МПИ к виду, который заказчик утвердила образцами:
+
+        Спасибо за отзыв и рекомендацию!
+        <пустая строка>
+        Благодарим вас за отзыв! …про этот отзыв… Обращайтесь к нам ещё, всегда
+        готовы предложить широкий ассортимент металлопроката и индивидуальный
+        подход к каждому клиенту.
+        <пустая строка>
+        С уважением, МетПромИнтекс.
+
+    Правим только ФОРМУ – первую строку, последнее предложение и подпись.
+    Середину не трогаем: что там написать, знает модель, а не мы.
+
+    Зачем код, если про это сказано в промпте: в боевом прогоне модель
+    нарушила вид во всех трёх ответах подряд – меняла первую строку, теряла
+    фразу про ассортимент, склеивала всё в один абзац без пустых строк.
+    Промпт делает это редким, код – невозможным.
+    """
+    t = (text or "").strip()
+    if not t:
+        return t
+
+    t = _MPI_SIGN_RX.sub("", t).strip()          # подпись поставим сами
+    t = _MPI_OPENER_RX.sub("", t, count=1).strip()   # и первую строку тоже
+    body = re.sub(r"\s*\n\s*", " ", t).strip()   # середина – ровно один абзац
+    body = re.sub(r"[ \t]{2,}", " ", body)
+
+    tail = pdata.REVIEW_MPI_TAIL
+    sentences = [s for s in _SENTENCE_SPLIT_RX.split(body) if s.strip()]
+    # Фраза про ассортимент могла прийти в чуть другом виде – тогда меняем её
+    # на эталонную, а не дописываем вторую такую же.
+    for i, s in enumerate(sentences):
+        if SequenceMatcher(None, s.lower(), tail.lower()).ratio() >= ASSORTMENT_NEAR:
+            sentences.pop(i)
+            break
+    # Прощальная фраза вместо ассортиментной («Будем рады видеть вас снова!») –
+    # это ровно та ошибка, на которую жаловалась заказчик.
+    if sentences and _MPI_FAREWELL_RX.search(sentences[-1]):
+        sentences.pop()
+    body = " ".join(s.strip() for s in sentences if s.strip()).strip()
+    body = (body + " " + tail).strip() if body else tail
+
+    return f"{pdata.REVIEW_MPI_OPENER}\n\n{body}\n\n{pdata.REVIEW_MPI_SIGN}"
+
+
+# Прощания, которыми модель подменяла фразу про ассортимент.
+_MPI_FAREWELL_RX = re.compile(
+    r"(будем рады|ждём вас|ждем вас|рады видеть|до новых встреч|обращайтесь)", re.I)
+
+
 def clean_draft(text: str, project_id: str = "") -> str:
     """
     Причесать ответ после модели.
@@ -288,6 +348,8 @@ def clean_draft(text: str, project_id: str = "") -> str:
     t = re.sub(r"\*\*(.+?)\*\*", r"\1", t)      # **жирный** markdown
     t = re.sub(r"(?m)^#{1,6}\s*", "", t)        # заголовки решётками
     t = re.sub(r"\n{3,}", "\n\n", t).strip()    # лишние пустые строки
+    if project_id == "MPI":
+        return fix_mpi_shape(t)                 # у МПИ вид ответа свой, см. функцию
     return fix_assortment(project_id, t) if project_id else t
 
 

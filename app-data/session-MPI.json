@@ -221,16 +221,6 @@
       "sameSite": "None"
     },
     {
-      "name": "bh",
-      "value": "YO+L0tMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
-      "domain": ".yandex.com",
-      "path": "/",
-      "expires": 1820581359,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "_yasc",
       "value": "NyPu343L43WjpsrAQh59nHKmpUeZgqLAZYobMh87EGPlNWcwK3/7Uq0IhFHaxHNn79CEmac=",
       "domain": ".yandex.com",
@@ -241,11 +231,21 @@
       "sameSite": "None"
     },
     {
+      "name": "bh",
+      "value": "YNmS0tMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "domain": ".yandex.com",
+      "path": "/",
+      "expires": 1820582233,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
       "name": "receive-cookie-deprecation",
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817557485,
+      "expires": 1817558749,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -491,36 +491,6 @@
       "sameSite": "None"
     },
     {
-      "name": "bh",
-      "value": "YOKM0tMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1820581475.089,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_ym_visorc",
-      "value": "b",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1786023283,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "cycada",
-      "value": "eln+vsf5fKRRYlL55XOUqSfA5hjy39BWIgnQZ/gtJxs=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1787231083.689,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "ys",
       "value": "udn.cDrQnNCf0Jg%3D#wprid.1786021484794794-5772779092758756596-balancer-l7leveler-kubr-yp-sas-182-BAL#c_chck.4006533141",
       "domain": ".yandex.ru",
@@ -561,13 +531,33 @@
       "sameSite": "None"
     },
     {
-      "name": "gdpr",
-      "value": "0",
+      "name": "bh",
+      "value": "YNiS0tMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817557486,
+      "expires": 1820582232.694,
       "httpOnly": false,
-      "secure": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "pu",
+      "value": "3166650041786022236",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1820582236.889,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "cycada",
+      "value": "oIERjxGhuKWaO3R5QCv0kCfA5hjy39BWIgnQZ/gtJxs=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1787232346.379,
+      "httpOnly": false,
+      "secure": true,
       "sameSite": "None"
     },
     {
@@ -575,8 +565,28 @@
       "value": "1",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817557486,
+      "expires": 1817558748,
       "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ym_visorc",
+      "value": "b",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1786024549,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "gdpr",
+      "value": "0",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1817558753,
+      "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     }
@@ -615,15 +625,19 @@
         },
         {
           "name": "ludca",
-          "value": "My4wdmVyc2lvbgmshi6zuobHVkY2EzqAXxxuYrOgjnlyIqPhQ3RuZqPJX2gGaq-glpm-iz4YppXT_1MIkilLE_6xCn1SI9qcDjxvN4rwHhV_N_ugGjk_N-bxCmFja87gWxxvF_7sRilzNoOgsjk_f9boJrkna9bpCnFPN9OgDn0_N97gWglXPurwNy13N7qsKy0nN6acXmVjNtMIvhEHB9qQDxA6GquhKvFLG_qcVmBvmzuhT2xWYoeg1glWervNCkw2cs-gjm0vE_58HiXDB7udX2AyGqf5Cw3DgzoUuxxvE86MHy3zN-aMNwhvr8roNhl6Hq_pSxQuGquZSy2jJ_KkQghSdqf9M2A2i8rwWm0iStecbilXM_7BMmU6H6bgQik2H-acPm1rG860RxATG9ZcQjl_B6K0BnwaZvLgDjF6Vq-4OglbB7vVX2w=="
+          "value": "My4wdmVyc2lvbgmshjmfpcbHVkY2EzqAWtdpsrOgi7J18qPhRr9ptqfJRrcBpr-gk1K5Wz4Yo17UL1MIl-JMw_6xD7ZV89qcC_do54rwG9545_ugH_I45-bxD6pku87gXtdox_7sQ-J05oOgt_I4r9boI3Igu9bpD7pI59OgC7Y4597gX8JQ7urwMuZw57qsLuYg56acW65k5tMIu9oA19qQCts9yquhLzpMy_qcU6toSzuhSqdRsoeg08JRqrvND4cxos-gi6Yow_58G-7E17udWqs1yqf5DsbEUzoUvtdow86MGub05-aMMsNof8roM9J9zq_pTt8pyquZTuak9_KkR8NVpqf9NqsxW8rwX6Ylmteca-JQ4_7BN649z6bgR-IxzrPFSrM9sr_pXqMlz6ucG_ZMotbgM6o4vtQ=="
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "327"
+          "value": "369"
         },
         {
           "name": "_ym_wv2rf:85710618:0",
           "value": "0"
+        },
+        {
+          "name": "_ym85710618_lastHit",
+          "value": "1786022590924"
         },
         {
           "name": "_mt__data",
@@ -651,7 +665,7 @@
         },
         {
           "name": "_ym39321485_lastHit",
-          "value": "1786004951625"
+          "value": "1786022590919"
         },
         {
           "name": "_ym105001275_lsid",
@@ -659,7 +673,7 @@
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "3144"
+          "value": "3526"
         },
         {
           "name": "_ym104859823:0_reqNum",
@@ -675,7 +689,7 @@
         },
         {
           "name": "_ym_retryReqs",
-          "value": "{\"1\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/85710618\",\"time\":1786021445514,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/178428228288/p/edit/\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":4,\"dp\":0,\"ls\":939087481998,\"hid\":620577997,\"z\":0,\"i\":\"20260806130405\",\"et\":1786021446,\"c\":1,\"rn\":728622052,\"rqn\":312,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":953,\"wv\":2,\"ds\":\"0,0,651,0,2,0,,277,1,2059,,,1301\",\"co\":0,\"hdl\":1,\"eu\":2,\"ns\":1786021443116,\"t\":\"Данные\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021446},\"counterId\":85710618,\"ghid\":620577997,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"p-3-up-3-g-1\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42271500,\"prs\":2,\"wss\":0,\"w2s\":6,\"ti\":1},\"d\":1},\"2\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/24367924\",\"time\":1786021445832,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/178428228288?no-distribution=1&view-state=expanded&debug=mobile&no-app-redirect=1&nrd=1\",\"page-ref\":\"https://yandex.ru/\",\"charset\":\"utf-8\",\"site-info\":\"{\\\"yandexuid\\\":\\\"9004329451785833918\\\",\\\"test-ids\\\":[\\\"1610701\\\",\\\"1643844\\\",\\\"1637399\\\",\\\"1637501\\\",\\\"1607509\\\",\\\"1640596\\\",\\\"1647331\\\",\\\"1646626\\\",\\\"46450\\\",\\\"912283\\\",\\\"1608724\\\",\\\"1585214\\\",\\\"663872\\\",\\\"663860\\\"]}\",\"ut\":\"noindex\",\"uah\":\"che\\n0\",\"hittoken\":\"1786021445_eea36bf6701d0cde06980af271645661865664f455f7a2b73020a67dc4808552\"},\"browserInfo\":{\"pv\":1,\"ar\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":2,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":1,\"dp\":0,\"ls\":112730117129,\"hid\":397070565,\"phid\":\"620577997\",\"z\":0,\"i\":\"20260806130405\",\"et\":1786021446,\"c\":1,\"rn\":1070957753,\"rqn\":252,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"fp\":780,\"ds\":\"0,0,0,,,0,,348,1,1138,,,1155\",\"t\":\"МетПромИнтекс, металлопрокат, Промышленная зона № 1, 33/3, Актау — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021446},\"counterId\":24367924,\"ghid\":397070565,\"telemetry\":{\"gdpr\":\"13-0\",\"mc\":\"h-2-ex-1-g-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208,\"ti\":2},\"d\":1},\"3\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/102272633\",\"time\":1786021446033,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/metprominteks/178428228288/?yclid=\",\"page-ref\":\"https://yandex.ru/\",\"charset\":\"utf-8\",\"site-info\":\"{\\\"__ym\\\":{\\\"vacuum\\\":{\\\"surface\\\":\\\"webmaps\\\",\\\"orgid\\\":\\\"178428228288\\\",\\\"event\\\":\\\"show_org\\\"}}}\",\"ut\":\"noindex\",\"uah\":\"che\\n0\",\"hittoken\":\"1786021445_edd3ce8272d2ab136e7af99bc4915d080f39f259cf1e8dbb977c02ce931b11ac\"},\"browserInfo\":{\"pv\":1,\"ar\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":2,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":127568862739,\"hid\":397070565,\"phid\":\"620577997\",\"z\":0,\"i\":\"20260806130406\",\"et\":1786021446,\"c\":1,\"rn\":744556858,\"rqn\":4,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"fp\":780,\"ds\":\"0,0,0,,,0,,348,1,1138,,,1155\",\"t\":\"МетПромИнтекс, металлопрокат, Промышленная зона № 1, 33/3, Актау — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021446},\"counterId\":102272633,\"ghid\":397070565,\"telemetry\":{\"gdpr\":\"13-0\",\"mc\":\"h-2-ex-1-g-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208,\"ti\":2},\"d\":1},\"4\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/85710618\",\"time\":1786021465332,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/203880344000/p/edit/\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":4,\"dp\":0,\"ls\":939087481998,\"hid\":883480319,\"z\":0,\"i\":\"20260806130425\",\"et\":1786021465,\"c\":1,\"rn\":831733425,\"rqn\":321,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1321,\"wv\":2,\"ds\":\"0,0,802,9,,0,,471,1,2281,,,1692\",\"co\":0,\"hdl\":1,\"eu\":2,\"ns\":1786021462616,\"t\":\"Данные\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021465},\"counterId\":85710618,\"ghid\":883480319,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"p-3-up-3-g-11\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42271500,\"prs\":2,\"wss\":0,\"w2s\":6,\"ti\":1},\"d\":1},\"5\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/104859823\",\"time\":1786021452584,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/metprominteks/194483940056/?debug=mobile&ll=65.527321%2C44.849734&no-app-redirect=1&no-distribution=1&view-state=expanded&z=15\",\"page-ref\":\"https://yandex.ru/\",\"nohit\":\"1\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":1507527509796,\"hid\":1038127314,\"phid\":\"796665094\",\"z\":0,\"i\":\"20260806130412\",\"et\":1786021453,\"c\":1,\"rn\":561662825,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"t\":\"МетПромИнтекс, металлопрокат, ул. Жаппасбай батыра, 40, Кызылорда — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021453},\"counterId\":104859823,\"ghid\":1038127314,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"h-1-ex-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208,\"ti\":2},\"d\":1},\"6\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/24367924\",\"time\":1786021465719,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/203880344000?no-distribution=1&view-state=expanded&debug=mobile&no-app-redirect=1&nrd=1\",\"page-ref\":\"https://yandex.ru/\",\"charset\":\"utf-8\",\"site-info\":\"{\\\"yandexuid\\\":\\\"9004329451785833918\\\",\\\"test-ids\\\":[\\\"1610701\\\",\\\"1643844\\\",\\\"1637399\\\",\\\"1637501\\\",\\\"1607509\\\",\\\"1640596\\\",\\\"1647331\\\",\\\"1646626\\\",\\\"46450\\\",\\\"912283\\\",\\\"1608724\\\",\\\"1585214\\\",\\\"663872\\\",\\\"663860\\\"]}\",\"ut\":\"noindex\",\"uah\":\"che\\n0\",\"hittoken\":\"1786021465_ae76739d17233f0706abfded4024c4a980937e503fc9c7eed18adcb985b8fe7b\"},\"browserInfo\":{\"pv\":1,\"ar\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":2,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":1,\"dp\":0,\"ls\":112730117129,\"hid\":1050057919,\"phid\":\"883480319\",\"z\":0,\"i\":\"20260806130425\",\"et\":1786021466,\"c\":1,\"rn\":534030038,\"rqn\":261,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"fp\":855,\"ds\":\"0,0,0,,,0,,340,0,1008,,,1015\",\"t\":\"Метпроминтекс, чёрная металлургия, ул. Александра Пушкина, 56, Астана — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1},\"counterId\":24367924,\"ghid\":1050057919,\"telemetry\":{\"gdpr\":\"13-0\",\"mc\":\"h-2-ex-1-g-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208},\"d\":1},\"7\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/58051849\",\"time\":1786021465658,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/metprominteks/203880344000/?debug=mobile&ll=71.495467%2C51.185449&no-app-redirect=1&no-distribution=1&view-state=expanded&z=15\",\"page-ref\":\"https://yandex.ru/\",\"nohit\":\"1\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":1507044694463,\"hid\":1050057919,\"z\":0,\"i\":\"20260806130425\",\"et\":1786021466,\"c\":1,\"rn\":857164256,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"t\":\"Метпроминтекс, чёрная металлургия, ул. Александра Пушкина, 56, Астана — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021466},\"counterId\":58051849,\"ghid\":1050057919,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"h-1-ex-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208,\"ti\":2},\"d\":1},\"8\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/85710618\",\"time\":1786021468101,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/218013586325/p/edit/\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":4,\"dp\":0,\"ls\":939087481998,\"hid\":641377262,\"z\":0,\"i\":\"20260806130428\",\"et\":1786021468,\"c\":1,\"rn\":825844069,\"rqn\":322,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1330,\"wv\":2,\"ds\":\"0,0,727,5,,0,,552,1,2493,,,1763\",\"co\":0,\"hdl\":1,\"eu\":2,\"ns\":1786021464897,\"t\":\"Данные\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021468},\"counterId\":85710618,\"ghid\":641377262,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"g-11-p-3-up-3\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42271500,\"wss\":0,\"w2s\":6,\"ti\":1},\"d\":1},\"9\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/24367924\",\"time\":1786021486210,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/metprominteks/239295588745/?debug=mobile&ll=69.168309%2C54.892897&no-app-redirect=1&no-distribution=1&view-state=expanded&z=15\",\"page-ref\":\"https://yandex.ru/\",\"nohit\":\"1\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":1,\"dp\":0,\"ls\":112730117129,\"hid\":814024780,\"z\":0,\"i\":\"20260806130446\",\"et\":1786021486,\"c\":1,\"rn\":588039372,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"t\":\"МетПромИнтекс, металлопрокат, ул. Габита Мусрепова, 34/В, Петропавловск — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1},\"counterId\":24367924,\"ghid\":814024780,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208}},\"10\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/56213845\",\"time\":1786021485287,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/239295588745/p/edit/\",\"charset\":\"utf-8\",\"exp\":\"a6BGpcXpC8RDEVDllaTrMw,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":1082420648799,\"hid\":189576256,\"z\":0,\"i\":\"20260806130445\",\"et\":1786021485,\"c\":1,\"rn\":512632325,\"rqn\":2885,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1036,\"wv\":2,\"ds\":\"0,0,700,6,2,0,,305,1,,,,1409\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1786021483688,\"t\":\"Данные\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021485},\"counterId\":56213845,\"ghid\":189576256,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}},\"11\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/56213845\",\"time\":1786021471357,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/220951297138/p/edit/\",\"charset\":\"utf-8\",\"exp\":\"a6BGpcXpC8RDEVDllaTrMw,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":1082420648799,\"hid\":526681169,\"z\":0,\"i\":\"20260806130431\",\"et\":1786021471,\"c\":1,\"rn\":510055371,\"rqn\":2851,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1091,\"wv\":2,\"ds\":\"0,0,761,6,,0,,292,2,,,,1602\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1786021469623,\"t\":\"Данные\",\"adb\":\"2\",\"rqnl\":1},\"counterId\":56213845,\"ghid\":526681169,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42140180},\"d\":1},\"12\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/46231566\",\"time\":1786021471357,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/220951297138/p/edit/\",\"charset\":\"utf-8\",\"exp\":\"a6BGpcXpC8RDEVDllaTrMw,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":3,\"dp\":0,\"ls\":439814455673,\"hid\":526681169,\"z\":0,\"i\":\"20260806130431\",\"et\":1786021471,\"c\":1,\"rn\":592740058,\"rqn\":738,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1091,\"wv\":2,\"ds\":\"0,0,761,6,,0,,292,2,,,,1602\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1786021469623,\"t\":\"Данные\",\"adb\":\"2\",\"rqnl\":1},\"counterId\":46231566,\"ghid\":526681169,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42140180},\"d\":1},\"13\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/46231566\",\"time\":1786021485287,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/239295588745/p/edit/\",\"charset\":\"utf-8\",\"exp\":\"a6BGpcXpC8RDEVDllaTrMw,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":3,\"dp\":0,\"ls\":439814455673,\"hid\":189576256,\"z\":0,\"i\":\"20260806130445\",\"et\":1786021485,\"c\":1,\"rn\":871101962,\"rqn\":746,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1036,\"wv\":2,\"ds\":\"0,0,700,6,2,0,,305,1,,,,1409\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1786021483688,\"t\":\"Данные\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021485},\"counterId\":46231566,\"ghid\":189576256,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}},\"14\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/95432042\",\"time\":1786021472196,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/metprominteks/220951297138/?debug=mobile&ll=69.565751%2C42.337212&no-app-redirect=1&no-distribution=1&view-state=expanded&z=15\",\"page-ref\":\"https://yandex.ru/\",\"nohit\":\"1\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":1277770359748,\"hid\":137950614,\"z\":0,\"i\":\"20260806130432\",\"et\":1786021472,\"c\":1,\"rn\":607490836,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"t\":\"МетПромИнтекс, металлопрокат, ул. Байтулы баба, 18, Шымкент — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021472},\"counterId\":95432042,\"ghid\":137950614,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"h-1-ex-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208,\"ti\":2},\"d\":1},\"15\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/99007174\",\"time\":1786021486210,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/metprominteks/239295588745/?debug=mobile&ll=69.168309%2C54.892897&no-app-redirect=1&no-distribution=1&view-state=expanded&z=15\",\"page-ref\":\"https://yandex.ru/\",\"nohit\":\"1\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":508499025258,\"hid\":814024780,\"z\":0,\"i\":\"20260806130446\",\"et\":1786021486,\"c\":1,\"rn\":217200099,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"t\":\"МетПромИнтекс, металлопрокат, ул. Габита Мусрепова, 34/В, Петропавловск — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1},\"counterId\":99007174,\"ghid\":814024780,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"h-1-ex-1-g-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208}}}"
+          "value": "{\"1\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/85710618\",\"time\":1786021445514,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/178428228288/p/edit/\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":4,\"dp\":0,\"ls\":939087481998,\"hid\":620577997,\"z\":0,\"i\":\"20260806130405\",\"et\":1786021446,\"c\":1,\"rn\":728622052,\"rqn\":312,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":953,\"wv\":2,\"ds\":\"0,0,651,0,2,0,,277,1,2059,,,1301\",\"co\":0,\"hdl\":1,\"eu\":2,\"ns\":1786021443116,\"t\":\"Данные\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021446},\"counterId\":85710618,\"ghid\":620577997,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"p-3-up-3-g-1\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42271500,\"prs\":2,\"wss\":0,\"w2s\":6,\"ti\":1},\"d\":1},\"2\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/24367924\",\"time\":1786021445832,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/178428228288?no-distribution=1&view-state=expanded&debug=mobile&no-app-redirect=1&nrd=1\",\"page-ref\":\"https://yandex.ru/\",\"charset\":\"utf-8\",\"site-info\":\"{\\\"yandexuid\\\":\\\"9004329451785833918\\\",\\\"test-ids\\\":[\\\"1610701\\\",\\\"1643844\\\",\\\"1637399\\\",\\\"1637501\\\",\\\"1607509\\\",\\\"1640596\\\",\\\"1647331\\\",\\\"1646626\\\",\\\"46450\\\",\\\"912283\\\",\\\"1608724\\\",\\\"1585214\\\",\\\"663872\\\",\\\"663860\\\"]}\",\"ut\":\"noindex\",\"uah\":\"che\\n0\",\"hittoken\":\"1786021445_eea36bf6701d0cde06980af271645661865664f455f7a2b73020a67dc4808552\"},\"browserInfo\":{\"pv\":1,\"ar\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":2,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":1,\"dp\":0,\"ls\":112730117129,\"hid\":397070565,\"phid\":\"620577997\",\"z\":0,\"i\":\"20260806130405\",\"et\":1786021446,\"c\":1,\"rn\":1070957753,\"rqn\":252,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"fp\":780,\"ds\":\"0,0,0,,,0,,348,1,1138,,,1155\",\"t\":\"МетПромИнтекс, металлопрокат, Промышленная зона № 1, 33/3, Актау — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021446},\"counterId\":24367924,\"ghid\":397070565,\"telemetry\":{\"gdpr\":\"13-0\",\"mc\":\"h-2-ex-1-g-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208,\"ti\":2},\"d\":1},\"3\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/102272633\",\"time\":1786021446033,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/metprominteks/178428228288/?yclid=\",\"page-ref\":\"https://yandex.ru/\",\"charset\":\"utf-8\",\"site-info\":\"{\\\"__ym\\\":{\\\"vacuum\\\":{\\\"surface\\\":\\\"webmaps\\\",\\\"orgid\\\":\\\"178428228288\\\",\\\"event\\\":\\\"show_org\\\"}}}\",\"ut\":\"noindex\",\"uah\":\"che\\n0\",\"hittoken\":\"1786021445_edd3ce8272d2ab136e7af99bc4915d080f39f259cf1e8dbb977c02ce931b11ac\"},\"browserInfo\":{\"pv\":1,\"ar\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":2,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":127568862739,\"hid\":397070565,\"phid\":\"620577997\",\"z\":0,\"i\":\"20260806130406\",\"et\":1786021446,\"c\":1,\"rn\":744556858,\"rqn\":4,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"fp\":780,\"ds\":\"0,0,0,,,0,,348,1,1138,,,1155\",\"t\":\"МетПромИнтекс, металлопрокат, Промышленная зона № 1, 33/3, Актау — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021446},\"counterId\":102272633,\"ghid\":397070565,\"telemetry\":{\"gdpr\":\"13-0\",\"mc\":\"h-2-ex-1-g-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208,\"ti\":2},\"d\":1},\"4\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/85710618\",\"time\":1786021465332,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/203880344000/p/edit/\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":4,\"dp\":0,\"ls\":939087481998,\"hid\":883480319,\"z\":0,\"i\":\"20260806130425\",\"et\":1786021465,\"c\":1,\"rn\":831733425,\"rqn\":321,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1321,\"wv\":2,\"ds\":\"0,0,802,9,,0,,471,1,2281,,,1692\",\"co\":0,\"hdl\":1,\"eu\":2,\"ns\":1786021462616,\"t\":\"Данные\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021465},\"counterId\":85710618,\"ghid\":883480319,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"p-3-up-3-g-11\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42271500,\"prs\":2,\"wss\":0,\"w2s\":6,\"ti\":1},\"d\":1},\"5\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/104859823\",\"time\":1786021452584,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/metprominteks/194483940056/?debug=mobile&ll=65.527321%2C44.849734&no-app-redirect=1&no-distribution=1&view-state=expanded&z=15\",\"page-ref\":\"https://yandex.ru/\",\"nohit\":\"1\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":1507527509796,\"hid\":1038127314,\"phid\":\"796665094\",\"z\":0,\"i\":\"20260806130412\",\"et\":1786021453,\"c\":1,\"rn\":561662825,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"t\":\"МетПромИнтекс, металлопрокат, ул. Жаппасбай батыра, 40, Кызылорда — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021453},\"counterId\":104859823,\"ghid\":1038127314,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"h-1-ex-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208,\"ti\":2},\"d\":1},\"6\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/24367924\",\"time\":1786021465719,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/203880344000?no-distribution=1&view-state=expanded&debug=mobile&no-app-redirect=1&nrd=1\",\"page-ref\":\"https://yandex.ru/\",\"charset\":\"utf-8\",\"site-info\":\"{\\\"yandexuid\\\":\\\"9004329451785833918\\\",\\\"test-ids\\\":[\\\"1610701\\\",\\\"1643844\\\",\\\"1637399\\\",\\\"1637501\\\",\\\"1607509\\\",\\\"1640596\\\",\\\"1647331\\\",\\\"1646626\\\",\\\"46450\\\",\\\"912283\\\",\\\"1608724\\\",\\\"1585214\\\",\\\"663872\\\",\\\"663860\\\"]}\",\"ut\":\"noindex\",\"uah\":\"che\\n0\",\"hittoken\":\"1786021465_ae76739d17233f0706abfded4024c4a980937e503fc9c7eed18adcb985b8fe7b\"},\"browserInfo\":{\"pv\":1,\"ar\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":2,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":1,\"dp\":0,\"ls\":112730117129,\"hid\":1050057919,\"phid\":\"883480319\",\"z\":0,\"i\":\"20260806130425\",\"et\":1786021466,\"c\":1,\"rn\":534030038,\"rqn\":261,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"fp\":855,\"ds\":\"0,0,0,,,0,,340,0,1008,,,1015\",\"t\":\"Метпроминтекс, чёрная металлургия, ул. Александра Пушкина, 56, Астана — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1},\"counterId\":24367924,\"ghid\":1050057919,\"telemetry\":{\"gdpr\":\"13-0\",\"mc\":\"h-2-ex-1-g-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208},\"d\":1},\"7\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/58051849\",\"time\":1786021465658,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/metprominteks/203880344000/?debug=mobile&ll=71.495467%2C51.185449&no-app-redirect=1&no-distribution=1&view-state=expanded&z=15\",\"page-ref\":\"https://yandex.ru/\",\"nohit\":\"1\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":1507044694463,\"hid\":1050057919,\"z\":0,\"i\":\"20260806130425\",\"et\":1786021466,\"c\":1,\"rn\":857164256,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"t\":\"Метпроминтекс, чёрная металлургия, ул. Александра Пушкина, 56, Астана — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021466},\"counterId\":58051849,\"ghid\":1050057919,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"h-1-ex-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208,\"ti\":2},\"d\":1},\"8\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/85710618\",\"time\":1786021468101,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/218013586325/p/edit/\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":4,\"dp\":0,\"ls\":939087481998,\"hid\":641377262,\"z\":0,\"i\":\"20260806130428\",\"et\":1786021468,\"c\":1,\"rn\":825844069,\"rqn\":322,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1330,\"wv\":2,\"ds\":\"0,0,727,5,,0,,552,1,2493,,,1763\",\"co\":0,\"hdl\":1,\"eu\":2,\"ns\":1786021464897,\"t\":\"Данные\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021468},\"counterId\":85710618,\"ghid\":641377262,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"g-11-p-3-up-3\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42271500,\"wss\":0,\"w2s\":6,\"ti\":1},\"d\":1},\"11\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/56213845\",\"time\":1786021471357,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/220951297138/p/edit/\",\"charset\":\"utf-8\",\"exp\":\"a6BGpcXpC8RDEVDllaTrMw,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":1082420648799,\"hid\":526681169,\"z\":0,\"i\":\"20260806130431\",\"et\":1786021471,\"c\":1,\"rn\":510055371,\"rqn\":2851,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1091,\"wv\":2,\"ds\":\"0,0,761,6,,0,,292,2,,,,1602\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1786021469623,\"t\":\"Данные\",\"adb\":\"2\",\"rqnl\":1},\"counterId\":56213845,\"ghid\":526681169,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42140180},\"d\":1},\"12\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/46231566\",\"time\":1786021471357,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/220951297138/p/edit/\",\"charset\":\"utf-8\",\"exp\":\"a6BGpcXpC8RDEVDllaTrMw,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"2fcf9t0evwpka93vpr54j1ow8p4p23\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":3,\"dp\":0,\"ls\":439814455673,\"hid\":526681169,\"z\":0,\"i\":\"20260806130431\",\"et\":1786021471,\"c\":1,\"rn\":592740058,\"rqn\":738,\"u\":\"1785833922567756647\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1091,\"wv\":2,\"ds\":\"0,0,761,6,,0,,292,2,,,,1602\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1786021469623,\"t\":\"Данные\",\"adb\":\"2\",\"rqnl\":1},\"counterId\":46231566,\"ghid\":526681169,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":42140180},\"d\":1},\"14\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/95432042\",\"time\":1786021472196,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/maps/org/metprominteks/220951297138/?debug=mobile&ll=69.565751%2C42.337212&no-app-redirect=1&no-distribution=1&view-state=expanded&z=15\",\"page-ref\":\"https://yandex.ru/\",\"nohit\":\"1\",\"charset\":\"utf-8\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"axve7nh0n93j3a6fbktm5p7ei51ci\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2600\",\"cn\":2,\"dp\":0,\"ls\":1277770359748,\"hid\":137950614,\"z\":0,\"i\":\"20260806130432\",\"et\":1786021472,\"c\":1,\"rn\":607490836,\"u\":\"1785833922567756647\",\"w\":\"320x694\",\"s\":\"1366x768x24\",\"sk\":1,\"ifr\":1,\"t\":\"МетПромИнтекс, металлопрокат, ул. Байтулы баба, 18, Шымкент — Яндекс Карты\",\"adb\":\"2\",\"rqnl\":1,\"st\":1786021472},\"counterId\":95432042,\"ghid\":137950614,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"h-1-ex-1\",\"yu\":\"9004329451785833918\",\"cdl\":\"na\",\"eco\":50208,\"ti\":2},\"d\":1}}"
         },
         {
           "name": "_ym39321485_lsid",
@@ -730,6 +744,10 @@
           "value": "1555903260945"
         },
         {
+          "name": "_ym98973702_lsid",
+          "value": "910422199579"
+        },
+        {
           "name": "_ym98973686:0_reqNum",
           "value": "3"
         },
@@ -743,7 +761,7 @@
         },
         {
           "name": "_ym46231566_lastHit",
-          "value": "1786004951640"
+          "value": "1786022590923"
         },
         {
           "name": "_ym_uid",
@@ -759,11 +777,7 @@
         },
         {
           "name": "_ym56213845_lastHit",
-          "value": "1786004951633"
-        },
-        {
-          "name": "_ym102272633:0_reqNum",
-          "value": "4"
+          "value": "1786022590921"
         },
         {
           "name": "_ym99007174:0_reqNum",
@@ -838,12 +852,12 @@
           "value": "{\"com\":29766745}"
         },
         {
-          "name": "_ym98973702_lsid",
-          "value": "910422199579"
+          "name": "_ym102272633:0_reqNum",
+          "value": "4"
         },
         {
           "name": "_ym46231566:0_reqNum",
-          "value": "746"
+          "value": "918"
         },
         {
           "name": "_ym92205484_lsid",
@@ -859,7 +873,7 @@
         },
         {
           "name": "_ym56213845:0_reqNum",
-          "value": "2885"
+          "value": "3227"
         },
         {
           "name": "_ym98892916_lsid",
@@ -880,7 +894,7 @@
       "localStorage": [
         {
           "name": "_ym784657:0_reqNum",
-          "value": "3"
+          "value": "13"
         },
         {
           "name": "_ym784657_lsid",
@@ -888,7 +902,7 @@
         },
         {
           "name": "_ym54321510:0_reqNum",
-          "value": "1"
+          "value": "2"
         },
         {
           "name": "_ym54321510_lsid",
@@ -916,12 +930,12 @@
           "value": "337750228411"
         },
         {
-          "name": "_ym784657_lastHit",
-          "value": "1786004164540"
+          "name": "_ym_uid",
+          "value": "\"1785833922567756647\""
         },
         {
-          "name": "_ym_synced",
-          "value": "{\"com\":29766735}"
+          "name": "_ym784657_lastHit",
+          "value": "1786004164540"
         },
         {
           "name": "_ym784657:0_reqNum",
@@ -932,8 +946,8 @@
           "value": "{}"
         },
         {
-          "name": "_ym_uid",
-          "value": "\"1785833922567756647\""
+          "name": "_ym_synced",
+          "value": "{\"com\":29766735}"
         }
       ]
     }

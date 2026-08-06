@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -25,20 +26,57 @@ from pathlib import Path
 import streamlit as st
 import streamlit.components.v1 as components
 
-import apptime
-import gis_playwright as gis
-import kp_audit
-import kp_sheet
-import llm
-import paths
-import projects_data as pdata
-import repo_store
-import reviews as rv
-import runner
-import ui_theme as T
-import yb_playwright as yb
-import playwright_worker
-from playwright_worker import PlaywrightWorker
+# ── Свои модули ─────────────────────────────────────────────────────
+#
+# Сначала прогреваем их по списку, и только потом импортируем обычными
+# строками. Выглядит лишним – но именно из-за отсутствия этого шага
+# приложение падало страницей «Oh no» каждый раз, когда код обновлялся.
+#
+# Облако обновляет файлы под работающим приложением, а Streamlit в этот
+# момент выселяет изменённые модули из sys.modules – так он заставляет
+# страницу подхватить новый код. Если в ту же секунду другой поток (вторая
+# вкладка, идущий прогон) импортирует такой модуль, импорт падает на ровном
+# месте: KeyError: 'paths', следом 'yb_playwright', 'runner', 'llm'.
+# Приложение умирает целиком, а человек видит «Oh no» и не понимает, при
+# чём тут он: он всего лишь запустил публикацию.
+#
+# Лечится ожиданием: выселение занимает мгновение, повтор проходит. А после
+# прогрева обычные import'ы – это уже просто взгляд в словарь, они успевают
+# проскочить между двумя выселениями.
+_OWN_MODULES = ("build", "apptime", "paths", "projects_data", "repo_store", "ui_theme",
+                "llm", "reviews", "kp_sheet", "kp_audit",
+                "yb_playwright", "gis_playwright", "playwright_worker", "runner")
+
+
+def _settle_imports() -> None:
+    """Прогреть свои модули, пережив обновление кода на ходу."""
+    for attempt in range(5):
+        try:
+            for name in _OWN_MODULES:
+                importlib.import_module(name)
+            return
+        except KeyError:          # sys.modules подменили посреди импорта
+            time.sleep(0.2 * (attempt + 1))
+    # Не вышло за секунду с лишним – пусть падает обычный импорт ниже,
+    # с настоящей ошибкой, а не с нашей.
+
+
+_settle_imports()
+
+import apptime  # noqa: E402
+import gis_playwright as gis  # noqa: E402
+import kp_audit  # noqa: E402
+import kp_sheet  # noqa: E402
+import llm  # noqa: E402
+import paths  # noqa: E402
+import projects_data as pdata  # noqa: E402
+import repo_store  # noqa: E402
+import reviews as rv  # noqa: E402
+import runner  # noqa: E402
+import ui_theme as T  # noqa: E402
+import yb_playwright as yb  # noqa: E402
+import playwright_worker  # noqa: E402
+from playwright_worker import PlaywrightWorker  # noqa: E402
 
 # Метка сборки. Показывается человеку и служит ключом кэша для CSS.
 #

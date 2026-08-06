@@ -3102,13 +3102,52 @@ def test_two_people_at_once(tmp: Path) -> None:
     # Замер памяти должен работать по-настоящему, а не возвращать ноль.
     check("память измеряется", r.memory_mb() > 0, r.memory_mb())
 
+    # И считать он должен ВЕСЬ контейнер, а не только себя. Здесь была
+    # слепота: браузер – отдельный процесс, его полгигабайта в замер не
+    # попадали, сторож молчал, а облако убивало приложение целиком.
+    import inspect
+    src = inspect.getsource(r.memory_mb)
+    check("замер смотрит шире своего процесса",
+          "container_memory_mb" in src and "_tree_memory_mb" in src, src[:200])
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "memory").mkdir()
+        (root / "memory" / "memory.stat").write_text(
+            "cache 1083813888\ntotal_rss 337223680\ntotal_cache 1083813888\n", encoding="utf-8")
+        eq("cgroup v1: берём живую память, а не кэш", r.container_memory_mb(root), 321)
+        (root / "memory.stat").write_text("anon 524288000\nfile 900000000\n", encoding="utf-8")
+        eq("cgroup v2: тоже живую", r.container_memory_mb(root), 500)
+        (root / "memory.max").write_text("max\n", encoding="utf-8")
+        eq("потолок «max» – это не потолок", r.memory_limit_mb(root), 0)
+        (root / "memory.max").write_text(str(1024 * 1024 * 1024), encoding="utf-8")
+        eq("потолок читается", r.memory_limit_mb(root), 1024)
+
+    # Пороги подстраиваются под потолок контейнера, но строже, а не мягче.
+    saved_limit = r.memory_limit_mb
+    try:
+        r.memory_limit_mb = lambda *a, **k: 0
+        eq("потолка не видно – пороги прежние", r.mem_gates(),
+           (r.MEM_START_MB, r.MEM_SOFT_MB, r.MEM_HARD_MB))
+        r.memory_limit_mb = lambda *a, **k: 1024
+        gates = r.mem_gates()
+        check("тариф скромный – пороги опустились", gates[2] < r.MEM_HARD_MB, str(gates))
+        check("и по-прежнему по возрастанию", gates[0] < gates[1] < gates[2], str(gates))
+        r.memory_limit_mb = lambda *a, **k: 8192
+        eq("тариф щедрый – прежние числа, а не выше", r.mem_gates(),
+           (r.MEM_START_MB, r.MEM_SOFT_MB, r.MEM_HARD_MB))
+    finally:
+        r.memory_limit_mb = saved_limit
+
     # Внутри прогона память тоже сторожится: мягкий порог – перезапуск
     # браузера, жёсткий – аккуратная остановка с сохранённым отчётом.
-    import inspect
-    loop = inspect.getsource(r._actualize_worker)
-    check("в прогоне есть сторож памяти", "MEM_HARD_MB" in loop and "MEM_SOFT_MB" in loop)
-    check("жёсткий порог останавливает прогон", "stopped = True" in loop)
-    check("мягкий порог перезапускает браузер", "browser.restart()" in loop)
+    # У ПУБЛИКАЦИИ сторожа не было вовсе – она падала молча.
+    for name, loop in (("актуализации", inspect.getsource(r._actualize_worker)),
+                       ("публикации", inspect.getsource(r._publish_worker))):
+        check(f"в прогоне {name} есть сторож памяти",
+              "mem_gates()" in loop and "memory_mb()" in loop)
+        check(f"жёсткий порог останавливает прогон {name}", "stopped = True" in loop)
+        check(f"мягкий порог перезапускает браузер в прогоне {name}",
+              "browser.restart()" in loop)
 
 
 # ════════════════════════════════════════════════════════════════════

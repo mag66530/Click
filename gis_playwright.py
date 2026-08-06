@@ -840,8 +840,17 @@ class GisLoginFlow:
                 viewport={"width": 1000, "height": 760}, user_agent=yb.UA,
                 locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS)
             self.page = self.context.new_page()
-            self.page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=40_000)
-            self.page.wait_for_timeout(1500)
+            # Сначала корень: кабинет сам уводит на форму входа. Если формы
+            # не появилось – пробуем явный адрес. Порядок такой, потому что
+            # у заказчика в адресной строке было именно account.2gis.com.
+            self.page.goto(ACCOUNT_HOST, wait_until="domcontentloaded", timeout=40_000)
+            self.page.wait_for_timeout(2500)
+            if not self._fields()["hasPass"]:
+                try:
+                    self.page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=40_000)
+                    self.page.wait_for_timeout(2500)
+                except Exception:  # noqa: BLE001 – останемся на корне, снимок покажет что там
+                    pass
             return self.state()
         except Exception:
             self.close()
@@ -886,25 +895,67 @@ class GisLoginFlow:
         except Exception:  # noqa: BLE001
             return None
 
-    def submit_credentials(self, email: str, password: str) -> dict:
-        """Вписать почту и пароль и нажать «Войти»."""
-        page = self.page
-        mail = page.locator('input[type="email"], input[name="email"], '
-                            'input[type="text"]:not([type="password"])').first
-        mail.click()
+    def _fields(self) -> dict:
+        """Что за поля на странице входа. Ничего не бросает – только смотрит."""
         try:
-            mail.fill("")
+            return self.page.evaluate(_FIND_LOGIN_FIELDS_JS)
         except Exception:  # noqa: BLE001
-            pass
-        mail.type(email, delay=30)
-        pw = page.locator('input[type="password"]').first
-        pw.click()
-        pw.type(password, delay=30)
-        page.wait_for_timeout(300)
-        if not yb._click_exact_button(page, ["войти", "log in", "sign in"]):
-            pw.press("Enter")
-        page.wait_for_timeout(3500)
-        return self.state()
+            return {"inputs": [], "hasMail": False, "hasPass": False}
+
+    def submit_credentials(self, email: str, password: str) -> dict:
+        """
+        Вписать почту и пароль и нажать «Войти».
+
+        Поля ищем СВОИМ разбором, а не селектором по типу. У 2ГИС поля –
+        самодельные компоненты, и атрибута type у них может не быть вовсе
+        (в разметке кабинета встречается голое `<input class="…"
+        placeholder="Поиск">`). Первый заход это и уронил: селектор
+        `input[type=text]` не нашёл ничего, и вместо понятного сообщения
+        человек увидел «Locator.click: Timeout 30000ms exceeded».
+
+        Ничего наружу не бросаем: любая неудача возвращается снимком экрана
+        и словами, что именно на странице увидели. Слепой таймаут не
+        объясняет ничего, а снимок объясняет сразу.
+        """
+        page = self.page
+        found = self._fields()
+        if not (found.get("hasMail") and found.get("hasPass")):
+            st = self.state()
+            st["note"] = _no_fields_note(found)
+            return st
+
+        try:
+            mail = page.locator('[data-click-login="mail"]').first
+            mail.click(timeout=8_000)
+            try:
+                mail.fill("")
+            except Exception:  # noqa: BLE001 – самодельное поле может не поддерживать fill
+                pass
+            mail.type(email, delay=30)
+
+            pw = page.locator('[data-click-login="pass"]').first
+            pw.click(timeout=8_000)
+            try:
+                pw.fill("")
+            except Exception:  # noqa: BLE001
+                pass
+            pw.type(password, delay=30)
+            page.wait_for_timeout(400)
+            if not yb._click_exact_button(page, ["войти", "log in", "sign in"]):
+                pw.press("Enter")
+        except Exception as e:  # noqa: BLE001
+            st = self.state()
+            st["note"] = f"Не получилось заполнить форму входа: {yb._short_error(e)}"
+            return st
+
+        page.wait_for_timeout(4000)
+        st = self.state()
+        if st.get("step") == "login":
+            # Форма осталась – значит 2ГИС не пустил. Причина обычно написана
+            # прямо на странице, поэтому показываем её текст.
+            st["note"] = _page_complaint(page) or ("2ГИС остался на форме входа – "
+                                                   "проверьте почту и пароль.")
+        return st
 
     def submit_code(self, code: str) -> dict:
         page = self.page
@@ -916,6 +967,72 @@ class GisLoginFlow:
             field.press("Enter")
         page.wait_for_timeout(3000)
         return self.state()
+
+
+# Поля входа ищем разбором, а не селектором: у 2ГИС это самодельные
+# компоненты, и атрибута type у них может не быть.
+_FIND_LOGIN_FIELDS_JS = r"""
+() => {
+  const seen = el => {
+    const r = el.getBoundingClientRect();
+    const st = getComputedStyle(el);
+    return r.width > 40 && r.height > 8 && st.visibility !== 'hidden' && st.display !== 'none';
+  };
+  const all = Array.from(document.querySelectorAll('input')).filter(seen);
+  const kind = el => (el.getAttribute('type') || '').toLowerCase();
+  const label = el => [el.placeholder, el.name, el.id,
+                       el.getAttribute('aria-label')].filter(Boolean).join(' ');
+
+  const pass = all.find(el => kind(el) === 'password') || null;
+  const MAIL = /(почт|mail|логин|login|телефон|phone)/i;
+  const SEARCH = /(поиск|search)/i;
+  let mail = all.find(el => el !== pass && kind(el) !== 'password' && MAIL.test(label(el)));
+  if (!mail) mail = all.find(el => el !== pass && kind(el) !== 'password' && !SEARCH.test(label(el)));
+
+  document.querySelectorAll('[data-click-login]').forEach(
+    n => n.removeAttribute('data-click-login'));
+  if (mail) mail.setAttribute('data-click-login', 'mail');
+  if (pass) pass.setAttribute('data-click-login', 'pass');
+  return {
+    hasMail: !!mail, hasPass: !!pass,
+    inputs: all.map(el => ({ type: kind(el), label: label(el).slice(0, 40) })),
+  };
+}
+"""
+
+# Текст жалобы со страницы: 2ГИС пишет причину прямо в форме.
+_COMPLAINT_JS = r"""
+() => {
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  const RX = /(невер|не найден|ошибк|попроб|заблокир|подтверд|не совпад|некоррект)/i;
+  let best = '';
+  for (const el of document.querySelectorAll('body *')) {
+    const t = norm(el.textContent);
+    if (!t || t.length > 200 || !RX.test(t)) continue;
+    if (Array.from(el.querySelectorAll('*')).some(c => RX.test(norm(c.textContent)))) continue;
+    if (!best || t.length < best.length) best = t;
+  }
+  return best;
+}
+"""
+
+
+def _no_fields_note(found: dict) -> str:
+    """Что сказать человеку, если полей входа на странице не видно."""
+    inputs = found.get("inputs") or []
+    if not inputs:
+        return ("На странице входа 2ГИС не видно ни одного поля. Возможно, кабинет "
+                "показал что-то другое – капчу, согласие или ошибку. Посмотрите снимок ниже.")
+    seen = ", ".join(f"«{i.get('label') or i.get('type') or '?'}»" for i in inputs[:5])
+    return (f"Поля входа не опознаны. На странице видно полей: {len(inputs)} ({seen}). "
+            "Пришлите снимок ниже – поправим поиск полей.")
+
+
+def _page_complaint(page: Page) -> str:
+    try:
+        return (page.evaluate(_COMPLAINT_JS) or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 _LOGIN_STATE_JS = r"""

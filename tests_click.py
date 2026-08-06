@@ -1172,6 +1172,79 @@ def test_kp_autosync(tmp: Path) -> None:
         st.session_state.clear()
 
 
+def test_gis_login_fields() -> None:
+    """
+    Поля входа 2ГИС ищутся разбором, а не селектором по типу.
+
+    Живой случай: заказчик нажала «Войти в 2ГИС» и получила «Не удалось
+    открыть браузер: Locator.click: Timeout 30000ms exceeded». Селектор был
+    `input[type=text]`, а у 2ГИС поля – самодельные компоненты, и атрибута
+    type у них может не быть вовсе: в разметке кабинета встречается голое
+    `<input class="…" placeholder="Поиск">`. Ничего не нашлось – и вместо
+    объяснения человек увидел таймаут.
+    """
+    import gis_playwright as gis
+    print("\n▸ 2ГИС: поля формы входа")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 1000, "height": 800}).new_page()
+
+            # Форма ровно как у 2ГИС: у поля почты типа НЕТ.
+            page.set_content("""
+            <html><body style="margin:40px">
+              <h1>Вход</h1>
+              <input class="_inputInner_1iuov_26" placeholder="Электронная почта"
+                     style="width:320px;height:40px">
+              <input type="password" class="_inputInner_1iuov_26" placeholder="Пароль"
+                     style="width:320px;height:40px">
+              <button>Войти</button>
+            </body></html>""")
+            found = page.evaluate(gis._FIND_LOGIN_FIELDS_JS)  # noqa: SLF001
+            check("поле почты без атрибута type найдено", found["hasMail"], str(found))
+            check("поле пароля найдено", found["hasPass"], str(found))
+            eq("почта помечена для клика",
+               page.locator('[data-click-login="mail"]').get_attribute("placeholder"),
+               "Электронная почта")
+
+            # Поле поиска за почту не принимаем – оно есть в шапке кабинета.
+            page.set_content("""
+            <html><body style="margin:40px">
+              <input class="a" placeholder="Поиск" style="width:320px;height:40px">
+              <input class="b" placeholder="Почта" style="width:320px;height:40px">
+              <input type="password" class="c" style="width:320px;height:40px">
+            </body></html>""")
+            page.evaluate(gis._FIND_LOGIN_FIELDS_JS)  # noqa: SLF001
+            eq("из двух полей выбрано именно «Почта»",
+               page.locator('[data-click-login="mail"]').get_attribute("placeholder"), "Почта")
+
+            # Полей нет вовсе – это не падение, а понятная подсказка.
+            page.set_content("<html><body><h1>Проверьте, что вы не робот</h1></body></html>")
+            empty = page.evaluate(gis._FIND_LOGIN_FIELDS_JS)  # noqa: SLF001
+            check("пустая форма опознана", not empty["hasMail"] and not empty["hasPass"])
+            note = gis._no_fields_note(empty)  # noqa: SLF001
+            check("человеку сказано, что смотреть снимок", "снимок" in note.lower(), note)
+
+            # Жалобу 2ГИС со страницы показываем словами.
+            page.set_content("""
+            <html><body><form><div class="err">Неверный логин или пароль</div>
+            <input type="password"></form></body></html>""")
+            eq("причина отказа прочитана со страницы",
+               gis._page_complaint(page), "Неверный логин или пароль")  # noqa: SLF001
+        finally:
+            browser.close()
+
+
 def test_gis_urls_and_session(tmp: Path) -> None:
     """Адреса кабинета 2ГИС и признак живой сессии."""
     from datetime import datetime, timezone
@@ -3539,6 +3612,7 @@ def main() -> int:
         test_kp_sheet()
         test_kp_autosync(tmp)
         test_gis_urls_and_session(tmp)
+        test_gis_login_fields()
         test_gis_reviews_on_real_page()
         test_gis_answer_and_actualize()
     finally:

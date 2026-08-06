@@ -2935,7 +2935,7 @@ def test_report_with_reviews() -> None:
 
     keep = rv.load_queue
     # Отзыв r1 успели отправить уже после прогона, r2 ещё ждёт.
-    rv.load_queue = lambda pid: [
+    rv.load_queue = lambda pid, platform=rv.YANDEX: [
         {"reviewId": "r1", "status": rv.ANSWERED, "sentAt": "2026-08-05T10:00:00+00:00",
          "finalText": "Уважаемый Захар! Спасибо.", "note": "Ответ опубликован"},
     ]
@@ -3009,7 +3009,7 @@ def test_queue_resets_between_runs() -> None:
 
     # А в отчёте прогона – его отзывы, даже если в самом отчёте их не сохраняли.
     keep = rv.load_queue
-    rv.load_queue = lambda pid: items
+    rv.load_queue = lambda pid, platform=rv.YANDEX: items
     try:
         rows = app._report_reviews("APS", {"type": "actualize", "runId": "run-1"})
         eq("старый отчёт собирается по метке прогона",

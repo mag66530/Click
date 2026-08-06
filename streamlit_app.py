@@ -280,7 +280,8 @@ def _pull_session(project_id: str) -> None:
     if not repo_store.is_configured():
         return
     pairs = ((f"session-{project_id}", yb.session_path(project_id)),
-             (f"device-{project_id}", yb.device_path(project_id)))
+             (f"device-{project_id}", yb.device_path(project_id)),
+             (f"session-gis-{project_id}", gis.session_path(project_id)))
     for name, path in pairs:
         if path.exists() and path.stat().st_size > 2:
             continue
@@ -296,18 +297,22 @@ def _push_session(project_id: str) -> None:
     """Свежие куки – в хранилище. Прогон продлевает их, копия не должна отставать."""
     if not repo_store.is_configured():
         return
-    pairs = ((f"session-{project_id}", yb.session_path(project_id), True),
-             (f"device-{project_id}", yb.device_path(project_id), False))
-    for name, path, need_auth in pairs:
-        if not path.exists() or (need_auth and not yb.has_saved_session(project_id)):
+    pairs = ((f"session-{project_id}", yb.session_path(project_id), yb.has_saved_session),
+             (f"device-{project_id}", yb.device_path(project_id), None),
+             # Сессия 2ГИС – туда же: без неё после перезапуска облака вход
+             # пришлось бы проходить заново, а обещано, что не придётся.
+             (f"session-gis-{project_id}", gis.session_path(project_id), gis.has_saved_session))
+    for name, path, alive in pairs:
+        if not path.exists() or (alive and not alive(project_id)):
             continue
         mark = f"_pushed_{name}"
         mtime = path.stat().st_mtime
         if st.session_state.get(mark) == mtime:
             continue
         try:
+            where = "2ГИС" if "gis" in name else "Яндекса"
             repo_store.save(name, json.loads(path.read_text(encoding="utf-8")),
-                            f"Click: сессия Яндекса ({project_id})")
+                            f"Click: сессия {where} ({project_id})")
             st.session_state[mark] = mtime
         except Exception:  # noqa: BLE001
             pass
@@ -2137,7 +2142,7 @@ def _sent_csv(rows: list[dict]) -> bytes:
     return buf.getvalue().encode("utf-8-sig")
 
 
-def _report_reviews(project_id: str, data: dict) -> list[dict]:
+def _report_reviews(project_id: str, data: dict, platform: str = rv.YANDEX) -> list[dict]:
     """
     Отзывы прогона – с тем, что с ними стало ПОСЛЕ прогона.
 
@@ -2147,7 +2152,7 @@ def _report_reviews(project_id: str, data: dict) -> list[dict]:
     свежий статус, время отправки и итоговый текст. Отзыв, разобранный уже
     после прогона, в выгрузке виден разобранным – как оно и есть.
     """
-    queue = rv.load_queue(project_id)
+    queue = rv.load_queue(project_id, platform)
     rows = data.get("reviews") or []
     if not rows:
         # Отчёт старый – отзывов в нём не сохраняли. Но у элементов очереди
@@ -2847,7 +2852,8 @@ def _report_csv(data: dict) -> bytes:
     return ("﻿" + "\n".join(rows)).encode("utf-8")
 
 
-_REPORT_KINDS = {"publish": "📤 Публикация", "actualize": "🔄 Актуализация"}
+_REPORT_KINDS = {"publish": "📤 Публикация", "actualize": "🔄 Актуализация",
+                 "actualize-gis": "🗺 2ГИС"}
 
 
 def _last_run_kind(project_id: str) -> str:
@@ -2855,9 +2861,9 @@ def _last_run_kind(project_id: str) -> str:
     Какой прогон был последним – его отчёт и показываем по умолчанию.
     Чтение организаций не в счёт: отчёта у него нет.
     """
-    when = {k: (runner.read_state(project_id, k).get("startedAt") or "")
-            for k in ("publish", "actualize")}
-    return "actualize" if when["actualize"] > when["publish"] else "publish"
+    kinds = ("publish", "actualize", "actualize-gis")
+    when = {k: (runner.read_state(project_id, k).get("startedAt") or "") for k in kinds}
+    return max(kinds, key=lambda k: when[k])
 
 
 def tab_report(project_id: str) -> None:
@@ -2876,7 +2882,7 @@ def tab_report(project_id: str) -> None:
             st.session_state.pop("report-select", None)
             st.rerun()
 
-    is_act = kind == "actualize"
+    is_act = kind in ("actualize", "actualize-gis")
     reports = runner.list_reports(project_id, kind)
     if not reports:
         html(T.empty("📊", "Отчётов пока нет",
@@ -2966,7 +2972,9 @@ def tab_report(project_id: str) -> None:
             run_log = reader(project_id, kind, selected) if reader else ""
             base_name = selected.replace(".json", "")
             # Прогон с отзывами скачивается целиком: города, отзывы, лог.
-            review_rows = _report_reviews(project_id, data) if is_act else []
+            review_rows = (_report_reviews(project_id, data,
+                                           data.get("platform") or rv.YANDEX)
+                           if is_act else [])
             cols = st.columns([1, 1, 1, 2] if review_rows else [1, 1, 3])
             cols[0].download_button("⬇ Города (CSV)", data=_report_csv(data),
                                     file_name=base_name + ".csv", mime="text/csv",

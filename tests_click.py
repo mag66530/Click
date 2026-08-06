@@ -1299,6 +1299,11 @@ def test_gis_urls_and_session(tmp: Path) -> None:
           gis.review_id("778", one) != gis.review_id("777", one))
 
 
+def rv_module():
+    import reviews
+    return reviews
+
+
 def test_gis_reviews_on_real_page() -> None:
     """
     Чтение отзывов 2ГИС с НАСТОЯЩЕЙ страницы кабинета (tests_fixtures).
@@ -1333,7 +1338,7 @@ def test_gis_reviews_on_real_page() -> None:
 
             raw = page.evaluate(gis._READ_REVIEWS_JS)  # noqa: SLF001
             items = [gis.normalize(it, "70000001079192862") for it in raw["items"]]
-            eq("карточек прочитано", len(items), 4)
+            eq("карточек прочитано", len(items), 6)
             eq("баннер за отзыв не принят", raw["skipped"], 0)
 
             first = items[0]
@@ -1356,6 +1361,34 @@ def test_gis_reviews_on_real_page() -> None:
             check("своим он не считается", not gis.is_own(flamp))
 
             eq("отзыв из одних звёзд – без текста", items[3]["text"], "")
+
+            # ── Уже отвеченные отзывы в работу не идут ──
+            # Живой случай: в очередь попал отзыв, на который ответили ещё в
+            # ноябре. Кабинет применяет фильтр «Без ответа» уже после того,
+            # как нарисует список, поэтому верить адресу нельзя – смотрим на
+            # саму карточку. Кнопка «Ответить» на ней остаётся (2ГИС разрешает
+            # ответить ещё раз), зато у ответа своя дата и свои «Удалить» и
+            # «Отображать как основной».
+            done = items[4]
+            eq("отвеченный отзыв опознан по ответу в карточке", done["answered"], True)
+            check("и не попадёт в отбор", not rv_module().is_unanswered(done))
+            check("текст ответа компании за отзыв не принят",
+                  "Подтвердите" not in done["text"], done["text"][:80])
+            check("а сам отзыв прочитан", done["text"].startswith("Мы заказывали товар"),
+                  done["text"][:60])
+            eq("оценка одна звезда", done["rating"], 1)
+
+            # ── Длинный отзыв склеивается целиком ──
+            # Раньше брался «самый длинный листок», а свёрнутый текст 2ГИС
+            # держит кусками – в очередь попадал обрывок с середины слова:
+            # «адыков Адиль! То не берет телефон…».
+            long_one = items[5]
+            check("длинный текст склеен целиком",
+                  long_one["text"].startswith("Заказывали трубу")
+                  and long_one["text"].endswith("привезли в срок"), long_one["text"])
+            check("шва посреди слова нет", "Садыков Сергей" in long_one["text"],
+                  long_one["text"])
+            check("свежие отзывы по-прежнему без ответа", not items[0]["answered"])
 
             # Страница ещё не дорисована: карточек нет – это не «ноль отзывов».
             page.set_content("<html><body><div id='root'></div></body></html>")

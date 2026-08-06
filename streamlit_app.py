@@ -2352,6 +2352,31 @@ def reviews_queue_block(project_id: str, platform: str = rv.YANDEX) -> None:
 
         _send_all_block(project_id, pending, running, platform)
 
+        # Список можно вычистить целиком. Нужно после неудачного сбора: пока
+        # 2ГИС отдавал вперемешку и отвеченные отзывы, список набивался тем,
+        # что разбирать не надо, а «Убрать из списка» по одному – это долго.
+        if pending and not running:
+            if st.session_state.get("rv-drop-all-asked"):
+                st.warning(f"Убрать из списка все {len(pending)} отзывов? "
+                           "В кабинете ничего не изменится – список просто "
+                           "очистится, и следующий прогон соберёт их заново.")
+                y, n = st.columns(2)
+                if n.button("Отмена", key="rv-drop-all-no", use_container_width=True):
+                    st.session_state.pop("rv-drop-all-asked", None)
+                    st.rerun()
+                if y.button(f"Да, убрать {len(pending)}", key="rv-drop-all-yes",
+                            type="primary", use_container_width=True):
+                    for it in pending:
+                        it["status"] = rv.SKIPPED
+                        it["note"] = ""
+                    _review_queue_save(project_id, platform=platform)
+                    st.session_state.pop("rv-drop-all-asked", None)
+                    st.rerun()
+            elif st.button("🧹 Очистить список", key="rv-drop-all",
+                           use_container_width=True):
+                st.session_state["rv-drop-all-asked"] = True
+                st.rerun()
+
         for n, item in enumerate(pending):
             label = _REVIEW_LABELS.get(item.get("status"), "–")
             stars = "★" * int(item.get("rating") or 0)

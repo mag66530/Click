@@ -221,8 +221,17 @@ _READ_REVIEWS_JS = r"""
     }
 
     const all = leaves(card);
-    const dateEl = all.find(el => DATE_RX.test(textOf(el)));
+    const dates = all.filter(el => DATE_RX.test(textOf(el)));
+    const dateEl = dates[0] || null;
     const dateText = dateEl ? textOf(dateEl) : '';
+
+    // Ответ компании уже стоит? Кнопка «Ответить» на такой карточке
+    // ОСТАЁТСЯ (2ГИС разрешает ответить ещё раз), поэтому опознаём ответ по
+    // двум надёжным приметам: у ответа своя дата – в карточке становится две –
+    // и рядом с ним появляются «Удалить» и «Отображать как основной».
+    const answerMark = Array.from(card.querySelectorAll('button, [role="button"], a, span, div'))
+      .some(el => /^(удалить|отображать как основной|скрыть ответ)$/i.test(textOf(el)));
+    const answered = answerMark || dates.length > 1;
 
     // Автор – соседняя с площадкой подпись; если площадки нет, первый
     // короткий листок до даты.
@@ -242,21 +251,42 @@ _READ_REVIEWS_JS = r"""
       }
     }
 
-    // Текст отзыва – самый длинный листок, не считая служебных: ссылок
-    // (там адрес филиала), кнопок, счётчиков, даты и имени.
+    // Текст отзыва – самый длинный БЛОК, а не самый длинный листок.
+    //
+    // Листок не годится: длинный отзыв 2ГИС показывает свёрнутым (line="3"),
+    // и текст в разметке разбит на несколько кусков. «Самый длинный листок»
+    // брал один из них – в очередь попадал обрывок, начинавшийся с середины
+    // слова: «адыков Адиль! То не берет телефон…». Берём элемент целиком:
+    // его innerText склеивает куски обратно.
+    //
+    // Блок с ответом компании пропускаем: там текст длиннее самого отзыва,
+    // и он бы победил.
+    const answerBox = answerMark
+      ? (Array.from(card.querySelectorAll('button, [role="button"], a, span, div'))
+          .find(el => /^(удалить|отображать как основной)$/i.test(textOf(el))) || null)
+      : null;
+    const answerRoot = answerBox ? answerBox.closest('div, li, section') : null;
+
     let text = '';
-    for (const el of all) {
+    for (const el of card.querySelectorAll('div, p, span')) {
       if (el.closest('a, button, svg, [role="button"]')) continue;
-      const t = textOf(el);
-      if (!t || el === dateEl || el === badge) continue;
-      if (t === author || PLATFORMS.includes(t) || /^\d+$/.test(t)) continue;
+      // Обёртка вокруг кнопки – не текст. Без этого у отзыва из одних звёзд
+      // «текстом» становилось слово «Ответить».
+      if (el.querySelector('a, button, [role="button"]')) continue;
+      if (answerRoot && (answerRoot.contains(el) || el.contains(answerRoot))) continue;
+      // Обёртки, в которые попали имя, дата или оценка, – это не текст отзыва.
+      if (dates.some(d => el.contains(d))) continue;
+      if (badge && el.contains(badge)) continue;
+      if (el.querySelector('[class*="rating__front"]')) continue;
+      const t = norm(el.innerText || el.textContent);
+      if (!t || t === author || PLATFORMS.includes(t) || /^\d+$/.test(t)) continue;
       if (t.length > text.length) text = t;
     }
 
     const branch = card.querySelector('a[href*="/reviews/"]');
     const foreign = foreignLink(card);
     items.push({
-      author, rating, text, dateText,
+      author, rating, text, dateText, answered,
       platform: platform || (foreign ? norm(foreign.textContent).replace(/^посмотреть\s+на\s+/i, '') : ''),
       canAnswer: !!answerButton(card),
       foreignUrl: foreign ? foreign.href : '',
@@ -317,8 +347,10 @@ def normalize(item: dict, org_id: str | None = None) -> dict:
         "rating": int(item.get("rating") or 0),
         "text": (item.get("text") or "").strip(),
         "time_created": parse_date(item.get("dateText") or ""),
-        # Список открыт с фильтром «Без ответа»: всё, что здесь, – без ответа.
-        "answered": False,
+        # Смотрим на саму карточку, а не на фильтр в адресе. Фильтр «Без
+        # ответа» кабинет применяет уже после отрисовки списка, и первым
+        # заходом видно ВСЕ отзывы – в очередь попадали уже отвеченные.
+        "answered": bool(item.get("answered")),
         "platform": item.get("platform") or "",
         "canAnswer": bool(item.get("canAnswer")),
         "foreignUrl": item.get("foreignUrl") or "",
@@ -384,20 +416,30 @@ def read_reviews(page: Page, url: str, navigate: bool = True,
             out["noSession"] = True
             return out
 
-    data, ready = None, False
-    deadline = time.time() + (REVIEWS_WAIT_MS / 1000 if navigate else 4)
+    # Ждём, пока список УСТОИТСЯ, а не первую попавшуюся отрисовку.
+    #
+    # Кабинет сначала рисует все отзывы и только потом применяет фильтр из
+    # адреса. Первый заход хватал предварительный список – и в очередь
+    # попадали отзывы, на которые давно ответили. Считаем список готовым,
+    # когда два чтения подряд дают одно и то же число карточек.
+    data, ready, same, was = None, False, 0, -1
+    deadline = time.time() + (REVIEWS_WAIT_MS / 1000 if navigate else 5)
     while time.time() < deadline:
-        data = _reviews_on_page(page, org_id)
-        if data and data["items"]:
-            break
+        fresh = _reviews_on_page(page, org_id)
+        if fresh and fresh["items"]:
+            data = fresh
+            same = same + 1 if len(fresh["items"]) == was else 0
+            was = len(fresh["items"])
+            if same >= 1:
+                break
         try:
             ready = bool(page.evaluate(_PAGE_READY_JS)) and bool(page.evaluate(_EMPTY_LIST_JS))
         except Exception:  # noqa: BLE001
             ready = False
-        if ready:
-            data = data or {"items": [], "skipped": 0}
+        if ready and not data:
+            data = {"items": [], "skipped": 0}
             break
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(700)
 
     if data is None:
         out["reason"] = ("Страница отзывов не открылась – кабинет 2ГИС не отдал список. "

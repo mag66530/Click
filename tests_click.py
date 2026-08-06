@@ -968,10 +968,10 @@ def test_kp_sheet() -> None:
          "Посты", "Аккаунт", "Карта", "Статус", "Аккаунт", "Карта", "Статус"],
         ["Россия", "Москва", "13274285", "https://metpromintex.ru", "", "",
          "", "https://yandex.ru/sprav/365594/p/edit/posts/", "https://yandex.ru/maps/1", "Активная",
-         "https://account.2gis.com/1", "https://2gis.ru/1", "Активная"],
+         "https://account.2gis.com/orgs/70000001077855513/", "https://2gis.ru/moscow/firm/1", "Активная"],
         ["Россия", "Санкт-Петербург", "5652922", "https://spb.metpromintex.ru", "", "",
          "", "https://yandex.ru/sprav/234955/p/edit/posts/", "https://yandex.ru/maps/2", "Онлайн",
-         "https://account.2gis.com/2", "https://2gis.ru/2", "Удалена"],
+         "https://account.2gis.com/orgs/70000001077855514/", "https://2gis.ru/spb/firm/2", "Удалена"],
         ["Казахстан", "Алматы", "2000000", "https://kz.metpromintex.ru", "", "",
          "", "https://yandex.ru/sprav/777777/edit/posts/", "", "Активная", "", "", "Активная"],
         ["Россия", "Омск", "1104000", "https://omsk.metpromintex.ru", "", "",
@@ -999,6 +999,26 @@ def test_kp_sheet() -> None:
     check("id городов уникальны", len(ids) == len(set(ids)))
     check("из ссылок извлекается ID компании",
           all(yb_extract(ct["url"]) for c in countries for ct in c["cities"]))
+
+    # ── Блок 2ГИС в той же таблице ──────────────────────────────────
+    eq("колонка «Аккаунт» 2ГИС найдена по содержимому", diag.get("gisColumn"), 10)
+    eq("статус 2ГИС берётся справа от неё, а не яндексовый", diag.get("gisStatusColumn"), 12)
+    eq("городов с живой карточкой 2ГИС", diag.get("gisCities"), 1)
+    moscow = next(c for c in cities if c["name"] == "Москва")
+    eq("ссылка на кабинет 2ГИС сохранена",
+       moscow["gisUrl"], "https://account.2gis.com/orgs/70000001077855513/")
+    eq("публичная карточка 2ГИС тоже", moscow["gisMap"], "https://2gis.ru/moscow/firm/1")
+    spb = next(c for c in cities if c["name"] == "Санкт-Петербург")
+    eq("удалённая карточка 2ГИС в работу не идёт", spb["gisUrl"], "")
+    check("но сам город остаётся: в Яндексе он «Онлайн»", bool(spb["url"]))
+
+    gis_countries = kp_sheet.to_countries(cities, "IMP", platform=kp_sheet.GIS)
+    eq("в списке 2ГИС только города с живой карточкой",
+       [ct["name"] for c in gis_countries for ct in c["cities"]], ["Москва"])
+    eq("и ссылка у города – на кабинет 2ГИС",
+       gis_countries[0]["cities"][0]["url"], "https://account.2gis.com/orgs/70000001077855513/")
+    gis_ids = {ct["id"] for c in gis_countries for ct in c["cities"]}
+    check("id городов 2ГИС не путаются с яндексовыми", not (gis_ids & set(ids)))
 
     # Пустая и битая таблица не должны валить приложение
     empty, d2 = kp_sheet.parse_rows([])
@@ -1150,6 +1170,232 @@ def test_kp_autosync(tmp: Path) -> None:
         repo_store.load, repo_store.save = old_load, old_save
         kp_sheet.load_cities = old_cities
         st.session_state.clear()
+
+
+def test_gis_urls_and_session(tmp: Path) -> None:
+    """Адреса кабинета 2ГИС и признак живой сессии."""
+    from datetime import datetime, timezone
+
+    import gis_playwright as gis
+    print("\n▸ 2ГИС: адреса и сессия")
+
+    eq("номер организации из ссылки КП",
+       gis.extract_org_id("https://account.2gis.com/orgs/70000001077855513/"), "70000001077855513")
+    eq("с хвостом /dashboard тоже",
+       gis.extract_org_id("https://account.2gis.com/orgs/70000001060441666/dashboard"),
+       "70000001060441666")
+    check("ссылка на публичную карточку номером организации не считается",
+          gis.extract_org_id("https://2gis.ru/moscow/firm/70000001077855514/") is None)
+    check("пусто – ничего", gis.extract_org_id("") is None)
+
+    eq("отзывы открываем сразу с фильтром «Без ответа»",
+       gis.build_reviews_url("https://account.2gis.com/orgs/123456/"),
+       "https://account.2gis.com/orgs/123456/reviews?withoutAnswer=true")
+    eq("актуализация – раздел «Данные о компании»",
+       gis.build_company_url("https://account.2gis.com/orgs/123456/dashboard"),
+       "https://account.2gis.com/orgs/123456/company")
+    check("без ссылки адрес не выдумываем", gis.build_reviews_url("") is None)
+
+    old = gis.USERS_DATA
+    gis.USERS_DATA = tmp / "gis-session"
+    try:
+        check("сессии нет – так и говорим", not gis.has_saved_session("SMU"))
+        fp = gis.session_path("SMU")
+        fp.write_text(json.dumps({"cookies": [{"name": "dg_user_locale", "domain": ".2gis.com"}]}),
+                      encoding="utf-8")
+        check("куки без входа за сессию не считаем", not gis.has_saved_session("SMU"))
+        fp.write_text(json.dumps({"cookies": [{"name": "dg_session_token", "domain": ".2gis.com"}]}),
+                      encoding="utf-8")
+        check("с токеном кабинета – сессия есть", gis.has_saved_session("SMU"))
+        check("сессия 2ГИС лежит отдельно от яндексовой",
+              gis.session_path("SMU").name != "yb_storage_state.json")
+    finally:
+        gis.USERS_DATA = old
+
+    eq("дата отзыва понимается", gis.parse_date("5 июля 2024"),
+       int(datetime(2024, 7, 5, tzinfo=timezone.utc).timestamp() * 1000))
+    eq("май – не месяц «ма»", gis.parse_date("1 мая 2026"),
+       int(datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp() * 1000))
+    eq("мусор вместо даты не роняет", gis.parse_date("позавчера"), 0)
+
+    one = {"author": "Вера", "dateText": "5 июля 2024", "text": "Отличные трубы"}
+    check("номер отзыва считаем сами – 2ГИС его не показывает",
+          gis.review_id("777", one).startswith("gis-"))
+    eq("тот же отзыв – тот же номер", gis.review_id("777", one), gis.review_id("777", dict(one)))
+    check("у другой организации номер другой",
+          gis.review_id("778", one) != gis.review_id("777", one))
+
+
+def test_gis_reviews_on_real_page() -> None:
+    """
+    Чтение отзывов 2ГИС с НАСТОЯЩЕЙ страницы кабинета (tests_fixtures).
+
+    У 2ГИС нет готового состояния страницы, как __PRELOAD_DATA у Яндекса:
+    кабинет – React-приложение, данные приезжают отдельным запросом, а в
+    разметке остаются только карточки. Поэтому разбираем карточки, и вот
+    ровно на этой странице проверяем, что разбираем правильно.
+    """
+    import gis_playwright as gis
+    print("\n▸ 2ГИС: отзывы на настоящей странице")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    fixture = Path(__file__).parent / "tests_fixtures" / "gis-reviews-page.html"
+    check("фикстура страницы отзывов на месте", fixture.exists())
+    if not fixture.exists():
+        return
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 1280, "height": 900}).new_page()
+            page.set_content(f"<html><body>{fixture.read_text(encoding='utf-8')}</body></html>")
+
+            raw = page.evaluate(gis._READ_REVIEWS_JS)  # noqa: SLF001
+            items = [gis.normalize(it, "70000001079192862") for it in raw["items"]]
+            eq("карточек прочитано", len(items), 4)
+            eq("баннер за отзыв не принят", raw["skipped"], 0)
+
+            first = items[0]
+            eq("автор", first["author"], "Вера Орловская")
+            eq("оценка пять – жёлтых звёзд на всю ширину", first["rating"], 5)
+            eq("площадка", first["platform"], "2GIS")
+            check("текст отзыва целиком", first["text"].startswith("Наша фирма заказывала в СМУ"))
+            check("дата разобрана", first["time_created"] > 0)
+            check("на такой отзыв можем ответить сами", gis.is_own(first))
+            check("адрес филиала – полной ссылкой",
+                  first["branchUrl"].startswith("https://account.2gis.com/orgs/"))
+
+            eq("оценка считается по ширине жёлтого ряда, а не по числу звёзд",
+               items[1]["rating"], 4)
+
+            flamp = items[2]
+            eq("отзыв с чужой площадки опознан", flamp["platform"], "Flamp")
+            check("на него отвечать нельзя – кнопки «Ответить» нет", not flamp["canAnswer"])
+            check("но ссылка, куда идти человеку, сохранена", "flamp.ru" in flamp["foreignUrl"])
+            check("своим он не считается", not gis.is_own(flamp))
+
+            eq("отзыв из одних звёзд – без текста", items[3]["text"], "")
+
+            # Страница ещё не дорисована: карточек нет – это не «ноль отзывов».
+            page.set_content("<html><body><div id='root'></div></body></html>")
+            empty = gis._reviews_on_page(page)  # noqa: SLF001
+            check("на пустой странице карточек нет", empty is not None and not empty["items"])
+        finally:
+            browser.close()
+
+
+def test_gis_answer_and_actualize() -> None:
+    """
+    Ответ на отзыв и подтверждение данных – в настоящем браузере.
+
+    Порядок, который делает человек: «Ответить» → текст → «Опубликовать» →
+    плашка «Ответ на отзыв размещён». Проверяем, что Click проходит его же и
+    что «кнопку нажали, а ответа нет» успехом НЕ считается.
+    """
+    import gis_playwright as gis
+    print("\n▸ 2ГИС: ответ на отзыв и «Данные верны»")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    # Карточка ведёт себя как настоящая: «Ответить» раскрывает поле,
+    # «Опубликовать» ставит ответ под отзыв и показывает плашку.
+    card = """
+    <html><body style="margin:0">
+      <div class="list">
+        <div class="card">
+          <div class="rating__back-x" style="width:90px;height:16px">
+            <div class="Stars__star-x"></div></div>
+          <div class="rating__front-x" style="width:90px;height:16px">
+            <div class="Stars__star-x"></div></div>
+          <div class="who">Вера Орловская</div><div class="badge">2GIS</div>
+          <div class="date">5 июля 2024</div>
+          <div class="text">Наша фирма заказывала профильные трубы, качество отличное</div>
+          <div class="actions">
+            <button class="button__basic-x" onclick="openField()">Ответить</button>
+          </div>
+        </div>
+      </div>
+      <script>
+        function openField() {
+          const a = document.querySelector('.actions');
+          a.innerHTML = '<textarea></textarea>' +
+            '<button class="button__basic-x" onclick="publish()">Опубликовать</button>';
+        }
+        function publish() {
+          const t = document.querySelector('textarea').value;
+          document.querySelector('.actions').innerHTML =
+            '<div class="answer">' + t + '</div>';
+          document.body.insertAdjacentHTML('beforeend',
+            '<div class="toast">Ответ на отзыв размещён</div>');
+        }
+      </script>
+    </body></html>
+    """
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 1100, "height": 800}).new_page()
+            page.set_content(card)
+
+            res = gis.publish_review_answer(
+                page, "", "Наша фирма заказывала профильные трубы",
+                "Уважаемая Вера! Благодарим за отзыв.", navigate=False)
+            eq("ответ опубликован", res["status"], "answered")
+            check("текст встал под отзывом",
+                  "Благодарим за отзыв" in page.inner_text(".answer"))
+
+            # Отзыва в списке «Без ответа» нет – значит, ответили без нас.
+            page.set_content("<html><body><div>Пусто</div></body></html>")
+            gone = gis.publish_review_answer(page, "", "Наша фирма заказывала профильные трубы",
+                                             "Ответ", navigate=False)
+            eq("на отвеченный отзыв второй раз не отвечаем", gone["status"], "already")
+
+            # Кнопку нажали, а ответа не видно и плашки нет – это НЕ успех.
+            # Ровно так у Яндекса отзывы уходили из очереди «отвеченными»,
+            # а в кабинете ничего не появлялось.
+            page.set_content(card.replace("function publish() {",
+                                          "function publish() { if (1) return;"))
+            silent = gis.publish_review_answer(
+                page, "", "Наша фирма заказывала профильные трубы", "Ответ", navigate=False)
+            eq("без подтверждения ответ успешным не считается", silent["status"], "failed")
+            check("и человеку сказано, что делать", "вручную" in silent["reason"], silent["reason"])
+
+            # ── «Данные верны» ──────────────────────────────────────
+            page.set_content("""
+            <html><body style="margin:0">
+              <div style="height:900px">много контента</div>
+              <div class="banner">Данные о компании не обновлялись достаточно давно,
+                они не изменились?
+                <a href="#" onclick="window.__ok=1;document.body.insertAdjacentHTML('beforeend',
+                   '<div>Спасибо за подтверждение данных</div>');return false">Данные верны</a>
+              </div>
+            </body></html>""")
+            found = gis._mark_ok_button(page)  # noqa: SLF001
+            check("кнопка «Данные верны» найдена", bool(found), str(found))
+            page.locator('[data-click-ok="1"]').first.click()
+            check("клик попал именно в неё", page.evaluate("() => window.__ok === 1"))
+            check("плашка подтверждения замечена", page.evaluate(gis._ACTUALIZE_TOAST_JS))  # noqa: SLF001
+
+            page.set_content("<html><body><div>Данные о компании</div></body></html>")
+            check("плашки нет – подтверждать нечего, и это не ошибка",
+                  gis._mark_ok_button(page) is None)  # noqa: SLF001
+        finally:
+            browser.close()
 
 
 def yb_extract(url: str):
@@ -3141,6 +3387,9 @@ def main() -> int:
         test_kp_sheet_choice()
         test_kp_sheet()
         test_kp_autosync(tmp)
+        test_gis_urls_and_session(tmp)
+        test_gis_reviews_on_real_page()
+        test_gis_answer_and_actualize()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

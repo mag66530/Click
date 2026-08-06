@@ -1,0 +1,1999 @@
+{
+  "collectedAt": "2026-08-06T11:29:08.142974+00:00",
+  "count": 51,
+  "withCards": true,
+  "companies": [
+    {
+      "id": "228071058652",
+      "tycoonId": "48151862",
+      "permanentId": "228071058652",
+      "type": "chain",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс",
+        "MetPromInteks"
+      ],
+      "address": "Земля",
+      "regionCode": "",
+      "geoId": 10000,
+      "site": "https://metpromintex.ru/",
+      "sites": [
+        "https://metpromintex.ru/"
+      ],
+      "social": {},
+      "emails": [],
+      "phones": [
+        "+7 (495) 729-83-58"
+      ],
+      "rubrics": [],
+      "noAccess": false,
+      "rating": null,
+      "fromDom": true,
+      "url": "https://yandex.ru/sprav/228071058652/p/edit/",
+      "companyId": "228071058652",
+      "fromCard": true
+    },
+    {
+      "id": "2242836430",
+      "tycoonId": "36379347",
+      "permanentId": "2242836430",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Уральский федеральный округ, Челябинская область, городской округ Челябинск, Челябинск, Троицкий тракт, 11А, корп. 1",
+      "regionCode": "RU",
+      "geoId": 56,
+      "site": "https://chelyabinsk.metpromintex.ru/",
+      "sites": [
+        "https://chelyabinsk.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79191236830",
+        "whatsapp": "https://wa.me/+79191236830"
+      },
+      "emails": [
+        "chelyabinsk@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (351) 223-68-30"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/2242836430/p/edit/",
+      "companyId": "2242836430",
+      "fromCard": true
+    },
+    {
+      "id": "11457141140",
+      "tycoonId": "56108949",
+      "permanentId": "11457141140",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс",
+        "МПИ"
+      ],
+      "address": "Приволжский федеральный округ, Пермский край, городской округ Пермь, Пермь, улица Чернышевского, 28",
+      "regionCode": "RU",
+      "geoId": 50,
+      "site": "https://perm.metpromintex.ru/",
+      "sites": [
+        "https://perm.metpromintex.ru/"
+      ],
+      "social": {
+        "telegram": "https://t.me/+79641902026",
+        "whatsapp": "https://wa.me/79641902026"
+      },
+      "emails": [
+        "perm@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (342) 259-20-26"
+      ],
+      "rubrics": [
+        "Цветные металлы",
+        "Чёрная металлургия"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/11457141140/p/edit/",
+      "companyId": "11457141140",
+      "fromCard": true
+    },
+    {
+      "id": "14915550819",
+      "tycoonId": "36346569",
+      "permanentId": "14915550819",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Дальневосточный федеральный округ, Приморский край, Владивостокский городской округ, Владивосток, Дальзаводская улица, 2",
+      "regionCode": "RU",
+      "geoId": 75,
+      "site": "https://vladivostok.metpromintex.ru/",
+      "sites": [
+        "https://vladivostok.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79628298578",
+        "whatsapp": "https://wa.me/79628298578"
+      },
+      "emails": [
+        "vladivostok@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (902) 524-13-38",
+        "+7 (962) 829-85-78",
+        "+7 (423) 254-13-38"
+      ],
+      "rubrics": [
+        "Чёрная металлургия",
+        "Цветные металлы",
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/14915550819/p/edit/",
+      "companyId": "14915550819",
+      "fromCard": true
+    },
+    {
+      "id": "17020848852",
+      "tycoonId": "36377129",
+      "permanentId": "17020848852",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Приволжский федеральный округ, Саратовская область, муниципальное образование Саратов, Саратов, улица имени В.И. Чапаева, 59",
+      "regionCode": "RU",
+      "geoId": 194,
+      "site": "https://saratov.metpromintex.ru/",
+      "sites": [
+        "https://saratov.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79521480493",
+        "whatsapp": "https://wa.me/79521480493"
+      },
+      "emails": [
+        "saratov@metpromintex.ru",
+        "moscow@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (8452) 53-11-57"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/17020848852/p/edit/",
+      "companyId": "17020848852",
+      "fromCard": true
+    },
+    {
+      "id": "18815611671",
+      "tycoonId": "36379027",
+      "permanentId": "18815611671",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "Metpromintex",
+        "МетПромИнтекс"
+      ],
+      "address": "Дальневосточный федеральный округ, Хабаровский край, городской округ Хабаровск, Хабаровск, Краснореченская улица, 94",
+      "regionCode": "RU",
+      "geoId": 76,
+      "site": "https://habarovsk.metpromintex.ru/",
+      "sites": [
+        "https://habarovsk.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79628298578",
+        "whatsapp": "https://wa.me/+79628298578"
+      },
+      "emails": [
+        "khabarovsk@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (4212) 60-30-28"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/18815611671/p/edit/",
+      "companyId": "18815611671",
+      "fromCard": true
+    },
+    {
+      "id": "19001859314",
+      "tycoonId": "36347431",
+      "permanentId": "19001859314",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Приволжский федеральный округ, Удмуртская Республика, городской округ Ижевск, Ижевск, Воткинское шоссе, 168А",
+      "regionCode": "RU",
+      "geoId": 44,
+      "site": "https://izhevsk.metpromintex.ru/",
+      "sites": [
+        "https://izhevsk.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+7(964)+190-20-26",
+        "whatsapp": "https://wa.me/+7(964)+190-20-26"
+      },
+      "emails": [
+        "izhevsk@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (3412) 32-27-95"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/19001859314/p/edit/",
+      "companyId": "19001859314",
+      "fromCard": true
+    },
+    {
+      "id": "22290680107",
+      "tycoonId": "32216989",
+      "permanentId": "22290680107",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "Metpromintex",
+        "МетПромИнтекс"
+      ],
+      "address": "город республиканского подчинения Бишкек, Бишкек, улица Суеркулова, 16",
+      "regionCode": "KG",
+      "geoId": 10309,
+      "site": "",
+      "sites": [],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+996224076737",
+        "whatsapp": "https://wa.me/+996224076737"
+      },
+      "emails": [
+        "info@metpromintex.kg"
+      ],
+      "phones": [
+        "+996 224 07 67 37"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Цветные металлы",
+        "Чёрная металлургия"
+      ],
+      "noAccess": false,
+      "rating": 4.6,
+      "url": "https://yandex.ru/sprav/22290680107/p/edit/",
+      "companyId": "22290680107",
+      "fromCard": true
+    },
+    {
+      "id": "32551844686",
+      "tycoonId": "36347683",
+      "permanentId": "32551844686",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Северо-Западный федеральный округ, Калининградская область, городской округ Калининград, Калининград, Судостроительная улица, 75",
+      "regionCode": "RU",
+      "geoId": 22,
+      "site": "https://kaliningrad.metpromintex.ru/",
+      "sites": [
+        "https://kaliningrad.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/metpromintex"
+      },
+      "emails": [
+        "info@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (495) 729-83-58"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/32551844686/p/edit/",
+      "companyId": "32551844686",
+      "fromCard": true
+    },
+    {
+      "id": "37668240676",
+      "tycoonId": "5695866",
+      "permanentId": "37668240676",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "Метпроминтекс",
+      "names": [
+        "Metpromintex",
+        "Метпроминтекс",
+        "Mpi"
+      ],
+      "address": "Алматы, улица Мукагали Макатаева, 117",
+      "regionCode": "KZ",
+      "geoId": 162,
+      "site": "",
+      "sites": [],
+      "social": {
+        "whatsapp": "https://wa.me/+7+(707)307-38-48",
+        "telegram": "https://t.me/+7+(707)307-38-48",
+        "vkontakte": "https://vk.ru/public217252669"
+      },
+      "emails": [
+        "aktau@metpromintex.kz",
+        "aktobe@metpromintex.kz",
+        "astana@metpromintex.ru",
+        "atyrau@metpromintex.kz",
+        "info@metpromintex.kz"
+      ],
+      "phones": [
+        "+7 (727) 354-08-28"
+      ],
+      "rubrics": [
+        "Чёрная металлургия",
+        "Цветные металлы",
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 4.9,
+      "url": "https://yandex.ru/sprav/37668240676/p/edit/",
+      "companyId": "37668240676",
+      "fromCard": true
+    },
+    {
+      "id": "39431836400",
+      "tycoonId": "45375256",
+      "permanentId": "39431836400",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Костанайская область, городской акимат Костанай, Костанай, Рабочая улица, 162",
+      "regionCode": "KZ",
+      "geoId": 10295,
+      "site": "https://metpromintex-kostanay.kz/",
+      "sites": [
+        "https://metpromintex-kostanay.kz/"
+      ],
+      "social": {
+        "whatsapp": "https://wa.me/+7+(708)+486-28-81",
+        "telegram": "https://t.me/+7+(708)+486-28-81"
+      },
+      "emails": [
+        "kostanaj@metpromintex.kz"
+      ],
+      "phones": [
+        "8 (800) 080-88-85"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/39431836400/p/edit/",
+      "companyId": "39431836400",
+      "fromCard": true
+    },
+    {
+      "id": "44240920366",
+      "tycoonId": "36347620",
+      "permanentId": "44240920366",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Приволжский федеральный округ, Республика Татарстан (Татарстан), городской округ Казань, Казань, улица Мазита Гафури, 71",
+      "regionCode": "RU",
+      "geoId": 43,
+      "site": "https://kazan.metpromintex.ru/",
+      "sites": [
+        "https://kazan.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+7+903-602-40-91",
+        "whatsapp": "https://wa.me/+7903-602-40-91"
+      },
+      "emails": [
+        "kazan@metpromintex.ru",
+        "moscow@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (843) 216-39-54"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/44240920366/p/edit/",
+      "companyId": "44240920366",
+      "fromCard": true
+    },
+    {
+      "id": "53213490561",
+      "tycoonId": "36377146",
+      "permanentId": "53213490561",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Северо-Кавказский федеральный округ, Ставропольский край, городской округ Ставрополь, Ставрополь, улица Голенева, 21",
+      "regionCode": "RU",
+      "geoId": 36,
+      "site": "https://stavropol.metpromintex.ru/",
+      "sites": [
+        "https://stavropol.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79034116458",
+        "whatsapp": "https://wa.me/+79034116458"
+      },
+      "emails": [
+        "saratov@metpromintex.ru",
+        "stavropol@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (8652) 69-31-88",
+        "+7 (906) 479-31-88"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/53213490561/p/edit/",
+      "companyId": "53213490561",
+      "fromCard": true
+    },
+    {
+      "id": "54663899184",
+      "tycoonId": "36348810",
+      "permanentId": "54663899184",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Павлодарская область, городской акимат Павлодар, Павлодар, улица Камзина, 39",
+      "regionCode": "KZ",
+      "geoId": 190,
+      "site": "https://metpromintex-pavlodar.kz/",
+      "sites": [
+        "https://metpromintex-pavlodar.kz/"
+      ],
+      "social": {
+        "whatsapp": "https://wa.me/+7+(708)+486-28-81",
+        "telegram": "https://t.me/+7+(708)+486-28-81",
+        "vkontakte": "https://vk.ru/public217252669"
+      },
+      "emails": [
+        "astana@metpromintex.ru",
+        "barnaul@metpromintex.ru",
+        "chelyabinsk@metpromintex.ru",
+        "ekaterinburg@metpromintex.ru",
+        "info@metpromintex.ru",
+        "irkutsk@metpromintex.ru",
+        "pavlodar@metpromintex.kz"
+      ],
+      "phones": [
+        "8 (800) 080-88-85"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/54663899184/p/edit/",
+      "companyId": "54663899184",
+      "fromCard": true
+    },
+    {
+      "id": "63116183185",
+      "tycoonId": "36377205",
+      "permanentId": "63116183185",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Уральский федеральный округ, Тюменская область, Ханты-Мансийский автономный округ — Югра, городской округ Сургут, Сургут, Индустриальная улица, 38",
+      "regionCode": "RU",
+      "geoId": 973,
+      "site": "https://surgut.metpromintex.ru/",
+      "sites": [
+        "https://surgut.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79521480493",
+        "whatsapp": "https://wa.me/+79521480493"
+      },
+      "emails": [
+        "surgut@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (3462) 71-89-88"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/63116183185/p/edit/",
+      "companyId": "63116183185",
+      "fromCard": true
+    },
+    {
+      "id": "66977463270",
+      "tycoonId": "32101862",
+      "permanentId": "66977463270",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Южный федеральный округ, Краснодарский край, городской округ Сочи, Сочи, Донская улица, 10",
+      "regionCode": "RU",
+      "geoId": 239,
+      "site": "https://sochi.metpromintex.ru/",
+      "sites": [
+        "https://sochi.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79521480493",
+        "whatsapp": "https://wa.me/+79521480493"
+      },
+      "emails": [
+        "info@metpromintex.ru"
+      ],
+      "phones": [
+        "8 (800) 700-08-06"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.4,
+      "url": "https://yandex.ru/sprav/66977463270/p/edit/",
+      "companyId": "66977463270",
+      "fromCard": true
+    },
+    {
+      "id": "69155052413",
+      "tycoonId": "36377290",
+      "permanentId": "69155052413",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Уральский федеральный округ, Тюменская область, городской округ Тюмень, Тюмень, улица Мельникайте, 112, стр. 3",
+      "regionCode": "RU",
+      "geoId": 55,
+      "site": "https://tumen.metpromintex.ru/",
+      "sites": [
+        "https://tumen.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79634523251",
+        "whatsapp": "https://wa.me/+79634523251"
+      },
+      "emails": [
+        "tyumen@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (3452) 53-32-51"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/69155052413/p/edit/",
+      "companyId": "69155052413",
+      "fromCard": true
+    },
+    {
+      "id": "80678098651",
+      "tycoonId": "36348510",
+      "permanentId": "80678098651",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Южный федеральный округ, Краснодарский край, муниципальное образование Новороссийск, Новороссийск, улица Луначарского, 21",
+      "regionCode": "RU",
+      "geoId": 970,
+      "site": "https://novorossiysk.metpromintex.ru/",
+      "sites": [
+        "https://novorossiysk.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+7952-148-04-93",
+        "whatsapp": "https://wa.me/+7952-148-04-93"
+      },
+      "emails": [
+        "info@metpromintex.ru"
+      ],
+      "phones": [
+        "8 (800) 700-08-06"
+      ],
+      "rubrics": [
+        "Цветные металлы",
+        "Чёрная металлургия",
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/80678098651/p/edit/",
+      "companyId": "80678098651",
+      "fromCard": true
+    },
+    {
+      "id": "99042513897",
+      "tycoonId": "29933441",
+      "permanentId": "99042513897",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "Метпроминтекс",
+      "names": [
+        "Metpromintex",
+        "Метпроминтекс"
+      ],
+      "address": "Сибирский федеральный округ, Омская область, городской округ Омск, Омск, проспект Губкина, 9",
+      "regionCode": "RU",
+      "geoId": 66,
+      "site": "https://omsk.metpromintex.ru/",
+      "sites": [
+        "https://omsk.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79628298578",
+        "whatsapp": "https://wa.me/79628298578"
+      },
+      "emails": [
+        "omsk@metpromintex.ru",
+        "moscow@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (3812) 63-38-09"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.7,
+      "url": "https://yandex.ru/sprav/99042513897/p/edit/",
+      "companyId": "99042513897",
+      "fromCard": true
+    },
+    {
+      "id": "100468945922",
+      "tycoonId": "45208907",
+      "permanentId": "100468945922",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "MetPromIntex",
+        "МетПромИнтекс",
+        "МПИ"
+      ],
+      "address": "Баку, проспект Ходжалы, 37",
+      "regionCode": "AZ",
+      "geoId": 10253,
+      "site": "https://metpromintex.az/",
+      "sites": [
+        "https://metpromintex.az/"
+      ],
+      "social": {
+        "telegram": "https://t.me/+994+51+895+96+88",
+        "whatsapp": "https://wa.me/+994+51+895+96+88"
+      },
+      "emails": [
+        "baku@metpromintex.az"
+      ],
+      "phones": [
+        "+994 51 895 96 88"
+      ],
+      "rubrics": [
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/100468945922/p/edit/",
+      "companyId": "100468945922",
+      "fromCard": true
+    },
+    {
+      "id": "100812834531",
+      "tycoonId": "36348763",
+      "permanentId": "100812834531",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Приволжский федеральный округ, Оренбургская область, городской округ Оренбург, Оренбург, улица Терешковой, 263/2",
+      "regionCode": "RU",
+      "geoId": 48,
+      "site": "https://orenburg.metpromintex.ru/",
+      "sites": [
+        "https://orenburg.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+7952-148-04-93",
+        "whatsapp": "https://wa.me/+7952-148-04-93"
+      },
+      "emails": [
+        "orenburg@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (3532) 20-16-65",
+        "+7 (903) 360-16-65"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/100812834531/p/edit/",
+      "companyId": "100812834531",
+      "fromCard": true
+    },
+    {
+      "id": "101290914440",
+      "tycoonId": "31938682",
+      "permanentId": "101290914440",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Центральный федеральный округ, Воронежская область, городской округ Воронеж, Воронеж, Пограничная улица, 2А",
+      "regionCode": "RU",
+      "geoId": 193,
+      "site": "https://voronezh.metpromintex.ru/",
+      "sites": [
+        "https://voronezh.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+7952-148-04-93",
+        "whatsapp": "https://wa.me/+7952-148-04-93"
+      },
+      "emails": [
+        "voronezh@metpromintex.ru",
+        "moscow@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (903) 651-66-80",
+        "+7 (473) 251-66-80"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.7,
+      "url": "https://yandex.ru/sprav/101290914440/p/edit/",
+      "companyId": "101290914440",
+      "fromCard": true
+    },
+    {
+      "id": "105566351638",
+      "tycoonId": "36379205",
+      "permanentId": "105566351638",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Приволжский федеральный округ, Чувашская Республика — Чувашия, городской округ Чебоксары, Чебоксары, Эгерский бульвар, 6",
+      "regionCode": "RU",
+      "geoId": 45,
+      "site": "https://cheboksary.metpromintex.ru/",
+      "sites": [
+        "https://cheboksary.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79521480493",
+        "whatsapp": "https://wa.me/+79521480493"
+      },
+      "emails": [
+        "info@metpromintex.ru"
+      ],
+      "phones": [
+        "8 (800) 700-08-06"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/105566351638/p/edit/",
+      "companyId": "105566351638",
+      "fromCard": true
+    },
+    {
+      "id": "115354684625",
+      "tycoonId": "45209743",
+      "permanentId": "115354684625",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Минск, проспект Независимости, 173",
+      "regionCode": "BY",
+      "geoId": 157,
+      "site": "https://metpromintex.by/",
+      "sites": [
+        "https://metpromintex.by/"
+      ],
+      "social": {
+        "telegram": "https://t.me/+375296669780",
+        "whatsapp": "https://wa.me/+375296669780"
+      },
+      "emails": [
+        "minsk@metpromintex.ru"
+      ],
+      "phones": [
+        "+375 29 666-97-80"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Цветные металлы",
+        "Чёрная металлургия"
+      ],
+      "noAccess": false,
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/115354684625/p/edit/",
+      "companyId": "115354684625",
+      "fromCard": true
+    },
+    {
+      "id": "120135683005",
+      "tycoonId": "45511229",
+      "permanentId": "120135683005",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Западно-Казахстанская область, Теректинский район, Акжаикский сельский округ, село Абай",
+      "regionCode": "KZ",
+      "geoId": 212705,
+      "site": "https://metpromintex-uralsk.kz/",
+      "sites": [
+        "https://metpromintex-uralsk.kz/"
+      ],
+      "social": {},
+      "emails": [
+        "uralsk@metpromintex.kz"
+      ],
+      "phones": [
+        "8 (800) 080-88-85",
+        "+7 (708) 486-28-81"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Цветные металлы",
+        "Чёрная металлургия"
+      ],
+      "noAccess": false,
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/120135683005/p/edit/",
+      "companyId": "120135683005",
+      "fromCard": true
+    },
+    {
+      "id": "123915935454",
+      "tycoonId": "36347514",
+      "permanentId": "123915935454",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "Метпроминтекс",
+      "names": [
+        "Метпроминтекс"
+      ],
+      "address": "Сибирский федеральный округ, Иркутская область, муниципальное образование Иркутск, Иркутск, Норильская улица, 2",
+      "regionCode": "RU",
+      "geoId": 63,
+      "site": "https://irkutsk.metpromintex.ru/",
+      "sites": [
+        "https://irkutsk.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79628298578",
+        "whatsapp": "https://wa.me/79628298578"
+      },
+      "emails": [
+        "irkutsk@metpromintex.ru",
+        "moscow@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (3952) 57-93-86"
+      ],
+      "rubrics": [
+        "Чёрная металлургия",
+        "Цветные металлы",
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 4.4,
+      "url": "https://yandex.ru/sprav/123915935454/p/edit/",
+      "companyId": "123915935454",
+      "fromCard": true
+    },
+    {
+      "id": "124286843199",
+      "tycoonId": "28614029",
+      "permanentId": "124286843199",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "Метпроминтекс",
+      "names": [
+        "Metpromintex",
+        "Метпроминтекс",
+        "Mpi",
+        "Мпи"
+      ],
+      "address": "Сибирский федеральный округ, Алтайский край, городской округ Барнаул, Барнаул, Взлётная улица, 71",
+      "regionCode": "RU",
+      "geoId": 197,
+      "site": "https://barnaul.metpromintex.ru/",
+      "sites": [
+        "https://barnaul.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79628298578",
+        "whatsapp": "https://wa.me/+79628298578"
+      },
+      "emails": [
+        "barnaul@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (3852) 25-13-69"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/124286843199/p/edit/",
+      "companyId": "124286843199",
+      "fromCard": true
+    },
+    {
+      "id": "125395344546",
+      "tycoonId": "28608797",
+      "permanentId": "125395344546",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "Метпроминтекс",
+      "names": [
+        "Metpromintex",
+        "Метпроминтекс",
+        "Mpi",
+        "МПИ"
+      ],
+      "address": "Приволжский федеральный округ, Нижегородская область, городской округ Нижний Новгород, Нижний Новгород, Керченская улица, 9",
+      "regionCode": "RU",
+      "geoId": 47,
+      "site": "https://nn.metpromintex.ru/",
+      "sites": [
+        "https://nn.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+7+903-602-40-91",
+        "whatsapp": "https://wa.me/+7+903-602-40-91"
+      },
+      "emails": [
+        "nn@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (831) 414-40-91"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.7,
+      "url": "https://yandex.ru/sprav/125395344546/p/edit/",
+      "companyId": "125395344546",
+      "fromCard": true
+    },
+    {
+      "id": "132025289983",
+      "tycoonId": "36377357",
+      "permanentId": "132025289983",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Приволжский федеральный округ, Ульяновская область, городской округ Ульяновск, Ульяновск, Промышленная улица, 59А",
+      "regionCode": "RU",
+      "geoId": 195,
+      "site": "https://ulyanovsk.metpromintex.ru/",
+      "sites": [
+        "https://ulyanovsk.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79036024091",
+        "whatsapp": "https://wa.me/+79036024091"
+      },
+      "emails": [
+        "ulyanovsk@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (905) 349-16-08",
+        "+7 (8422) 73-16-08"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/132025289983/p/edit/",
+      "companyId": "132025289983",
+      "fromCard": true
+    },
+    {
+      "id": "134626991081",
+      "tycoonId": "32258740",
+      "permanentId": "134626991081",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "Metpromintex",
+        "МетПромИнтекс",
+        "МПИ"
+      ],
+      "address": "Ташкент, улица Шота Руставели, 101",
+      "regionCode": "UZ",
+      "geoId": 10335,
+      "site": "http://metpromintex.uz/",
+      "sites": [
+        "http://metpromintex.uz/"
+      ],
+      "social": {
+        "telegram": "https://t.me/metpromintex",
+        "whatsapp": "https://wa.me/+7+998-90-005-00-98"
+      },
+      "emails": [
+        "info@metpromintex.uz"
+      ],
+      "phones": [
+        "+998 90 005 00 98"
+      ],
+      "rubrics": [
+        "Цветные металлы",
+        "Чёрная металлургия",
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/134626991081/p/edit/",
+      "companyId": "134626991081",
+      "fromCard": true
+    },
+    {
+      "id": "147052672676",
+      "tycoonId": "36377106",
+      "permanentId": "147052672676",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Центральный федеральный округ, Рязанская область, городской округ Рязань, Рязань, Ситниковская улица, 69А",
+      "regionCode": "RU",
+      "geoId": 11,
+      "site": "https://ryazan.metpromintex.ru/",
+      "sites": [
+        "https://ryazan.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+7952-148-04-93",
+        "whatsapp": "https://wa.me/+7952-148-04-93"
+      },
+      "emails": [
+        "ryazan@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (4912) 99-07-17"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/147052672676/p/edit/",
+      "companyId": "147052672676",
+      "fromCard": true
+    },
+    {
+      "id": "152968553063",
+      "tycoonId": "36346827",
+      "permanentId": "152968553063",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Южный федеральный округ, Волгоградская область, городской округ Волгоград, Волгоград, Университетский проспект, 64",
+      "regionCode": "RU",
+      "geoId": 38,
+      "site": "https://volgograd.metpromintex.ru/",
+      "sites": [
+        "https://volgograd.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/metpromintex"
+      },
+      "emails": [
+        "volgograd@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (8442) 60-57-71"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.4,
+      "url": "https://yandex.ru/sprav/152968553063/p/edit/",
+      "companyId": "152968553063",
+      "fromCard": true
+    },
+    {
+      "id": "154312758780",
+      "tycoonId": "45510949",
+      "permanentId": "154312758780",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "Metpromintex",
+        "МетПромИнтекс"
+      ],
+      "address": "область Абай, городская администрация Семей, Семей, улица Кабанбай батыра, 53",
+      "regionCode": "KZ",
+      "geoId": 165,
+      "site": "https://metpromintex-semei.kz/",
+      "sites": [
+        "https://metpromintex-semei.kz/"
+      ],
+      "social": {
+        "whatsapp": "https://wa.me/+7+(708)486-28-81",
+        "telegram": "https://t.me/+7+(708)486-28-81"
+      },
+      "emails": [
+        "semei@metpromintex.kz"
+      ],
+      "phones": [
+        "8 (800) 080-88-85"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Кровельные работы",
+        "Чёрная металлургия"
+      ],
+      "noAccess": false,
+      "rating": 4.7,
+      "url": "https://yandex.ru/sprav/154312758780/p/edit/",
+      "companyId": "154312758780",
+      "fromCard": true
+    },
+    {
+      "id": "171754043558",
+      "tycoonId": "28479465",
+      "permanentId": "171754043558",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "Метпромитнекс",
+      "names": [
+        "Metpromintex",
+        "Метпромитнекс",
+        "Mpi",
+        "МПИ"
+      ],
+      "address": "Сибирский федеральный округ, Красноярский край, городской округ Красноярск, Красноярск, микрорайон Зелёная Роща, Джамбульская улица, 4",
+      "regionCode": "RU",
+      "geoId": 62,
+      "site": "https://krasnoyarsk.metpromintex.ru/",
+      "sites": [
+        "https://krasnoyarsk.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79628298578"
+      },
+      "emails": [
+        "krasnoyarsk@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (965) 517-86-77",
+        "+7 (391) 271-75-47"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Цветные металлы",
+        "Металлоконструкции"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/171754043558/p/edit/",
+      "companyId": "171754043558",
+      "fromCard": true
+    },
+    {
+      "id": "178428228288",
+      "tycoonId": "45307144",
+      "permanentId": "178428228288",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс",
+        "МПИ"
+      ],
+      "address": "Мангистауская область, городской акимат Актау, Актау, Промышленная зона № 1, 33/3",
+      "regionCode": "KZ",
+      "geoId": 29575,
+      "site": "https://metpromintex-aktau.kz/",
+      "sites": [
+        "https://metpromintex-aktau.kz/"
+      ],
+      "social": {
+        "whatsapp": "https://wa.me/+7(708)486-28-81",
+        "telegram": "https://t.me/+7(708)486-28-81"
+      },
+      "emails": [
+        "aktau@metpromintex.kz"
+      ],
+      "phones": [
+        "8 (800) 080-88-85"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.7,
+      "url": "https://yandex.ru/sprav/178428228288/p/edit/",
+      "companyId": "178428228288",
+      "fromCard": true
+    },
+    {
+      "id": "178830091875",
+      "tycoonId": "36377220",
+      "permanentId": "178830091875",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Сибирский федеральный округ, Томская область, городской округ Томск, Томск, микрорайон Черемошники, переулок Добролюбова, 10, стр. 3",
+      "regionCode": "RU",
+      "geoId": 67,
+      "site": "https://tomsk.metpromintex.ru/",
+      "sites": [
+        "https://tomsk.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79628298578",
+        "whatsapp": "https://wa.me/+79628298578"
+      },
+      "emails": [
+        "tomsk@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (3822) 22-62-31"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/178830091875/p/edit/",
+      "companyId": "178830091875",
+      "fromCard": true
+    },
+    {
+      "id": "184438240545",
+      "tycoonId": "36415670",
+      "permanentId": "184438240545",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Приволжский федеральный округ, Республика Татарстан (Татарстан), городской округ Набережные Челны, Набережные Челны, Мензелинский тракт, 14",
+      "regionCode": "RU",
+      "geoId": 236,
+      "site": "https://chelny.metpromintex.ru/",
+      "sites": [
+        "https://chelny.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+7+952-148-04-93",
+        "whatsapp": "https://wa.me/+7+952-148-04-93"
+      },
+      "emails": [
+        "info@metpromintex.ru"
+      ],
+      "phones": [
+        "8 (800) 700-08-06"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/184438240545/p/edit/",
+      "companyId": "184438240545",
+      "fromCard": true
+    },
+    {
+      "id": "194483940056",
+      "tycoonId": "45510922",
+      "permanentId": "194483940056",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "MetPromIntex",
+        "МетПромИнтекс",
+        "МПИ"
+      ],
+      "address": "Кызылординская область, городской акимат Кызылорда, Кызылорда, улица Жаппасбай батыра, 40",
+      "regionCode": "KZ",
+      "geoId": 21050,
+      "site": "https://metpromintex-kyzylorda.kz/",
+      "sites": [
+        "https://metpromintex-kyzylorda.kz/"
+      ],
+      "social": {},
+      "emails": [
+        "kyzylorda@metpromintex.kz"
+      ],
+      "phones": [
+        "8 (800) 080-88-85",
+        "+7 (708) 486-28-81",
+        "+7 (725) 022-42-10"
+      ],
+      "rubrics": [
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/194483940056/p/edit/",
+      "companyId": "194483940056",
+      "fromCard": true
+    },
+    {
+      "id": "197839128384",
+      "tycoonId": "36347808",
+      "permanentId": "197839128384",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Сибирский федеральный округ, Кемеровская область - Кузбасс, Кемеровский городской округ, Кемерово, Советский проспект, 2/14",
+      "regionCode": "RU",
+      "geoId": 64,
+      "site": "https://kemerovo.metpromintex.ru/",
+      "sites": [
+        "https://kemerovo.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+7962-829-85-78",
+        "whatsapp": "https://wa.me/+7962-829-85-78"
+      },
+      "emails": [
+        "kemerovo@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (3842) 24-02-56"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.6,
+      "url": "https://yandex.ru/sprav/197839128384/p/edit/",
+      "companyId": "197839128384",
+      "fromCard": true
+    },
+    {
+      "id": "199944128836",
+      "tycoonId": "36347902",
+      "permanentId": "199944128836",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Приволжский федеральный округ, Кировская область, муниципальное образование Киров, Киров, Октябрьский проспект, 18",
+      "regionCode": "RU",
+      "geoId": 46,
+      "site": "https://kirov.metpromintex.ru/",
+      "sites": [
+        "https://kirov.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+7952+148+04+93",
+        "whatsapp": "https://wa.me/+7952+148+04+93"
+      },
+      "emails": [
+        "kirov@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (8332) 20-68-86"
+      ],
+      "rubrics": [
+        "Цветные металлы",
+        "Чёрная металлургия",
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/199944128836/p/edit/",
+      "companyId": "199944128836",
+      "fromCard": true
+    },
+    {
+      "id": "56644785259",
+      "tycoonId": "45511245",
+      "permanentId": "56644785259",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Восточно-Казахстанская область, городской акимат Усть-Каменогорск, Усть-Каменогорск, проспект Нурсултана Назарбаева, 341/1",
+      "regionCode": "KZ",
+      "geoId": 10306,
+      "site": "https://metpromintex-ust-kamenogorsk.kz/",
+      "sites": [
+        "https://metpromintex-ust-kamenogorsk.kz/"
+      ],
+      "social": {},
+      "emails": [
+        "ust-kamenogorsk@metpromintex.kz"
+      ],
+      "phones": [
+        "8 (800) 080-88-85",
+        "+7 (708) 486-28-81"
+      ],
+      "rubrics": [
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/56644785259/p/edit/",
+      "companyId": "56644785259",
+      "fromCard": true
+    },
+    {
+      "id": "86874149923",
+      "tycoonId": "45511216",
+      "permanentId": "86874149923",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Жамбылская область, городской акимат Тараз, Тараз, проспект Жамбыла, 75Б",
+      "regionCode": "KZ",
+      "geoId": 21094,
+      "site": "https://metpromintex-taraz.kz/",
+      "sites": [
+        "https://metpromintex-taraz.kz/"
+      ],
+      "social": {},
+      "emails": [
+        "taraz@metpromintex.kz"
+      ],
+      "phones": [
+        "8 (800) 080-88-85",
+        "+7 (708) 486-28-81"
+      ],
+      "rubrics": [
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/86874149923/p/edit/",
+      "companyId": "86874149923",
+      "fromCard": true
+    },
+    {
+      "id": "200618379073",
+      "tycoonId": "36377420",
+      "permanentId": "200618379073",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Приволжский федеральный округ, Республика Башкортостан, городской округ Уфа, Уфа, Трамвайная улица, 4А",
+      "regionCode": "RU",
+      "geoId": 172,
+      "site": "https://ufa.metpromintex.ru/",
+      "sites": [
+        "https://ufa.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79521480493",
+        "whatsapp": "https://wa.me/79521480493"
+      },
+      "emails": [
+        "ufa@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (347) 299-64-47"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.4,
+      "url": "https://yandex.ru/sprav/200618379073/p/edit/",
+      "companyId": "200618379073",
+      "fromCard": true
+    },
+    {
+      "id": "203880344000",
+      "tycoonId": "5695865",
+      "permanentId": "203880344000",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "Метпроминтекс",
+      "names": [
+        "Metpromintex",
+        "МетПромИнтекс",
+        "Метпроминтекс"
+      ],
+      "address": "город республиканского значения Астана, Астана, улица Александра Пушкина, 56",
+      "regionCode": "KZ",
+      "geoId": 163,
+      "site": "https://metpromintex-astana.kz/",
+      "sites": [
+        "https://metpromintex-astana.kz/"
+      ],
+      "social": {
+        "whatsapp": "https://wa.me/7+(708)+486-28-81",
+        "telegram": "https://t.me/+7+(708)+486-28-81",
+        "vkontakte": "https://vk.ru/public217252669"
+      },
+      "emails": [
+        "astana@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (7172) 62-76-38"
+      ],
+      "rubrics": [
+        "Чёрная металлургия",
+        "Цветные металлы",
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/203880344000/p/edit/",
+      "companyId": "203880344000",
+      "fromCard": true
+    },
+    {
+      "id": "218013586325",
+      "tycoonId": "45375225",
+      "permanentId": "218013586325",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Актюбинская область, городской акимат Актобе, Актобе, проспект 312-й Стрелковой Дивизии, 38",
+      "regionCode": "KZ",
+      "geoId": 20273,
+      "site": "https://metpromintex-aktobe.kz/",
+      "sites": [
+        "https://metpromintex-aktobe.kz/"
+      ],
+      "social": {
+        "whatsapp": "https://wa.me/+7+(708)+486-28-81",
+        "telegram": "https://t.me/+7+(708)+486-28-81"
+      },
+      "emails": [
+        "aktobe@metpromintex.kz"
+      ],
+      "phones": [
+        "8 (800) 080-88-85"
+      ],
+      "rubrics": [
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/218013586325/p/edit/",
+      "companyId": "218013586325",
+      "fromCard": true
+    },
+    {
+      "id": "219161630357",
+      "tycoonId": "45375246",
+      "permanentId": "219161630357",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Карагандинская область, городской акимат Караганда, Караганда, проспект Бухар Жырау, 86/5",
+      "regionCode": "KZ",
+      "geoId": 164,
+      "site": "https://metpromintex-karaganda.kz/",
+      "sites": [
+        "https://metpromintex-karaganda.kz/"
+      ],
+      "social": {
+        "whatsapp": "https://wa.me/77084862881",
+        "telegram": "https://t.me/+77084862881"
+      },
+      "emails": [
+        "karaganda@metpromintex.kz"
+      ],
+      "phones": [
+        "8 (800) 080-88-85",
+        "+7 (965) 517-86-77"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/219161630357/p/edit/",
+      "companyId": "219161630357",
+      "fromCard": true
+    },
+    {
+      "id": "220951297138",
+      "tycoonId": "36379476",
+      "permanentId": "220951297138",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "Metpromintex",
+        "МетПромИнтекс"
+      ],
+      "address": "Шымкент, улица Байтулы баба, 18",
+      "regionCode": "KZ",
+      "geoId": 221,
+      "site": "https://metpromintex-shymkent.kz/",
+      "sites": [
+        "https://metpromintex-shymkent.kz/"
+      ],
+      "social": {
+        "whatsapp": "https://wa.me/+7+(707)+307-38-48",
+        "telegram": "https://t.me/+7+(707)+307-38-48",
+        "vkontakte": "https://vk.ru/public217252669"
+      },
+      "emails": [
+        "shymkent@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (7252) 61-21-28"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.9,
+      "url": "https://yandex.ru/sprav/220951297138/p/edit/",
+      "companyId": "220951297138",
+      "fromCard": true
+    },
+    {
+      "id": "221193047030",
+      "tycoonId": "36377250",
+      "permanentId": "221193047030",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Центральный федеральный округ, Тульская область, муниципальное образование Тула, Тула, Пушкинская улица, 14",
+      "regionCode": "RU",
+      "geoId": 15,
+      "site": "https://tula.metpromintex.ru/",
+      "sites": [
+        "https://tula.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79521480493",
+        "whatsapp": "https://wa.me/+79521480493"
+      },
+      "emails": [
+        "tula@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (4872) 71-68-38",
+        "+7 (967) 431-68-38"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 4.3,
+      "url": "https://yandex.ru/sprav/221193047030/p/edit/",
+      "companyId": "221193047030",
+      "fromCard": true
+    },
+    {
+      "id": "230218067121",
+      "tycoonId": "36348363",
+      "permanentId": "230218067121",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Сибирский федеральный округ, Кемеровская область - Кузбасс, Новокузнецкий городской округ, Новокузнецк, проспект Строителей, 7",
+      "regionCode": "RU",
+      "geoId": 237,
+      "site": "https://novokuznetsk.metpromintex.ru/",
+      "sites": [
+        "https://novokuznetsk.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+7962-829-85-78",
+        "whatsapp": "https://wa.me/+7962-829-85-78"
+      },
+      "emails": [
+        "novokuznetsk@metpromintex.ru",
+        "moscow@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (3843) 20-99-84"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/230218067121/p/edit/",
+      "companyId": "230218067121",
+      "fromCard": true
+    },
+    {
+      "id": "237222413555",
+      "tycoonId": "36379591",
+      "permanentId": "237222413555",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Центральный федеральный округ, Ярославская область, городской округ Ярославль, Ярославль, проспект Октября, 91А",
+      "regionCode": "RU",
+      "geoId": 16,
+      "site": "https://yaroslavl.metpromintex.ru/",
+      "sites": [
+        "https://yaroslavl.metpromintex.ru/"
+      ],
+      "social": {
+        "vkontakte": "https://vk.ru/public217252669",
+        "telegram": "https://t.me/+79521480493",
+        "whatsapp": "https://wa.me/+79521480493"
+      },
+      "emails": [
+        "yaroslavl@metpromintex.ru"
+      ],
+      "phones": [
+        "+7 (4852) 66-25-09"
+      ],
+      "rubrics": [
+        "Металлопрокат",
+        "Чёрная металлургия",
+        "Цветные металлы"
+      ],
+      "noAccess": false,
+      "rating": 0,
+      "url": "https://yandex.ru/sprav/237222413555/p/edit/",
+      "companyId": "237222413555",
+      "fromCard": true
+    },
+    {
+      "id": "239295588745",
+      "tycoonId": "45510939",
+      "permanentId": "239295588745",
+      "type": "ordinal",
+      "publishing": "publish",
+      "name": "МетПромИнтекс",
+      "names": [
+        "МетПромИнтекс"
+      ],
+      "address": "Северо-Казахстанская область, городской акимат Петропавловск, Петропавловск, улица Габита Мусрепова, 34/В",
+      "regionCode": "KZ",
+      "geoId": 10298,
+      "site": "https://metpromintex-petropavlovsk.kz/",
+      "sites": [
+        "https://metpromintex-petropavlovsk.kz/"
+      ],
+      "social": {
+        "whatsapp": "https://wa.me/+7(708)486-28-81",
+        "telegram": "https://t.me/+7(708)486-28-81"
+      },
+      "emails": [
+        "petropavlovsk@metpromintex.kz"
+      ],
+      "phones": [
+        "8 (800) 080-88-85"
+      ],
+      "rubrics": [
+        "Металлопрокат"
+      ],
+      "noAccess": false,
+      "rating": 4.8,
+      "url": "https://yandex.ru/sprav/239295588745/p/edit/",
+      "companyId": "239295588745",
+      "fromCard": true
+    }
+  ]
+}

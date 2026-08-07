@@ -2922,7 +2922,10 @@ def _kp_sheet_settings_block(project_id: str, config: dict) -> None:
     default = saved_title if saved_title in titles else (
         prefer if prefer in titles else kp_sheet.guess_sheet(titles, prefer))
 
-    c1, c2 = st.columns([3, 1])
+    # bottom – чтобы кнопка встала вровень с самим полем выбора, а не с его
+    # подписью: у селектбокса сверху есть заголовок, у кнопки его нет, и без
+    # выравнивания она висела выше поля.
+    c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
     title = c1.selectbox("Лист таблицы", titles,
                          index=titles.index(default) if default in titles else 0,
                          key=f"kp-title-{project_id}")
@@ -2972,22 +2975,19 @@ def _kp_sheet_settings_block(project_id: str, config: dict) -> None:
 def tab_cities(project_id: str, config: dict) -> None:
     html('<div class="card-title">Страны и города проекта</div>')
 
-    # Сколько всего городов и откуда они берутся. Блок загрузки из КП переехал
-    # в «Настройки», к самой ссылке на таблицу и выбору листа: держать выбор
-    # листа в одном месте, а кнопку «загрузить» в другом было неоткуда понять.
+    # Сколько всего городов и где обновляется список. Блок загрузки из КП
+    # переехал в «Настройки», к самой ссылке на таблицу и выбору листа:
+    # держать выбор листа в одном месте, а кнопку «загрузить» в другом было
+    # неоткуда понять.
     total = sum(len(c.get("cities") or []) for c in config.get("countries") or [])
     countries = len(config.get("countries") or [])
-    synced = local_time(config.get("kpSyncedAt"))
     if total:
         st.caption(f"Всего {cities_word(total)} в "
-                   f"{plural(countries, 'стране', 'странах', 'странах')}"
-                   + (f" · загружено из КП {synced}" if synced else "")
-                   + " · обновить список: «⚙️ Настройки» → «Источник городов – Google-таблица КП».")
+                   f"{plural(countries, 'стране', 'странах', 'странах')}. "
+                   "Для обновления списка перейдите в «Настройки» → «Источник городов»")
     else:
-        st.info("Городов пока нет. Список загружается из таблицы КП: "
-                "«⚙️ Настройки» → «Источник городов – Google-таблица КП».")
-    st.caption("Ссылка города – адрес карточки Яндекс.Бизнеса. Подойдёт любой вид "
-               "(/edit/, /edit/photos/, /p/edit/posts/) – Click сам приведёт его к разделу «Посты».")
+        st.info("Городов пока нет. Для обновления списка перейдите в "
+                "«Настройки» → «Источник городов»")
 
     with st.expander("➕ Добавить страну"):
         c1, c2 = st.columns([3, 1])

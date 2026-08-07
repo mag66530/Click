@@ -2865,54 +2865,6 @@ def tab_actualize(project_id: str, config: dict) -> None:
 #  РАЗДЕЛ: ГОРОДА
 # ════════════════════════════════════════════════════════════════════
 
-def _cities_source_block(project_id: str, config: dict) -> None:
-    """
-    Загрузка городов из Google-таблицы КП. В облаке файловая система временная,
-    поэтому набитый руками список пропадает при перезапуске; таблица живёт
-    снаружи и подтягивается обратно.
-
-    Сама ссылка и выбор листа настраиваются в «⚙️ Настройки» – одним местом
-    на оба потребителя (эта вкладка и «Сверка»), чтобы они не расходились.
-    """
-    saved_url = (config.get("kpSheetUrl") or "").strip()
-    effective = kp_sheet.sheet_url(project_id, saved_url)
-    has_key = kp_sheet.service_account_info() is not None
-
-    with st.expander("📊 Загрузка городов из КП", expanded=not config["countries"]):
-        if not effective or not has_key:
-            st.info("Источник городов не настроен. Ссылка на таблицу и лист задаются "
-                    "во вкладке «⚙️ Настройки» → «Источник городов – Google-таблица КП».")
-            return
-
-        saved_title = (config.get("kpSheetTitle") or "").strip()
-        st.caption(f"Таблица: {effective}" + (f" · лист «{saved_title}»" if saved_title
-                   else " · лист подберётся сам при первой загрузке"))
-
-        c1, c2 = st.columns([2, 3])
-        if c1.button("⬇️ Загрузить города из таблицы", type="primary",
-                     key=f"kp-pull-{project_id}", use_container_width=True):
-            try:
-                with st.spinner("Читаю таблицу КП…"):
-                    ok, note = kp_pull(project_id, config)
-            except Exception as e:  # noqa: BLE001
-                ok, note = False, str(e)
-            if not ok:
-                st.error(note)
-                return
-            st.success(note)
-            time.sleep(1.2)
-            st.rerun()
-
-        synced = local_time(config.get("kpSyncedAt"))
-        c2.caption(f"Последняя загрузка: {synced}" if synced else
-                   "Города из таблицы ещё не загружались.")
-        st.caption(f"Загружается само: если с последней загрузки прошло больше "
-                   f"{KP_SYNC_TTL_HOURS} часов, Click перечитает таблицу при открытии проекта. "
-                   "Кнопка – когда нужно прямо сейчас.")
-        st.caption("Загрузка ЗАМЕНЯЕТ список стран и городов данными из таблицы. "
-                   "Карточки со статусом «Удалена» не попадают.")
-
-
 def _kp_sheet_settings_block(project_id: str, config: dict) -> None:
     """
     Источник городов – ссылка на таблицу КП и явный выбор листа.
@@ -2987,10 +2939,53 @@ def _kp_sheet_settings_block(project_id: str, config: dict) -> None:
                    "работа, и при необходимости выберите другой.")
     st.caption("Этот лист читают и «Города», и «Сверка» – выбор общий на весь проект.")
 
+    # Загрузка живёт здесь же, рядом с выбором таблицы и листа: раньше кнопка
+    # стояла на «Городах», и человек, сменив лист в настройках, не понимал,
+    # куда идти, чтобы список перечитался.
+    st.divider()
+    c1, c2 = st.columns([2, 3])
+    if c1.button("⬇️ Загрузить города из таблицы", type="primary",
+                 key=f"kp-pull-{project_id}", use_container_width=True):
+        try:
+            with st.spinner("Читаю таблицу КП…"):
+                ok, note = kp_pull(project_id, config)
+        except Exception as e:  # noqa: BLE001
+            ok, note = False, str(e)
+        if not ok:
+            st.error(note)
+            return
+        st.success(note)
+        time.sleep(1.2)
+        st.rerun()
+
+    synced = local_time(config.get("kpSyncedAt"))
+    total = sum(len(c.get("cities") or []) for c in config.get("countries") or [])
+    c2.caption((f"Последняя загрузка: {synced} · сейчас {cities_word(total)}" if synced
+                else "Города из таблицы ещё не загружались."))
+    st.caption(f"Загружается само: если с последней загрузки прошло больше "
+               f"{KP_SYNC_TTL_HOURS} часов, Click перечитает таблицу при открытии проекта. "
+               "Кнопка – когда нужно прямо сейчас.")
+    st.caption("Загрузка ЗАМЕНЯЕТ список стран и городов данными из таблицы. "
+               "Карточки со статусом «Удалена» не попадают.")
+
 
 def tab_cities(project_id: str, config: dict) -> None:
-    _cities_source_block(project_id, config)
     html('<div class="card-title">Страны и города проекта</div>')
+
+    # Сколько всего городов и откуда они берутся. Блок загрузки из КП переехал
+    # в «Настройки», к самой ссылке на таблицу и выбору листа: держать выбор
+    # листа в одном месте, а кнопку «загрузить» в другом было неоткуда понять.
+    total = sum(len(c.get("cities") or []) for c in config.get("countries") or [])
+    countries = len(config.get("countries") or [])
+    synced = local_time(config.get("kpSyncedAt"))
+    if total:
+        st.caption(f"Всего {cities_word(total)} в "
+                   f"{plural(countries, 'стране', 'странах', 'странах')}"
+                   + (f" · загружено из КП {synced}" if synced else "")
+                   + " · обновить список: «⚙️ Настройки» → «Источник городов – Google-таблица КП».")
+    else:
+        st.info("Городов пока нет. Список загружается из таблицы КП: "
+                "«⚙️ Настройки» → «Источник городов – Google-таблица КП».")
     st.caption("Ссылка города – адрес карточки Яндекс.Бизнеса. Подойдёт любой вид "
                "(/edit/, /edit/photos/, /p/edit/posts/) – Click сам приведёт его к разделу «Посты».")
 

@@ -83,6 +83,65 @@ YANDEX, GIS = "yandex", "gis"
 # «активные» и «не активные» неотличимы: в одной строке есть подстрока другой.
 SKIP_STATUS_RX = re.compile(r"удал|добав|заблок|\bне\s*актив", re.I)
 WARN_STATUS_RX = re.compile(r"тех|проблем", re.I)
+_ALIVE_STATUS_RX = re.compile(r"актив|онлайн", re.I)
+
+
+def expected_state(status: str) -> str:
+    """
+    Что колонка «Статус» в КП обещает про карточку на площадке.
+
+    Один словарь на обе площадки (у Яндекса и 2ГИС он одинаковый):
+
+      'absent'    – карточки быть не должно: Удалена, Добавить, Заблокирована,
+                    Не активная;
+      'alive-any' – карточка есть, публикация не важна: Тех. проблемы;
+      'alive'     – карточка есть и работает: Активная, Онлайн;
+      ''          – пусто или незнакомое слово: сверять нечего.
+
+    Это та же логика, по которой parse_rows решает, брать город в работу
+    (SKIP_STATUS_RX), просто названная словами исхода – чтобы актуализация
+    могла сверить обещание КП с тем, что реально в кабинете.
+    """
+    s = _norm(status)
+    if not s:
+        return ""
+    if SKIP_STATUS_RX.search(s):
+        return "absent"
+    if WARN_STATUS_RX.search(s):
+        return "alive-any"
+    if _ALIVE_STATUS_RX.search(s):
+        return "alive"
+    return ""
+
+
+def status_verdict(kp_status: str, card_alive: bool | None) -> tuple[str, str]:
+    """
+    Сверить статус из КП с тем, жива ли карточка. Возвращает (вердикт, текст).
+
+      'ok'       – КП и площадка сходятся;
+      'mismatch' – расходятся (в актуализацию попадают только «живые» города,
+                   так что на деле это всегда «в КП активная – а карточки нет»);
+      'skip'     – сверять нечего: статус пуст/незнаком или состояние карточки
+                   неизвестно (кабинет не открылся, сессия слетела).
+
+    card_alive: True – карточка открылась, False – удалена/404, None – не
+    смогли определить.
+    """
+    expect = expected_state(kp_status)
+    st = (kp_status or "").strip()
+    if not expect or card_alive is None:
+        return "skip", ""
+    if expect in ("alive", "alive-any"):
+        if card_alive:
+            return "ok", f"в КП «{st}» – карточка на месте"
+        return "mismatch", f"в КП «{st}», а карточки на площадке нет"
+    # expect == 'absent' – в актуализацию такой город не попадает, но если
+    # вдруг попал (статус проставили после сбора городов) и карточка жива –
+    # это тоже расхождение.
+    if card_alive:
+        return "mismatch", f"в КП «{st}», а карточка на площадке живая"
+    return "ok", f"в КП «{st}» – карточки нет, всё сходится"
+
 
 # Одна и та же страна пишется в КП по-разному. Без сведения к одному имени
 # Click рисует две плитки («РФ» и «Россия»), а окончания постов ищутся по
@@ -630,14 +689,19 @@ def load_cities(project_id: str, from_config: str = "") -> tuple[list[dict], dic
 
 def to_countries(cities: list[dict], project_id: str, platform: str = YANDEX) -> list[dict]:
     """
-    Список городов → структура конфига Click: [{id, name, cities:[{id,name,url}]}].
+    Список городов → структура конфига Click: [{id, name, cities:[{id,name,url,kpStatus}]}].
     Порядок стран и городов сохраняется как в таблице.
 
     platform выбирает площадку: у 2ГИС свои ссылки и свой статус, и городов
     там обычно заметно меньше – карточка заведена не везде. Идентификаторы у
     площадок разные, иначе выбранные галочки одной перепутались бы с другой.
+
+    kpStatus – статус из КП той же площадки (у Яндекса «status», у 2ГИС
+    «gisStatus»). Едет вместе с городом до самой актуализации: там, открыв
+    кабинет, есть с чем сверить обещание таблицы.
     """
     key = "url" if platform == YANDEX else "gisUrl"
+    status_key = "status" if platform == YANDEX else "gisStatus"
     mark = "" if platform == YANDEX else f"{platform}-"
 
     def slug(s: str) -> str:
@@ -656,7 +720,7 @@ def to_countries(cities: list[dict], project_id: str, platform: str = YANDEX) ->
             "name": country,
             "cities": [
                 {"id": f"ct-{project_id}-{mark}{n}-{i}-{slug(it['name'])}",
-                 "name": it["name"], "url": it[key]}
+                 "name": it["name"], "url": it[key], "kpStatus": it.get(status_key, "")}
                 for i, it in enumerate(items)
             ],
         })

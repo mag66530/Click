@@ -773,7 +773,10 @@ def save_actualize_tasks(project_id: str, config: dict, selection: dict[str, lis
         if not country or not city_ids:
             continue
         city_tasks = [
-            {"cityName": c["name"], "companyUrl": c["url"], "companyId": yb.extract_company_id(c["url"])}
+            {"cityName": c["name"], "companyUrl": c["url"], "companyId": yb.extract_company_id(c["url"]),
+             # Статус из КП едет вместе с городом – actualize_city сверит его
+             # с тем, что реально в кабинете (см. kp_sheet.status_verdict).
+             "kpStatus": c.get("kpStatus", "")}
             for c in country["cities"] if c["id"] in city_ids
         ]
         if not city_tasks:
@@ -3040,6 +3043,11 @@ _PUB_TILES = [
 _ACT_TILES = [
     {"key": "actualized", "status": "actualized", "label": "Актуализировано", "colour": "ok",   "always": True},
     {"key": "notNeeded",  "status": "not-needed", "label": "Не требовалось",  "colour": "skip", "always": True},
+    # Не сбой Click – статус в КП разошёлся с площадкой (карточки нет, а КП
+    # обещал живую, или наоборот). Отдельно от «Ошибок»: одно говорит
+    # «поправьте таблицу», другое – «Click не справился», путать нельзя.
+    {"key": "statusMismatch", "status": "status-mismatch", "label": "Статус в КП не совпал",
+     "colour": "warn", "always": False},
     {"key": "failed",     "status": "failed",     "label": "Ошибок",          "colour": "err",  "always": True},
 ]
 # Цвет, фон и рамка плашки – те же, что у не кликабельных .report-stat.
@@ -3071,6 +3079,10 @@ def _report_notes(data: dict, totals: dict) -> list[str]:
         notes.append(f'⚠️ {cities_word(totals["unknown"])} с неподтверждённой публикацией. '
                      "Клик «Создать» был сделан, но Яндекс не подтвердил. "
                      "Проверьте вручную – повторять автоматически опасно (дубль).")
+    if totals.get("statusMismatch"):
+        notes.append(f'🚦 {cities_word(totals["statusMismatch"])} со статусом в КП, который не '
+                     "совпал с площадкой (например, в таблице «Активная», а карточки там нет). "
+                     "Это не сбой Click – поправьте статус в КП или разберитесь с карточкой.")
     if totals.get("skipped"):
         notes.append(f'⏭ {cities_word(totals["skipped"])} пропущено: этот же текст уже уходил '
                      "в эти карточки недавно (защита от дублей).")

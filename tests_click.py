@@ -1015,12 +1015,15 @@ def test_kp_sheet_choice() -> None:
             ["Казахстан", "Алматы", "https://yandex.ru/sprav/3/edit", "активные"],
         ],
     }
-    rows = kp_sheet._pick_sheet(list(sheets), lambda t: sheets[t])  # noqa: SLF001
+    rows, picked = kp_sheet._pick_sheet(list(sheets), lambda t: sheets[t])  # noqa: SLF001
     eq("взят «кп», а не старая копия", len(kp_sheet.parse_rows(rows)[0]), 3)
-    rows = kp_sheet._pick_sheet(list(sheets), lambda t: sheets[t],  # noqa: SLF001
-                                prefer="карта присутсвия Аэросталь (OLD")
+    eq("и название выбранного листа возвращается", picked, "кп")
+    rows, picked = kp_sheet._pick_sheet(list(sheets), lambda t: sheets[t],  # noqa: SLF001
+                                        prefer="карта присутсвия Аэросталь (OLD")
     eq("если ссылка указывает на старый лист – берём его",
        len(kp_sheet.parse_rows(rows)[0]), 1)
+    eq("и это отражено в названии выбранного листа",
+       picked, "карта присутсвия Аэросталь (OLD")
 
     # Старая копия – последняя очередь: сначала ВСЕ рабочие листы, и только
     # если ни на одном городов нет, берём её. Так таблица не остаётся без
@@ -1029,16 +1032,48 @@ def test_kp_sheet_choice() -> None:
         "карта присутсвия Аэросталь (OLD": sheets["карта присутсвия Аэросталь (OLD"],
         "кп": [["Страна", "Город", "Аккаунт"], ["", "", ""]],
     }
-    rows = kp_sheet._pick_sheet(list(with_empty), lambda t: with_empty[t])  # noqa: SLF001
+    rows, picked = kp_sheet._pick_sheet(list(with_empty), lambda t: with_empty[t])  # noqa: SLF001
     eq("рабочий лист пуст – старая копия идёт запасным вариантом",
        len(kp_sheet.parse_rows(rows)[0]), 1)
 
     # Если рабочих листов нет вовсе – старый читаем, иначе таблица с
     # единственным листом «…OLD» перестала бы работать.
     only_old = {"карта присутсвия (OLD": sheets["карта присутсвия Аэросталь (OLD"]}
-    rows = kp_sheet._pick_sheet(list(only_old), lambda t: only_old[t])  # noqa: SLF001
+    rows, picked = kp_sheet._pick_sheet(list(only_old), lambda t: only_old[t])  # noqa: SLF001
     eq("единственный лист читается, даже если назван OLD",
        len(kp_sheet.parse_rows(rows)[0]), 1)
+    eq("и он же назван выбранным", picked, "карта присутсвия (OLD")
+
+    # Лист выбран явно в «Настройках» – читаем ЕГО, без всякой эвристики.
+    # Живой сценарий: старая копия «…OLD» подходила бы по содержимому, но
+    # раз в настройках стоит «кп» – эвристика тут вообще не участвует.
+    old_open_book = kp_sheet.open_book
+    kp_sheet.open_book = lambda fid, sa, gid="": (list(sheets), lambda t: sheets[t], "")  # noqa: SLF001
+    try:
+        rows, used = kp_sheet._read_values("fid", {}, title="кп")  # noqa: SLF001
+        eq("явный выбор листа читается напрямую", used, "кп")
+        eq("и именно с него берутся города", len(kp_sheet.parse_rows(rows)[0]), 3)
+
+        # Регистр и пробелы вокруг названия не должны мешать совпадению.
+        rows, used = kp_sheet._read_values("fid", {}, title="  КП  ")  # noqa: SLF001
+        eq("совпадение нечувствительно к регистру и пробелам", used, "кп")
+
+        # Лист переименовали или удалили – понятная ошибка, а НЕ молчаливый
+        # переход на другой лист (иначе ровно та путаница, ради которой и
+        # затевался явный выбор, вернулась бы с другой стороны).
+        try:
+            kp_sheet._read_values("fid", {}, title="Такого листа больше нет")  # noqa: SLF001
+            check("пропавший лист должен бросать ошибку", False)
+        except RuntimeError as e:
+            check("сказано, что лист мог пропасть", "переименовать" in str(e), str(e))
+            check("и куда идти, чтобы выбрать заново", "Настройки" in str(e), str(e))
+
+        # Лист не задан вовсе (проект ещё не мигрировал на явный выбор) –
+        # прежнее поведение: эвристика по содержимому, как раньше.
+        rows, used = kp_sheet._read_values("fid", {})  # noqa: SLF001
+        eq("без явного выбора – прежняя эвристика по содержимому", used, "кп")
+    finally:
+        kp_sheet.open_book = old_open_book
 
 
 def test_kp_sheet() -> None:
@@ -1065,6 +1100,14 @@ def test_kp_sheet() -> None:
         ["Россия", "Омск", "1104000", "https://omsk.metpromintex.ru", "", "",
          "", "https://yandex.ru/sprav/299334/p/edit/posts/", "", "Удалена", "", "", "Удалена"],
         ["Россия", "БезСсылки", "1000", "https://x.ru", "", "", "", "", "", "Активная", "", "", ""],
+        # Яндекс завёл второй вид ссылки на ту же карточку – yb_playwright.py
+        # его давно распознаёт (COMPANY_ID_RX), а kp_sheet.SPRAV_RX до сих пор
+        # искал только старый /sprav/. Живой случай: в КП заказчика Волгоград,
+        # Красноярск и Ижевск стояли «Активная» с такой ссылкой, а Click их в
+        # список Яндекса не брал вовсе – город просто пропадал молча.
+        ["Россия", "Волгоград", "1019000", "https://volgograd.metpromintex.ru", "", "",
+         "", "https://yandex.ru/business/companies/company/70210624498/?utm_source=maps",
+         "", "Активная", "", "", ""],
     ]
     cities, diag = kp_sheet.parse_rows(rows)
 
@@ -1073,12 +1116,21 @@ def test_kp_sheet() -> None:
        diag.get("urlHeader"), "Аккаунт")
     eq("взята именно колонка Яндекса", diag.get("urlColumn"), 7)
     eq("статус берётся справа от неё (Яндекса, не 2ГИС)", diag.get("statusColumn"), 9)
-    eq("городов после фильтра", len(cities), 3)
+    eq("городов после фильтра", len(cities), 4)
     check("Омск со статусом «Удалена» отброшен", all(c["name"] != "Омск" for c in cities))
     check("город без ссылки на ЯБ отброшен", all(c["name"] != "БезСсылки" for c in cities))
     check("Питер оставлен: у него удалён только 2ГИС, а Яндекс «Онлайн»",
           any(c["name"] == "Санкт-Петербург" for c in cities))
     eq("ссылка сохранена как есть", cities[0]["url"], "https://yandex.ru/sprav/365594/p/edit/posts/")
+
+    volgograd = next((c for c in cities if c["name"] == "Волгоград"), None)
+    check("Волгоград с новым видом ссылки НЕ пропадает", volgograd is not None)
+    if volgograd:
+        eq("ссылка нового вида сохранена целиком", volgograd["url"],
+           "https://yandex.ru/business/companies/company/70210624498/?utm_source=maps")
+        eq("статус тоже на месте", volgograd["status"], "Активная")
+        eq("и по ней всё равно достаётся ID компании",
+           yb_extract(volgograd["url"]), "70210624498")
 
     countries = kp_sheet.to_countries(cities, "IMP")
     eq("стран получилось", len(countries), 2)
@@ -1280,7 +1332,13 @@ def test_kp_autosync(tmp: Path) -> None:
                    "status": "Активная", "site": "", "email": "", "phone": ""},
                   {"country": "Россия", "name": "Пермь", "url": "https://yandex.ru/sprav/2",
                    "status": "Активная", "site": "", "email": "", "phone": ""}]
-        app.kp_sheet.load_cities = lambda pid, url="": (cities, {"countries": 1, "skippedDeleted": 3})
+        seen_titles = []
+
+        def fake_load(pid, url="", title=""):
+            seen_titles.append(title)
+            return cities, {"countries": 1, "skippedDeleted": 3, "usedSheet": title or "кп"}
+
+        app.kp_sheet.load_cities = fake_load
         config = {"id": "p-mpe-default", "countries": [], "kpSheetUrl": "", "kpSyncedAt": stale}
         st.session_state["_cfg_MPE"] = {"projects": [config], "activeProjectId": "p-mpe-default"}
         ok, note = app.kp_pull("MPE", config)
@@ -1290,8 +1348,21 @@ def test_kp_autosync(tmp: Path) -> None:
         check("отметка времени обновилась", app._hours_since(config["kpSyncedAt"]) < 1)  # noqa: SLF001
         check("сказано, сколько пропущено удалённых", "3" in note, note)
 
+        # 4а. Лист ещё не выбирали явно – kp_pull запоминает угаданный лист
+        # в конфиге, чтобы дальше выбор был явным (см. diag['usedSheet']).
+        eq("лист не был передан явно (title ещё не выбран)", seen_titles[-1], "")
+        eq("а угаданный лист сам лёг в конфиг", config["kpSheetTitle"], "кп")
+
+        # 4б. Лист УЖЕ выбран явно – kp_pull передаёт его дальше как есть и
+        # не трогает после успешной загрузки, даже если что-то поменялось.
+        config["kpSheetTitle"] = "Карта присутствия"
+        ok, note = app.kp_pull("MPE", config)
+        check("загрузка с явным листом тоже прошла", ok, note)
+        eq("явно выбранный лист передан в load_cities", seen_titles[-1], "Карта присутствия")
+        eq("и остался таким же после загрузки", config["kpSheetTitle"], "Карта присутствия")
+
         # 5. Таблица недоступна – работаем на прежнем списке, а не на пустом.
-        def boom(pid, url=""):
+        def boom(pid, url="", title=""):
             raise RuntimeError("Google отказал (403)")
         app.kp_sheet.load_cities = boom
         before = config["countries"]

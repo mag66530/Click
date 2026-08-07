@@ -245,7 +245,8 @@ def _default_subproject(project_id: str) -> dict:
 
 # Что из конфига храним снаружи (в репозитории). Пароль от Яндекса – НИКОГДА:
 # он остаётся только в этом контейнере.
-_KEPT = ("countries", "countriesGis", "email", "kpSheetUrl", "kpSyncedAt", "gisPhotosDefault")
+_KEPT = ("countries", "countriesGis", "email", "kpSheetUrl", "kpSheetTitle",
+        "kpSyncedAt", "gisPhotosDefault")
 
 
 def load_raw_config(project_id: str) -> dict:
@@ -535,7 +536,9 @@ def kp_pull(project_id: str, config: dict) -> tuple[bool, str]:
     город появляется в списке по-разному в зависимости от того, как его
     загрузили.
     """
-    cities, diag = kp_sheet.load_cities(project_id, (config.get("kpSheetUrl") or "").strip())
+    saved_title = (config.get("kpSheetTitle") or "").strip()
+    cities, diag = kp_sheet.load_cities(project_id, (config.get("kpSheetUrl") or "").strip(),
+                                        title=saved_title)
     if diag.get("error"):
         return False, diag["error"]
     if not cities:
@@ -545,6 +548,11 @@ def kp_pull(project_id: str, config: dict) -> tuple[bool, str]:
     # строках, отдельного чтения не требуется.
     config["countriesGis"] = kp_sheet.to_countries(cities, project_id, platform=kp_sheet.GIS)
     config["kpSyncedAt"] = datetime.now(timezone.utc).isoformat()
+    # Лист ещё не выбирали явно в «⚙️ Настройки» – запоминаем тот, что нашла
+    # эвристика. Дальше выбор явный и не меняется сам по себе: заново гадать
+    # незачем, а вкладка «Настройки» сразу покажет то, что реально читается.
+    if not saved_title and diag.get("usedSheet"):
+        config["kpSheetTitle"] = diag["usedSheet"]
     save_config(project_id)
     note = f'Загружено: {cities_word(len(cities))} в {diag.get("countries", 0)} странах.'
     if diag.get("gisCities"):
@@ -2859,41 +2867,30 @@ def tab_actualize(project_id: str, config: dict) -> None:
 
 def _cities_source_block(project_id: str, config: dict) -> None:
     """
-    Источник городов – Google-таблица КП. В облаке файловая система временная,
+    Загрузка городов из Google-таблицы КП. В облаке файловая система временная,
     поэтому набитый руками список пропадает при перезапуске; таблица живёт
     снаружи и подтягивается обратно.
+
+    Сама ссылка и выбор листа настраиваются в «⚙️ Настройки» – одним местом
+    на оба потребителя (эта вкладка и «Сверка»), чтобы они не расходились.
     """
     saved_url = (config.get("kpSheetUrl") or "").strip()
     effective = kp_sheet.sheet_url(project_id, saved_url)
     has_key = kp_sheet.service_account_info() is not None
 
-    with st.expander("📊 Источник городов – Google-таблица КП",
-                     expanded=not config["countries"]):
-        url = st.text_input("Ссылка на таблицу КП этого проекта", value=saved_url,
-                            key=f"kp-url-{project_id}",
-                            placeholder="https://docs.google.com/spreadsheets/d/…")
-        if url.strip() != saved_url:
-            config["kpSheetUrl"] = url.strip()
-            save_config(project_id)
-            st.rerun()
+    with st.expander("📊 Загрузка городов из КП", expanded=not config["countries"]):
+        if not effective or not has_key:
+            st.info("Источник городов не настроен. Ссылка на таблицу и лист задаются "
+                    "во вкладке «⚙️ Настройки» → «Источник городов – Google-таблица КП».")
+            return
 
-        if not effective:
-            st.caption("Ссылку можно задать здесь или секретом `kp_sheet_url_"
-                       f"{project_id}` в настройках приложения.")
-        elif not saved_url:
-            st.caption(f"Используется таблица проекта по умолчанию: {effective}")
-        if not has_key:
-            st.warning(
-                "Не найден ключ сервисного аккаунта Google. Добавьте в секреты приложения "
-                "`gcp_service_account_b64` – весь JSON-ключ в base64. Таблица должна быть "
-                "расшарена на этот аккаунт как Читатель.",
-                icon="🔑",
-            )
+        saved_title = (config.get("kpSheetTitle") or "").strip()
+        st.caption(f"Таблица: {effective}" + (f" · лист «{saved_title}»" if saved_title
+                   else " · лист подберётся сам при первой загрузке"))
 
         c1, c2 = st.columns([2, 3])
         if c1.button("⬇️ Загрузить города из таблицы", type="primary",
-                     disabled=not (effective and has_key), key=f"kp-pull-{project_id}",
-                     use_container_width=True):
+                     key=f"kp-pull-{project_id}", use_container_width=True):
             try:
                 with st.spinner("Читаю таблицу КП…"):
                     ok, note = kp_pull(project_id, config)
@@ -2914,6 +2911,81 @@ def _cities_source_block(project_id: str, config: dict) -> None:
                    "Кнопка – когда нужно прямо сейчас.")
         st.caption("Загрузка ЗАМЕНЯЕТ список стран и городов данными из таблицы. "
                    "Карточки со статусом «Удалена» не попадают.")
+
+
+def _kp_sheet_settings_block(project_id: str, config: dict) -> None:
+    """
+    Источник городов – ссылка на таблицу КП и явный выбор листа.
+
+    Раньше лист внутри таблицы подбирался эвристикой в двух разных местах
+    («Города» и «Сверка») по-разному, и они могли молча выбрать разные листы.
+    Теперь выбор один, здесь, и сохраняется в конфиге – «Города» и «Сверка»
+    просто читают то, что тут выбрано.
+    """
+    html('<div class="card-title">📊 Источник городов – Google-таблица КП</div>')
+    saved_url = (config.get("kpSheetUrl") or "").strip()
+    saved_title = (config.get("kpSheetTitle") or "").strip()
+    effective = kp_sheet.sheet_url(project_id, saved_url)
+    has_key = kp_sheet.service_account_info() is not None
+
+    url = st.text_input("Ссылка на таблицу КП этого проекта", value=saved_url,
+                        key=f"kp-url-{project_id}",
+                        placeholder="https://docs.google.com/spreadsheets/d/…")
+    if url.strip() != saved_url:
+        config["kpSheetUrl"] = url.strip()
+        # Сменили таблицу – старый выбор листа к ней уже не относится.
+        config["kpSheetTitle"] = ""
+        save_config(project_id)
+        _audit_forget()
+        st.rerun()
+
+    if not effective:
+        st.caption("Ссылку можно задать здесь или секретом `kp_sheet_url_"
+                   f"{project_id}` в настройках приложения.")
+        return
+    if not saved_url:
+        st.caption(f"Используется таблица проекта по умолчанию: {effective}")
+    if not has_key:
+        st.warning(
+            "Не найден ключ сервисного аккаунта Google. Добавьте в секреты приложения "
+            "`gcp_service_account_b64` – весь JSON-ключ в base64. Таблица должна быть "
+            "расшарена на этот аккаунт как Читатель.",
+            icon="🔑",
+        )
+        return
+
+    try:
+        titles, prefer = _audit_cache(f"titles|{project_id}|{saved_url}",
+                                      lambda: kp_sheet.sheet_titles(project_id, saved_url))
+    except Exception as e:  # noqa: BLE001
+        st.error(str(e))
+        return
+    if not titles:
+        st.error("В таблице нет ни одного листа.")
+        return
+
+    # Приоритет подсказки: уже сохранённый выбор → лист по gid из ссылки →
+    # угадка по названию («КП», «Карта присутствия» и т.п.). Содержимое
+    # листов тут не читаем – это только подсказка, выбирает человек.
+    default = saved_title if saved_title in titles else (
+        prefer if prefer in titles else kp_sheet.guess_sheet(titles, prefer))
+
+    c1, c2 = st.columns([3, 1])
+    title = c1.selectbox("Лист таблицы", titles,
+                         index=titles.index(default) if default in titles else 0,
+                         key=f"kp-title-{project_id}")
+    if title != saved_title:
+        config["kpSheetTitle"] = title
+        save_config(project_id)
+    if c2.button("↻ Обновить список листов", key=f"kp-titles-refresh-{project_id}",
+                use_container_width=True):
+        _audit_forget()
+        st.rerun()
+
+    if not saved_title:
+        st.caption("Лист подобран по названию – проверьте, что это тот самый, где ведётся "
+                   "работа, и при необходимости выберите другой.")
+    st.caption("Этот лист читают и «Города», и «Сверка» – выбор общий на весь проект.")
 
 
 def tab_cities(project_id: str, config: dict) -> None:
@@ -3384,6 +3456,9 @@ def tab_settings(project_id: str, config: dict) -> None:
 
     st.divider()
     _gis_login_block(project_id, config)
+
+    st.divider()
+    _kp_sheet_settings_block(project_id, config)
 
     st.divider()
     _web_keys_block()
@@ -4099,10 +4174,11 @@ def _kp_card_ids(project_id: str, config: dict) -> list[str]:
     перечитывай, дубль не найдётся. Зато в КП у города записана прямая
     ссылка на карточку: по ней Click откроет её сам.
 
-    Таблицу читаем из кэша вкладки; не вышло – возвращаем пусто и просто
-    собираем как раньше.
+    Лист берём из настроек проекта (тот же, что и «Города») – не вышло
+    (не настроен, таблица недоступна) – возвращаем пусто и просто собираем
+    организации как раньше.
     """
-    title = st.session_state.get("audit-sheet")
+    title = (config.get("kpSheetTitle") or "").strip()
     if not title:
         return []
     try:
@@ -4116,23 +4192,6 @@ def _kp_card_ids(project_id: str, config: dict) -> list[str]:
         return list(dict.fromkeys(out))
     except Exception:  # noqa: BLE001 – без таблицы соберём просто список
         return []
-
-
-def _audit_pick_sheet(titles: list[str], prefer: str) -> str:
-    """Какой лист предлагать: указанный ссылкой, потом «Лист20», потом «кп»."""
-    saved = st.session_state.get("audit-sheet")
-    if saved in titles:
-        return saved
-    for want in ("лист20", "лист 20"):
-        for t in titles:
-            if kp_audit.norm_text(t).replace(" ", "") == want.replace(" ", ""):
-                return t
-    if prefer in titles:
-        return prefer
-    for t in titles:
-        if kp_audit.norm_text(t) in ("кп", "карта присутствия", "карта присутсвия"):
-            return t
-    return titles[0] if titles else ""
 
 
 def tab_audit(project_id: str, config: dict) -> None:
@@ -4182,31 +4241,20 @@ def tab_audit(project_id: str, config: dict) -> None:
             live_panel(project_id, running, "collect")
 
     # ─── Лист КП ───
+    # Источник и лист – общие с «Городами», настраиваются в «⚙️ Настройки»:
+    # раньше у «Сверки» был свой отдельный выбор листа, который жил только
+    # в сессии и мог разойтись с тем, что читают «Города» – два места видели
+    # разные версии одной и той же таблицы.
     saved_url = (config.get("kpSheetUrl") or "").strip()
-    if not kp_sheet.is_configured(project_id, saved_url):
-        st.info("Не настроена таблица КП. Ссылка и ключ доступа задаются во вкладке "
-                "«🏙 Города» → «Источник городов».")
-        return
-
-    try:
-        titles, prefer = _audit_cache(f"titles|{project_id}|{saved_url}",
-                                      lambda: kp_sheet.sheet_titles(project_id, saved_url))
-    except Exception as e:  # noqa: BLE001
-        st.error(str(e))
-        return
-    if not titles:
-        st.error("В таблице КП нет ни одного листа.")
+    title = (config.get("kpSheetTitle") or "").strip()
+    if not kp_sheet.is_configured(project_id, saved_url) or not title:
+        st.info("Не настроен источник городов. Ссылка на таблицу и лист задаются во вкладке "
+                "«⚙️ Настройки» → «Источник городов – Google-таблица КП».")
         return
 
     with st.container(border=True):
         html('<div class="card-title">📄 Лист КП</div>')
-        # Лист из прошлого раза мог пропасть (переименовали, сменили таблицу) –
-        # тогда Streamlit упал бы на значении, которого нет в списке.
-        if st.session_state.get("audit-sheet") not in titles:
-            st.session_state.pop("audit-sheet", None)
-        pick = _audit_pick_sheet(titles, prefer)
-        title = st.selectbox("Лист таблицы", titles, index=titles.index(pick) if pick in titles else 0,
-                             key="audit-sheet", label_visibility="collapsed")
+        st.caption(f"Лист «{title}» – выбран в «⚙️ Настройки».")
         if st.button("↻ Перечитать таблицу", key="audit-reread"):
             _audit_forget()
             st.rerun()
@@ -4216,15 +4264,8 @@ def tab_audit(project_id: str, config: dict) -> None:
             st.error(str(e))
             return
         if not any(any(str(c).strip() for c in r) for r in rows):
-            # «Лист20» заказчик только собирается заполнить – пока он пустой,
-            # предлагаем открыть рабочий лист в один клик, а не искать в списке.
-            st.warning(f"Лист «{title}» пустой – сверять нечего.")
-            others = [t for t in titles
-                      if t != title and kp_audit.norm_text(t) in
-                      ("кп", "карта присутствия", "карта присутсвия", "выгрузка", "целевая")]
-            for n, other in enumerate(others[:3]):
-                st.button(f"Открыть лист «{other}»", key=f"audit-goto-{n}",
-                          on_click=lambda t=other: st.session_state.__setitem__("audit-sheet", t))
+            st.warning(f"Лист «{title}» пустой – сверять нечего. Выберите другой лист "
+                       "во вкладке «⚙️ Настройки» → «Источник городов».")
             return
 
     if not companies:

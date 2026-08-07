@@ -1459,26 +1459,44 @@ def upload_media(page: Page, gis_url: str | None, files: list[str], label: str =
 
     before = int(look.get("tiles") or 0)
     was_counter = look.get("counter")
+    media_url = page.url          # вернуться сюда же после перепроверки
     try:
         page.locator('input[type="file"]').first.set_input_files(good, timeout=15_000)
     except Exception as e:  # noqa: BLE001
         out["reason"] = f"Не удалось передать файлы: {yb._short_error(e)}"
         return out
 
-    # Успех – только доказанный: снимки должны появиться в альбоме.
+    # Ждём роста альбома в браузере – но это пока не доказательство, а только
+    # надежда. Кабинет рисует плитку сразу, «оптимистично», ещё до того, как
+    # сервер файл принял; если сервер его отверг, плитка тихо пропадает. Мы
+    # проверяли рост и останавливались, как только его видели, – и в боевом
+    # прогоне это дало ложный успех: лог написал «снимков добавлено 1 из 1»,
+    # а в самом кабинете альбом остался пустым. Здесь только ждём подольше,
+    # решение принимается ниже.
     deadline = time.time() + MEDIA_WAIT_MS / 1000
-    grown = 0
     while time.time() < deadline:
         page.wait_for_timeout(700)
         now = _media_look(page)
         if not now:
             continue
-        grown = max(grown, int(now.get("tiles") or 0) - before)
+        seen = int(now.get("tiles") or 0) - before
         if was_counter is not None and now.get("counter") is not None:
-            grown = max(grown, int(now["counter"]) - int(was_counter))
-        if grown >= len(good):
+            seen = max(seen, int(now["counter"]) - int(was_counter))
+        if seen >= len(good):
             break
 
+    # Доказательство только одно – то, что страница покажет ПОСЛЕ перезагрузки
+    # с сервера, а не то, что успел нарисовать браузер по своей инициативе.
+    try:
+        page.goto(media_url, wait_until="domcontentloaded", timeout=40_000)
+        confirmed = _media_settle(page, want_field=False)
+    except Exception as e:  # noqa: BLE001
+        out["reason"] = f"Не удалось перепроверить альбом после загрузки: {yb._short_error(e)}"
+        return out
+
+    grown = int(confirmed.get("tiles") or 0) - before
+    if was_counter is not None and confirmed.get("counter") is not None:
+        grown = max(grown, int(confirmed["counter"]) - int(was_counter))
     out["uploaded"] = min(grown, len(good)) if grown > 0 else 0
     if out["uploaded"] >= len(good):
         info(f"  📸 {label}2ГИС: снимков добавлено {out['uploaded']} из {len(good)}")

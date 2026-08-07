@@ -1682,17 +1682,53 @@ def test_gis_media_upload() -> None:
                 browser = pw.chromium.launch()
             try:
                 page = browser.new_context(viewport={"width": 1100, "height": 800}).new_page()
-                box = {"html": page_html}
-                page.route("**/*", lambda route: route.fulfill(
-                    status=200, content_type="text/html; charset=utf-8", body=box["html"]))
+                # box["confirmed"] – это «сервер»: сколько файлов кабинет ДЕЙСТВИТЕЛЬНО
+                # принял бы, не то, что нарисовал браузер. Фикстура шлёт отдельный
+                # запрос на каждый файл – это позволяет отличить «клиент нарисовал
+                # плитку сразу» от «сервер файл принял», ровно так, как это различает
+                # проверка после перезагрузки в upload_media().
+                box = {"html": page_html, "confirmed": 0, "confirm": True}
+                TILE = ('<div class="tile"><img alt="Фотография от владельца" width="220" '
+                       'height="220" src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5'
+                       'BAEAAAAALAAAAAABAAEAAAICRAEAOw=="></div>')
+
+                def handle(route):
+                    req = route.request
+                    if req.method == "POST" and "__gis_upload__" in req.url:
+                        if box["confirm"]:
+                            box["confirmed"] += 1
+                        route.fulfill(status=200, content_type="application/json", body="{}")
+                        return
+                    html = box["html"]
+                    if box["confirmed"] and '<div class="grid" id="grid">' in html:
+                        html = html.replace('<div class="grid" id="grid">',
+                                            '<div class="grid" id="grid">'
+                                            + TILE * box["confirmed"], 1)
+                        html = re.sub(r"Все\s+фото\s+и\s+видео\s+\d+",
+                                      f"Все фото и видео {1 + box['confirmed']}", html)
+                    route.fulfill(status=200, content_type="text/html; charset=utf-8", body=html)
+
+                page.route("**/*", handle)
                 url = "https://account.2gis.com/orgs/70000001081103893/"
 
                 res = gis.upload_media(page, url, shots, label="Самара: ")
                 eq("оба снимка встали в альбом", res["uploaded"], 2)
                 eq("gif отброшен, а не отправлен", res["skipped"], 1)
                 eq("и это не ошибка", res["reason"], "")
-                eq("в альбоме стало три плитки",
+                eq("в альбоме стало три плитки – ПОСЛЕ перезагрузки, не по памяти браузера",
                    page.evaluate("() => document.querySelectorAll('#grid img').length"), 3)
+
+                # Живой случай: лог написал «снимков добавлено», а в самом кабинете
+                # альбом остался пустым. Кабинет рисует плитку сразу, «оптимистично» –
+                # раньше, чем сервер файл принял; если сервер не подтвердил, эта
+                # проверка обязана распознать неудачу, а не поверить браузеру на слово.
+                box["confirmed"] = 0
+                box["confirm"] = False            # сервер файл не принимает
+                box["html"] = page_html            # но клиент по-прежнему рисует плитку сам
+                fooled = gis.upload_media(page, url, shots[:1], label="Самара: ")
+                eq("клиентскую плитку без ответа сервера успехом не считаем",
+                   fooled["uploaded"], 0)
+                check("и сказано, что делать", "вручную" in fooled["reason"], fooled["reason"])
 
                 # Ссылка на раздел берётся из меню, а не складывается из кусков:
                 # на складывании адреса Click уже обжёгся с «Данными о компании».
@@ -1709,7 +1745,10 @@ def test_gis_media_upload() -> None:
                       page.evaluate("() => document.querySelector('.gmcYaKQ4')"
                                     ".getAttribute('href')").startswith("/"))
 
-                # Альбом не вырос – успехом это не считаем.
+                # Альбом не вырос вовсе – ни в браузере, ни на сервере. Честная
+                # неудача, не в чём ловить.
+                box["confirmed"] = 0
+                box["confirm"] = False
                 box["html"] = page_html.replace(
                     "grid.appendChild(tile);", "void tile;")
                 quiet = gis.upload_media(page, url, shots[:1], label="Самара: ")

@@ -1142,19 +1142,34 @@ def _confirmed(page: Page, had_banner: bool, seconds: float | None = None) -> st
 def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict:
     """
     Статусы – те же, что у Яндекса, чтобы отчёт был общий:
-      'actualized' – кнопку «Данные верны» нажали, и кабинет это подтвердил
-      'not-needed' – плашки нет, подтверждать нечего (это НЕ ошибка)
-      'failed'     – страница не открылась, кнопка не нашлась или клик не прошёл
+      'actualized'      – кнопку «Данные верны» нажали, и кабинет это подтвердил
+      'not-needed'      – плашки нет, подтверждать нечего (это НЕ ошибка)
+      'status-mismatch' – КП обещал живую карточку, а кабинет пишет «удалена
+                          из справочника» – это не сбой приложения, а неверный
+                          статус в таблице; подтверждать нечего
+      'failed'          – страница не открылась, кнопка не нашлась или клик
+                          не прошёл
+      'no-session'      – сессия 2ГИС не активна
+
+    task['kpStatus'] – значение колонки «Статус» 2ГИС из КП. Сверяем его с
+    тем, что видим в кабинете (см. kp_sheet.status_verdict), и кладём в
+    cardAlive/statusVerdict/statusNote отдельно от итогового status.
     """
+    import kp_sheet
+
     started = time.time()
     label = f"[{idx + 1}/{total}] {task.get('cityName', '?')}"
+    kp_status = (task.get("kpStatus") or "").strip()
     result = {"cityName": task.get("cityName"), "companyUrl": task.get("gisUrl") or task.get("companyUrl"),
-              "status": "failed", "reason": "", "durationMs": 0, "platform": "gis"}
+              "status": "failed", "reason": "", "durationMs": 0, "platform": "gis",
+              "kpStatus": kp_status, "cardAlive": None, "statusVerdict": "", "statusNote": ""}
 
     def finish(status: str, reason: str) -> dict:
         result["status"] = status
         result["reason"] = reason
         result["durationMs"] = int((time.time() - started) * 1000)
+        verdict, note = kp_sheet.status_verdict(kp_status, result["cardAlive"])
+        result["statusVerdict"], result["statusNote"] = verdict, note
         return result
 
     info(f"🏙  {label} – актуализация 2ГИС...")
@@ -1174,14 +1189,26 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
     spot = look.get("spot")
     had_banner = bool(look.get("banner"))
 
+    # Жива ли карточка? «Удалена» – точно нет; «мы на странице „Данные о
+    # компании“» или сама плашка нашлась – точно да. Иначе не уверены, и
+    # путать неуверенность с расхождением статуса нельзя.
+    if look.get("deleted"):
+        result["cardAlive"] = False
+    elif look.get("onCompany") or spot:
+        result["cardAlive"] = True
+    verdict, note = kp_sheet.status_verdict(kp_status, result["cardAlive"])
+    if verdict == "mismatch":
+        warn(f"  🚦 {label}: {note}")
+
     if not spot:
         if not look:
             return finish("failed", "Страницу «Данные о компании» прочитать не вышло "
                                     "(браузер не ответил). Попробуйте ещё раз")
         # Карточки нет в справочнике – это состояние карточки, а не поломка.
         if look.get("deleted"):
-            out = finish("failed", "Карточка удалена из справочника 2ГИС – "
-                                   "подтверждать нечего. Проверьте статус в КП")
+            if verdict == "mismatch":
+                return finish("status-mismatch", note)
+            out = finish("failed", "Карточка удалена из справочника 2ГИС – подтверждать нечего")
             warn(f"  🗑 {label}: {out['reason']}")
             return out
         if not look.get("onCompany"):

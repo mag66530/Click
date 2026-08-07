@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -705,8 +706,6 @@ def gis_url_for_city(config: dict, country_name: str, city_name: str) -> str | N
 
 
 def save_queue_to_tasks(project_id: str, config: dict, queue: list[dict]) -> int:
-    tasks_dir = project_base(project_id) / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
     ts = int(time.time() * 1000)
     saved = 0
     for idx, item in enumerate(queue):
@@ -748,8 +747,14 @@ def save_queue_to_tasks(project_id: str, config: dict, queue: list[dict]) -> int
             "headlessMode": True,
             "tasks": city_tasks,
         }
+        # Задания «только фото в 2ГИС» кладём в ОТДЕЛЬНУЮ папку. Это не про
+        # порядок в файлах: прогон прежней сборки про такие задания не знает и,
+        # увидев пустой текст, публикует пустой пост – так у заказчика и вышло.
+        # В чужую папку он не заглянет, потому что в его коде её нет.
+        folder = tasks_dir(project_id, "gis" if item.get("gisOnly") else "tasks")
+        folder.mkdir(parents=True, exist_ok=True)
         name = f"{idx + 1:02d}-{safe_filename(country['name'])}-{ts}.json"
-        (tasks_dir / name).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        (folder / name).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         saved += 1
     return saved
 
@@ -788,8 +793,18 @@ def save_actualize_tasks(project_id: str, config: dict, selection: dict[str, lis
     return total
 
 
-def clear_tasks(project_id: str) -> None:
-    for fp in (project_base(project_id) / "tasks").glob("*.json"):
+def tasks_dir(project_id: str, source: str = "tasks") -> Path:
+    """
+    Папка очереди. `gis` – задания «только фото в 2ГИС», они лежат ОТДЕЛЬНО.
+
+    Имя папки спрашиваем у runner: очередь читает он, и знать про неё двоим –
+    это рано или поздно разные имена в двух файлах.
+    """
+    return project_base(project_id) / runner.tasks_folder(project_id, source).name
+
+
+def clear_tasks(project_id: str, source: str = "tasks") -> None:
+    for fp in tasks_dir(project_id, source).glob("*.json"):
         fp.unlink(missing_ok=True)
 
 
@@ -1260,32 +1275,29 @@ def live_panel(project_id: str, running: bool, run_kind: str) -> None:
         st.caption("Обновите страницу, чтобы увидеть свежий прогресс.")
 
 
-def _pending_is_gis_only(project_id: str) -> bool:
-    """
-    Вся очередь – только фото в 2ГИС?
-
-    ВРЕМЕННО, вместе с одноимённым блоком на «Публикации». Нужно, чтобы
-    «Запуск» не врал: постов не будет, и сессия Яндекса для такого прогона
-    не требуется – нужна сессия 2ГИС.
-    """
-    tasks: list[dict] = []
-    for fp in (project_base(project_id) / "tasks").glob("*.json"):
-        try:
-            tasks.extend(json.loads(fp.read_text(encoding="utf-8")).get("tasks") or [])
-        except (json.JSONDecodeError, OSError):
-            continue
-    return bool(tasks) and all(t.get("gisOnly") for t in tasks)
-
-
 def tab_run(project_id: str, config: dict) -> None:
     settings = get_settings(project_id)
     state = runner.read_state(project_id, "publish")
     running = state.get("status") == "running"
     busy = runner.busy_reason(project_id, "publish")   # пусто – запускать можно
-    files, cities = runner.count_pending(project_id)
-    gis_only = _pending_is_gis_only(project_id)
+
+    # Две очереди, и они не смешиваются: посты в своей папке, «только фото в
+    # 2ГИС» – в своей. Заказчик просила отдельную функцию, и отдельная она
+    # именно здесь: у этих заданий своя очередь, свой запуск и свой смысл.
+    files_post, cities_post = runner.count_pending(project_id, "tasks")
+    files_gis, cities_gis = runner.count_pending(project_id, "gis")
+    both = bool(cities_post and cities_gis)
+    gis_only = bool(cities_gis) and not cities_post
+    source = "gis" if gis_only else "tasks"
+    files = files_gis if gis_only else files_post
+    cities = cities_gis if gis_only else cities_post
     has_session = gis.has_saved_session(project_id) if gis_only else yb.has_saved_session(project_id)
     has_creds = bool((config.get("email") or "").strip())
+
+    if both:
+        st.warning(f"В очереди сразу два разных задания: посты ({cities_word(cities_post)}) "
+                   f"и только фото в 2ГИС ({cities_word(cities_gis)}). Запуск заблокирован, "
+                   "чтобы не уехало не то – уберите одно из двух кнопками ниже.")
 
     # ─── Степпер как в оригинале ───
     html(T.step(1, "Вход в 2ГИС" if gis_only else "Вход в Яндекс",
@@ -1296,10 +1308,11 @@ def tab_run(project_id: str, config: dict) -> None:
         st.info("Перейдите в раздел «⚙️ Настройки» → "
                 + ("«Вход в 2ГИС»." if gis_only else "«Вход в Яндекс»."))
 
-    html(T.step(2, "Очередь задач",
-                f"Посты собираются во вкладке «Публикация» и складываются в очередь. "
+    html(T.step(2, "Очередь заданий «только фото в 2ГИС»" if gis_only else "Очередь задач",
+                f"Собирается во вкладке «Публикация». "
                 f"Сейчас: <b>{plural(files, 'файл', 'файла', 'файлов')}</b>, "
-                f"<b>{cities_word(cities)}</b>.",
+                f"<b>{cities_word(cities)}</b>."
+                + (f" Отдельно лежат посты: {cities_word(cities_post)}." if both else ""),
                 "done" if cities else ("active" if has_session else "locked"),
                 f"{cities_word(cities)} готово" if cities else ""))
 
@@ -1316,7 +1329,7 @@ def tab_run(project_id: str, config: dict) -> None:
     # ─── Кнопки ───
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1:
-        disabled = bool(busy) or not cities or not has_session
+        disabled = bool(busy) or not cities or not has_session or both
         подпись = "📸 Залить фото в 2ГИС" if gis_only else "▶ Опубликовать"
         if st.button(f"{подпись} ({cities_word(cities)})", type="primary",
                      use_container_width=True, disabled=disabled, key="btn-publish"):
@@ -1328,6 +1341,7 @@ def tab_run(project_id: str, config: dict) -> None:
                 strict_account_check=bool(settings["strictAccountCheck"]),
                 retry_unknown=bool(settings["retryUnknown"]),
                 dedup_window_hours=float(settings["dedupWindowHours"]),
+                source=source,
             )
             (st.toast if ok else st.error)(msg)
             time.sleep(0.6)
@@ -1356,36 +1370,44 @@ def tab_run(project_id: str, config: dict) -> None:
 
     # ─── Очередь задач ───
     st.divider()
-    if cities:
-        # Кнопка очистки – НА ВИДУ, а не внутри свёрнутого списка файлов.
+    if cities_post or cities_gis:
+        # Кнопки очистки – НА ВИДУ, а не внутри свёрнутого списка файлов.
         # Заказчик: «старая очередь при остановке не сбросилась, и очистить я
         # её не могу». Кнопка была – но лежала внутри «Файлы задач в очереди»,
         # который по умолчанию закрыт, и найти её было нечем. А очередь после
         # остановки и правда остаётся: недоделанные города ждут следующего
         # запуска – это нарочно, но сказать об этом надо здесь же.
         q1, q2 = st.columns([2, 3])
-        with q1, st.container(key="danger-clear-tasks"):
-            if st.button(f"🗑 Очистить очередь ({cities_word(cities)})", disabled=running,
-                         use_container_width=True, key="btn-clear-tasks"):
-                clear_tasks(project_id)
-                st.rerun()
+        with q1:
+            if cities_post:
+                with st.container(key="danger-clear-tasks"):
+                    if st.button(f"🗑 Очистить очередь постов ({cities_word(cities_post)})",
+                                 disabled=running, use_container_width=True, key="btn-clear-tasks"):
+                        clear_tasks(project_id, "tasks")
+                        st.rerun()
+            if cities_gis:
+                with st.container(key="danger-clear-gis"):
+                    if st.button(f"🗑 Очистить очередь фото в 2ГИС ({cities_word(cities_gis)})",
+                                 disabled=running, use_container_width=True, key="btn-clear-gis"):
+                        clear_tasks(project_id, "gis")
+                        st.rerun()
         with q2:
             st.caption("После остановки недоделанные города остаются в очереди – следующий "
                        "запуск продолжит с них, а уже опубликованное реестр повторно не отправит. "
                        "Если продолжать не нужно – очистите очередь.")
 
-        with st.expander(f"📋 Файлы задач в очереди ({files})"):
-            for fp in sorted((project_base(project_id) / "tasks").glob("*.json")):
-                try:
-                    data = json.loads(fp.read_text(encoding="utf-8"))
-                except (json.JSONDecodeError, OSError):
-                    continue
-                tasks = data.get("tasks") or []
-                what = "📸 только фото в 2ГИС" if tasks and all(t.get("gisOnly") for t in tasks) \
-                    else T.esc(data.get("country", "–"))
-                html(f'<div class="city-row"><span class="city-row-name">{what}</span>'
-                     f'<span class="city-row-url">{T.esc(fp.name)}</span>'
-                     f'<span class="badge badge-accent">{len(tasks)} гор.</span></div>')
+        with st.expander(f"📋 Файлы задач в очереди ({files_post + files_gis})"):
+            for source_id, подпись in (("tasks", ""), ("gis", "📸 только фото в 2ГИС · ")):
+                for fp in sorted(tasks_dir(project_id, source_id).glob("*.json")):
+                    try:
+                        data = json.loads(fp.read_text(encoding="utf-8"))
+                    except (json.JSONDecodeError, OSError):
+                        continue
+                    tasks = data.get("tasks") or []
+                    html(f'<div class="city-row">'
+                         f'<span class="city-row-name">{подпись}{T.esc(data.get("country", "–"))}</span>'
+                         f'<span class="city-row-url">{T.esc(fp.name)}</span>'
+                         f'<span class="badge badge-accent">{len(tasks)} гор.</span></div>')
     else:
         html(T.empty("📭", "Очередь пуста", "Соберите пост во вкладке «Публикация» и добавьте города в очередь."))
 
@@ -4384,32 +4406,99 @@ def show_main(project_id: str) -> None:
 # рисует и ничего не запускает, а сама перерисовывается через секунду.
 # Выселение занимает мгновение: человек видит короткую плашку и работает
 # дальше уже на одной сборке.
-_MIXED_TRIES = "_mixed_build_tries"
-_MIXED_LIMIT = 8
+_REFRESH_LOCK = threading.Lock()
+
+
+def disk_build() -> str:
+    """
+    Метка сборки, прочитанная С ДИСКА, а не из памяти.
+
+    Сравнивать модули с меткой ИЗ ПАМЯТИ бессмысленно, и это стоило заказчику
+    ещё двух пустых постов. Streamlit перечитывает с диска только главный
+    скрипт; `build` он держит в памяти наравне с остальными. Значит после
+    обновления старыми оказываются И модули, И метка – всё «сходится», хотя
+    код разный, и проверка молчит. Правда только на диске.
+    """
+    try:
+        text = (Path(__file__).parent / "build.py").read_text(encoding="utf-8")
+    except OSError:
+        return UI_BUILD
+    found = re.search(r'BUILD\s*=\s*["\']([^"\']+)["\']', text)
+    return found.group(1) if found else UI_BUILD
 
 
 def stale_modules() -> list[str]:
-    """Модули, оставшиеся в памяти от прежней сборки."""
-    return [name for name in _OWN_MODULES
-            if getattr(sys.modules.get(name), "BUILD", UI_BUILD) != UI_BUILD]
+    """Части приложения, оставшиеся в памяти от прежней сборки."""
+    want = disk_build()
+    stale = [name for name in _OWN_MODULES
+             if getattr(sys.modules.get(name), "BUILD", want) != want]
+    if UI_BUILD != want:
+        stale.append("build")
+    return sorted(set(stale))
+
+
+def refresh_stale_modules() -> list[str]:
+    """
+    Перечитать с диска модули, оставшиеся от прежней сборки.
+
+    Зачем. Облако обновляет файлы под работающим приложением. Главный скрипт
+    Streamlit читает с диска на каждой перерисовке, а соседние модули берёт из
+    памяти – и до перезапуска приложения экран новый, а прогон старый. Это не
+    теория: заказчик получила «AttributeError: casual_words», а потом старый
+    прогон принял задания «только фото в 2ГИС» за обычные посты и опубликовал
+    пустые посты в пяти городах. Просить человека нажать «Reboot app» – не
+    решение: он этого не увидит и не должен.
+
+    Почему это безопасно теперь, хотя раньше самодельная перезагрузка роняла
+    приложение целиком. Тогда она шла на КАЖДОЙ перерисовке и из любого потока
+    без оглядки на соседей. Теперь – только когда метки и правда разошлись
+    (раз за сборку), только когда НЕ ИДЁТ ни один прогон (иначе живой прогон
+    остался бы со старым модулем) и под общим замком, чтобы два потока не
+    перезагружали разом. Плюс importlib.reload не выкидывает модуль из
+    sys.modules – читатель в соседнем потоке видит его всё время.
+    """
+    if any(runner.is_running(pid) for pid in PROJECTS):
+        return stale_modules()
+    with _REFRESH_LOCK:
+        stale = stale_modules()
+        if not stale:
+            return []
+        # Сперва метка, потом всё остальное: модули берут BUILD из неё.
+        for name in ["build"] + [n for n in _OWN_MODULES if n != "build"]:
+            module = sys.modules.get(name)
+            if module is None:
+                continue
+            for attempt in range(3):
+                try:
+                    importlib.reload(module)
+                    break
+                except KeyError:            # сосед выселил модуль – подождём
+                    time.sleep(0.2 * (attempt + 1))
+                except Exception:           # noqa: BLE001 – не вышло, скажем человеку
+                    break
+        return stale_modules()
 
 
 def main() -> None:
-    stale = stale_modules()
-    if stale:
-        tries = st.session_state.get(_MIXED_TRIES, 0) + 1
-        st.session_state[_MIXED_TRIES] = tries
-        if tries <= _MIXED_LIMIT:
-            st.info("⏳ Приложение обновляется – секунду. Это бывает после выхода "
-                    "новой версии: страница обновилась раньше, чем остальные части.")
-            time.sleep(1.0)
+    if stale_modules():
+        # Перечитываем сами. Не вышло (идёт прогон или модуль не поддался) –
+        # НИЧЕГО не рисуем и ничего не запускаем: смешанный код опаснее
+        # неудобства. Экран уже умел «только фото в 2ГИС», а прогон из памяти
+        # про них не знал – и посты ушли пустыми.
+        left = refresh_stale_modules()
+        if not left:
             st.rerun()
+        busy = [pid for pid in PROJECTS if runner.is_running(pid)]
+        if busy:
+            st.warning("⏳ Вышла новая версия Click, но сейчас идёт прогон – обновимся, "
+                       "когда он закончится. Пока работает прежняя версия; новые прогоны "
+                       "лучше не запускать.")
+            return
         st.error("Приложение обновилось, но часть его осталась от прежней сборки: "
-                 + ", ".join(stale) + ". Перезагрузите страницу (F5), а если не поможет – "
+                 + ", ".join(left) + ". Перезагрузите страницу (F5), а если не поможет – "
                  "«Reboot app» в меню Streamlit справа внизу. Запускать прогоны сейчас "
                  "нельзя: новый экран и старый прогон понимают задачи по-разному.")
         return
-    st.session_state.pop(_MIXED_TRIES, None)
 
     project_id = st.session_state.get("current_project_id")
     if not project_id:

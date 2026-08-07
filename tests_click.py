@@ -3397,11 +3397,23 @@ def test_two_people_at_once(tmp: Path) -> None:
     print("\n▸ Двое одновременно")
 
     # ── Гонки импортов больше нет ──
+    #
+    # Раньше здесь стояло «importlib.reload не встречается вовсе». Запрет был
+    # выстрадан: перезагрузка шла на КАЖДОЙ перерисовке и из любого потока,
+    # соседний поток в это время импортировал те же модули – и падал.
+    #
+    # Но полный запрет обошёлся дороже: после обновления облако оставляет
+    # модули в памяти прежними, и приложение работает вразнобой – экран новый,
+    # прогон старый. Заказчик получила от этого пустые посты в пяти живых
+    # карточках. Поэтому перезагрузка вернулась, но зажата со всех сторон, и
+    # проверяем мы теперь именно зажим, а не сам факт вызова.
     src = (Path(__file__).parent / "streamlit_app.py").read_text(encoding="utf-8")
     body = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
-    check("модули не перезагружаются вручную", "importlib.reload" not in body)
     check("sys.modules не правится", "sys.modules[" not in body)
     check("метка сборки осталась – её показываем", bool(app.UI_BUILD))
+    check("перезагрузка живёт в одном месте", _reload_callers(src) == {"refresh_stale_modules"},
+          str(_reload_callers(src)))
+    check("и только под общим замком", "_REFRESH_LOCK" in body)
 
     # ── Потолок общий на всё приложение ──
     saved_root, saved_mem = r.USERS_DATA, r.memory_mb
@@ -3831,6 +3843,7 @@ def test_gis_photos_wiring() -> None:
     Ссылку кладём в САМУ задачу: задача уезжает в файл и должна пережить
     перезапуск облака, а искать её потом посреди прогона негде.
     """
+    import runner
     import streamlit_app as app
     print("\n▸ Фото отгрузки ещё и в 2ГИС")
 
@@ -3862,8 +3875,10 @@ def test_gis_photos_wiring() -> None:
        "https://account.2gis.com/orgs/70000001094798575/")
 
     with tempfile.TemporaryDirectory() as tmp:
-        saved = app.USERS_DATA
-        app.USERS_DATA = Path(tmp)
+        # Корень подменяем ОБОИМ: очередь пишет экран, а читает её прогон –
+        # проверять надо ровно то, что он увидит.
+        saved, saved_runner = app.USERS_DATA, runner.USERS_DATA
+        app.USERS_DATA = runner.USERS_DATA = Path(tmp)
         try:
             queue = [{"countryId": "c-1", "countryName": "Россия",
                       "cityIds": ["ct-1", "ct-2"], "postType": "shipment",
@@ -3892,9 +3907,17 @@ def test_gis_photos_wiring() -> None:
             (app.project_base("SMU") / "tasks").rename(app.project_base("SMU") / "tasks-only")
             app.save_queue_to_tasks("SMU", config, [{**queue[0], "text": "", "gisOnly": True,
                                                      "productPhotos": ["/tmp/витрина.jpg"]}])
-            files = list((app.project_base("SMU") / "tasks").glob("*.json"))
+            files = list(runner.tasks_folder("SMU", "gis").glob("*.json"))
+            eq("задание уехало в отдельную папку", len(files), 1)
             only = {t["cityName"]: t
                     for t in json.loads(files[0].read_text(encoding="utf-8"))["tasks"]}
+            # Главное: такие задания лежат в СВОЕЙ папке. Прогон прежней сборки
+            # про них не знает и, увидев пустой текст, публикует пустой пост –
+            # так у заказчика и вышло. В чужую папку он не заглянет: её нет в
+            # его коде, очередь для него просто пуста.
+            eq("для обычной очереди этих заданий не существует",
+               runner.count_pending("SMU", "tasks"), (0, 0))
+            eq("а в своей очереди они есть", runner.count_pending("SMU", "gis")[1], 2)
             check("режим доехал до задачи", only["Самара"]["gisOnly"])
             eq("текста поста в задаче нет", only["Самара"]["postText"], "")
             eq("а снимки и ссылка 2ГИС на месте", only["Самара"]["gisUrl"],
@@ -3903,7 +3926,7 @@ def test_gis_photos_wiring() -> None:
                only["Самара"]["productPhotos"], ["/tmp/витрина.jpg"])
             check("обычная задача режимом не помечена", not by_city["Самара"].get("gisOnly"))
         finally:
-            app.USERS_DATA = saved
+            app.USERS_DATA, runner.USERS_DATA = saved, saved_runner
 
     # Отчёт: причина важнее счёта. Голый «0 из 3» выглядит поломкой, а
     # «нет карточки в 2ГИС» объясняет ноль.
@@ -4061,6 +4084,22 @@ def test_module_attrs_exist() -> None:
           not bad, "; ".join(sorted(set(bad))[:8]))
 
 
+def _reload_callers(src: str) -> set[str]:
+    """Из каких функций зовётся importlib.reload. Пусто – значит нигде."""
+    import ast
+
+    tree = ast.parse(src)
+    out: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for inner in ast.walk(node):
+            if (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
+                    and inner.func.attr == "reload"):
+                out.add(node.name)
+    return out
+
+
 def test_run_title() -> None:
     """
     Заголовок прогона: что именно сейчас делали.
@@ -4133,6 +4172,25 @@ def test_one_build_at_a_time() -> None:
     finally:
         sys.modules["reviews"] = настоящий
     eq("и всё вернулось на место", app.stale_modules(), [])
+
+    # А вот на этом проверка и промолчала в первый раз. Streamlit перечитывает
+    # с диска ТОЛЬКО главный скрипт, а build держит в памяти наравне с
+    # остальными. После обновления старыми оказываются и модули, И МЕТКА – всё
+    # «сходится», хотя код разный. Правда только на диске.
+    eq("метка берётся с диска", app.disk_build(), app.UI_BUILD)
+    было = app.UI_BUILD
+    старьё = types.ModuleType("build")
+    старьё.BUILD = "2026-01-01-старая"
+    настоящий_build = sys.modules["build"]
+    app.UI_BUILD = "2026-01-01-старая"          # так выглядит устаревшая метка в памяти
+    sys.modules["build"] = старьё
+    try:
+        check("устаревшая метка в памяти замечена", "build" in app.stale_modules(),
+              str(app.stale_modules()))
+    finally:
+        app.UI_BUILD = было
+        sys.modules["build"] = настоящий_build
+    eq("и снова всё сходится", app.stale_modules(), [])
 
 
 def test_side_page_after_restart() -> None:
@@ -4461,14 +4519,16 @@ def test_one_build() -> None:
            and re.search(r'^BUILD = "', f.read_text(encoding="utf-8"), re.M)]
     eq("метка задана только в build.py", own, [])
 
-    # Самодельной перезагрузки модулей быть не должно ни в каком виде.
-    check("в приложении нет своей перезагрузки модулей",
-          not hasattr(app, "_MODULES") and not hasattr(app, "_same_build"))
+    # Перезагрузка модулей разрешена ровно в одном месте и только когда метки
+    # разошлись – см. «Двое одновременно» и «Одна сборка на все модули».
     src = (root / "streamlit_app.py").read_text(encoding="utf-8")
-    body = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
-    check("importlib.reload не зовётся", "importlib.reload" not in body, "")
+    check("перезагрузка модулей – только в refresh_stale_modules",
+          _reload_callers(src) == {"refresh_stale_modules"}, str(_reload_callers(src)))
+    # Вот это и роняло приложение: выселение модуля из sys.modules посреди
+    # чужого импорта. importlib.reload так не делает – он перечитывает файл в
+    # тот же объект, и читатель в соседнем потоке видит модуль всё время.
     check("sys.modules напрямую не правится",
-          "sys.modules[" not in body and "sys.modules.pop" not in body, "")
+          "sys.modules[" not in src and "sys.modules.pop" not in src, "")
 
 
 

@@ -128,6 +128,19 @@ def p_tasks(project_id: str) -> Path:
     return base(project_id) / "tasks"
 
 
+# Задания «только фото в 2ГИС» лежат ОТДЕЛЬНО от постов, и это не про порядок
+# в папках. Прогон прежней сборки про такие задания не знает: он видит пустой
+# текст поста и публикует пустой пост – так у заказчика и вышло, пять пустых
+# постов в живых карточках. В свою папку он не заглядывает вовсе, потому что
+# в его коде её нет: очередь для него просто пуста, и он ничего не делает.
+def p_tasks_gis(project_id: str) -> Path:
+    return base(project_id) / "tasks-gis-photos"
+
+
+def tasks_folder(project_id: str, source: str = "tasks") -> Path:
+    return p_tasks_gis(project_id) if source == "gis" else p_tasks(project_id)
+
+
 def p_tasks_actualize(project_id: str, platform: str = YANDEX) -> Path:
     return base(project_id) / PLATFORMS[platform]["tasks"]
 
@@ -734,8 +747,10 @@ def _load_task_files(folder: Path) -> list[tuple[Path, dict]]:
 
 
 def count_pending(project_id: str, folder: str = "tasks") -> tuple[int, int]:
-    """(файлов, городов) в очереди."""
-    files = _load_task_files(p_tasks(project_id) if folder == "tasks" else p_tasks_actualize(project_id))
+    """(файлов, городов) в очереди. folder: tasks | gis | actualize."""
+    where = {"tasks": p_tasks(project_id),
+             "gis": p_tasks_gis(project_id)}.get(folder) or p_tasks_actualize(project_id)
+    files = _load_task_files(where)
     return len(files), sum(len(cfg.get("tasks") or []) for _, cfg in files)
 
 
@@ -766,11 +781,14 @@ def start_publish(
     strict_account_check: bool = True,
     retry_unknown: bool = False,
     dedup_window_hours: float = DEDUP_WINDOW_HOURS,
+    source: str = "tasks",
 ) -> tuple[bool, str]:
     """
     Запускает публикацию в фоновом потоке. Возвращает (запущено?, сообщение).
     Повторный вызов при активном прогоне ничего не делает – это и есть защита
     от «нажал кнопку дважды → опубликовалось дважды».
+
+    source='gis' – очередь «только фото в 2ГИС», она лежит в своей папке.
     """
     with _lock:
         busy = busy_reason(project_id, "publish")
@@ -780,7 +798,7 @@ def start_publish(
         if thread and thread.is_alive():
             return False, "Предыдущая публикация ещё не завершилась."
 
-        files = _load_task_files(p_tasks(project_id))
+        files = _load_task_files(tasks_folder(project_id, source))
         if not files:
             return False, "Очередь задач пуста."
 
@@ -811,7 +829,7 @@ def start_publish(
         )
         _threads[(project_id, "publish")] = t
         t.start()
-        return True, f"Публикация запущена: {total} городов."
+        return True, f"{publish_title(files)}: {total} городов."
 
 
 def _gis_photos_for_city(project_id: str, browser, task: dict, local: list[str],

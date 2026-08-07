@@ -1114,7 +1114,7 @@ def scenario_gis_only(pid: str) -> None:
     yb.verify_account = lambda page, email: (   # type: ignore[assignment]
         аккаунт.append(email) or fake_verify_account(page, email))
     try:
-        folder = runner.p_tasks(pid)
+        folder = runner.p_tasks_gis(pid)          # своя папка, не общая с постами
         folder.mkdir(parents=True, exist_ok=True)
         shot = Path(tempfile.mkdtemp()) / "витрина.jpg"
         shot.write_bytes(b"\xff\xd8\xff" + b"z" * 32)
@@ -1132,8 +1132,11 @@ def scenario_gis_only(pid: str) -> None:
             ],
         }, ensure_ascii=False), encoding="utf-8")
 
+        eq("для обычной очереди этих задач не существует",
+           runner.count_pending(pid, "tasks"), (0, 0))
+        eq("а в своей очереди они есть", runner.count_pending(pid, "gis")[1], 2)
         ok, msg = runner.start_publish(pid, delay_between_posts_s=0,
-                                       expected_email="test@yandex.ru")
+                                       expected_email="test@yandex.ru", source="gis")
         check("прогон стартовал", ok, msg)
         wait_done(pid); settle(pid)
 
@@ -1166,7 +1169,7 @@ def scenario_gis_only(pid: str) -> None:
         }, ensure_ascii=False), encoding="utf-8")
         ушло.clear()
         ok, msg = runner.start_publish(pid, delay_between_posts_s=0,
-                                       expected_email="test@yandex.ru")
+                                       expected_email="test@yandex.ru", source="gis")
         check("второй прогон стартовал", ok, msg)
         wait_done(pid); settle(pid)
         eq("те же снимки второй раз не заливаются", len(ушло), 0)

@@ -413,9 +413,31 @@ def open_book(file_id: str, sa_info: dict, gid: str = "") -> tuple[list[str], An
     return titles, read, prefer
 
 
-def _read_values(file_id: str, sa_info: dict, gid: str = "") -> list[list[str]]:
-    """Значения таблицы. Нативную читаем через Sheets API, залитый .xlsx – качаем."""
+def _read_values(file_id: str, sa_info: dict, gid: str = "",
+                 title: str = "") -> tuple[list[list[str]], str]:
+    """
+    Значения таблицы: (строки, название использованного листа).
+
+    title передан (лист выбран явно в «Настройках») – читаем именно его,
+    без эвристики; лист успели переименовать или удалить – понятная ошибка,
+    а не молчаливый переход на другой лист. Не передан – прежнее
+    автоопределение по содержимому (_pick_sheet), для проектов, где лист
+    ещё не выбрали явно.
+    """
     titles, read, prefer = open_book(file_id, sa_info, gid)
+    if title:
+        want = title
+        if want not in titles:
+            # Название могло прийти с лишними пробелами или в другом регистре.
+            low = {t.strip().lower(): t for t in titles}
+            want = low.get(want.strip().lower(), "")
+        if not want:
+            raise RuntimeError(
+                f"Лист «{title}» не нашёлся в таблице – его могли переименовать "
+                f"или удалить. Выберите лист заново в «⚙️ Настройки». "
+                f"Сейчас в таблице есть: {', '.join(titles[:20])}"
+            )
+        return read(want), want
     return _pick_sheet(titles, read, prefer)
 
 
@@ -454,12 +476,24 @@ def read_sheet(project_id: str, title: str, from_config: str = "") -> list[list[
         low = {t.strip().lower(): t for t in titles}
         want = low.get((want or "").strip().lower(), "")
     if not want:
-        raise RuntimeError(f"В таблице нет листа «{title}». Есть: {', '.join(titles[:20])}")
+        if title:
+            raise RuntimeError(
+                f"Лист «{title}» не нашёлся в таблице – его могли переименовать или "
+                f"удалить. Выберите лист заново в «⚙️ Настройки». "
+                f"Сейчас в таблице есть: {', '.join(titles[:20])}"
+            )
+        raise RuntimeError(f"В таблице нет ни одного листа. Есть: {', '.join(titles[:20])}")
     return read(want)
 
 
-def _pick_sheet(titles: list[str], read, prefer: str = "") -> list[list[str]]:
-    """Первый лист, на котором нашлись города со ссылками на Яндекс.Бизнес."""
+def _pick_sheet(titles: list[str], read, prefer: str = "") -> tuple[list[list[str]], str]:
+    """
+    Первый лист, на котором нашлись города со ссылками на Яндекс.Бизнес.
+
+    Возвращает (строки, название выбранного листа) – имя нужно, чтобы после
+    первой автоматической загрузки запомнить выбор в конфиге проекта явно
+    и больше не гадать при следующих загрузках.
+    """
     if not titles:
         raise RuntimeError("В таблице нет листов")
     # Старые копии не читаем ВООБЩЕ – ровно этого просила заказчик. К ним
@@ -477,7 +511,7 @@ def _pick_sheet(titles: list[str], read, prefer: str = "") -> list[list[str]]:
             continue
         cities, diag = parse_rows(rows)
         if cities:
-            return rows
+            return rows, title
         tried.append(f"«{title}»: {diag.get('error') or 'городов не нашлось'}")
     raise RuntimeError("Ни на одном листе не нашлось таблицы с городами и ссылками "
                        "на Яндекс.Бизнес. Проверено – " + "; ".join(tried[:6]))
@@ -512,6 +546,18 @@ def _sheet_order(titles: list[str], prefer: str = "") -> list[str]:
         return (old + 2, 0)
 
     return sorted(titles, key=key)
+
+
+def guess_sheet(titles: list[str], prefer: str = "") -> str:
+    """
+    Лист-подсказка по названию – только для выпадающего списка в «Настройках».
+
+    Не читает содержимое (в отличие от _pick_sheet): это лишь то, что
+    предложить человеку по умолчанию, а не окончательный выбор – его
+    делает сам человек, глядя на список листов.
+    """
+    order = _sheet_order(titles, prefer)
+    return order[0] if order else ""
 
 
 def _norm(s: str) -> str:
@@ -679,8 +725,16 @@ def _status_column(header: list[str], from_col: int, avoid: str) -> int:
     return -1
 
 
-def load_cities(project_id: str, from_config: str = "") -> tuple[list[dict], dict]:
-    """Скачать и разобрать КП проекта. Бросает RuntimeError с понятным текстом."""
+def load_cities(project_id: str, from_config: str = "", title: str = "") -> tuple[list[dict], dict]:
+    """
+    Скачать и разобрать КП проекта. Бросает RuntimeError с понятным текстом.
+
+    title – лист, выбранный явно в «⚙️ Настройки». Пусто – прежнее
+    автоопределение по содержимому (для проектов, где лист ещё не выбрали).
+    В diag['usedSheet'] всегда лежит название реально прочитанного листа –
+    вызывающий код (kp_pull) сохраняет его в конфиг при первой загрузке,
+    чтобы дальше выбор был явным и не менялся сам по себе.
+    """
     url = sheet_url(project_id, from_config)
     fid = sheet_id(url)
     if not fid:
@@ -691,7 +745,10 @@ def load_cities(project_id: str, from_config: str = "") -> tuple[list[dict], dic
             "Не найден ключ сервисного аккаунта Google. Добавьте в секреты приложения "
             "gcp_service_account_b64 (весь JSON-ключ в base64) или секцию [gcp_service_account]."
         )
-    return parse_rows(_read_values(fid, sa, sheet_gid(url)))
+    rows, used_title = _read_values(fid, sa, sheet_gid(url), title)
+    cities, diag = parse_rows(rows)
+    diag["usedSheet"] = used_title
+    return cities, diag
 
 
 def to_countries(cities: list[dict], project_id: str, platform: str = YANDEX) -> list[dict]:

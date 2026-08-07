@@ -38,6 +38,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import struct
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1252,6 +1253,98 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
 MEDIA_TYPES = (".jpg", ".jpeg", ".png", ".webp")
 MEDIA_WAIT_MS = 60_000           # столько ждём, пока снимок появится в альбоме
 
+# Требования 2ГИС к фото (из подсказки в интерфейсе кабинета).
+GIS_MIN_PX   = 600               # минимальный размер стороны, px
+GIS_MAX_PX   = 7000              # максимальный размер стороны, px
+GIS_MAX_SIDE_RATIO = 5           # максимальное соотношение сторон (длинная / короткая)
+GIS_MAX_BYTES = 10 * 1024 * 1024 # максимальный размер файла, байт
+
+
+def _image_dims(path: str) -> tuple[int, int] | None:
+    """
+    Ширина и высота в пикселях – без PIL, из бинарных заголовков.
+
+    Поддерживает JPEG (SOF-маркеры), PNG (IHDR-чанк) и WEBP (VP8/VP8L/VP8X).
+    Возвращает None, если формат не распознан или файл повреждён.
+    """
+    try:
+        with open(path, "rb") as f:
+            hdr = f.read(32)
+
+        # ── PNG ────────────────────────────────────────────────
+        if hdr[:8] == b'\x89PNG\r\n\x1a\n':
+            w, h = struct.unpack('>II', hdr[16:24])
+            return w, h
+
+        # ── JPEG ───────────────────────────────────────────────
+        if hdr[:2] == b'\xff\xd8':
+            with open(path, "rb") as f:
+                data = f.read()
+            i = 2
+            while i + 8 < len(data):
+                if data[i] != 0xFF:
+                    break
+                m = data[i + 1]
+                # SOF-маркеры, в которых записаны размеры кадра
+                if m in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+                         0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                    h, w = struct.unpack('>HH', data[i + 5: i + 9])
+                    return w, h
+                seg_len = struct.unpack('>H', data[i + 2: i + 4])[0]
+                i += 2 + seg_len
+
+        # ── WEBP ───────────────────────────────────────────────
+        if hdr[:4] == b'RIFF' and hdr[8:12] == b'WEBP':
+            chunk = hdr[12:16]
+            with open(path, "rb") as f:
+                f.seek(12)
+                body = f.read(30)
+            if chunk == b'VP8X':          # extended
+                w = struct.unpack('<I', body[8:11] + b'\x00')[0] + 1
+                h = struct.unpack('<I', body[11:14] + b'\x00')[0] + 1
+                return w, h
+            if chunk == b'VP8 ':          # lossy
+                bits = struct.unpack('<HH', body[14:18])
+                return bits[0] & 0x3FFF, bits[1] & 0x3FFF
+            if chunk == b'VP8L':          # lossless
+                packed = int.from_bytes(body[9:13], 'little')
+                return (packed & 0x3FFF) + 1, ((packed >> 14) & 0x3FFF) + 1
+
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def check_gis_photo(path: str) -> str:
+    """
+    Проверяет файл на соответствие требованиям 2ГИС.
+
+    Возвращает пустую строку если всё в порядке, иначе – причину отказа.
+    """
+    size = Path(path).stat().st_size
+    if size > GIS_MAX_BYTES:
+        mb = size / 1024 / 1024
+        return f"файл {mb:.1f} МБ – 2ГИС принимает до 10 МБ"
+
+    dims = _image_dims(path)
+    if dims is None:
+        return ""   # не смогли прочитать – пусть пробует, 2ГИС сам скажет
+
+    w, h = dims
+    name = Path(path).name
+    if w < GIS_MIN_PX or h < GIS_MIN_PX:
+        return (f"{name}: размер {w}×{h} пкс – 2ГИС требует минимум "
+                f"{GIS_MIN_PX}×{GIS_MIN_PX} пкс")
+    if w > GIS_MAX_PX or h > GIS_MAX_PX:
+        return (f"{name}: размер {w}×{h} пкс – 2ГИС принимает максимум "
+                f"{GIS_MAX_PX}×{GIS_MAX_PX} пкс")
+    long_side, short_side = max(w, h), min(w, h)
+    if short_side > 0 and long_side / short_side > GIS_MAX_SIDE_RATIO:
+        ratio = long_side / short_side
+        return (f"{name}: соотношение сторон {ratio:.1f}:1 – "
+                f"2ГИС допускает не более {GIS_MAX_SIDE_RATIO}:1")
+    return ""
+
 
 def build_media_url(url: str | None) -> str | None:
     """Куда идти за разделом «Фото и видео». Точный адрес возьмём уже на месте."""
@@ -1299,6 +1392,10 @@ _MEDIA_LOOK_JS = r"""
   const m = body.match(/все\s+фото\s+и\s+видео\s+(\d+)/i);
   if (m) counter = parseInt(m[1], 10);
 
+  // Если 2ГИС показал ошибку валидации загруженного файла – подсказка содержит
+  // текст о требованиях. Ловим это, чтобы не ждать полный таймаут впустую.
+  const uploadError = /600.?600|7000.?7000|соотношение\s+сторон|до\s+10\s+мб/i.test(body);
+
   const field = document.querySelector('input[type="file"]');
   return {
     link: link,
@@ -1309,6 +1406,7 @@ _MEDIA_LOOK_JS = r"""
     title: norm(document.title || '').slice(0, 120),
     path: location.pathname || '',
     size: norm(body).length,
+    uploadError: uploadError,
   };
 }
 """
@@ -1390,6 +1488,16 @@ def upload_media(page: Page, gis_url: str | None, files: list[str], label: str =
     if bad:
         names = ", ".join(Path(b).name for b in bad[:3])
         warn(f"  📸 {label}2ГИС не принимает такие файлы (только jpg, png, webp): {names}")
+
+    # Проверяем размеры изображений до отправки: 2ГИС молча показывает красный
+    # крест если фото не соответствует требованиям, и в отчёте это выглядит как
+    # «файлы переданы, но не появились». Лучше сказать сразу, в чём проблема.
+    dim_errors = [check_gis_photo(p) for p in good]
+    dim_errors = [e for e in dim_errors if e]
+    if dim_errors:
+        out["reason"] = "Фото не соответствуют требованиям 2ГИС: " + "; ".join(dim_errors)
+        warn(f"  📸 {label}2ГИС: {out['reason']}")
+        return out
     if not good:
         out["reason"] = "Ни один файл не подходит для 2ГИС (принимаются jpg, png, webp)"
         return out
@@ -1451,11 +1559,17 @@ def upload_media(page: Page, gis_url: str | None, files: list[str], label: str =
     # Успех – только доказанный: снимки должны появиться в альбоме.
     deadline = time.time() + MEDIA_WAIT_MS / 1000
     grown = 0
+    upload_rejected = False
     while time.time() < deadline:
         page.wait_for_timeout(700)
         now = _media_look(page)
         if not now:
             continue
+        # 2ГИС показал ошибку валидации (красный крест с подсказкой о требованиях):
+        # ждать дальше бессмысленно, выходим сразу.
+        if now.get("uploadError"):
+            upload_rejected = True
+            break
         grown = max(grown, int(now.get("tiles") or 0) - before)
         if was_counter is not None and now.get("counter") is not None:
             grown = max(grown, int(now["counter"]) - int(was_counter))
@@ -1468,6 +1582,10 @@ def upload_media(page: Page, gis_url: str | None, files: list[str], label: str =
     elif out["uploaded"]:
         out["reason"] = (f"В альбоме появилось {out['uploaded']} из {len(good)} – "
                          "остальные проверьте вручную")
+        warn(f"  📸 {label}2ГИС: {out['reason']}")
+    elif upload_rejected:
+        out["reason"] = ("2ГИС отклонил фото: не соответствует требованиям "
+                         "(мин. 600×600 пкс, макс. 7000×7000, соотношение ≤ 1:5, до 10 МБ)")
         warn(f"  📸 {label}2ГИС: {out['reason']}")
     else:
         out["reason"] = ("Файлы переданы, но в альбоме они не появились – "

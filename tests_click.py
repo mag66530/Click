@@ -1512,6 +1512,57 @@ def test_gis_reviews_on_real_page() -> None:
             browser.close()
 
 
+def test_gis_photo_validation() -> None:
+    """Предварительная проверка размеров фото перед отправкой в 2ГИС."""
+    import gis_playwright as gis
+    import struct
+    import tempfile
+
+    print("\n▸ 2ГИС: предварительная валидация фото")
+
+    def make_png(w: int, h: int) -> bytes:
+        sig = b'\x89PNG\r\n\x1a\n'
+        ihdr_data = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)
+        import zlib
+        crc = zlib.crc32(b'IHDR' + ihdr_data) & 0xFFFFFFFF
+        ihdr = struct.pack('>I', 13) + b'IHDR' + ihdr_data + struct.pack('>I', crc)
+        iend_crc = zlib.crc32(b'IEND') & 0xFFFFFFFF
+        iend = struct.pack('>I', 0) + b'IEND' + struct.pack('>I', iend_crc)
+        return sig + ihdr + iend
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # 600×600 – минимально допустимый размер
+        p600 = str(Path(tmp) / "ok_600x600.png")
+        Path(p600).write_bytes(make_png(600, 600))
+        check("600×600 проходит", gis.check_gis_photo(p600) == "", gis.check_gis_photo(p600))
+
+        # 599×600 – меньше минимума
+        p599 = str(Path(tmp) / "small_599x600.png")
+        Path(p599).write_bytes(make_png(599, 600))
+        err = gis.check_gis_photo(p599)
+        check("599×600 не проходит", "600" in err, err)
+        check("размер указан в сообщении", "599" in err, err)
+
+        # 7001×700 – выше максимума
+        p7001 = str(Path(tmp) / "big_7001x700.png")
+        Path(p7001).write_bytes(make_png(7001, 700))
+        err = gis.check_gis_photo(p7001)
+        check("7001×700 не проходит", "7000" in err, err)
+
+        # 3000×200 – соотношение 15:1, больше 5:1
+        p_ratio = str(Path(tmp) / "wide_3000x200.png")
+        Path(p_ratio).write_bytes(make_png(3000, 200))
+        err = gis.check_gis_photo(p_ratio)
+        check("3000×200 не проходит (соотношение)", "соотношение" in err.lower(), err)
+
+        # _image_dims читает корректные размеры
+        dims = gis._image_dims(p600)   # noqa: SLF001
+        eq("PNG: размер прочитан верно", dims, (600, 600))
+
+        dims7 = gis._image_dims(p7001)  # noqa: SLF001
+        eq("PNG: большой размер", dims7, (7001, 700))
+
+
 def test_gis_media_upload() -> None:
     """
     Фото отгрузки в «Фото и видео» 2ГИС – на настоящей странице кабинета.

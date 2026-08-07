@@ -61,7 +61,14 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly",
           "https://www.googleapis.com/auth/drive.readonly"]
 GOOGLE_SHEET_MIME = "application/vnd.google-apps.spreadsheet"
 
-SPRAV_RX = re.compile(r"yandex\.[a-z.]+/sprav/\d+", re.I)
+# Яндекс завёл второй адрес той же карточки:
+#   старый  yandex.ru/sprav/21461411/edit/
+#   новый   yandex.ru/business/companies/company/70210624498/
+# Номер в обоих один и тот же (тот же случай уже решён в yb_playwright.py –
+# COMPANY_ID_RX). Раньше здесь matчился только старый вид: город с новой
+# ссылкой не получал url вовсе и молча выпадал из списка Яндекса, хотя
+# статус в КП был «Активная» – заказчик находила его в таблице, а Click нет.
+SPRAV_RX = re.compile(r"yandex\.[a-z.]+/(?:sprav|business/companies/company)/\d+", re.I)
 
 # Блок 2ГИС в той же строке КП: «Аккаунт» – ссылка на кабинет организации,
 # «Карта» – её публичная карточка, «Статус» – тот же словарь, что у Яндекса.

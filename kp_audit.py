@@ -235,7 +235,10 @@ _COLS: dict[str, tuple[str, ...]] = {
     "status": ("статус", "яндекс_статус"),
 }
 
-SPRAV_RX = re.compile(r"yandex\.[a-z.]+/sprav/\d+", re.I)
+# Тот же старый/новый вид ссылки, что у SPRAV_ID_RX выше – колонку со
+# ссылками ищем по количеству совпадений, и город с новой ссылкой не должен
+# уменьшать её счёт.
+SPRAV_RX = re.compile(r"yandex\.[a-z.]+/(?:sprav|business/companies/company)/\d+", re.I)
 
 # Чужие площадки: их ссылки в КП тоже есть, но сайтом города они не являются.
 _FOREIGN_SITE_RX = re.compile(r"yandex\.|2gis\.|2гис|google\.|goo\.gl|vk\.com|vk\.ru|"

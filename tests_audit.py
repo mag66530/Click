@@ -128,6 +128,20 @@ def test_parse_sheet() -> None:
        A.parse_sheet([["что-то"], ["ещё"]])["error"],
        "Не нашли шапку: нужна строка с колонкой «Город»")
 
+    # Яндекс завёл второй вид ссылки (yandex.ru/business/companies/company/…),
+    # но здесь важнее не сама ссылка (её ID и так снимает SPRAV_ID_RX), а
+    # КОЛОНКА: если в листе преобладает новый вид, старая узкая SPRAV_RX
+    # недосчитывала бы совпадений и рисковала указать не на ту колонку.
+    new_fmt = kp(["Россия", "Волгоград", "https://volgograd.aviastal.ru", "адрес", "почта",
+                  "телефон", "https://yandex.ru/business/companies/company/70210624498/",
+                  "Активная"],
+                 ["Россия", "Красноярск", "https://krsk.aviastal.ru", "адрес", "почта",
+                  "телефон", "https://yandex.ru/business/companies/company/72177026477/",
+                  "Активная"])
+    got_new = A.parse_sheet(new_fmt)
+    eq("колонка ссылки находится и по новому виду адреса", got_new["columns"]["link"], 6)
+    eq("оба города на месте", len(got_new["items"]), 2)
+
 
 def test_match() -> None:
     print("\n▸ Сопоставление городов и карточек")

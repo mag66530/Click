@@ -1065,6 +1065,14 @@ def test_kp_sheet() -> None:
         ["Россия", "Омск", "1104000", "https://omsk.metpromintex.ru", "", "",
          "", "https://yandex.ru/sprav/299334/p/edit/posts/", "", "Удалена", "", "", "Удалена"],
         ["Россия", "БезСсылки", "1000", "https://x.ru", "", "", "", "", "", "Активная", "", "", ""],
+        # Яндекс завёл второй вид ссылки на ту же карточку – yb_playwright.py
+        # его давно распознаёт (COMPANY_ID_RX), а kp_sheet.SPRAV_RX до сих пор
+        # искал только старый /sprav/. Живой случай: в КП заказчика Волгоград,
+        # Красноярск и Ижевск стояли «Активная» с такой ссылкой, а Click их в
+        # список Яндекса не брал вовсе – город просто пропадал молча.
+        ["Россия", "Волгоград", "1019000", "https://volgograd.metpromintex.ru", "", "",
+         "", "https://yandex.ru/business/companies/company/70210624498/?utm_source=maps",
+         "", "Активная", "", "", ""],
     ]
     cities, diag = kp_sheet.parse_rows(rows)
 
@@ -1073,12 +1081,21 @@ def test_kp_sheet() -> None:
        diag.get("urlHeader"), "Аккаунт")
     eq("взята именно колонка Яндекса", diag.get("urlColumn"), 7)
     eq("статус берётся справа от неё (Яндекса, не 2ГИС)", diag.get("statusColumn"), 9)
-    eq("городов после фильтра", len(cities), 3)
+    eq("городов после фильтра", len(cities), 4)
     check("Омск со статусом «Удалена» отброшен", all(c["name"] != "Омск" for c in cities))
     check("город без ссылки на ЯБ отброшен", all(c["name"] != "БезСсылки" for c in cities))
     check("Питер оставлен: у него удалён только 2ГИС, а Яндекс «Онлайн»",
           any(c["name"] == "Санкт-Петербург" for c in cities))
     eq("ссылка сохранена как есть", cities[0]["url"], "https://yandex.ru/sprav/365594/p/edit/posts/")
+
+    volgograd = next((c for c in cities if c["name"] == "Волгоград"), None)
+    check("Волгоград с новым видом ссылки НЕ пропадает", volgograd is not None)
+    if volgograd:
+        eq("ссылка нового вида сохранена целиком", volgograd["url"],
+           "https://yandex.ru/business/companies/company/70210624498/?utm_source=maps")
+        eq("статус тоже на месте", volgograd["status"], "Активная")
+        eq("и по ней всё равно достаётся ID компании",
+           yb_extract(volgograd["url"]), "70210624498")
 
     countries = kp_sheet.to_countries(cities, "IMP")
     eq("стран получилось", len(countries), 2)

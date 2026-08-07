@@ -3886,6 +3886,22 @@ def test_gis_photos_wiring() -> None:
             off = json.loads(files[0].read_text(encoding="utf-8"))["tasks"][0]
             check("без галочки в 2ГИС не собираемся", not off["gisPhotos"])
             eq("и ссылку не кладём", off["gisUrl"], None)
+
+            # ВРЕМЕННО: задание «только фото в 2ГИС». Текста поста у него нет
+            # вовсе – прогон по такому заданию не публикует, а только заливает.
+            (app.project_base("SMU") / "tasks").rename(app.project_base("SMU") / "tasks-only")
+            app.save_queue_to_tasks("SMU", config, [{**queue[0], "text": "", "gisOnly": True,
+                                                     "productPhotos": ["/tmp/витрина.jpg"]}])
+            files = list((app.project_base("SMU") / "tasks").glob("*.json"))
+            only = {t["cityName"]: t
+                    for t in json.loads(files[0].read_text(encoding="utf-8"))["tasks"]}
+            check("режим доехал до задачи", only["Самара"]["gisOnly"])
+            eq("текста поста в задаче нет", only["Самара"]["postText"], "")
+            eq("а снимки и ссылка 2ГИС на месте", only["Самара"]["gisUrl"],
+               "https://account.2gis.com/orgs/70000001081103893/")
+            eq("снимки те, что положили в блок",
+               only["Самара"]["productPhotos"], ["/tmp/витрина.jpg"])
+            check("обычная задача режимом не помечена", not by_city["Самара"].get("gisOnly"))
         finally:
             app.USERS_DATA = saved
 

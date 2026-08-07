@@ -1090,6 +1090,90 @@ def scenario_gis_photos_after_restart(pid: str) -> None:
         runner.memory_mb = was_mem             # type: ignore[assignment]
 
 
+def scenario_gis_only(pid: str) -> None:
+    """
+    ВРЕМЕННЫЙ режим: только фото в 2ГИС, без поста.
+
+    Заказчик проверяет заливку отдельно от публикации. Главное здесь – что в
+    Яндекс не уходит НИЧЕГО: ни поста, ни фото в «Товары», ни даже проверки
+    аккаунта. И что город без карточки 2ГИС не выдаётся за успех.
+    """
+    print("\n▸ Сценарий: только фото в 2ГИС, без поста")
+    CALLS.clear(); SCRIPT.clear()
+    runner.clear_ledger(pid)
+    import gis_playwright as gis
+    ушло: list[tuple[str, int]] = []
+    аккаунт: list[str] = []
+
+    def fake_upload(page, gis_url, files, label=""):
+        ушло.append((gis_url, len(files)))
+        return {"requested": len(files), "uploaded": len(files), "skipped": 0, "reason": ""}
+
+    was_upload, was_verify = gis.upload_media, yb.verify_account
+    gis.upload_media = fake_upload             # type: ignore[assignment]
+    yb.verify_account = lambda page, email: (   # type: ignore[assignment]
+        аккаунт.append(email) or fake_verify_account(page, email))
+    try:
+        folder = runner.p_tasks(pid)
+        folder.mkdir(parents=True, exist_ok=True)
+        shot = Path(tempfile.mkdtemp()) / "витрина.jpg"
+        shot.write_bytes(b"\xff\xd8\xff" + b"z" * 32)
+        (folder / f"04-Россия-{int(time.time() * 1000)}.json").write_text(json.dumps({
+            "credentials": {"email": "test@yandex.ru", "password": "x"},
+            "projectName": "TEST", "country": "Россия",
+            "tasks": [
+                {"cityName": "Самара", "companyUrl": "https://yandex.ru/sprav/601/p/edit/posts/",
+                 "companyId": "601", "postText": "", "productPhotos": [str(shot)],
+                 "gisPhotos": True, "gisOnly": True,
+                 "gisUrl": "https://account.2gis.com/orgs/70000001081103893/"},
+                {"cityName": "Тула", "companyUrl": "https://yandex.ru/sprav/602/p/edit/posts/",
+                 "companyId": "602", "postText": "", "productPhotos": [str(shot)],
+                 "gisPhotos": True, "gisOnly": True, "gisUrl": None},
+            ],
+        }, ensure_ascii=False), encoding="utf-8")
+
+        ok, msg = runner.start_publish(pid, delay_between_posts_s=0,
+                                       expected_email="test@yandex.ru")
+        check("прогон стартовал", ok, msg)
+        wait_done(pid); settle(pid)
+
+        eq("в Яндекс не публиковали НИЧЕГО", CALLS, [])
+        eq("и аккаунт Яндекса не проверяли – он тут ни при чём", аккаунт, [])
+        eq("в 2ГИС ушёл город с карточкой", len(ушло), 1)
+        eq("и это Самара", ушло[0][0], "https://account.2gis.com/orgs/70000001081103893/")
+
+        rows = {r["cityName"]: r for r in latest_report(pid)["results"]}
+        eq("Самара: успех", rows["Самара"]["status"], "ok")
+        check("и сказано, сколько снимков", "добавлено 1" in rows["Самара"]["reason"],
+              rows["Самара"]["reason"])
+        eq("Тула без карточки успехом не считается", rows["Тула"]["status"], "failed")
+        eq("и причина названа", (rows["Тула"].get("gisPhotos") or {}).get("reason"),
+           "Нет карточки в 2ГИС")
+        live = runner.read_live_log(pid, "publish")
+        check("в логе видно, что это не публикация", "ЗАПУСК ФОТО В 2ГИС" in live, live[:400])
+
+        # Повтор тех же снимков в тот же город – это не поломка, а реестр.
+        (folder / f"05-Россия-{int(time.time() * 1000)}.json").write_text(json.dumps({
+            "credentials": {"email": "test@yandex.ru", "password": "x"},
+            "projectName": "TEST", "country": "Россия",
+            "tasks": [{"cityName": "Самара", "companyUrl": "https://yandex.ru/sprav/601/p/edit/posts/",
+                       "companyId": "601", "postText": "", "productPhotos": [str(shot)],
+                       "gisPhotos": True, "gisOnly": True,
+                       "gisUrl": "https://account.2gis.com/orgs/70000001081103893/"}],
+        }, ensure_ascii=False), encoding="utf-8")
+        ушло.clear()
+        ok, msg = runner.start_publish(pid, delay_between_posts_s=0,
+                                       expected_email="test@yandex.ru")
+        check("второй прогон стартовал", ok, msg)
+        wait_done(pid); settle(pid)
+        eq("те же снимки второй раз не заливаются", len(ушло), 0)
+        снова = {r["cityName"]: r for r in latest_report(pid)["results"]}
+        eq("и это «пропущено», а не «ошибка»", снова["Самара"]["status"], "skipped-duplicate")
+    finally:
+        gis.upload_media = was_upload          # type: ignore[assignment]
+        yb.verify_account = was_verify         # type: ignore[assignment]
+
+
 def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="click-e2e-"))
     runner.USERS_DATA = tmp
@@ -1117,6 +1201,7 @@ def main() -> int:
         scenario_gis_actualize(pid)
         scenario_gis_photos(pid)
         scenario_gis_photos_after_restart(pid)
+        scenario_gis_only(pid)
         scenario_collect(pid)
         scenario_parallel(pid)
         scenario_dead_session(pid)

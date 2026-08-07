@@ -730,6 +730,9 @@ def save_queue_to_tasks(project_id: str, config: dict, queue: list[dict]) -> int
                 "extraImages": item.get("extraImages") or None,
                 "productPhotos": item.get("productPhotos") or None,
                 "gisPhotos": bool(item.get("gisPhotos")),
+                # ВРЕМЕННО: задание «только фото в 2ГИС» – прогон по нему не
+                # публикует пост вовсе, а только заливает снимки.
+                "gisOnly": bool(item.get("gisOnly")),
                 "gisUrl": (gis_url_for_city(config, country["name"], city["name"])
                            if item.get("gisPhotos") else None),
             })
@@ -1257,22 +1260,41 @@ def live_panel(project_id: str, running: bool, run_kind: str) -> None:
         st.caption("Обновите страницу, чтобы увидеть свежий прогресс.")
 
 
+def _pending_is_gis_only(project_id: str) -> bool:
+    """
+    Вся очередь – только фото в 2ГИС?
+
+    ВРЕМЕННО, вместе с одноимённым блоком на «Публикации». Нужно, чтобы
+    «Запуск» не врал: постов не будет, и сессия Яндекса для такого прогона
+    не требуется – нужна сессия 2ГИС.
+    """
+    tasks: list[dict] = []
+    for fp in (project_base(project_id) / "tasks").glob("*.json"):
+        try:
+            tasks.extend(json.loads(fp.read_text(encoding="utf-8")).get("tasks") or [])
+        except (json.JSONDecodeError, OSError):
+            continue
+    return bool(tasks) and all(t.get("gisOnly") for t in tasks)
+
+
 def tab_run(project_id: str, config: dict) -> None:
     settings = get_settings(project_id)
     state = runner.read_state(project_id, "publish")
     running = state.get("status") == "running"
     busy = runner.busy_reason(project_id, "publish")   # пусто – запускать можно
     files, cities = runner.count_pending(project_id)
-    has_session = yb.has_saved_session(project_id)
+    gis_only = _pending_is_gis_only(project_id)
+    has_session = gis.has_saved_session(project_id) if gis_only else yb.has_saved_session(project_id)
     has_creds = bool((config.get("email") or "").strip())
 
     # ─── Степпер как в оригинале ───
-    html(T.step(1, "Вход в Яндекс",
+    html(T.step(1, "Вход в 2ГИС" if gis_only else "Вход в Яндекс",
                 "Нужен один раз: Click сохранит сессию, дальше публикация идёт в фоне без 2FA.",
                 "done" if has_session else "active",
                 "Сессия сохранена" if has_session else ""))
     if not has_session:
-        st.info("Перейдите в раздел «⚙️ Настройки» → «Вход в Яндекс».")
+        st.info("Перейдите в раздел «⚙️ Настройки» → "
+                + ("«Вход в 2ГИС»." if gis_only else "«Вход в Яндекс»."))
 
     html(T.step(2, "Очередь задач",
                 f"Посты собираются во вкладке «Публикация» и складываются в очередь. "
@@ -1281,18 +1303,22 @@ def tab_run(project_id: str, config: dict) -> None:
                 "done" if cities else ("active" if has_session else "locked"),
                 f"{cities_word(cities)} готово" if cities else ""))
 
-    html(T.step(3, "Публикация",
+    html(T.step(3, "Фото в 2ГИС" if gis_only else "Публикация",
                 ("Окно браузера будет видно – галочка в «Настройках» включена."
                  if show_browser_window() else "Браузер работает скрыто.")
-                + " Каждый город подтверждается ответом API Яндекса – "
-                "в отчёт попадает реальный результат, а не «наверное получилось».",
+                + (" В очереди задания «только фото в 2ГИС»: постов не будет, снимки уйдут "
+                   "в раздел «Фото и видео». Успехом считается только появившийся в альбоме снимок."
+                   if gis_only else
+                   " Каждый город подтверждается ответом API Яндекса – "
+                   "в отчёт попадает реальный результат, а не «наверное получилось»."),
                 "active" if (cities and has_session and not running) else ("done" if running else "locked")))
 
     # ─── Кнопки ───
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1:
         disabled = bool(busy) or not cities or not has_session
-        if st.button(f"▶ Опубликовать ({cities_word(cities)})", type="primary",
+        подпись = "📸 Залить фото в 2ГИС" if gis_only else "▶ Опубликовать"
+        if st.button(f"{подпись} ({cities_word(cities)})", type="primary",
                      use_container_width=True, disabled=disabled, key="btn-publish"):
             ok, msg = runner.start_publish(
                 project_id,
@@ -1584,6 +1610,27 @@ def tab_compose(project_id: str, config: dict) -> None:
               config["gisPhotosDefault"] = gis_photos
               save_config(project_id)
 
+      # ─── ВРЕМЕННО: только фото в 2ГИС, без поста ───
+      # Заказчик проверяет заливку в 2ГИС отдельно: публиковать ради этого
+      # шестьдесят постов незачем. Блок нарочно стоит особняком и помечен
+      # временным – когда проверка пройдёт, он сольётся с фото Яндекса.
+      with st.container(key="gis-only-row"):
+          d1, d2 = st.columns([3, 1])
+          gis_only_raw = d1.text_area(
+              "🟢 ВРЕМЕННО · Только фото в 2ГИС – без поста", height=118,
+              key="compose-gis-only",
+              placeholder="Ссылки или пути, по одной в строке\n"
+                          "Пост НЕ публикуется: снимки уходят только в «Фото и видео» 2ГИС",
+          )
+          gis_only_files = d2.file_uploader("Фото для 2ГИС", type=["jpg", "jpeg", "png", "webp"],
+                                            accept_multiple_files=True,
+                                            key=f"compose-gis-only-files-{st.session_state.get('upl-gen', 0)}",
+                                            label_visibility="collapsed")
+      html('<div class="hint">Заполнили этот блок – прогон не публикует посты вовсе, а только '
+           'заливает снимки в «Фото и видео» 2ГИС по выбранным городам. Город без карточки в '
+           'списке 2ГИС пропускается с пометкой. Одни и те же снимки в один и тот же город '
+           'второй раз не заливаются. gif 2ГИС не принимает.</div>')
+
     image_urls = [u.strip() for u in (image_urls_raw or "").splitlines() if u.strip()]
     product_photos = [u.strip() for u in (product_photos_raw or "").splitlines() if u.strip()]
 
@@ -1608,6 +1655,19 @@ def tab_compose(project_id: str, config: dict) -> None:
                 path.write_bytes(f.getvalue())
             product_photos.append(str(path))
 
+    # ВРЕМЕННО: снимки для 2ГИС без поста – см. блок выше.
+    gis_only_photos = [u.strip() for u in (gis_only_raw or "").splitlines() if u.strip()]
+    if gis_only_files:
+        uploads = project_base(project_id) / "uploads"
+        uploads.mkdir(parents=True, exist_ok=True)
+        for f in gis_only_files:
+            digest = hashlib.md5(f.getvalue()).hexdigest()[:10]
+            path = uploads / f"{digest}-{safe_filename(f.name)}"
+            if not path.exists():
+                path.write_bytes(f.getvalue())
+            gis_only_photos.append(str(path))
+    gis_only_mode = bool(gis_only_photos)
+
     all_images: list[str] = saved_paths + image_urls
     if len(all_images) > 4:
         st.warning(f"Яндекс берёт максимум 4 фото в пост – лишние {len(all_images) - 4} не отправятся.")
@@ -1619,6 +1679,16 @@ def tab_compose(project_id: str, config: dict) -> None:
     # добавили её, выбор стран сбросился, следующей уже нет – и сохранить
     # собранное стало нечем. Плашка при этом бодро советовала «сохраните
     # очередь ниже», а ниже ничего не было.
+    # Два режима сразу – это не «и то, и другое», а непонятно что. Говорим
+    # прямо и не даём добавить, пока одно из двух не убрано.
+    both_filled = gis_only_mode and bool((body or "").strip())
+    if both_filled:
+        st.warning("Заполнены и текст поста, и блок «Только фото в 2ГИС». Это разные режимы: "
+                   "либо публикуем пост, либо только заливаем снимки в 2ГИС. Очистите одно из двух.")
+    elif gis_only_mode:
+        st.info(f"Режим «только фото в 2ГИС»: постов не будет, уйдут только снимки "
+                f"({len(gis_only_photos)} шт.) в «Фото и видео» выбранных городов.")
+
     if selected_countries:
         if (body or "").strip():
             with st.container(border=True):
@@ -1634,29 +1704,36 @@ def tab_compose(project_id: str, config: dict) -> None:
         st.divider()
         c1, c2 = st.columns([2, 3])
         with c1:
-            can_add = bool((body or "").strip()) and total_cities > 0
-            if st.button(f"➕ Добавить в очередь ({cities_word(total_cities)})", type="primary",
+            can_add = (gis_only_mode or bool((body or "").strip())) and total_cities > 0 \
+                and not both_filled
+            подпись = ("📸 Фото в 2ГИС" if gis_only_mode else "➕ Добавить в очередь")
+            if st.button(f"{подпись} ({cities_word(total_cities)})", type="primary",
                          use_container_width=True, disabled=not can_add, key="btn-add-queue"):
                 added = 0
                 for country in selected_countries:
                     city_ids = per_country.get(country["id"]) or []
                     if not city_ids:
                         continue
-                    if any(q["countryId"] == country["id"] and q["text"] ==
-                           build_final_text(project_id, country["name"], post_type, body) for q in queue):
-                        st.warning(f"{country['name']}: такой же пост уже в очереди – пропускаю.")
+                    text = ("" if gis_only_mode
+                            else build_final_text(project_id, country["name"], post_type, body))
+                    if any(q["countryId"] == country["id"] and q["text"] == text
+                           and bool(q.get("gisOnly")) == gis_only_mode for q in queue):
+                        st.warning(f"{country['name']}: такое же задание уже в очереди – пропускаю.")
                         continue
                     queue.append({
                         "countryId": country["id"],
                         "countryName": country["name"],
                         "cityIds": list(city_ids),
                         "postType": post_type,
-                        "text": build_final_text(project_id, country["name"], post_type, body),
+                        "text": text,
                         "imagePath": all_images[0] if all_images and not all_images[0].startswith("http") else None,
                         "imageUrl": all_images[0] if all_images and all_images[0].startswith("http") else None,
                         "extraImages": all_images[1:4] or None,
-                        "productPhotos": product_photos or None,
-                        "gisPhotos": bool(gis_photos and product_photos),
+                        # В режиме «только 2ГИС» снимки едут тем же полем:
+                        # прогон различает режимы по gisOnly, а не по полю.
+                        "productPhotos": (gis_only_photos if gis_only_mode else product_photos) or None,
+                        "gisPhotos": bool(gis_only_mode or (gis_photos and product_photos)),
+                        "gisOnly": gis_only_mode,
                     })
                     added += 1
                 if added:
@@ -1677,8 +1754,9 @@ def tab_compose(project_id: str, config: dict) -> None:
                             "🎉 Все страны добавлены! Сохраните очередь – блок «В очереди к сохранению» ниже.")
                 st.rerun()
         with c2:
-            if not can_add:
-                st.caption("Нужно: текст поста + хотя бы один выбранный город.")
+            if not can_add and not both_filled:
+                st.caption("Нужно: текст поста (или фото в блоке «Только фото в 2ГИС») + "
+                           "хотя бы один выбранный город.")
     elif queue:
         st.info("Все страны уже добавлены в очередь. Осталось сохранить её в задачи – "
                 "кнопка «Сохранить очередь в задачи» ниже.")
@@ -1698,7 +1776,13 @@ def tab_compose(project_id: str, config: dict) -> None:
              f'<span class="badge badge-accent">{len(queue)}</span> · '
              f'{cities_word(sum(len(q["cityIds"]) for q in queue))}</div>')
         for i, item in enumerate(queue):
-            preview = item["text"][:180] + ("…" if len(item["text"]) > 180 else "")
+            # У задания «только фото в 2ГИС» текста нет вовсе – показываем, что
+            # именно уедет, иначе в очереди висела бы пустая строка.
+            if item.get("gisOnly"):
+                preview = ("📸 Только фото в 2ГИС, без поста: "
+                           + ", ".join(Path(p).name for p in (item.get("productPhotos") or [])[:3]))
+            else:
+                preview = item["text"][:180] + ("…" if len(item["text"]) > 180 else "")
             html(f'<div class="queue-item">'
                  f'<div class="queue-item-title">{flag(item["countryName"])} {T.esc(item["countryName"])} '
                  f'<span class="badge badge-accent">{len(item["cityIds"])} гор.</span></div>'

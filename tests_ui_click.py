@@ -210,7 +210,10 @@ def main() -> int:
                   bool(_empty) and abs(_empty["dz"] - _empty["ta"]) <= 2, str(_empty))
 
             _inputs = page.locator('input[type="file"]')
-            check("загрузчиков на «Отгрузке» два", _inputs.count() == 2, str(_inputs.count()))
+            # Три: картинки поста, «Товары» Яндекса и – ВРЕМЕННО, для проверки
+            # заливки – «только фото в 2ГИС». Когда временный блок сольётся с
+            # фото Яндекса, здесь снова станет два.
+            check("загрузчиков на «Отгрузке» три", _inputs.count() == 3, str(_inputs.count()))
             for _i in range(_inputs.count()):
                 _inputs.nth(_i).set_input_files(_files)
                 page.wait_for_timeout(2500)

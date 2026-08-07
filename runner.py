@@ -843,6 +843,7 @@ def _gis_photos_for_city(project_id: str, browser, task: dict, local: list[str],
     if was:
         when = str(was.get("at", ""))[:19].replace("T", " ")
         out["reason"] = f"Эти снимки уже заливали в 2ГИС {when} UTC – повтор пропущен"
+        out["dup"] = True
         _append_log(project_id, "INFO", f"  ⏭ {city}: {out['reason']}")
         return out
 
@@ -870,6 +871,44 @@ def _gis_photos_for_city(project_id: str, browser, task: dict, local: list[str],
     elif out["uploaded"]:
         _ledger_add(project_id, _photo_key(gis_url, local), task, "gis-photos", run_id)
     return out
+
+
+def _gis_only_city(project_id: str, browser, task: dict, run_id: str, box: dict) -> dict:
+    """
+    Только фото в «Фото и видео» 2ГИС – без поста в Яндекс.
+
+    ВРЕМЕННЫЙ режим, заведённый для проверки: убедиться, что заливка в 2ГИС
+    работает, не публикуя ради этого шестьдесят постов. Потом он сольётся
+    обратно с фото Яндекса и отсюда уйдёт.
+
+    Результат выглядит как обычная строка отчёта, чтобы её понимали и отчёт,
+    и выгрузка CSV: статус города здесь – это судьба самих снимков, а не
+    поста, которого не было.
+    """
+    city = task.get("cityName", "?")
+    photos = task.get("productPhotos") or []
+    started = time.time()
+    base = {"cityName": city, "companyUrl": task.get("gisUrl") or task.get("companyUrl"),
+            "steps": {}, "gisOnly": True}
+
+    def done(status: str, reason: str, gis: dict | None = None) -> dict:
+        return {**base, "status": status, "reason": reason,
+                "durationMs": int((time.time() - started) * 1000),
+                **({"gisPhotos": gis} if gis else {})}
+
+    _append_log(project_id, "INFO", f"  📸 {city}: только фото в 2ГИС, пост не публикуем")
+    local, errors = yb.fetch_photos(list(photos), p_temp(project_id))
+    if not local:
+        return done("failed", "; ".join(errors) or "Нечего заливать: файлы не получены")
+
+    gis = _gis_photos_for_city(project_id, browser, task, local, run_id, box)
+    if gis.get("uploaded"):
+        return done("ok", f"В 2ГИС добавлено {gis['uploaded']} из {gis['requested']}", gis)
+    # Повтор тех же снимков в тот же город – это не поломка, а сработавший
+    # реестр: в отчёте он должен читаться как «пропущено», а не «ошибка».
+    if gis.get("dup"):
+        return done("skipped-duplicate", gis.get("reason", ""), gis)
+    return done("failed", gis.get("reason") or "Фото в 2ГИС не добавились", gis)
 
 
 def _publish_worker(
@@ -940,11 +979,20 @@ def _publish_worker(
                "skipped-duplicate": "skipped"}.get(status, "failed")
         counters[key] += 1
 
+    # Прогон целиком про 2ГИС – в Яндекс не уйдёт ни один пост. Тогда и
+    # аккаунт Яндекса проверять незачем: сессия нужна другая, 2ГИС.
+    gis_only_run = bool(total) and all(t.get("gisOnly")
+                                       for _, cfg in files for t in (cfg.get("tasks") or []))
+
     browser = yb.YbBrowser(project_id, headless=headless)
     processed = 0
     try:
         _append_log(project_id, "INFO", "═" * 46)
-        _append_log(project_id, "INFO", f"ЗАПУСК ПУБЛИКАЦИИ · {total} городов · аккаунт {expected_email or account or '–'}")
+        if gis_only_run:
+            _append_log(project_id, "INFO",
+                        f"ЗАПУСК ФОТО В 2ГИС · {total} городов · посты не публикуются")
+        else:
+            _append_log(project_id, "INFO", f"ЗАПУСК ПУБЛИКАЦИИ · {total} городов · аккаунт {expected_email or account or '–'}")
         _append_log(project_id, "INFO", "═" * 46)
         save_report("in-progress")
 
@@ -956,7 +1004,7 @@ def _publish_worker(
         # «Определить не удалось» – это неудача проверки, а не повод не работать:
         # раньше из-за этого прогон падал с «залогинен НЕ ТОТ аккаунт, найдено:
         # не определено» при полностью правильном аккаунте.
-        if expected_email:
+        if expected_email and not gis_only_run:
             check = yb.verify_account(browser.page, expected_email)
             state = check.get("state") or (
                 "ok" if check.get("matched") else ("other" if check.get("emails") else "unknown"))
@@ -1028,6 +1076,24 @@ def _publish_worker(
                 # текущего: иначе на первом же городе пишется «1 из 1», человек
                 # видит «готово» и ждёт отчёт, которого ещё нет.
                 push_state("running", len(results), city)
+
+                # Временный режим «только фото в 2ГИС»: поста нет, значит нет
+                # ни публикации, ни «Товаров» Яндекса – только заливка. Стоит
+                # ДО защиты от дубля: та стережёт повтор ПОСТА, а поста тут
+                # нет вовсе. Свой сторож у снимков есть – реестр 2ГИС.
+                if task.get("gisOnly"):
+                    res = _gis_only_city(project_id, browser, task, run_id, gis_box)
+                    res["country"] = country
+                    res["package"] = country
+                    res["_task"] = task
+                    results.append(res)
+                    tally(res["status"])
+                    icon = {"ok": "✅", "skipped-duplicate": "⏭"}.get(res["status"], "❌")
+                    _append_log(project_id, "INFO",
+                                f"  {icon} ИТОГ [{processed}/{total}] {city}: {res['reason']}")
+                    save_report("in-progress")
+                    push_state("running", len(results), city)
+                    continue
 
                 # ── Уровень 2 защиты от дубля: реестр ──
                 dup = recent_publication(project_id, task, dedup_window_hours)
@@ -1321,7 +1387,12 @@ def _second_pass(
     потому что именно автоповтор после неподтверждённого клика и давал дубли.
     Включить старое поведение можно галочкой «Повторять неопределённые».
     """
-    candidates = [r for r in results if r["status"] in ("failed", "unknown")]
+    # Задания «только фото в 2ГИС» второй проход не касается вовсе: он про
+    # ленту постов Яндекса, а поста тут не было. Иначе город без карточки
+    # 2ГИС уезжал на публикацию – ровно то, чего этот режим и не должен
+    # делать.
+    candidates = [r for r in results
+                  if r["status"] in ("failed", "unknown") and not r.get("gisOnly")]
     if not candidates:
         return
 

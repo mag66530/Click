@@ -358,92 +358,87 @@
           "url": "https://account.2gis.com/orgs/70000001067280332/branches/70000001067280333"
         },
         {
-          "id": "ct-MPI-gis-0-3-екатеринбург",
-          "name": "Екатеринбург",
-          "url": "https://account.2gis.com/orgs/70000001051648544/branches"
-        },
-        {
-          "id": "ct-MPI-gis-0-4-красноярск",
+          "id": "ct-MPI-gis-0-3-красноярск",
           "name": "Красноярск",
           "url": "https://account.2gis.com/orgs/70000001081112295/dashboard"
         },
         {
-          "id": "ct-MPI-gis-0-5-нижний-новгород",
+          "id": "ct-MPI-gis-0-4-нижний-новгород",
           "name": "Нижний Новгород",
           "url": "https://account.2gis.com/orgs/70000001081103691/dashboard"
         },
         {
-          "id": "ct-MPI-gis-0-6-челябинск",
+          "id": "ct-MPI-gis-0-5-челябинск",
           "name": "Челябинск",
           "url": "https://account.2gis.com/orgs/70000001081116563/dashboard"
         },
         {
-          "id": "ct-MPI-gis-0-7-уфа",
+          "id": "ct-MPI-gis-0-6-уфа",
           "name": "Уфа",
           "url": "https://account.2gis.com/orgs/70000001081104805/dashboard"
         },
         {
-          "id": "ct-MPI-gis-0-8-самара",
+          "id": "ct-MPI-gis-0-7-самара",
           "name": "Самара",
           "url": "https://account.2gis.com/orgs/70000001081103893/dashboard"
         },
         {
-          "id": "ct-MPI-gis-0-9-ростов-на-дону",
+          "id": "ct-MPI-gis-0-8-ростов-на-дону",
           "name": "Ростов-на-Дону",
           "url": "https://account.2gis.com/orgs/70000001081129462/dashboard"
         },
         {
-          "id": "ct-MPI-gis-0-10-омск",
+          "id": "ct-MPI-gis-0-9-омск",
           "name": "Омск",
           "url": "https://account.2gis.com/orgs/70000001076859555/branches/70000001076859560"
         },
         {
-          "id": "ct-MPI-gis-0-11-воронеж",
+          "id": "ct-MPI-gis-0-10-воронеж",
           "name": "Воронеж",
           "url": "https://account.2gis.com/orgs/70000001081102633/dashboard"
         },
         {
-          "id": "ct-MPI-gis-0-12-пермь",
+          "id": "ct-MPI-gis-0-11-пермь",
           "name": "Пермь",
           "url": "https://account.2gis.com/orgs/70000001080962734/branches/70000001080962735"
         },
         {
-          "id": "ct-MPI-gis-0-13-барнаул",
+          "id": "ct-MPI-gis-0-12-барнаул",
           "name": "Барнаул",
           "url": "https://account.2gis.com/orgs/70000001080794279/dashboard"
         },
         {
-          "id": "ct-MPI-gis-0-14-ижевск",
+          "id": "ct-MPI-gis-0-13-ижевск",
           "name": "Ижевск",
           "url": "https://account.2gis.com/orgs/70000001081105249/branches/70000001081105250"
         },
         {
-          "id": "ct-MPI-gis-0-15-иркутск",
+          "id": "ct-MPI-gis-0-14-иркутск",
           "name": "Иркутск",
           "url": "https://account.2gis.com/orgs/70000001081111440/branches/70000001081111443"
         },
         {
-          "id": "ct-MPI-gis-0-16-ярославль",
+          "id": "ct-MPI-gis-0-15-ярославль",
           "name": "Ярославль",
           "url": "https://account.2gis.com/orgs/70000001080825524/dashboard"
         },
         {
-          "id": "ct-MPI-gis-0-17-набережные-челны",
+          "id": "ct-MPI-gis-0-16-набережные-челны",
           "name": "Набережные Челны",
           "url": "https://account.2gis.com/orgs/70000001081103611/dashboard"
         },
         {
-          "id": "ct-MPI-gis-0-18-новокузнецк",
+          "id": "ct-MPI-gis-0-17-новокузнецк",
           "name": "Новокузнецк",
           "url": "https://account.2gis.com/orgs/70000001081112926/dashboard"
         },
         {
-          "id": "ct-MPI-gis-0-19-рязань",
+          "id": "ct-MPI-gis-0-18-рязань",
           "name": "Рязань",
           "url": "https://account.2gis.com/orgs/70000001081210489/dashboard"
         },
         {
-          "id": "ct-MPI-gis-0-20-сургут",
+          "id": "ct-MPI-gis-0-19-сургут",
           "name": "Сургут",
           "url": "https://account.2gis.com/orgs/70000001081104797/dashboard"
         }
@@ -484,7 +479,12 @@
           "url": "https://account.2gis.com/orgs/70000001097008662/dashboard"
         },
         {
-          "id": "ct-MPI-gis-1-6-костанай",
+          "id": "ct-MPI-gis-1-6-актау",
+          "name": "Актау",
+          "url": "https://account.2gis.com/orgs/70000001094801066/branches/70000001094801067"
+        },
+        {
+          "id": "ct-MPI-gis-1-7-костанай",
           "name": "Костанай",
           "url": "https://account.2gis.com/orgs/70000001096236442/dashboard"
         }
@@ -515,5 +515,5 @@
   ],
   "email": "metpromintex@yandex.ru",
   "kpSheetUrl": "https://docs.google.com/spreadsheets/d/1Hb7R1scmyhSPyROUa2mWMzD4jDcdgBcs1IGu0WQ48O4/edit?gid=0#gid=0",
-  "kpSyncedAt": "2026-08-06T13:53:47.481124+00:00"
+  "kpSyncedAt": "2026-08-07T06:56:26.860805+00:00"
 }

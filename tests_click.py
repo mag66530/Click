@@ -1580,9 +1580,16 @@ def test_gis_media_upload() -> None:
                                     ".getAttribute('href')").startswith("/"))
 
                 # Альбом не вырос – успехом это не считаем.
+                # Таймаут на время теста сжимаем: нам нужно убедиться, что молчаливый
+                # отказ детектируется, а не что мы терпеливо ждём 60 секунд.
                 box["html"] = page_html.replace(
                     "grid.appendChild(tile);", "void tile;")
-                quiet = gis.upload_media(page, url, shots[:1], label="Самара: ")
+                was_wait = gis.MEDIA_WAIT_MS
+                gis.MEDIA_WAIT_MS = 3_000
+                try:
+                    quiet = gis.upload_media(page, url, shots[:1], label="Самара: ")
+                finally:
+                    gis.MEDIA_WAIT_MS = was_wait
                 eq("молчаливый отказ успехом не считаем", quiet["uploaded"], 0)
                 check("и человеку сказано, что делать", "вручную" in quiet["reason"], quiet["reason"])
 

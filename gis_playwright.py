@@ -1250,7 +1250,7 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
 
 # 2ГИС принимает не всё: gif не примет, и молча – просто ничего не произойдёт.
 MEDIA_TYPES = (".jpg", ".jpeg", ".png", ".webp")
-MEDIA_WAIT_MS = 25_000           # столько ждём, пока снимок появится в альбоме
+MEDIA_WAIT_MS = 60_000           # столько ждём, пока снимок появится в альбоме
 
 
 def build_media_url(url: str | None) -> str | None:
@@ -1265,6 +1265,12 @@ def build_media_url(url: str | None) -> str | None:
 # что видно человеку: плитка альбома – это картинка заметного размера. Иконки
 # и значки рисуются через svg и под этот счёт не попадают. Заодно снимаем
 # число со вкладки «Все фото и видео N» – как второй свидетель.
+#
+# Важно: getBoundingClientRect возвращает 0 для элементов ЗА нижней границей
+# viewport (ниже прокрутки). В headless-браузере страница не прокручивается,
+# поэтому новые снимки, добавленные в конец длинного альбома, не попадают в
+# поле зрения. Используем offsetWidth/offsetHeight как резерв: они возвращают
+# CSS-размер элемента независимо от положения на странице.
 _MEDIA_LOOK_JS = r"""
 () => {
   const norm = s => (s || '').replace(/\s+/g, ' ').trim();
@@ -1281,7 +1287,11 @@ _MEDIA_LOOK_JS = r"""
   for (const img of document.querySelectorAll('img')) {
     if (!img.getAttribute('src')) continue;
     const r = img.getBoundingClientRect();
-    if (r.width >= 60 && r.height >= 60) tiles++;
+    // Новые плитки в конце длинного альбома находятся ниже viewport:
+    // getBoundingClientRect возвращает 0, offsetWidth/offsetHeight – нет.
+    const w = r.width || img.offsetWidth;
+    const h = r.height || img.offsetHeight;
+    if (w >= 60 && h >= 60) tiles++;
   }
 
   let counter = null;

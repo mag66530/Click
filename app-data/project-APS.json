@@ -7,457 +7,1022 @@
         {
           "id": "ct-APS-0-0-москва",
           "name": "Москва",
-          "url": "https://yandex.ru/sprav/21643318/edit/main"
+          "url": "https://yandex.ru/sprav/21643318/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-0-1-санкт-петербург",
           "name": "Санкт-Петербург",
-          "url": "https://yandex.ru/sprav/22885340/edit"
+          "url": "https://yandex.ru/sprav/22885340/edit",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-0-2-новосибирск",
           "name": "Новосибирск",
-          "url": "https://yandex.ru/sprav/7661809/edit/main"
+          "url": "https://yandex.ru/sprav/7661809/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-0-3-екатеринбург",
           "name": "Екатеринбург",
-          "url": "https://yandex.ru/sprav/21873032/edit/main?utm_source=maps&utm_medium=org_card&utm_campaign=owner-button"
+          "url": "https://yandex.ru/sprav/21873032/edit/main?utm_source=maps&utm_medium=org_card&utm_campaign=owner-button",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-0-4-казань",
           "name": "Казань",
-          "url": "https://yandex.ru/sprav/31831052/edit"
+          "url": "https://yandex.ru/sprav/31831052/edit",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-5-нижний-новгород",
+          "id": "ct-APS-0-5-красноярск",
+          "name": "Красноярск",
+          "url": "https://yandex.ru/business/companies/company/72177026477/?utm_source=maps&utm_medium=org_card&utm_campaign=owner-button",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-APS-0-6-нижний-новгород",
           "name": "Нижний Новгород",
-          "url": "https://yandex.ru/sprav/15351827/edit/main"
+          "url": "https://yandex.ru/sprav/15351827/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-6-челябинск",
+          "id": "ct-APS-0-7-челябинск",
           "name": "Челябинск",
-          "url": "https://yandex.ru/sprav/24494360/edit/main"
+          "url": "https://yandex.ru/sprav/24494360/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-7-уфа",
+          "id": "ct-APS-0-8-уфа",
           "name": "Уфа",
-          "url": "https://yandex.ru/sprav/23867544/edit/main"
+          "url": "https://yandex.ru/sprav/23867544/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-8-самара",
+          "id": "ct-APS-0-9-самара",
           "name": "Самара",
-          "url": "https://yandex.ru/sprav/22421831/edit/main"
+          "url": "https://yandex.ru/sprav/22421831/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-9-ростов-на-дону",
+          "id": "ct-APS-0-10-ростов-на-дону",
           "name": "Ростов-на-Дону",
-          "url": "https://yandex.ru/sprav/15355204/edit/main/"
+          "url": "https://yandex.ru/sprav/15355204/edit/main/",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-10-краснодар",
+          "id": "ct-APS-0-11-краснодар",
           "name": "Краснодар",
-          "url": "https://yandex.ru/sprav/7661756/edit/main"
+          "url": "https://yandex.ru/sprav/7661756/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-11-омск",
+          "id": "ct-APS-0-12-омск",
           "name": "Омск",
-          "url": "https://yandex.ru/sprav/22069504/edit/main"
+          "url": "https://yandex.ru/sprav/22069504/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-12-воронеж",
+          "id": "ct-APS-0-13-воронеж",
           "name": "Воронеж",
-          "url": "https://yandex.ru/sprav/21715667/edit/main"
+          "url": "https://yandex.ru/sprav/21715667/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-13-пермь",
+          "id": "ct-APS-0-14-пермь",
           "name": "Пермь",
-          "url": "https://yandex.ru/sprav/7661863/edit/main"
+          "url": "https://yandex.ru/sprav/7661863/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-14-донецк",
+          "id": "ct-APS-0-15-волгоград",
+          "name": "Волгоград",
+          "url": "https://yandex.ru/business/companies/company/70210624498/?utm_source=maps&utm_medium=org_card&utm_campaign=owner-button",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-APS-0-16-донецк",
           "name": "Донецк",
-          "url": "https://yandex.ru/sprav/25755100/edit/"
+          "url": "https://yandex.ru/sprav/25755100/edit/",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-15-саратов",
+          "id": "ct-APS-0-17-саратов",
           "name": "Саратов",
-          "url": "https://yandex.ru/sprav/19855714/edit/main"
+          "url": "https://yandex.ru/sprav/19855714/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-16-тюмень",
+          "id": "ct-APS-0-18-тюмень",
           "name": "Тюмень",
-          "url": "https://yandex.ru/sprav/16677943/edit/main"
+          "url": "https://yandex.ru/sprav/16677943/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-17-тольятти",
+          "id": "ct-APS-0-19-тольятти",
           "name": "Тольятти",
-          "url": "https://yandex.ru/sprav/23369127/edit/main"
+          "url": "https://yandex.ru/sprav/23369127/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-18-барнаул",
+          "id": "ct-APS-0-20-барнаул",
           "name": "Барнаул",
-          "url": "https://yandex.ru/sprav/238448811690/p/edit/main"
+          "url": "https://yandex.ru/sprav/238448811690/p/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-19-хабаровск",
+          "id": "ct-APS-0-21-ижевск",
+          "name": "Ижевск",
+          "url": "https://yandex.ru/business/companies/company/149054142964/?utm_source=maps&utm_medium=org_card&utm_campaign=owner-button",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-APS-0-22-хабаровск",
           "name": "Хабаровск",
-          "url": "https://yandex.ru/sprav/23397644/edit/main"
+          "url": "https://yandex.ru/sprav/23397644/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-20-ульяновск",
+          "id": "ct-APS-0-23-ульяновск",
           "name": "Ульяновск",
-          "url": "https://yandex.ru/sprav/110172200486/p/edit/main"
+          "url": "https://yandex.ru/sprav/110172200486/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-21-иркутск",
+          "id": "ct-APS-0-24-иркутск",
           "name": "Иркутск",
-          "url": "https://yandex.ru/sprav/15351553/edit/main"
+          "url": "https://yandex.ru/sprav/15351553/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-22-махачкала",
+          "id": "ct-APS-0-25-махачкала",
           "name": "Махачкала",
-          "url": "https://yandex.ru/sprav/165824565707/p/edit/main"
+          "url": "https://yandex.ru/sprav/165824565707/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-23-владивосток",
+          "id": "ct-APS-0-26-владивосток",
           "name": "Владивосток",
-          "url": "https://yandex.ru/sprav/41770792252/p/edit/main"
+          "url": "https://yandex.ru/sprav/41770792252/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-24-ярославль",
+          "id": "ct-APS-0-27-ярославль",
           "name": "Ярославль",
-          "url": "https://yandex.ru/sprav/24213964/edit/main"
+          "url": "https://yandex.ru/sprav/24213964/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-25-севастополь",
+          "id": "ct-APS-0-28-севастополь",
           "name": "Севастополь",
-          "url": "https://yandex.ru/sprav/215914235035/p/edit/main"
+          "url": "https://yandex.ru/sprav/215914235035/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-26-ставрополь",
+          "id": "ct-APS-0-29-ставрополь",
           "name": "Ставрополь",
-          "url": "https://yandex.ru/sprav/214794015373/p/edit/main"
+          "url": "https://yandex.ru/sprav/214794015373/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-27-кемерово",
+          "id": "ct-APS-0-30-кемерово",
           "name": "Кемерово",
-          "url": "https://yandex.ru/sprav/21144078/edit/main"
+          "url": "https://yandex.ru/sprav/21144078/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-28-томск",
+          "id": "ct-APS-0-31-томск",
           "name": "Томск",
-          "url": "https://yandex.ru/sprav/23771439/edit/main"
+          "url": "https://yandex.ru/sprav/23771439/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-29-набережные-челны",
+          "id": "ct-APS-0-32-набережные-челны",
           "name": "Набережные Челны",
-          "url": "https://yandex.ru/sprav/47042593377/p/edit/main"
+          "url": "https://yandex.ru/sprav/47042593377/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-30-новокузнецк",
+          "id": "ct-APS-0-33-новокузнецк",
           "name": "Новокузнецк",
-          "url": "https://yandex.ru/sprav/22126255/edit/main"
+          "url": "https://yandex.ru/sprav/22126255/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-31-оренбург",
+          "id": "ct-APS-0-34-оренбург",
           "name": "Оренбург",
-          "url": "https://yandex.ru/sprav/22070291/edit/main"
+          "url": "https://yandex.ru/sprav/22070291/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-32-рязань",
+          "id": "ct-APS-0-35-рязань",
           "name": "Рязань",
-          "url": "https://yandex.ru/sprav/155430858495/p/edit/main"
+          "url": "https://yandex.ru/sprav/155430858495/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-33-балашиха",
+          "id": "ct-APS-0-36-балашиха",
           "name": "Балашиха",
-          "url": "https://yandex.ru/sprav/15817232938/p/edit/main"
+          "url": "https://yandex.ru/sprav/15817232938/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-34-чебоксары",
+          "id": "ct-APS-0-37-чебоксары",
           "name": "Чебоксары",
-          "url": "https://yandex.ru/sprav/139031059312/p/edit/main"
+          "url": "https://yandex.ru/sprav/139031059312/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-35-калининград",
+          "id": "ct-APS-0-38-калининград",
           "name": "Калининград",
-          "url": "https://yandex.ru/sprav/54940381636/p/edit/main"
+          "url": "https://yandex.ru/sprav/54940381636/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-36-пенза",
+          "id": "ct-APS-0-39-пенза",
           "name": "Пенза",
-          "url": "https://yandex.ru/sprav/169981171110/p/edit/main"
+          "url": "https://yandex.ru/sprav/169981171110/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-37-липецк",
+          "id": "ct-APS-0-40-липецк",
           "name": "Липецк",
-          "url": "https://yandex.ru/sprav/232542467240/p/edit/main"
+          "url": "https://yandex.ru/sprav/232542467240/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-38-киров",
+          "id": "ct-APS-0-41-киров",
           "name": "Киров",
-          "url": "https://yandex.ru/sprav/79912116456/p/edit/main"
+          "url": "https://yandex.ru/sprav/79912116456/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-39-астрахань",
+          "id": "ct-APS-0-42-астрахань",
           "name": "Астрахань",
-          "url": "https://yandex.ru/sprav/123425966212/p/edit/main"
+          "url": "https://yandex.ru/sprav/123425966212/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-40-тула",
+          "id": "ct-APS-0-43-тула",
           "name": "Тула",
-          "url": "https://yandex.ru/sprav/23691050/edit"
+          "url": "https://yandex.ru/sprav/23691050/edit",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-41-сочи",
+          "id": "ct-APS-0-44-сочи",
           "name": "Сочи",
-          "url": "https://yandex.ru/sprav/88124070545/p/edit/main"
+          "url": "https://yandex.ru/sprav/88124070545/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-42-курск",
+          "id": "ct-APS-0-45-курск",
           "name": "Курск",
-          "url": "https://yandex.ru/sprav/81648603694/p/edit/main"
+          "url": "https://yandex.ru/sprav/81648603694/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-43-улан-удэ",
+          "id": "ct-APS-0-46-улан-удэ",
           "name": "Улан-Удэ",
-          "url": "https://yandex.ru/sprav/160113730203/p/edit/main"
+          "url": "https://yandex.ru/sprav/160113730203/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-44-мариуполь",
+          "id": "ct-APS-0-47-мариуполь",
           "name": "Мариуполь",
-          "url": "https://yandex.ru/sprav/25755702/edit"
+          "url": "https://yandex.ru/sprav/25755702/edit",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-45-сургут",
+          "id": "ct-APS-0-48-сургут",
           "name": "Сургут",
-          "url": "https://yandex.ru/sprav/23666081/edit/"
+          "url": "https://yandex.ru/sprav/23666081/edit/",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-46-тверь",
+          "id": "ct-APS-0-49-тверь",
           "name": "Тверь",
-          "url": "https://yandex.ru/sprav/124895665665/p/edit/main"
+          "url": "https://yandex.ru/sprav/124895665665/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-47-луганск",
+          "id": "ct-APS-0-50-луганск",
           "name": "Луганск",
-          "url": "https://yandex.ru/sprav/25755305/edit/main"
+          "url": "https://yandex.ru/sprav/25755305/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-48-магнитогорск",
+          "id": "ct-APS-0-51-магнитогорск",
           "name": "Магнитогорск",
-          "url": "https://yandex.ru/sprav/167988713550/p/edit/main"
+          "url": "https://yandex.ru/sprav/167988713550/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-49-якутск",
+          "id": "ct-APS-0-52-якутск",
           "name": "Якутск",
-          "url": "https://yandex.ru/sprav/95961521241/p/edit/main"
+          "url": "https://yandex.ru/sprav/95961521241/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-50-брянск",
+          "id": "ct-APS-0-53-брянск",
           "name": "Брянск",
-          "url": "https://yandex.ru/sprav/41441572103/p/edit/main"
+          "url": "https://yandex.ru/sprav/41441572103/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-51-иваново",
+          "id": "ct-APS-0-54-иваново",
           "name": "Иваново",
-          "url": "https://yandex.ru/sprav/149057236343/p/edit/main"
+          "url": "https://yandex.ru/sprav/149057236343/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-52-владимир",
+          "id": "ct-APS-0-55-владимир",
           "name": "Владимир",
-          "url": "https://yandex.ru/sprav/196853454779/p/edit/main"
+          "url": "https://yandex.ru/sprav/196853454779/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-53-нижний-тагил",
+          "id": "ct-APS-0-56-нижний-тагил",
           "name": "Нижний Тагил",
-          "url": "https://yandex.ru/sprav/233219184733/p/edit/main"
+          "url": "https://yandex.ru/sprav/233219184733/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-54-калуга",
+          "id": "ct-APS-0-57-симферополь",
+          "name": "Симферополь",
+          "url": "https://yandex.ru/sprav/176952881022/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-58-чита",
+          "name": "Чита",
+          "url": "https://yandex.ru/sprav/59222237228/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-59-грозный",
+          "name": "Грозный",
+          "url": "https://yandex.ru/sprav/180114208554/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-60-калуга",
           "name": "Калуга",
-          "url": "https://yandex.ru/sprav/54216947938/p/edit/main"
+          "url": "https://yandex.ru/sprav/54216947938/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-55-белгород",
+          "id": "ct-APS-0-61-белгород",
           "name": "Белгород",
-          "url": "https://yandex.ru/sprav/204922049893/p/edit/main"
+          "url": "https://yandex.ru/sprav/204922049893/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-56-курган",
+          "id": "ct-APS-0-62-волжский",
+          "name": "Волжский",
+          "url": "https://yandex.ru/sprav/65710519570/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-63-саранск",
+          "name": "Саранск",
+          "url": "https://yandex.ru/sprav/10349733203/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-64-вологда",
+          "name": "Вологда",
+          "url": "https://yandex.ru/sprav/107139596112/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-65-смоленск",
+          "name": "Смоленск",
+          "url": "https://yandex.ru/sprav/139014854122/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-66-подольск",
+          "name": "Подольск",
+          "url": "https://yandex.ru/sprav/41585087662/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-67-череповец",
+          "name": "Череповец",
+          "url": "https://yandex.ru/sprav/104397178504/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-68-курган",
           "name": "Курган",
-          "url": "https://yandex.ru/sprav/137373411557/p/edit/main"
+          "url": "https://yandex.ru/sprav/137373411557/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-57-архангельск",
+          "id": "ct-APS-0-69-архангельск",
           "name": "Архангельск",
-          "url": "https://yandex.ru/sprav/195049814303/p/edit/main"
+          "url": "https://yandex.ru/sprav/195049814303/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-58-нижневартовск",
+          "id": "ct-APS-0-70-владикавказ",
+          "name": "Владикавказ",
+          "url": "https://yandex.ru/sprav/21049290830/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-71-орёл",
+          "name": "Орёл",
+          "url": "https://yandex.ru/sprav/61915164594/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-72-нижневартовск",
           "name": "Нижневартовск",
-          "url": "https://yandex.ru/sprav/23021185/edit/main?utm_source=maps&utm_medium=org_card&utm_campaign=owner-button"
+          "url": "https://yandex.ru/sprav/23021185/edit/main?utm_source=maps&utm_medium=org_card&utm_campaign=owner-button",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-59-херсон",
+          "id": "ct-APS-0-73-петрозаводск",
+          "name": "Петрозаводск",
+          "url": "https://yandex.ru/sprav/61836386159/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-74-херсон",
           "name": "Херсон",
-          "url": "https://yandex.ru/sprav/25756934/edit"
+          "url": "https://yandex.ru/sprav/25756934/edit",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-60-йошкар-ола",
+          "id": "ct-APS-0-75-йошкар-ола",
           "name": "Йошкар-Ола",
-          "url": "https://yandex.ru/sprav/187296247479/p/edit/main"
+          "url": "https://yandex.ru/sprav/187296247479/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-61-кострома",
+          "id": "ct-APS-0-76-стерлитамак",
+          "name": "Стерлитамак",
+          "url": "https://yandex.ru/sprav/79541162805/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-77-мытищи",
+          "name": "Мытищи",
+          "url": "https://yandex.ru/sprav/181620591868/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-78-мурманск",
+          "name": "Мурманск",
+          "url": "https://yandex.ru/sprav/174417502952/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-79-кострома",
           "name": "Кострома",
-          "url": "https://yandex.ru/sprav/157804514684/p/edit/main"
+          "url": "https://yandex.ru/sprav/157804514684/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-62-благовещенск",
+          "id": "ct-APS-0-80-новороссийск",
+          "name": "Новороссийск",
+          "url": "https://yandex.ru/sprav/43413703859/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-81-химки",
+          "name": "Химки",
+          "url": "https://yandex.ru/sprav/82537826419/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-82-тамбов",
+          "name": "Тамбов",
+          "url": "https://yandex.ru/sprav/15311018620/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-83-таганрог",
+          "name": "Таганрог",
+          "url": "https://yandex.ru/sprav/155261167159/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-84-благовещенск",
           "name": "Благовещенск",
-          "url": "https://yandex.ru/sprav/210578955949/p/edit/main"
+          "url": "https://yandex.ru/sprav/210578955949/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-63-комсомольск-на-амуре",
+          "id": "ct-APS-0-85-нальчик",
+          "name": "Нальчик",
+          "url": "https://yandex.ru/sprav/16294152881/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-86-нижнекамск",
+          "name": "Нижнекамск",
+          "url": "https://yandex.ru/sprav/73092542124/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-87-комсомольск-на-амуре",
           "name": "Комсомольск-на-Амуре",
-          "url": "https://yandex.ru/sprav/167777906638/p/edit/main"
+          "url": "https://yandex.ru/sprav/167777906638/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-64-энгельс",
+          "id": "ct-APS-0-88-шахты",
+          "name": "Шахты",
+          "url": "https://yandex.ru/sprav/2283959861/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-89-дзержинск",
+          "name": "Дзержинск",
+          "url": "https://yandex.ru/sprav/174009873119/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-90-энгельс",
           "name": "Энгельс",
-          "url": "https://yandex.ru/sprav/31378468879/p/edit/main"
+          "url": "https://yandex.ru/sprav/31378468879/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-65-королёв",
+          "id": "ct-APS-0-91-королёв",
           "name": "Королёв",
-          "url": "https://yandex.ru/sprav/106104969628/p/edit/main"
+          "url": "https://yandex.ru/sprav/106104969628/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-66-братск",
+          "id": "ct-APS-0-92-великий-новгород",
+          "name": "Великий Новгород",
+          "url": "https://yandex.ru/sprav/77435068230/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-93-ангарск",
+          "name": "Ангарск",
+          "url": "https://yandex.ru/sprav/173595048561/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-94-братск",
           "name": "Братск",
-          "url": "https://yandex.ru/sprav/146061799795/p/edit/main"
+          "url": "https://yandex.ru/sprav/146061799795/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-67-люберцы",
+          "id": "ct-APS-0-95-орск",
+          "name": "Орск",
+          "url": "https://yandex.ru/sprav/217391444190/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-96-старый-оскол",
+          "name": "Старый Оскол",
+          "url": "https://yandex.ru/sprav/38275268267/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-97-сыктывкар",
+          "name": "Сыктывкар",
+          "url": "https://yandex.ru/sprav/163370360812/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-98-люберцы",
           "name": "Люберцы",
-          "url": "https://yandex.ru/sprav/180546993655/p/edit/main"
+          "url": "https://yandex.ru/sprav/180546993655/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-68-бийск",
+          "id": "ct-APS-0-99-бийск",
           "name": "Бийск",
-          "url": "https://yandex.ru/sprav/13968797615/p/edit/main"
+          "url": "https://yandex.ru/sprav/13968797615/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-69-балаково",
+          "id": "ct-APS-0-100-псков",
+          "name": "Псков",
+          "url": "https://yandex.ru/sprav/14394444946/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-101-абакан",
+          "name": "Абакан",
+          "url": "https://yandex.ru/sprav/146304944378/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-102-балаково",
           "name": "Балаково",
-          "url": "https://yandex.ru/sprav/178521513389/p/edit/"
+          "url": "https://yandex.ru/sprav/178521513389/p/edit/",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-70-красногорск",
+          "id": "ct-APS-0-103-красногорск",
           "name": "Красногорск",
-          "url": "https://yandex.ru/sprav/217061179891/p/edit/main"
+          "url": "https://yandex.ru/sprav/217061179891/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-71-каменск-уральский",
+          "id": "ct-APS-0-104-норильск",
+          "name": "Норильск",
+          "url": "https://yandex.ru/sprav/89476802628/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-105-петропавловск-камчатский",
+          "name": "Петропавловск-Камчатский",
+          "url": "https://yandex.ru/sprav/108268606967/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-106-прокопьевск",
+          "name": "Прокопьевск",
+          "url": "https://yandex.ru/sprav/67394894431/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-107-рыбинск",
+          "name": "Рыбинск",
+          "url": "https://yandex.ru/sprav/203391044204/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-108-северодвинск",
+          "name": "Северодвинск",
+          "url": "https://yandex.ru/sprav/79128729083/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-109-уссурийск",
+          "name": "Уссурийск",
+          "url": "https://yandex.ru/sprav/242060204854/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-110-новочеркасск",
+          "name": "Новочеркасск",
+          "url": "https://yandex.ru/sprav/177008358894/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-111-волгодонск",
+          "name": "Волгодонск",
+          "url": "https://yandex.ru/sprav/126947554182/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-112-каменск-уральский",
           "name": "Каменск-Уральский",
-          "url": "https://yandex.ru/sprav/169642969893/p/edit/main"
+          "url": "https://yandex.ru/sprav/169642969893/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-72-златоуст",
+          "id": "ct-APS-0-113-сызрань",
+          "name": "Сызрань",
+          "url": "https://yandex.ru/sprav/24889242330/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-114-златоуст",
           "name": "Златоуст",
-          "url": "https://yandex.ru/sprav/233837985761/p/edit/main"
+          "url": "https://yandex.ru/sprav/233837985761/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-73-керчь",
+          "id": "ct-APS-0-115-альметьевск",
+          "name": "Альметьевск",
+          "url": "https://yandex.ru/sprav/82561967081/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-116-электросталь",
+          "name": "Электросталь",
+          "url": "https://yandex.ru/sprav/241846359119/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-117-керчь",
           "name": "Керчь",
-          "url": "https://yandex.ru/sprav/102318931888/p/edit/main"
+          "url": "https://yandex.ru/sprav/102318931888/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-74-копейск",
+          "id": "ct-APS-0-118-копейск",
           "name": "Копейск",
-          "url": "https://yandex.ru/sprav/211624166545/p/edit/main"
+          "url": "https://yandex.ru/sprav/211624166545/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-75-мелитополь",
+          "id": "ct-APS-0-119-мелитополь",
           "name": "Мелитополь",
-          "url": "https://yandex.ru/sprav/25755984/edit"
+          "url": "https://yandex.ru/sprav/25755984/edit",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-0-76-миасс",
+          "id": "ct-APS-0-120-миасс",
           "name": "Миасс",
-          "url": "https://yandex.ru/sprav/181820002445/p/edit/main"
+          "url": "https://yandex.ru/sprav/181820002445/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-77-майкоп",
+          "id": "ct-APS-0-121-салават",
+          "name": "Салават",
+          "url": "https://yandex.ru/sprav/207062873730/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-122-хасавюрт",
+          "name": "Хасавюрт",
+          "url": "https://yandex.ru/sprav/146593084663/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-123-майкоп",
           "name": "Майкоп",
-          "url": "https://yandex.ru/sprav/69844828771/p/edit/main"
+          "url": "https://yandex.ru/sprav/69844828771/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-78-коломна",
+          "id": "ct-APS-0-124-находка",
+          "name": "Находка",
+          "url": "https://yandex.ru/sprav/73379986438/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-125-коломна",
           "name": "Коломна",
-          "url": "https://yandex.ru/sprav/171406614637/p/edit/main"
+          "url": "https://yandex.ru/sprav/171406614637/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-79-березники",
+          "id": "ct-APS-0-126-нефтекамск",
+          "name": "Нефтекамск",
+          "url": "https://yandex.ru/sprav/116915072091/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-127-одинцово",
+          "name": "Одинцово",
+          "url": "https://yandex.ru/sprav/222339794753/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-128-рубцовск",
+          "name": "Рубцовск",
+          "url": "https://yandex.ru/sprav/54136626753/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-129-березники",
           "name": "Березники",
-          "url": "https://yandex.ru/sprav/128367635353/p/edit/main"
+          "url": "https://yandex.ru/sprav/128367635353/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-80-ковров",
+          "id": "ct-APS-0-130-ковров",
           "name": "Ковров",
-          "url": "https://yandex.ru/sprav/195095211701/p/edit/main"
+          "url": "https://yandex.ru/sprav/195095211701/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-81-каспийск",
+          "id": "ct-APS-0-131-каспийск",
           "name": "Каспийск",
-          "url": "https://yandex.ru/sprav/60054259141/p/edit/main"
+          "url": "https://yandex.ru/sprav/60054259141/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-82-кисловодск",
+          "id": "ct-APS-0-132-щёлково",
+          "name": "Щёлково",
+          "url": "https://yandex.ru/sprav/64142931785/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-133-кисловодск",
           "name": "Кисловодск",
-          "url": "https://yandex.ru/sprav/171599463428/p/edit/main"
+          "url": "https://yandex.ru/sprav/171599463428/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-83-батайск",
+          "id": "ct-APS-0-134-назрань",
+          "name": "Назрань",
+          "url": "https://yandex.ru/sprav/156925990664/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-135-нефтеюганск",
+          "name": "Нефтеюганск",
+          "url": "https://yandex.ru/sprav/54338245359/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-136-раменское",
+          "name": "Раменское",
+          "url": "https://yandex.ru/sprav/223821497352/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-137-батайск",
           "name": "Батайск",
-          "url": "https://yandex.ru/sprav/6349428425/p/edit/main"
+          "url": "https://yandex.ru/sprav/6349428425/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-84-кызыл",
+          "id": "ct-APS-0-138-обнинск",
+          "name": "Обнинск",
+          "url": "https://yandex.ru/sprav/218198490173/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-139-дербент",
+          "name": "Дербент",
+          "url": "https://yandex.ru/sprav/21984615989/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-140-новочебоксарск",
+          "name": "Новочебоксарск",
+          "url": "https://yandex.ru/sprav/63694617955/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-141-серпухов",
+          "name": "Серпухов",
+          "url": "https://yandex.ru/sprav/120855432901/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-142-кызыл",
           "name": "Кызыл",
-          "url": "https://yandex.ru/sprav/193142813873/p/edit/main"
+          "url": "https://yandex.ru/sprav/193142813873/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-85-ессентуки",
+          "id": "ct-APS-0-143-новомосковск",
+          "name": "Новомосковск",
+          "url": "https://yandex.ru/sprav/75375145939/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-144-орехово-зуево",
+          "name": "Орехово-Зуево",
+          "url": "https://yandex.ru/sprav/143412755320/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-145-первоуральск",
+          "name": "Первоуральск",
+          "url": "https://yandex.ru/sprav/165529637568/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-146-черкесск",
+          "name": "Черкесск",
+          "url": "https://yandex.ru/sprav/223933585677/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-147-ессентуки",
           "name": "Ессентуки",
-          "url": "https://yandex.ru/sprav/92685556982/p/edit/main"
+          "url": "https://yandex.ru/sprav/92685556982/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-86-жуковский",
+          "id": "ct-APS-0-148-элиста",
+          "name": "Элиста",
+          "url": "https://yandex.ru/sprav/142940225706/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-149-невинномысск",
+          "name": "Невинномысск",
+          "url": "https://yandex.ru/sprav/68807947468/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-150-долгопрудный",
+          "name": "Долгопрудный",
+          "url": "https://yandex.ru/sprav/239092825899/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-151-октябрьский",
+          "name": "Октябрьский",
+          "url": "https://yandex.ru/sprav/144650399953/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-152-димитровград",
+          "name": "Димитровград",
+          "url": "https://yandex.ru/sprav/85528621717/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-153-пушкино",
+          "name": "Пушкино",
+          "url": "https://yandex.ru/sprav/58961828615/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-154-реутов",
+          "name": "Реутов",
+          "url": "https://yandex.ru/sprav/96537982538/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-155-жуковский",
           "name": "Жуковский",
-          "url": "https://yandex.ru/sprav/220756427179/p/edit/main"
+          "url": "https://yandex.ru/sprav/220756427179/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-87-артём",
+          "id": "ct-APS-0-156-артём",
           "name": "Артём",
-          "url": "https://yandex.ru/sprav/113911932443/p/edit/main"
+          "url": "https://yandex.ru/sprav/113911932443/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-88-бердск",
+          "id": "ct-APS-0-157-новый-уренгой",
+          "name": "Новый Уренгой",
+          "url": "https://yandex.ru/sprav/179806306434/p/edit/main",
+          "kpStatus": ""
+        },
+        {
+          "id": "ct-APS-0-158-евпатория",
+          "name": "Евпатория",
+          "url": "https://yandex.ru/sprav/105590254945/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-159-мурино",
+          "name": "Мурино",
+          "url": "https://yandex.ru/sprav/119869986279/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-160-муром",
+          "name": "Муром",
+          "url": "https://yandex.ru/sprav/155117237103/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-161-новошахтинск",
+          "name": "Новошахтинск",
+          "url": "https://yandex.ru/sprav/117563131121/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-162-ногинск",
+          "name": "Ногинск",
+          "url": "https://yandex.ru/sprav/166287114965/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-163-северск",
+          "name": "Северск",
+          "url": "https://yandex.ru/sprav/211980978304/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-164-бердск",
           "name": "Бердск",
-          "url": "https://yandex.ru/sprav/2883461537/p/edit/main"
+          "url": "https://yandex.ru/sprav/2883461537/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-89-арзамас",
+          "id": "ct-APS-0-165-ноябрьск",
+          "name": "Ноябрьск",
+          "url": "https://yandex.ru/sprav/83548368411/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-166-арзамас",
           "name": "Арзамас",
-          "url": "https://yandex.ru/sprav/100640982006/p/edit/main"
+          "url": "https://yandex.ru/sprav/100640982006/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-APS-0-90-камышин",
+          "id": "ct-APS-0-167-камышин",
           "name": "Камышин",
-          "url": "https://yandex.ru/sprav/238013877655/p/edit/main"
+          "url": "https://yandex.ru/sprav/238013877655/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-168-михайловск",
+          "name": "Михайловск",
+          "url": "https://yandex.ru/sprav/151727487336/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-0-169-видное",
+          "name": "Видное",
+          "url": "https://yandex.ru/sprav/95649031960/p/edit/main",
+          "kpStatus": "Онлайн"
         }
       ]
     },
@@ -468,77 +1033,92 @@
         {
           "id": "ct-APS-1-0-алматы",
           "name": "Алматы",
-          "url": "https://yandex.ru/sprav/15350818/edit/main/"
+          "url": "https://yandex.ru/sprav/15350818/edit/main/",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-1-астана",
           "name": "Астана",
-          "url": "https://yandex.ru/sprav/25279047/edit"
+          "url": "https://yandex.ru/sprav/25279047/edit",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-APS-1-2-шымкент",
           "name": "Шымкент",
-          "url": "https://yandex.ru/sprav/21056226/edit/main?utm_source=maps&utm_medium=org_card&utm_campaign=owner-button"
+          "url": "https://yandex.ru/sprav/21056226/edit/main?utm_source=maps&utm_medium=org_card&utm_campaign=owner-button",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-3-актобе",
           "name": "Актобе",
-          "url": "https://yandex.ru/sprav/21047040/edit"
+          "url": "https://yandex.ru/sprav/21047040/edit",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-4-караганда",
           "name": "Караганда",
-          "url": "https://yandex.ru/sprav/21045811/edit/main"
+          "url": "https://yandex.ru/sprav/21045811/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-5-тараз",
           "name": "Тараз",
-          "url": "https://yandex.ru/sprav/25640819/edit"
+          "url": "https://yandex.ru/sprav/25640819/edit",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-6-усть-каменогорск",
           "name": "Усть-Каменогорск",
-          "url": "https://yandex.ru/sprav/21045395/edit/main"
+          "url": "https://yandex.ru/sprav/21045395/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-7-павлодар",
           "name": "Павлодар",
-          "url": "https://yandex.ru/sprav/28010789/edit"
+          "url": "https://yandex.ru/sprav/28010789/edit",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-APS-1-8-атырау",
           "name": "Атырау",
-          "url": "https://yandex.ru/sprav/21046316/edit/"
+          "url": "https://yandex.ru/sprav/21046316/edit/",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-9-семей",
           "name": "Семей",
-          "url": "https://yandex.ru/sprav/25640364/edit"
+          "url": "https://yandex.ru/sprav/25640364/edit",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-10-кызылорда",
           "name": "Кызылорда",
-          "url": "https://yandex.ru/sprav/25639288/edit"
+          "url": "https://yandex.ru/sprav/25639288/edit",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-11-актау",
           "name": "Актау",
-          "url": "https://yandex.ru/sprav/25637563/edit"
+          "url": "https://yandex.ru/sprav/25637563/edit",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-12-костанай",
           "name": "Костанай",
-          "url": "https://yandex.ru/sprav/25638664/edit/main"
+          "url": "https://yandex.ru/sprav/25638664/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-13-уральск",
           "name": "Уральск",
-          "url": "https://yandex.ru/sprav/25640923/edit"
+          "url": "https://yandex.ru/sprav/25640923/edit",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-14-петропавловск",
           "name": "Петропавловск",
-          "url": "https://yandex.ru/sprav/25639595/edit"
+          "url": "https://yandex.ru/sprav/25639595/edit",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -549,7 +1129,8 @@
         {
           "id": "ct-APS-2-0-баку",
           "name": "Баку",
-          "url": "https://yandex.ru/sprav/161554714522/p/edit/"
+          "url": "https://yandex.ru/sprav/161554714522/p/edit/",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -560,7 +1141,8 @@
         {
           "id": "ct-APS-3-0-ереван",
           "name": "Ереван",
-          "url": "https://yandex.ru/sprav/31564993/edit"
+          "url": "https://yandex.ru/sprav/31564993/edit",
+          "kpStatus": "Онлайн"
         }
       ]
     },
@@ -571,32 +1153,38 @@
         {
           "id": "ct-APS-4-0-минск",
           "name": "Минск",
-          "url": "https://yandex.ru/sprav/22121268/edit/main"
+          "url": "https://yandex.ru/sprav/22121268/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-4-1-гомель",
           "name": "Гомель",
-          "url": "https://yandex.ru/sprav/22192555/edit/main"
+          "url": "https://yandex.ru/sprav/22192555/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-APS-4-2-витебск",
           "name": "Витебск",
-          "url": "https://yandex.ru/sprav/22191489/edit/main"
+          "url": "https://yandex.ru/sprav/22191489/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-4-3-гродно",
           "name": "Гродно",
-          "url": "https://yandex.ru/sprav/22192672/edit/main"
+          "url": "https://yandex.ru/sprav/22192672/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-4-4-могилев",
           "name": "Могилев",
-          "url": "https://yandex.ru/sprav/22192790/edit/main"
+          "url": "https://yandex.ru/sprav/22192790/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-4-5-брест",
           "name": "Брест",
-          "url": "https://yandex.ru/sprav/22190783/edit/main"
+          "url": "https://yandex.ru/sprav/22190783/edit/main",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -607,12 +1195,14 @@
         {
           "id": "ct-APS-5-0-бишкек",
           "name": "Бишкек",
-          "url": "https://yandex.ru/sprav/31565270/edit"
+          "url": "https://yandex.ru/sprav/31565270/edit",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-5-1-ош",
           "name": "Ош",
-          "url": "https://yandex.ru/sprav/33891281/edit/main"
+          "url": "https://yandex.ru/sprav/33891281/edit/main",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -623,12 +1213,14 @@
         {
           "id": "ct-APS-6-0-ташкент",
           "name": "Ташкент",
-          "url": "https://yandex.ru/sprav/31565459/edit/main"
+          "url": "https://yandex.ru/sprav/31565459/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-6-1-бухара",
           "name": "Бухара",
-          "url": "https://yandex.ru/sprav/219161630357/p/edit/main"
+          "url": "https://yandex.ru/sprav/219161630357/p/edit/main",
+          "kpStatus": "Онлайн"
         }
       ]
     }
@@ -641,132 +1233,158 @@
         {
           "id": "ct-APS-gis-0-0-москва",
           "name": "Москва",
-          "url": "https://account.2gis.com/orgs/70000001033946143/dashboard"
+          "url": "https://account.2gis.com/orgs/70000001033946143/dashboard",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-1-санкт-петербург",
           "name": "Санкт-Петербург",
-          "url": "https://account.2gis.com/orgs/70000001047639125/branches/70000001047639126"
+          "url": "https://account.2gis.com/orgs/70000001047639125/branches/70000001047639126",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-2-новосибирск",
           "name": "Новосибирск",
-          "url": "https://account.2gis.com/orgs/70000001047613259/branches/70000001047613260"
+          "url": "https://account.2gis.com/orgs/70000001047613259/branches/70000001047613260",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-3-екатеринбург",
           "name": "Екатеринбург",
-          "url": "https://account.2gis.com/orgs/70000001033774343/branches/70000001033774344"
+          "url": "https://account.2gis.com/orgs/70000001033774343/branches/70000001033774344",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-4-казань",
           "name": "Казань",
-          "url": "https://account.2gis.com/orgs/70000001047561224/branches/70000001047561225"
+          "url": "https://account.2gis.com/orgs/70000001047561224/branches/70000001047561225",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-5-красноярск",
           "name": "Красноярск",
-          "url": "https://account.2gis.com/orgs/70000001047590503/dashboard"
+          "url": "https://account.2gis.com/orgs/70000001047590503/dashboard",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-6-нижний-новгород",
           "name": "Нижний Новгород",
-          "url": "https://account.2gis.com/orgs/70000001047614564/branches/70000001047614565"
+          "url": "https://account.2gis.com/orgs/70000001047614564/branches/70000001047614565",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-7-челябинск",
           "name": "Челябинск",
-          "url": "https://account.2gis.com/orgs/70000001045737559/branches/70000001045737560"
+          "url": "https://account.2gis.com/orgs/70000001045737559/branches/70000001045737560",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-8-уфа",
           "name": "Уфа",
-          "url": "https://account.2gis.com/orgs/70000001043325182/branches/70000001043325183"
+          "url": "https://account.2gis.com/orgs/70000001043325182/branches/70000001043325183",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-9-ростов-на-дону",
           "name": "Ростов-на-Дону",
-          "url": "https://account.2gis.com/orgs/70000001036115347/branches/70000001036115348"
+          "url": "https://account.2gis.com/orgs/70000001036115347/branches/70000001036115348",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-10-омск",
           "name": "Омск",
-          "url": "https://account.2gis.com/orgs/70000001047637246/branches/70000001047637247"
+          "url": "https://account.2gis.com/orgs/70000001047637246/branches/70000001047637247",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-11-воронеж",
           "name": "Воронеж",
-          "url": "https://account.2gis.com/orgs/70000001047575400/dashboard"
+          "url": "https://account.2gis.com/orgs/70000001047575400/dashboard",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-12-пермь",
           "name": "Пермь",
-          "url": "https://account.2gis.com/orgs/70000001021596782/branches/70000001021596783"
+          "url": "https://account.2gis.com/orgs/70000001021596782/branches/70000001021596783",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-13-волгоград",
           "name": "Волгоград",
-          "url": "https://account.2gis.com/orgs/70000001047564288/branches/70000001047564289"
+          "url": "https://account.2gis.com/orgs/70000001047564288/branches/70000001047564289",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-14-саратов",
           "name": "Саратов",
-          "url": "https://account.2gis.com/orgs/70000001047642177/branches/70000001047642178"
+          "url": "https://account.2gis.com/orgs/70000001047642177/branches/70000001047642178",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-15-тюмень",
           "name": "Тюмень",
-          "url": "https://account.2gis.com/orgs/70000001047641457/branches/70000001047641458"
+          "url": "https://account.2gis.com/orgs/70000001047641457/branches/70000001047641458",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-16-тольятти",
           "name": "Тольятти",
-          "url": "https://account.2gis.com/orgs/70000001047640240/branches/70000001047640241"
+          "url": "https://account.2gis.com/orgs/70000001047640240/branches/70000001047640241",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-17-барнаул",
           "name": "Барнаул",
-          "url": "https://account.2gis.com/orgs/70000001047561210/dashboard"
+          "url": "https://account.2gis.com/orgs/70000001047561210/dashboard",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-18-ижевск",
           "name": "Ижевск",
-          "url": "https://account.2gis.com/orgs/70000001047584931/dashboard"
+          "url": "https://account.2gis.com/orgs/70000001047584931/dashboard",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-19-иркутск",
           "name": "Иркутск",
-          "url": "https://account.2gis.com/orgs/70000001047582144/branches/70000001047582145"
+          "url": "https://account.2gis.com/orgs/70000001047582144/branches/70000001047582145",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-20-ярославль",
           "name": "Ярославль",
-          "url": "https://account.2gis.com/orgs/70000001047644604/branches/70000001047644605"
+          "url": "https://account.2gis.com/orgs/70000001047644604/branches/70000001047644605",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-21-кемерово",
           "name": "Кемерово",
-          "url": "https://account.2gis.com/orgs/70000001047563505/dashboard"
+          "url": "https://account.2gis.com/orgs/70000001047563505/dashboard",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-22-новокузнецк",
           "name": "Новокузнецк",
-          "url": "https://account.2gis.com/orgs/70000001047614988/branches/70000001047614989"
+          "url": "https://account.2gis.com/orgs/70000001047614988/branches/70000001047614989",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-23-оренбург",
           "name": "Оренбург",
-          "url": "https://account.2gis.com/orgs/70000001047638393/branches/70000001047638394"
+          "url": "https://account.2gis.com/orgs/70000001047638393/branches/70000001047638394",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-24-тула",
           "name": "Тула",
-          "url": "https://account.2gis.com/orgs/70000001047653983/branches/70000001047653984"
+          "url": "https://account.2gis.com/orgs/70000001047653983/branches/70000001047653984",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-0-25-нижневартовск",
           "name": "Нижневартовск",
-          "url": "https://account.2gis.com/orgs/70000001047615655/dashboard"
+          "url": "https://account.2gis.com/orgs/70000001047615655/dashboard",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -777,32 +1395,38 @@
         {
           "id": "ct-APS-gis-1-0-алматы",
           "name": "Алматы",
-          "url": "https://account.2gis.com/orgs/70000001047590727/dashboard"
+          "url": "https://account.2gis.com/orgs/70000001047590727/dashboard",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-1-1-тараз",
           "name": "Тараз",
-          "url": "https://account.2gis.com/orgs/70000001063456459/branches/70000001063456460"
+          "url": "https://account.2gis.com/orgs/70000001063456459/branches/70000001063456460",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-1-2-усть-каменогорск",
           "name": "Усть-Каменогорск",
-          "url": "https://account.2gis.com/orgs/70000001056690051/dashboard"
+          "url": "https://account.2gis.com/orgs/70000001056690051/dashboard",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-1-3-павлодар",
           "name": "Павлодар",
-          "url": "https://account.2gis.com/orgs/70000001056663641/branches/70000001056663642"
+          "url": "https://account.2gis.com/orgs/70000001056663641/branches/70000001056663642",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-1-4-семей",
           "name": "Семей",
-          "url": "https://account.2gis.com/orgs/70000001063471759/branches/70000001063471760"
+          "url": "https://account.2gis.com/orgs/70000001063471759/branches/70000001063471760",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-gis-1-5-актау",
           "name": "Актау",
-          "url": "https://account.2gis.com/orgs/70000001063445277/branches/70000001063445278"
+          "url": "https://account.2gis.com/orgs/70000001063445277/branches/70000001063445278",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -813,7 +1437,8 @@
         {
           "id": "ct-APS-gis-2-0-баку",
           "name": "Баку",
-          "url": "https://account.2gis.com/orgs/70000001077187774/dashboard"
+          "url": "https://account.2gis.com/orgs/70000001077187774/dashboard",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -824,7 +1449,8 @@
         {
           "id": "ct-APS-gis-3-0-минск",
           "name": "Минск",
-          "url": "https://account.2gis.com/orgs/70000001058997858/branches/70000001058997859"
+          "url": "https://account.2gis.com/orgs/70000001058997858/branches/70000001058997859",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -835,7 +1461,8 @@
         {
           "id": "ct-APS-gis-4-0-ташкент",
           "name": "Ташкент",
-          "url": "https://account.2gis.com/orgs/70000001069567504/dashboard"
+          "url": "https://account.2gis.com/orgs/70000001069567504/dashboard",
+          "kpStatus": "Активная"
         }
       ]
     }
@@ -843,5 +1470,5 @@
   "email": "aviastalru@yandex.ru",
   "kpSheetUrl": "https://docs.google.com/spreadsheets/d/17G2YlY7g0LKOV7IBDsrX7uulwqh0wsaFOqKGw9bLVEc/edit?gid=1223548196#gid=1223548196",
   "kpSheetTitle": "КП",
-  "kpSyncedAt": "2026-08-07T11:53:35.500362+00:00"
+  "kpSyncedAt": "2026-08-07T13:44:37.697881+00:00"
 }

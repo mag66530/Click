@@ -1150,7 +1150,10 @@ def scenario_gis_only(pid: str) -> None:
         eq("и причина названа", (rows["Тула"].get("gisPhotos") or {}).get("reason"),
            "Нет карточки в 2ГИС")
         live = runner.read_live_log(pid, "publish")
-        check("в логе видно, что это не публикация", "ЗАПУСК ФОТО В 2ГИС" in live, live[:400])
+        check("в логе видно, что это не публикация",
+              "ТОЛЬКО ФОТО В 2ГИС" in live and "ЗАПУСК ПУБЛИКАЦИИ" not in live, live[:400])
+        eq("и в отчёте есть заголовок прогона",
+           latest_report(pid).get("title"), "Только фото в 2ГИС, без постов")
 
         # Повтор тех же снимков в тот же город – это не поломка, а реестр.
         (folder / f"05-Россия-{int(time.time() * 1000)}.json").write_text(json.dumps({
@@ -1172,6 +1175,42 @@ def scenario_gis_only(pid: str) -> None:
     finally:
         gis.upload_media = was_upload          # type: ignore[assignment]
         yb.verify_account = was_verify         # type: ignore[assignment]
+
+
+def scenario_never_empty_post(pid: str) -> None:
+    """
+    Пустой пост не уходит в Яндекс НИКОГДА.
+
+    Живой случай: экран уже новый и складывает задачи «только фото в 2ГИС», а
+    прогон в памяти остался от прежней сборки и про такие задачи не знает. Он
+    честно доложил «Текст введён полностью (0 символов)» и опубликовал ПУСТЫЕ
+    посты в Москве, Петербурге и Новосибирске. Из карточки такое убирается
+    только руками, поэтому проверка стоит и у прогона, и у самой кнопки.
+    """
+    print("\n▸ Сценарий: пустой пост не публикуется")
+    CALLS.clear(); SCRIPT.clear()
+    runner.clear_ledger(pid)
+    folder = runner.p_tasks(pid)
+    folder.mkdir(parents=True, exist_ok=True)
+    # Задача СТАРОГО вида: текста нет, про gisOnly в ней не сказано ни слова.
+    (folder / f"06-Россия-{int(time.time() * 1000)}.json").write_text(json.dumps({
+        "credentials": {"email": "test@yandex.ru", "password": "x"},
+        "projectName": "TEST", "country": "Россия",
+        "tasks": [{"cityName": "Москва", "companyUrl": "https://yandex.ru/sprav/701/p/edit/posts/",
+                   "companyId": "701", "postText": "   "},
+                  {"cityName": "Казань", "companyUrl": "https://yandex.ru/sprav/702/p/edit/posts/",
+                   "companyId": "702", "postText": "Настоящий текст поста"}],
+    }, ensure_ascii=False), encoding="utf-8")
+
+    ok, msg = runner.start_publish(pid, delay_between_posts_s=0, expected_email="test@yandex.ru")
+    check("прогон стартовал", ok, msg)
+    wait_done(pid); settle(pid)
+
+    eq("город с пустым текстом до публикации не дошёл", CALLS, ["Казань"])
+    rows = {r["cityName"]: r for r in latest_report(pid)["results"]}
+    check("и в отчёте сказано почему", "публиковать нечего" in rows["Москва"]["reason"],
+          rows["Москва"]["reason"])
+    eq("а обычный город опубликован как обычно", rows["Казань"]["status"], "ok")
 
 
 def main() -> int:
@@ -1202,6 +1241,7 @@ def main() -> int:
         scenario_gis_photos(pid)
         scenario_gis_photos_after_restart(pid)
         scenario_gis_only(pid)
+        scenario_never_empty_post(pid)
         scenario_collect(pid)
         scenario_parallel(pid)
         scenario_dead_session(pid)

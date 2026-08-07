@@ -4061,6 +4061,80 @@ def test_module_attrs_exist() -> None:
           not bad, "; ".join(sorted(set(bad))[:8]))
 
 
+def test_run_title() -> None:
+    """
+    Заголовок прогона: что именно сейчас делали.
+
+    Заказчик: «в отчёте пусть будет заголовок – типа публикация с добавлением
+    фото в товары и 2ГИС, или публикация информационного поста». Три отчёта
+    подряд выглядели одинаково: цифры те же, а делали разное.
+    """
+    import runner as r
+    print("\n▸ Заголовок прогона")
+
+    def файлы(post_type: str, *tasks: dict):
+        return [(Path("01-Россия.json"), {"postType": post_type, "tasks": list(tasks)})]
+
+    eq("простая публикация",
+       r.publish_title(файлы("info", {"cityName": "Москва", "postText": "текст"})),
+       "Публикация · информационный пост")
+    eq("публикация с фото в «Товары»",
+       r.publish_title(файлы("shipment", {"cityName": "Москва", "postText": "т",
+                                          "productPhotos": ["/tmp/a.jpg"]})),
+       "Публикация · отгрузка + фото в «Товары»")
+    eq("публикация с фото в «Товары» и в 2ГИС",
+       r.publish_title(файлы("shipment", {"cityName": "Москва", "postText": "т",
+                                          "productPhotos": ["/tmp/a.jpg"], "gisPhotos": True})),
+       "Публикация · отгрузка + фото в «Товары» + фото в 2ГИС")
+    eq("только фото в 2ГИС",
+       r.publish_title(файлы("shipment", {"cityName": "Москва", "postText": "",
+                                          "productPhotos": ["/tmp/a.jpg"],
+                                          "gisPhotos": True, "gisOnly": True})),
+       "Только фото в 2ГИС, без постов")
+    eq("несколько типов разом – без выдумок",
+       r.publish_title([(Path("01.json"), {"postType": "info", "tasks": [{"postText": "т"}]}),
+                        (Path("02.json"), {"postType": "shipment", "tasks": [{"postText": "т"}]})]),
+       "Публикация постов")
+    eq("актуализация", r.actualize_title(r.YANDEX, False), "Актуализация Яндекс")
+    eq("актуализация с отзывами", r.actualize_title(r.GIS, True),
+       "Актуализация 2ГИС + проверка отзывов")
+
+
+def test_one_build_at_a_time() -> None:
+    """
+    Приложение не работает вразнобой: экран новый, а модуль старый.
+
+    Так заказчик получила две беды за день. «AttributeError: casual_words» на
+    «Актуализации» – экран новый, reviews в памяти старый. И хуже: новый экран
+    сложил задачи «только фото в 2ГИС», а прогон старым кодом про них не знал
+    и опубликовал пустые посты в трёх городах.
+
+    Перезагружать модули самим нельзя – это уже роняло приложение целиком.
+    Значит, надо не работать: пока метки не сойдутся, страница не рисуется.
+    """
+    import sys
+    import types
+    import streamlit_app as app
+    print("\n▸ Одна сборка на все модули")
+
+    check("метку сборки несут все модули приложения",
+          not [n for n in app._OWN_MODULES  # noqa: SLF001
+               if getattr(sys.modules.get(n), "BUILD", None) != app.UI_BUILD],
+          str([n for n in app._OWN_MODULES  # noqa: SLF001
+               if getattr(sys.modules.get(n), "BUILD", None) != app.UI_BUILD]))
+    eq("на одной сборке жалоб нет", app.stale_modules(), [])
+
+    подделка = types.ModuleType("reviews")
+    подделка.BUILD = "2026-01-01-старая"
+    настоящий = sys.modules["reviews"]
+    sys.modules["reviews"] = подделка
+    try:
+        eq("старый модуль виден по метке", app.stale_modules(), ["reviews"])
+    finally:
+        sys.modules["reviews"] = настоящий
+    eq("и всё вернулось на место", app.stale_modules(), [])
+
+
 def test_side_page_after_restart() -> None:
     """
     Вкладка 2ГИС переживает перезапуск браузера – точнее, заводится заново.
@@ -4495,6 +4569,8 @@ def main() -> int:
         test_module_attrs_exist()
         test_call_arity()
         test_side_page_after_restart()
+        test_run_title()
+        test_one_build_at_a_time()
         test_batch_browser_survives_rerun()
         test_one_build()
         test_actualize_selection()

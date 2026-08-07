@@ -873,6 +873,44 @@ def _gis_photos_for_city(project_id: str, browser, task: dict, local: list[str],
     return out
 
 
+def publish_title(files) -> str:
+    """
+    Как назвать прогон публикации человеку – одной строкой.
+
+    Заказчик: «в отчёте пусть будет заголовок: типа публикация с добавлением
+    фото в товары и 2ГИС, или публикация информационного поста». По одним
+    цифрам отчёты и правда не различить – три подряд выглядят одинаково, а
+    делали они разное.
+    """
+    import projects_data as pdata
+
+    tasks = [t for _, cfg in files for t in (cfg.get("tasks") or [])]
+    if not tasks:
+        return "Публикация"
+    if all(t.get("gisOnly") for t in tasks):
+        return "Только фото в 2ГИС, без постов"
+
+    types = {cfg.get("postType") for _, cfg in files if cfg.get("postType")}
+    name = ""
+    if len(types) == 1:
+        one = next(iter(types))
+        name = next((t["title"].lower() for t in pdata.POST_TYPES if t["id"] == one), "")
+    title = f"Публикация · {name}" if name else "Публикация постов"
+
+    extras = []
+    if any(t.get("productPhotos") for t in tasks):
+        extras.append("фото в «Товары»")
+    if any(t.get("gisPhotos") for t in tasks):
+        extras.append("фото в 2ГИС")
+    return title + (" + " + " + ".join(extras) if extras else "")
+
+
+def actualize_title(platform: str, with_reviews: bool) -> str:
+    """Заголовок прогона актуализации – по тем же соображениям, что и у публикации."""
+    where = PLATFORMS.get(platform, PLATFORMS[YANDEX])["short"]
+    return f"Актуализация {where}" + (" + проверка отзывов" if with_reviews else "")
+
+
 def _gis_only_city(project_id: str, browser, task: dict, run_id: str, box: dict) -> dict:
     """
     Только фото в «Фото и видео» 2ГИС – без поста в Яндекс.
@@ -895,6 +933,12 @@ def _gis_only_city(project_id: str, browser, task: dict, run_id: str, box: dict)
         return {**base, "status": status, "reason": reason,
                 "durationMs": int((time.time() - started) * 1000),
                 **({"gisPhotos": gis} if gis else {})}
+
+    # Сюда попадают и задачи БЕЗ текста поста, которые в 2ГИС никто не звал:
+    # такое бывает у файлов, слепленных прежней сборкой. Публиковать пустой
+    # пост нельзя, поэтому честно говорим, что делать нечего.
+    if not photos:
+        return done("failed", "Пустой текст поста и нет снимков – публиковать нечего")
 
     _append_log(project_id, "INFO", f"  📸 {city}: только фото в 2ГИС, пост не публикуем")
     local, errors = yb.fetch_photos(list(photos), p_temp(project_id))
@@ -937,6 +981,14 @@ def _publish_worker(
     processed_files: list[Path] = []
     account = (files[0][1].get("credentials") or {}).get("email", "") if files else ""
 
+    # Чем этот прогон занят – одной строкой, в лог и в отчёт. По цифрам отчёты
+    # не различаются, а делают они разное.
+    title = publish_title(files)
+    # Прогон целиком про 2ГИС – в Яндекс не уйдёт ни один пост. Тогда и
+    # аккаунт Яндекса проверять незачем: сессия нужна другая, 2ГИС.
+    gis_only_run = bool(total) and all(t.get("gisOnly")
+                                       for _, cfg in files for t in (cfg.get("tasks") or []))
+
     def should_stop() -> bool:
         return p_stop(project_id).exists()
 
@@ -953,6 +1005,7 @@ def _publish_worker(
             "stoppedByUser": stopped,
             "state": state,
             "runId": run_id,
+            "title": title,
             "totals": {"total": len(results), **counters},
             "results": [{k: v for k, v in r.items() if not k.startswith("_")} for r in results],
         }
@@ -979,20 +1032,16 @@ def _publish_worker(
                "skipped-duplicate": "skipped"}.get(status, "failed")
         counters[key] += 1
 
-    # Прогон целиком про 2ГИС – в Яндекс не уйдёт ни один пост. Тогда и
-    # аккаунт Яндекса проверять незачем: сессия нужна другая, 2ГИС.
-    gis_only_run = bool(total) and all(t.get("gisOnly")
-                                       for _, cfg in files for t in (cfg.get("tasks") or []))
-
     browser = yb.YbBrowser(project_id, headless=headless)
     processed = 0
     try:
         _append_log(project_id, "INFO", "═" * 46)
         if gis_only_run:
             _append_log(project_id, "INFO",
-                        f"ЗАПУСК ФОТО В 2ГИС · {total} городов · посты не публикуются")
+                        f"{title.upper()} · {total} городов · посты не публикуются")
         else:
-            _append_log(project_id, "INFO", f"ЗАПУСК ПУБЛИКАЦИИ · {total} городов · аккаунт {expected_email or account or '–'}")
+            _append_log(project_id, "INFO",
+                        f"{title.upper()} · {total} городов · аккаунт {expected_email or account or '–'}")
         _append_log(project_id, "INFO", "═" * 46)
         save_report("in-progress")
 
@@ -1081,7 +1130,15 @@ def _publish_worker(
                 # ни публикации, ни «Товаров» Яндекса – только заливка. Стоит
                 # ДО защиты от дубля: та стережёт повтор ПОСТА, а поста тут
                 # нет вовсе. Свой сторож у снимков есть – реестр 2ГИС.
-                if task.get("gisOnly"):
+                #
+                # Пустой текст сюда же и по той же причине: публиковать нечего.
+                # Это не придирка. Прогон, доставшийся от прежней сборки, не
+                # знал про gisOnly – и отправил в Москву, Петербург и
+                # Новосибирск ПУСТЫЕ посты по задачам «только фото в 2ГИС».
+                # Пустой пост в карточке заказчика хуже любой строки в отчёте,
+                # и чинить это надо здесь, а не только там, откуда задача
+                # приехала.
+                if task.get("gisOnly") or not (task.get("postText") or "").strip():
                     res = _gis_only_city(project_id, browser, task, run_id, gis_box)
                     res["country"] = country
                     res["package"] = country
@@ -1760,6 +1817,7 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
     def save_report(state: str) -> None:
         payload = {
             "type": "actualize", "platform": platform,
+            "title": actualize_title(platform, with_reviews),
             "startedAt": started_at, "finishedAt": _now_iso(),
             "durationSec": int(time.time() - start_ts), "stoppedByUser": stopped,
             "state": state, "runId": run_id,

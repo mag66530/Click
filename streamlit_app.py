@@ -1357,19 +1357,35 @@ def tab_run(project_id: str, config: dict) -> None:
     # ─── Очередь задач ───
     st.divider()
     if cities:
+        # Кнопка очистки – НА ВИДУ, а не внутри свёрнутого списка файлов.
+        # Заказчик: «старая очередь при остановке не сбросилась, и очистить я
+        # её не могу». Кнопка была – но лежала внутри «Файлы задач в очереди»,
+        # который по умолчанию закрыт, и найти её было нечем. А очередь после
+        # остановки и правда остаётся: недоделанные города ждут следующего
+        # запуска – это нарочно, но сказать об этом надо здесь же.
+        q1, q2 = st.columns([2, 3])
+        with q1, st.container(key="danger-clear-tasks"):
+            if st.button(f"🗑 Очистить очередь ({cities_word(cities)})", disabled=running,
+                         use_container_width=True, key="btn-clear-tasks"):
+                clear_tasks(project_id)
+                st.rerun()
+        with q2:
+            st.caption("После остановки недоделанные города остаются в очереди – следующий "
+                       "запуск продолжит с них, а уже опубликованное реестр повторно не отправит. "
+                       "Если продолжать не нужно – очистите очередь.")
+
         with st.expander(f"📋 Файлы задач в очереди ({files})"):
             for fp in sorted((project_base(project_id) / "tasks").glob("*.json")):
                 try:
                     data = json.loads(fp.read_text(encoding="utf-8"))
                 except (json.JSONDecodeError, OSError):
                     continue
-                html(f'<div class="city-row"><span class="city-row-name">{T.esc(data.get("country", "–"))}</span>'
+                tasks = data.get("tasks") or []
+                what = "📸 только фото в 2ГИС" if tasks and all(t.get("gisOnly") for t in tasks) \
+                    else T.esc(data.get("country", "–"))
+                html(f'<div class="city-row"><span class="city-row-name">{what}</span>'
                      f'<span class="city-row-url">{T.esc(fp.name)}</span>'
-                     f'<span class="badge badge-accent">{len(data.get("tasks") or [])} гор.</span></div>')
-            with st.container(key="danger-clear-tasks"):
-                if st.button("Очистить очередь", disabled=running, key="btn-clear-tasks"):
-                    clear_tasks(project_id)
-                    st.rerun()
+                     f'<span class="badge badge-accent">{len(tasks)} гор.</span></div>')
     else:
         html(T.empty("📭", "Очередь пуста", "Соберите пост во вкладке «Публикация» и добавьте города в очередь."))
 
@@ -3193,6 +3209,13 @@ def tab_report(project_id: str) -> None:
         if not data:
             return _day_logs(project_id)
 
+        # Чем этот прогон занимался. Заказчик: «пусть будет заголовок – типа
+        # публикация с добавлением фото в товары и 2ГИС или публикация
+        # информационного поста». По цифрам отчёты не различить.
+        if data.get("title"):
+            html(f'<div class="hint" style="margin:-4px 0 10px">'
+                 f'<b style="color:var(--text)">{T.esc(data["title"])}</b></div>')
+
         totals = data.get("totals") or {}
         results = data.get("results") or []
         current = st.session_state.get("report-filter", "all")
@@ -4345,7 +4368,49 @@ def show_main(project_id: str) -> None:
         tab_audit(project_id, config)
 
 
+# ─── Сборка должна быть ОДНА на все модули ───────────────────────────
+#
+# Облако обновляет файлы под работающим приложением, а Streamlit выселяет
+# изменённые модули из памяти по одному – по мере того как замечает их на
+# диске. В промежутке главный скрипт УЖЕ новый, а сосед ЕЩЁ старый, и это не
+# теория: заказчик получила такое дважды за один день. На «Актуализации» –
+# «AttributeError: casual_words» (экран новый, reviews старый). На
+# «Публикации» хуже: новый экран сложил задачи «только фото в 2ГИС», а прогон
+# старым кодом про такие задачи не знал – и отправил в три города ПУСТЫЕ посты.
+#
+# Модули мы не перезагружаем: самодельная перезагрузка из пользовательского
+# потока однажды уже роняла приложение целиком (см. комментарий у импортов).
+# Мы просто НЕ РАБОТАЕМ вразнобой – пока метки не сойдутся, страница ничего не
+# рисует и ничего не запускает, а сама перерисовывается через секунду.
+# Выселение занимает мгновение: человек видит короткую плашку и работает
+# дальше уже на одной сборке.
+_MIXED_TRIES = "_mixed_build_tries"
+_MIXED_LIMIT = 8
+
+
+def stale_modules() -> list[str]:
+    """Модули, оставшиеся в памяти от прежней сборки."""
+    return [name for name in _OWN_MODULES
+            if getattr(sys.modules.get(name), "BUILD", UI_BUILD) != UI_BUILD]
+
+
 def main() -> None:
+    stale = stale_modules()
+    if stale:
+        tries = st.session_state.get(_MIXED_TRIES, 0) + 1
+        st.session_state[_MIXED_TRIES] = tries
+        if tries <= _MIXED_LIMIT:
+            st.info("⏳ Приложение обновляется – секунду. Это бывает после выхода "
+                    "новой версии: страница обновилась раньше, чем остальные части.")
+            time.sleep(1.0)
+            st.rerun()
+        st.error("Приложение обновилось, но часть его осталась от прежней сборки: "
+                 + ", ".join(stale) + ". Перезагрузите страницу (F5), а если не поможет – "
+                 "«Reboot app» в меню Streamlit справа внизу. Запускать прогоны сейчас "
+                 "нельзя: новый экран и старый прогон понимают задачи по-разному.")
+        return
+    st.session_state.pop(_MIXED_TRIES, None)
+
     project_id = st.session_state.get("current_project_id")
     if not project_id:
         project_id = _project_from_url()          # переживает F5, в отличие от session_state

@@ -63,7 +63,7 @@ LIMIT_GIVE_UP = 2            # столько отказов Gemini по лим�
 RUN_KINDS = ("publish", "actualize", "actualize-gis", "collect")
 
 KIND_RU = {"publish": "Публикация", "actualize": "Актуализация",
-           "actualize-gis": "Актуализация 2ГИС", "collect": "Чтение организаций и статусов"}
+           "actualize-gis": "Актуализация 2ГИС", "collect": "Чтение организаций"}
 
 # ─── площадки ───────────────────────────────────────────────────────
 # Яндекс.Бизнес и 2ГИС отличаются браузерной частью и папками, а всё
@@ -2029,17 +2029,13 @@ def _save_companies(project_id: str, payload: dict) -> str:
 
 def start_collect(project_id: str, headless: bool = True, with_cards: bool = False,
                   card_ids: list[str] | None = None,
-                  must_ids: list[str] | None = None,
-                  gis_orgs: list[dict] | None = None) -> tuple[bool, str]:
+                  must_ids: list[str] | None = None) -> tuple[bool, str]:
     """
     Собрать организации аккаунта из раздела «Организации».
 
     with_cards – заодно открыть карточки: список отдаёт те же поля, но если
     Яндекс что-то в нём придержит, карточка покажет всё наверняка.
     card_ids – открыть только эти карточки (например, только спорные).
-    gis_orgs – кабинеты 2ГИС из КП ({orgId, url, city}): после Яндекса
-    обходим их и записываем, жива карточка или удалена, – для сверки
-    статусов. Одна кнопка – обе площадки, как просил заказчик.
     """
     with _lock:
         busy = busy_reason(project_id, "collect")
@@ -2064,8 +2060,7 @@ def start_collect(project_id: str, headless: bool = True, with_cards: bool = Fal
         })
         t = threading.Thread(target=_collect_worker,
                              args=(project_id, run_id, headless, with_cards,
-                                   list(card_ids or []), list(must_ids or []),
-                                   list(gis_orgs or [])),
+                                   list(card_ids or []), list(must_ids or [])),
                              daemon=True, name=f"click-collect-{project_id}")
         _threads[(project_id, "collect")] = t
         t.start()
@@ -2074,17 +2069,12 @@ def start_collect(project_id: str, headless: bool = True, with_cards: bool = Fal
 
 def _collect_worker(project_id: str, run_id: str, headless: bool,
                     with_cards: bool, card_ids: list[str],
-                    must_ids: list[str] | None = None,
-                    gis_orgs: list[dict] | None = None) -> None:
+                    must_ids: list[str] | None = None) -> None:
     _CUR.kind = "collect"
     yb.set_logger(lambda level, msg: _append_log(project_id, level, msg, kind="collect"))
     started_at = _now_iso()
     start_ts = time.time()
     companies: list[dict] = []
-    # Исход открытия карточек по ссылкам из КП. Раньше 404 просто уходил в
-    # лог, и сверка статусов не могла отличить «карточка удалена» от «мы не
-    # смотрели» – а это ровно та разница, на которой она стоит.
-    link_probes: dict[str, dict] = {}
 
     def push_state(status: str, current: int = 0, total: int = 0,
                    what: str = "", err: str | None = None) -> None:
@@ -2127,17 +2117,7 @@ def _collect_worker(project_id: str, run_id: str, headless: bool,
                 break
             card = yb.read_company_card(page, f"https://yandex.ru/sprav/{cid}/p/edit/")
             if card.get("error"):
-                err = card["error"]
-                if "404" in err:
-                    # Для сверки статусов это не сбой, а ответ: карточки нет.
-                    link_probes[cid] = {"state": "absent",
-                                        "note": "карточка по ссылке не открылась (404) – "
-                                                "удалена или переехала"}
-                    _append_log(project_id, "INFO",
-                                f"  🗑 карточка {cid} · не открылась (404) – похоже, удалена")
-                else:
-                    link_probes[cid] = {"state": "unknown", "note": err}
-                    _append_log(project_id, "WARN", f"  🟡 карточка {cid} · {err}")
+                _append_log(project_id, "WARN", f"  🟡 карточка {cid} · {card['error']}")
                 continue
             card.setdefault("id", cid)
             card["fromCard"] = True
@@ -2169,37 +2149,16 @@ def _collect_worker(project_id: str, run_id: str, headless: bool,
             push_state("running", n, len(wanted), co.get("name", ""))
             _sleep_interruptible(0.4, lambda: p_stop(project_id).exists())
 
-        browser.save_session()
-        # Яндекс прочитан – его браузер закрываем ДО обхода 2ГИС: два открытых
-        # браузера разом – лишние сотни мегабайт, а Яндекс больше не нужен.
-        try:
-            browser.close()
-        except Exception:  # noqa: BLE001
-            pass
-
-        gis_states: dict[str, dict] = {}
-        gis_checked_at = None
-        if gis_orgs and not p_stop(project_id).exists():
-            gis_states, gis_checked_at = _collect_gis_states(project_id, headless,
-                                                             gis_orgs, push_state)
-
         payload = {"collectedAt": _now_iso(), "count": len(companies),
                    "withCards": bool(wanted), "companies": companies,
                    # Сколько организаций насчитал сам Яндекс. Если меньше, чем
                    # видно в кабинете, – список отдал не всё, и это надо
                    # показать в отчёте, а не гадать.
                    "yandexTotal": int(сколько_обещал.get("total") or 0),
-                   # Для сверки статусов: исход открытия карточек Яндекса по
-                   # ссылкам из КП и обхода кабинетов 2ГИС.
-                   "linkProbes": link_probes,
-                   "gisStates": gis_states,
-                   "gisCheckedAt": gis_checked_at,
                    "build": BUILD}
         where = _save_companies(project_id, payload)
-        _append_log(project_id, "INFO",
-                    f"ИТОГИ · организаций {len(companies)}"
-                    + (f" · кабинетов 2ГИС проверено {len(gis_states)}" if gis_states else "")
-                    + f" · {where}")
+        _append_log(project_id, "INFO", f"ИТОГИ · организаций {len(companies)} · {where}")
+        browser.save_session()
         push_state("done", len(companies), len(companies), "")
     except Exception as e:  # noqa: BLE001
         _append_log(project_id, "ERROR", f"💥 Не собралось: {e}")
@@ -2212,78 +2171,6 @@ def _collect_worker(project_id: str, run_id: str, headless: bool,
         p_stop(project_id).unlink(missing_ok=True)
         _release_lock(project_id)
         yb.set_logger(None)
-
-
-def _collect_gis_states(project_id: str, headless: bool, gis_orgs: list[dict],
-                        push_state) -> tuple[dict, str | None]:
-    """
-    Обход кабинетов 2ГИС: жива карточка или удалена из справочника.
-
-    Вторая половина одной кнопки «Прочитать организации и статусы»: Яндекс
-    уже прочитан, теперь то же для 2ГИС. Сессия и браузер свои; слетевшая
-    сессия останавливает обход – остальные города упёрлись бы в ту же
-    страницу входа. Ошибка одного кабинета остальных не роняет: записываем
-    и идём дальше.
-    """
-    import gis_playwright as gis
-
-    states: dict[str, dict] = {}
-    if not gis.has_saved_session(project_id):
-        _append_log(project_id, "WARN",
-                    "⚠️ СТАТУСЫ 2ГИС · сессии нет – кабинеты не проверить. "
-                    "Войдите в 2ГИС в разделе «⚙️ Настройки».")
-        return states, None
-    _append_log(project_id, "INFO", f"СТАТУСЫ 2ГИС · кабинетов: {len(gis_orgs)}")
-    browser = gis.browser(project_id, headless=headless)
-    try:
-        browser.start()
-        for n, org in enumerate(gis_orgs, 1):
-            if p_stop(project_id).exists():
-                _append_log(project_id, "WARN", "⏹ Остановлено человеком")
-                break
-            # Сторож памяти – тот же, что в актуализации: полсотни кабинетов
-            # подряд облако уже роняли, и без него это видно только по тому,
-            # что приложение молча умерло вместе с чужими вкладками.
-            used = memory_mb()
-            _, soft_at, hard_at = mem_gates()
-            if used > hard_at:
-                _append_log(project_id, "WARN",
-                            f"⏹ ПАМЯТЬ · занято {used} МБ – останавливаю обход 2ГИС. "
-                            "Проверенное сохранено, остальное догоним следующим разом.")
-                break
-            if used > soft_at:
-                _append_log(project_id, "WARN",
-                            f"  ♻️ ПАМЯТЬ · занято {used} МБ – перезапускаю браузер")
-                try:
-                    browser.restart()
-                except Exception as e:  # noqa: BLE001 – перезапуск не роняет обход
-                    _append_log(project_id, "WARN", f"  ♻️ перезапуск не вышел: {e}")
-            city = str(org.get("city") or org.get("orgId") or "?")
-            try:
-                st = gis.company_state(browser.page, str(org.get("url") or ""))
-            except Exception as e:  # noqa: BLE001 – один кабинет не роняет обход
-                st = {"state": "error", "note": f"проверка сорвалась: {e}"}
-            states[str(org.get("orgId") or "")] = {**st, "city": city,
-                                                   "checkedAt": _now_iso()}
-            mark = {"alive": "🟢", "deleted": "🗑", "login": "🔐"}.get(st["state"], "🟡")
-            _append_log(project_id, "INFO",
-                        f"  {mark} {n}/{len(gis_orgs)} · {city} · {st['note']}")
-            push_state("running", n, len(gis_orgs), f"2ГИС · {city}")
-            if st["state"] == "login":
-                _append_log(project_id, "WARN",
-                            "⏹ СТАТУСЫ 2ГИС · сессия слетела – дальше идти незачем: "
-                            "остальные города упрутся в ту же страницу входа")
-                break
-            _sleep_interruptible(0.4, lambda: p_stop(project_id).exists())
-        browser.save_session()
-    except Exception as e:  # noqa: BLE001
-        _append_log(project_id, "WARN", f"⚠️ СТАТУСЫ 2ГИС · обход прервался: {e}")
-    finally:
-        try:
-            browser.close()
-        except Exception:
-            pass
-    return states, _now_iso()
 
 
 # ════════════════════════════════════════════════════════════════════

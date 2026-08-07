@@ -1308,30 +1308,6 @@ def audit_row(item: dict) -> str:
     )
 
 
-def status_row(entry: dict, kind: str = "err") -> str:
-    """
-    Строка проверки статусов: город, площадка, что в КП и что на самом деле.
-
-    kind – 'err' для несовпадений (красная кромка), 'skip' для «проверить
-    не вышло» (синяя): непроверенное – не ошибка КП, а наша слепота, и
-    красить его тем же красным нельзя.
-    """
-    ico = "❌" if kind == "err" else "•"
-    link = (f'<div class="audit-link"><a href="{esc(entry.get("url"))}" target="_blank">'
-            f'открыть карточку</a></div>' if entry.get("url") else "")
-    return (
-        f'<div class="audit-row {esc(kind)}">'
-        f'<div class="audit-head"><span>{ico}</span>'
-        f'<span class="audit-city">{esc(entry.get("city", "–"))}</span>'
-        f'<span class="audit-country">{esc(entry.get("country", ""))}</span>'
-        f'<span class="audit-note">{esc(entry.get("platform", ""))}</span></div>'
-        f'<div class="audit-fields">'
-        f'<div><span class="audit-key">В КП:</span> <b>{esc(entry.get("kp") or "–")}</b> · '
-        f'<span class="audit-key">на площадке:</span> {esc(entry.get("fact") or "–")}</div>'
-        f'{link}</div></div>'
-    )
-
-
 def audit_extra_row(co: dict) -> str:
     """Организация Яндекса, которой не нашлось города в КП."""
     bits = [co.get("address", ""), " / ".join(co.get("sites") or []),

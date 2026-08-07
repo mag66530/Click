@@ -4061,33 +4061,6 @@ def _kp_card_ids(project_id: str, config: dict) -> list[str]:
         return []
 
 
-def _kp_gis_orgs(project_id: str, config: dict) -> list[dict]:
-    """
-    Кабинеты 2ГИС из выбранного листа КП – для проверки статусов.
-
-    По каждому городу со ссылкой на account.2gis.com сборщик заглянет в
-    кабинет и запишет, жива карточка или удалена. Таблицу читаем из кэша
-    вкладки; не вышло – возвращаем пусто, сбор пройдёт без 2ГИС.
-    """
-    title = st.session_state.get("audit-sheet")
-    if not title:
-        return []
-    try:
-        rows = _audit_sheet_rows(project_id, config, title)
-        sheet = kp_audit.parse_sheet(rows)
-        out, seen = [], set()
-        for it in sheet.get("items") or []:
-            oid = kp_audit.gis_org_id(it.get("gisLink", ""))
-            if not oid or oid in seen:
-                continue
-            seen.add(oid)
-            out.append({"orgId": oid, "url": it.get("gisLink", ""),
-                        "city": it.get("city", ""), "country": it.get("country", "")})
-        return out
-    except Exception:  # noqa: BLE001 – без таблицы соберём только Яндекс
-        return []
-
-
 def _audit_pick_sheet(titles: list[str], prefer: str) -> str:
     """Какой лист предлагать: указанный ссылкой, потом «Лист20», потом «кп»."""
     saved = st.session_state.get("audit-sheet")
@@ -4117,21 +4090,18 @@ def tab_audit(project_id: str, config: dict) -> None:
         html('<div class="hint" style="margin-bottom:12px">Click читает список организаций аккаунта, '
              'раскладывает их по городам КП и сравнивает <b>сайт, телефоны и почту</b> с таблицей. '
              'Города, где карточек несколько, помечаются отдельно – это дубли, из-за них посты '
-             'уходят в одну карточку, а вторая живёт своей жизнью. Заодно проверяются '
-             '<b>статусы из КП</b>: «Активная» – карточка должна открываться, «Удалена» – её быть '
-             'не должно; для 2ГИС Click заглядывает в кабинет каждого города. На выходе – то же '
-             'самое КП, только с колонками из Яндекса.</div>')
+             'уходят в одну карточку, а вторая живёт своей жизнью. На выходе – то же самое КП, '
+             'только с колонками из Яндекса.</div>')
 
         c1, c2 = st.columns([2, 3])
         collected_at = local_time(stored.get("collectedAt")) if stored.get("collectedAt") else ""
-        if c1.button("🔄 Прочитать организации и статусы", type="primary", key="audit-collect",
+        if c1.button("🔄 Прочитать организации в Яндексе", type="primary", key="audit-collect",
                      disabled=bool(busy) or not yb.has_saved_session(project_id),
                      use_container_width=True):
             ok, msg = runner.start_collect(project_id,
                                            headless=bool(get_settings(project_id)["headless"]),
                                            with_cards=bool(st.session_state.get("audit-cards")),
-                                           must_ids=_kp_card_ids(project_id, config),
-                                           gis_orgs=_kp_gis_orgs(project_id, config))
+                                           must_ids=_kp_card_ids(project_id, config))
             (st.toast if ok else st.error)(msg)
             time.sleep(0.6)
             st.rerun()
@@ -4206,9 +4176,7 @@ def tab_audit(project_id: str, config: dict) -> None:
         return
 
     result = kp_audit.build(rows, companies,
-                            yandex_total=int(stored.get("yandexTotal") or 0),
-                            link_probes=stored.get("linkProbes"),
-                            gis_states=stored.get("gisStates"))
+                            yandex_total=int(stored.get("yandexTotal") or 0))
     if result.get("error"):
         st.error(result["error"] + f" (лист «{title}»)")
         return
@@ -4241,8 +4209,6 @@ def tab_audit(project_id: str, config: dict) -> None:
                    + (f" · без ссылки в КП: {totals['noLink']}" if totals.get("noLink") else ""))
 
         _audit_details(result, current, title, rows, collected_at)
-
-    _audit_status_card(project_id, result, stored, collected_at)
 
 
 def _audit_details(result: dict, current: str, title: str, rows: list[list[str]],
@@ -4293,87 +4259,11 @@ def _audit_details(result: dict, current: str, title: str, rows: list[list[str]]
                        data=kp_audit.to_csv(kp_audit.to_rows(rows, result)).encode("utf-8-sig"),
                        file_name=f"КП-сверка-{stamp}.csv", mime="text/csv",
                        use_container_width=True, key="audit-csv")
-    st.caption("В файле девять листов, у каждого своя задача: «Дашборд» – цифрами, "
-               "«Нет в КП», «Дубли», «Нет в Яндексе», «Расхождения» и «Статусы» – короткие "
-               "списки со ссылками, «Сверка» – сетка ✓/✗ по всем городам, «КП с данными» – "
+    st.caption("В файле восемь листов, у каждого своя задача: «Дашборд» – цифрами, "
+               "«Нет в КП», «Дубли», «Нет в Яндексе» и «Расхождения» – короткие списки "
+               "со ссылками, «Сверка» – сетка ✓/✗ по всем городам, «КП с данными» – "
                "ваша таблица без изменений плюс колонки из Яндекса. Как читать значки – "
                "на листе «Как читать».")
-
-
-def _audit_status_card(project_id: str, result: dict, stored: dict,
-                       collected_at: str = "") -> None:
-    """
-    Проверка статусов: колонка «Статус» из КП против площадок.
-
-    Как договорились: показываем только несовпадения. Всё сошлось – зелёная
-    плашка и «всё ок», разошлось – красная и список красным. Отдельно, не
-    красным, – то, что проверить не вышло: слетевшая сессия или отсутствие
-    ссылки – это не ошибка КП, и мешать их с расхождениями нельзя.
-    """
-    totals = result.get("totals") or {}
-    ok = int(totals.get("statusOk") or 0)
-    bad = int(totals.get("statusBad") or 0)
-    unchecked = int(totals.get("statusUnchecked") or 0)
-    if not (ok or bad or unchecked):
-        return   # в листе нет ни одного статуса – показывать нечего
-
-    with st.container(border=True):
-        html(f'<div class="report-head"><span class="report-head-title">🚦 Статусы карточек · '
-             f'КП против площадок</span>'
-             f'<span class="report-head-date">{T.esc(collected_at)}</span></div>')
-        html('<div class="hint" style="margin-bottom:12px">Колонка «Статус» в КП – обещание: '
-             '«Активная» и «Онлайн» – карточка открывается и опубликована, «Удалена» и '
-             '«Добавить» – карточки быть не должно, «Тех. проблемы» – карточка есть, а '
-             'публикация не важна. Яндекс проверяется по списку организаций и ссылкам из КП, '
-             '2ГИС – заходом в кабинет каждого города.</div>')
-
-        # Плашки некликабельные: список несовпадений и так короткий и виден
-        # целиком, прятать его за нажатием незачем.
-        cells = [("Совпадают", str(ok), "ok"), ("Не совпадают", str(bad), "err")]
-        if unchecked:
-            cells.append(("Не проверено", str(unchecked), "skip"))
-        html(T.stat_row(cells))
-
-        notes = []
-        gis_when = local_time(stored.get("gisCheckedAt")) if stored.get("gisCheckedAt") else ""
-        if gis_when:
-            notes.append(f"кабинеты 2ГИС проверены {gis_when}")
-        if unchecked:
-            notes.append(f"не удалось проверить: {unchecked}")
-        if notes:
-            st.caption(" · ".join(notes))
-
-        needs_gis = any(kp_audit.gis_org_id(it.get("gisLink") or "")
-                        for it in result.get("items") or [])
-        if needs_gis and not gis.has_saved_session(project_id):
-            st.warning("В КП есть кабинеты 2ГИС, а сессии 2ГИС нет – войдите в 2ГИС в разделе "
-                       "«⚙️ Настройки», иначе их статусы останутся непроверенными.")
-
-        if bad:
-            shown = kp_audit.status_entries(result, "bad")
-            st.error(f"Статус в КП не совпадает с площадкой: {len(shown)}. "
-                     "Ниже – что именно и где смотреть.")
-            for e in shown[:200]:
-                html(T.status_row(e, "err"))
-            if len(shown) > 200:
-                st.caption(f"Показаны первые 200 из {len(shown)}. Остальное – в выгрузке.")
-        elif ok:
-            st.success(f"Всё ок: проверено статусов {ok}, все совпадают с площадками.")
-        else:
-            # Ни одной проверки не вышло – значит организации собраны прошлой
-            # версией Click (в ней исходов ещё не сохраняли) либо не собраны
-            # вовсе. Вываливать сотню строк «не проверено» тут незачем: беда
-            # одна на всех и лечится одним нажатием.
-            st.info("Статусы ещё не проверялись. Нажмите «Прочитать организации и статусы» "
-                    "вверху страницы – Click заодно заглянет в кабинеты 2ГИС.")
-
-        if unchecked and (ok or bad):
-            with st.expander(f"Не удалось проверить ({unchecked}) – показать", expanded=False):
-                st.caption("Это не расхождения, а дырки в самой проверке: нет ссылки в КП "
-                           "или слетела сессия. Нажмите «Прочитать организации и статусы» – "
-                           "список станет короче.")
-                for e in kp_audit.status_entries(result, "skip")[:200]:
-                    html(T.status_row(e, "skip"))
 
 
 # ════════════════════════════════════════════════════════════════════

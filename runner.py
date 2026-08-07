@@ -1543,7 +1543,8 @@ def start_actualize(project_id: str, headless: bool = True, delay_s: float = 2.5
             "runId": run_id, "action": kind, "status": "running",
             "ownerPid": os.getpid(), "startedAt": _now_iso(), "finishedAt": None,
             "total": total, "current": 0, "currentCity": "", "reportName": None,
-            "totals": {"total": 0, "actualized": 0, "notNeeded": 0, "failed": 0}, "error": None,
+            "totals": {"total": 0, "actualized": 0, "notNeeded": 0, "statusMismatch": 0, "failed": 0},
+            "error": None,
         })
 
         t = threading.Thread(target=_actualize_worker,
@@ -1730,6 +1731,12 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
     return out
 
 
+# Статус actualize_city → ключ в counters. Один словарь на оба места, где
+# он нужен, – иначе при добавлении нового статуса легко забыть про второе.
+_ACT_COUNTER_KEY = {"actualized": "actualized", "not-needed": "notNeeded",
+                    "status-mismatch": "statusMismatch"}
+
+
 def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay_s: float,
                       with_reviews: bool = False, platform: str = YANDEX) -> None:
     kind = PLATFORMS[platform]["kind"]
@@ -1743,7 +1750,11 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
     report_path = p_reports_actualize(project_id, platform) / report_name
 
     results: list[dict] = []
-    counters = {"actualized": 0, "notNeeded": 0, "failed": 0}
+    # statusMismatch – КП и площадка расходятся (см. actualize_city в
+    # yb_playwright/gis_playwright): не сбой прогона, а неверный статус
+    # в таблице. Врозь с failed, иначе «Проверьте таблицу» тонет среди
+    # настоящих поломок.
+    counters = {"actualized": 0, "notNeeded": 0, "statusMismatch": 0, "failed": 0}
     review_totals = {"found": 0, "drafted": 0, "needsHuman": 0, "noDraft": 0}
     collected: list[dict] = []
     # Общий на весь прогон счётчик отказов Gemini по лимиту. Упёрлись дважды
@@ -1906,8 +1917,7 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                     # «Данные» ещё открывалась, а отзывы уже уводят на вход.
                     if rr.get("noSession"):
                         results.append(res)
-                        counters[{"actualized": "actualized",
-                                  "not-needed": "notNeeded"}.get(res["status"], "failed")] += 1
+                        counters[_ACT_COUNTER_KEY.get(res["status"], "failed")] += 1
                         gen = PLATFORMS[platform]["gen"]
                         _append_log(project_id, "ERROR",
                                     f"❌ ОСТАНОВКА: сессия {gen} не действует – раздел отзывов "
@@ -1929,7 +1939,7 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                         except Exception as e:  # noqa: BLE001
                             _append_log(project_id, "WARN", f"  💬 очередь не сохранилась: {e}")
                 results.append(res)
-                counters[{"actualized": "actualized", "not-needed": "notNeeded"}.get(res["status"], "failed")] += 1
+                counters[_ACT_COUNTER_KEY.get(res["status"], "failed")] += 1
                 save_report("in-progress")
                 push_state("running", task.get("cityName", ""))
                 if i < len(city_tasks) - 1:
@@ -1942,8 +1952,9 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
         # и раньше последние строки (ИТОГИ, ОТЗЫВЫ, ОЧЕРЕДЬ) в скачанный лог
         # не попадали – заказчик открывала файл и не находила там концовки.
         _append_log(project_id, "INFO",
-                    f"ИТОГИ · ✅ {counters['actualized']} · ⊝ {counters['notNeeded']} · ❌ {counters['failed']}"
-                    f" · память {memory_mb()} МБ")
+                    f"ИТОГИ · ✅ {counters['actualized']} · ⊝ {counters['notNeeded']} · "
+                    f"🚦 {counters['statusMismatch']} · ❌ {counters['failed']} · "
+                    f"память {memory_mb()} МБ")
         if with_reviews:
             _append_log(project_id, "INFO",
                         f"ОТЗЫВЫ · без ответа {review_totals['found']} · "

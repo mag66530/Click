@@ -492,6 +492,10 @@ def test_report_render() -> None:
     row = T.report_row({"status": "unknown", "cityName": "Казань", "reason": "не подтверждено",
                         "durationMs": 12345})
     check("неопределённый статус рисуется отдельным стилем", "report-row warn" in row and "⚠️" in row)
+    mismatch = T.report_row({"status": "status-mismatch", "cityName": "Пермь",
+                             "reason": "в КП «Активная», а карточки на площадке нет"})
+    check("расхождение статуса – жёлтым, не красным (это не сбой Click)",
+          "report-row warn" in mismatch and "🚦" in mismatch, mismatch)
     check("XSS в названии города экранируется",
           "&lt;script&gt;" in T.report_row({"status": "ok", "cityName": "<script>x</script>"}))
     check("страна в строке показывается по требованию",
@@ -505,6 +509,13 @@ def test_report_render() -> None:
     check("короткое время в секундах", app._dur_text(45) == "45 сек")  # noqa: SLF001
     check("пустой лог даёт заглушку", "log-placeholder" in T.log_box(""))
     check("строки лога раскрашиваются", "log-err" in T.log_box("[ERROR] всё плохо"))
+
+    notes = app._report_notes({}, {"statusMismatch": 3})  # noqa: SLF001
+    check("расхождение статусов – своя подсказка",
+          any("🚦" in n and "не сбой Click" in n for n in notes), notes)
+    check("без расхождений подсказки нет",
+          not any("🚦" in n for n in app._report_notes({}, {"statusMismatch": 0})),  # noqa: SLF001
+          app._report_notes({}, {"statusMismatch": 0}))  # noqa: SLF001
 
 
 def test_browser_fallback() -> None:
@@ -1150,10 +1161,58 @@ def test_kp_sheet() -> None:
     eq("контакты города подтянулись: почта", rc[0]["email"], "moscow@metpromintex.ru")
     eq("контакты города подтянулись: телефон", rc[0]["phone"], "+7 (495) 729-83-58")
 
+    # ── kpStatus едет вместе с городом до самой актуализации ──
+    real_countries = kp_sheet.to_countries(rc, "IMP")
+    moscow_ct = next(ct for c in real_countries for ct in c["cities"] if ct["name"] == "Москва")
+    eq("статус Яндекса приехал в конфиг", moscow_ct["kpStatus"], "Активная")
+    tehprob_ct = next(ct for c in real_countries for ct in c["cities"]
+                      if ct["name"] == "СТехПроблемой")
+    eq("«Тех. проблемы» тоже сохранён как есть", tehprob_ct["kpStatus"], "Тех. проблемы")
+
     order = kp_sheet._sheet_order(
         ["Сводка", "Карта присутсвия", "НЕ ТРОГАТЬ", "2ГИС", "Приоритеты"])
     eq("лист «Карта присутсвия» (с опечаткой) идёт первым", order[0], "Карта присутсвия")
     check("служебные листы уходят в конец", order[-1] in {"Сводка", "НЕ ТРОГАТЬ", "Приоритеты"})
+
+
+def test_kp_status_verdict() -> None:
+    """
+    Статус из КП против того, что реально в кабинете – чистая логика,
+    без сети. Актуализация ходит только по «живым» по КП городам, поэтому
+    на практике 'mismatch' почти всегда означает «в КП активная, а карточки
+    нет» – но проверяем и обратный край, вдруг статус поменяли задним числом.
+    """
+    import kp_sheet as KS
+    print("\n▸ Статус КП против кабинета")
+
+    eq("Активная → ждём живую карточку", KS.expected_state("Активная"), "alive")
+    eq("Онлайн → тоже живую", KS.expected_state("Онлайн"), "alive")
+    eq("Тех. проблемы → живую, публикация не важна",
+       KS.expected_state("Тех. проблемы"), "alive-any")
+    eq("Удалена → карточки быть не должно", KS.expected_state("Удалена"), "absent")
+    eq("Добавить → тоже не должно", KS.expected_state("Добавить"), "absent")
+    eq("Заблокирована → тоже", KS.expected_state("Заблокирована"), "absent")
+    eq("не активная → тоже (и не путается с «активная»)",
+       KS.expected_state("не активная"), "absent")
+    eq("пусто → сверять нечего", KS.expected_state(""), "")
+    eq("незнакомое слово → сверять нечего", KS.expected_state("Приостановлена навсегда"), "")
+
+    ok, note = KS.status_verdict("Активная", True)
+    eq("КП «Активная» + карточка жива → ok", ok, "ok")
+    check("текст вердикта не пустой", bool(note))
+    bad, _ = KS.status_verdict("Активная", False)
+    eq("КП «Активная» + карточки нет → mismatch", bad, "mismatch")
+    okgone, _ = KS.status_verdict("Удалена", False)
+    eq("КП «Удалена» + карточки правда нет → ok", okgone, "ok")
+    badalive, _ = KS.status_verdict("Удалена", True)
+    eq("КП «Удалена» + карточка живая → mismatch", badalive, "mismatch")
+
+    skip1, _ = KS.status_verdict("Активная", None)
+    eq("состояние карточки неизвестно → skip, не mismatch", skip1, "skip")
+    skip2, _ = KS.status_verdict("", True)
+    eq("статус в КП пуст → skip", skip2, "skip")
+    skip3, _ = KS.status_verdict("Что-то новое", True)
+    eq("незнакомый статус → skip, а не тихое ok", skip3, "skip")
 
 
 def test_kp_autosync(tmp: Path) -> None:
@@ -1847,6 +1906,20 @@ def gis_actualize_checks(gis, page) -> None:
         serve("")
         none = gis.actualize_city(page, task)
         eq("без плашки – «не требуется»", none["status"], "not-needed")
+        eq("КП статус пуст – сверять нечего, cardAlive всё равно True",
+           (none["cardAlive"], none["statusVerdict"]), (True, "skip"))
+
+        # ── Карточка живая, а КП говорит «Удалена» – редкий обратный край:
+        #    статус сменили ПОСЛЕ того, как собрали список задач. Карточка
+        #    открыта – действуем как обычно (жать нечего – «не требуется»),
+        #    но расхождение видно в statusVerdict ──
+        serve("")
+        reverse_task = {**task, "kpStatus": "Удалена"}
+        reverse = gis.actualize_city(page, reverse_task)
+        eq("живая карточка при этом не мешает обычному «не требуется»",
+           reverse["status"], "not-needed")
+        eq("но statusVerdict честно говорит «расходится»",
+           reverse["statusVerdict"], "mismatch")
 
         # ── Кабинет сменил слова на надписи – ищем внутри плашки ────
         serve("""<div class="CQydym6f" style="padding:12px">Данные о компании не обновлялись
@@ -1894,14 +1967,37 @@ def gis_actualize_checks(gis, page) -> None:
         eq("филиал – это не «увели не туда»", branch["status"], "actualized")
 
         # ── Карточку удалили из справочника ────────────────────────
-        serve("""<script>document.title = 'Личный кабинет 2ГИС';
+        deleted_html = ("""<script>document.title = 'Личный кабинет 2ГИС';
                  history.replaceState({}, '', '/orgs/70000001079192862/restore')</script>
                  <div>Компания «МетПромИнтекс» удалена из справочника 2ГИС.
                  Не нашли вашу компанию?</div>""")
+        serve(deleted_html)
         gone = gis.actualize_city(page, task)
-        eq("удалённая карточка – отдельный случай", gone["status"], "failed")
+        eq("удалённая карточка без статуса КП – отдельный случай", gone["status"], "failed")
         check("и сказано человеческими словами",
               "удалена из справочника" in gone["reason"], gone["reason"])
+        eq("cardAlive сохранён как False", gone["cardAlive"], False)
+
+        # ── Тот же случай, но КП говорит «Активная» – это статус-расхождение,
+        #    ровно то, ради чего вся сверка затевалась: не заходить с кнопкой
+        #    в мёртвую карточку, а сразу сказать человеку, что КП врёт ──
+        serve(deleted_html)
+        mismatch_task = {**task, "kpStatus": "Активная"}
+        bad = gis.actualize_city(page, mismatch_task)
+        eq("КП «Активная» + карточки нет → status-mismatch", bad["status"], "status-mismatch")
+        check("причина – про КП, а не про поломку приложения",
+              "в кп" in bad["reason"].lower(), bad["reason"])
+        eq("statusVerdict тоже mismatch", bad["statusVerdict"], "mismatch")
+
+        # ── А если КП и площадка согласны («Удалена» + карточки нет) –
+        #    это по-прежнему «failed» (подтверждать нечего), но БЕЗ пометки
+        #    расхождения: КП тут ни при чём, оно право ──
+        serve(deleted_html)
+        agree_task = {**task, "kpStatus": "Удалена"}
+        agree = gis.actualize_city(page, agree_task)
+        eq("КП «Удалена» + карточки нет → обычный failed, не mismatch",
+           agree["status"], "failed")
+        eq("statusVerdict – ok, КП было право", agree["statusVerdict"], "ok")
 
         # ── Кабинет увёл на другую страницу ────────────────────────
         serve("""<script>document.title = 'Личный кабинет 2ГИС: Обзор';
@@ -3931,6 +4027,53 @@ def test_gis_photos_wiring() -> None:
           plain.splitlines()[0])
 
 
+def test_actualize_task_kp_status() -> None:
+    """
+    Статус из КП едет в задачу актуализации – для обеих площадок.
+
+    kp_sheet.to_countries кладёт kpStatus в каждый город конфига (свой на
+    Яндекс и на 2ГИС), save_actualize_tasks переносит его в файл задачи –
+    actualize_city сверит его с тем, что реально в кабинете.
+    """
+    import streamlit_app as app
+    print("\n▸ Статус КП в задаче актуализации")
+
+    config = {
+        "countries": [{"id": "c-1", "name": "Россия", "cities": [
+            {"id": "ct-1", "name": "Москва", "url": "https://yandex.ru/sprav/501/",
+             "kpStatus": "Активная"},
+            {"id": "ct-2", "name": "Тула", "url": "https://yandex.ru/sprav/502/",
+             "kpStatus": "Тех. проблемы"},
+        ]}],
+        "countriesGis": [{"id": "c-gis-1", "name": "Россия", "cities": [
+            {"id": "ct-gis-1", "name": "Москва",
+             "url": "https://account.2gis.com/orgs/70000001081103893/",
+             "kpStatus": "Удалена"},
+        ]}],
+    }
+
+    with tempfile.TemporaryDirectory() as tmp:
+        saved = app.USERS_DATA
+        app.USERS_DATA = Path(tmp)
+        try:
+            n = app.save_actualize_tasks("SMU", config, {"c-1": ["ct-1", "ct-2"]})
+            eq("обе выбранные задачи записаны", n, 2)
+            files = list((app.project_base("SMU") / "tasks-actualize").glob("*.json"))
+            tasks = {t["cityName"]: t for t in json.loads(files[0].read_text(encoding="utf-8"))["tasks"]}
+            eq("статус Москвы приехал в задачу", tasks["Москва"]["kpStatus"], "Активная")
+            eq("«Тех. проблемы» тоже, как есть", tasks["Тула"]["kpStatus"], "Тех. проблемы")
+
+            import reviews as rv
+            n_gis = app.save_actualize_tasks("SMU", config, {"c-gis-1": ["ct-gis-1"]},
+                                             platform=rv.GIS)
+            eq("задача 2ГИС записана", n_gis, 1)
+            gis_files = list((app.project_base("SMU") / "tasks-actualize-gis").glob("*.json"))
+            gis_task = json.loads(gis_files[0].read_text(encoding="utf-8"))["tasks"][0]
+            eq("статус 2ГИС приехал в свою задачу", gis_task["kpStatus"], "Удалена")
+        finally:
+            app.USERS_DATA = saved
+
+
 # ════════════════════════════════════════════════════════════════════
 def test_queue_resets_between_runs() -> None:
     """
@@ -4517,6 +4660,7 @@ def main() -> int:
         test_login_step_detection()
         test_kp_sheet_choice()
         test_kp_sheet()
+        test_kp_status_verdict()
         test_kp_autosync(tmp)
         test_gis_urls_and_session(tmp)
         test_gis_login_fields()
@@ -4525,6 +4669,7 @@ def main() -> int:
         test_gis_answer_and_actualize()
         test_gis_media_upload()
         test_gis_photos_wiring()
+        test_actualize_task_kp_status()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

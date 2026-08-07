@@ -200,10 +200,24 @@ def email_key(value: str) -> str:
 
 SPRAV_ID_RX = re.compile(r"(?:sprav|/business/companies/company)/(\d+)", re.I)
 
+# Кабинет 2ГИС. В ссылке из КП номер ОРГАНИЗАЦИИ (account.2gis.com/orgs/<id>/…),
+# на публичной карте – номер филиала; кабинету нужен первый.
+GIS_ACCOUNT_RX = re.compile(r"account\.2gis\.[a-z.]+", re.I)
+GIS_ORG_RX = re.compile(r"account\.2gis\.[a-z.]+/orgs/(\d+)", re.I)
+
 
 def company_id_from_url(url: str) -> str:
     m = SPRAV_ID_RX.search(str(url or ""))
     return m.group(1) if m else ""
+
+
+def gis_org_id(url: str) -> str:
+    m = GIS_ORG_RX.search(str(url or ""))
+    return m.group(1) if m else ""
+
+
+def gis_cabinet_url(org_id: str) -> str:
+    return f"https://account.2gis.com/orgs/{org_id}/company" if org_id else ""
 
 
 def company_ids(company: dict) -> set[str]:
@@ -316,13 +330,44 @@ def parse_sheet(rows: list[list[str]]) -> dict:
         hits = sum(1 for r in data if c < len(r) and SPRAV_RX.search(str(r[c])))
         if hits > best_hits:
             best_col, best_hits = c, hits
+
+    # Блок 2ГИС – так же по содержимому: заголовок у него тот же «Аккаунт»,
+    # имя площадки живёт строкой выше в объединённой ячейке и сюда не доезжает.
+    gis_col, gis_hits = -1, 0
+    for c in range(out["width"]):
+        if c == best_col:
+            continue
+        hits = sum(1 for r in data if c < len(r) and GIS_ACCOUNT_RX.search(str(r[c])))
+        if hits > gis_hits:
+            gis_col, gis_hits = c, hits
+    cols["gisLink"] = gis_col
+
+    def status_near(from_col: int, avoid: str) -> int:
+        """
+        «Статус» – ближайшая колонка справа от ссылок своей площадки.
+
+        В КП МПИ все три статуса называются одинаково – просто «Статус», –
+        поэтому одного названия мало: ищем от колонки со ссылками и
+        останавливаемся у начала чужого блока, чтобы статус 2ГИС не сел
+        на строку Яндекса и наоборот.
+        """
+        if from_col < 0:
+            return -1
+        stop = min(from_col + 6, len(header))
+        for other in (best_col, gis_col):
+            if other > from_col:
+                stop = min(stop, other)
+        for c in range(from_col + 1, stop):
+            if "статус" in header[c] and not re.search(avoid, header[c]):
+                return c
+        return -1
+
     if best_col >= 0:
         cols["link"] = best_col
-        # «Статус» – ближайшая колонка справа от ссылок, но не чужой площадки.
-        for c in range(best_col + 1, min(best_col + 6, len(header))):
-            if "статус" in header[c] and not re.search(r"2гис|2gis|гугл|google", header[c]):
-                cols["status"] = c
-                break
+        near = status_near(best_col, r"2гис|2gis|гугл|google")
+        if near >= 0:
+            cols["status"] = near
+    cols["gisStatus"] = status_near(gis_col, r"яндекс|yandex|гугл|google")
     out["columns"] = cols
 
     def cell(row: list[str], idx: int) -> str:
@@ -343,6 +388,8 @@ def parse_sheet(rows: list[list[str]]) -> dict:
             "phones": phones,
             "link": cell(row, cols["link"]),
             "status": cell(row, cols["status"]),
+            "gisLink": cell(row, cols["gisLink"]),
+            "gisStatus": cell(row, cols["gisStatus"]),
         })
     return out
 
@@ -539,6 +586,203 @@ def compare(item: dict, companies: list[dict], all_ids: set[str] | None = None) 
     return res
 
 
+# ─── Статусы: КП против площадок ────────────────────────────────────
+# Колонка «Статус» в КП – обещание: «Активная» значит, что карточка на
+# площадке открывается и живёт, «Удалена» – что её там нет. Проверка
+# отвечает на один вопрос: правду ли говорит таблица. Словарь статусов
+# один на обе площадки: Активная, Онлайн, Тех. проблемы, Удалена, Добавить
+# (встречаются ещё «не активная» и «заблокирована»).
+
+# «не активная» проверяем ДО «активная»: в одной строке есть подстрока другой.
+_EXPECT_ABSENT_RX = re.compile(r"удал|добав|заблок|не\s*актив", re.I)
+_EXPECT_ALIVE_ANY_RX = re.compile(r"тех|проблем", re.I)
+_EXPECT_ALIVE_RX = re.compile(r"актив|онлайн", re.I)
+
+
+def expected_state(kp_status: str) -> str:
+    """
+    Что должно быть на площадке, если КП говорит правду.
+
+      'absent'    – карточки быть не должно (Удалена, Добавить, заблокирована);
+      'alive-any' – карточка есть, а публикация не важна (Тех. проблемы:
+                    видеть ошибку в отчёте лучше, чем красить её красным);
+      'alive'     – карточка есть и опубликована (Активная, Онлайн);
+      ''          – статус пуст или незнаком, сверять нечего.
+    """
+    s = norm_text(kp_status)
+    if not s:
+        return ""
+    if _EXPECT_ABSENT_RX.search(s):
+        return "absent"
+    if _EXPECT_ALIVE_ANY_RX.search(s):
+        return "alive-any"
+    if _EXPECT_ALIVE_RX.search(s):
+        return "alive"
+    return ""
+
+
+def companies_by_ids(companies: Iterable[dict]) -> dict[str, dict]:
+    """Каждый номер карточки (новый, старый, permanent) → сама карточка."""
+    out: dict[str, dict] = {}
+    for co in companies:
+        for i in company_ids(co):
+            out.setdefault(i, co)
+    return out
+
+
+def yandex_state(item: dict, by_id: dict[str, dict], link_probes: dict | None) -> dict:
+    """
+    Что с карточкой Яндекса на самом деле.
+
+    Возвращает {'state': alive|absent|unknown, 'published': bool|None,
+    'note', 'url'}. Порядок источников – от точного к нестрогому:
+
+      1. Ссылка из КП, карточка среди прочитанных – живая. Заодно видно,
+         опубликована ли: publishing_status лежит прямо в списке организаций.
+      2. Ссылки нет в списке, но сборщик открывал её напрямую (добор по КП) –
+         исход пробы записан в linkProbes: 404 значит удалена.
+      3. Пробы нет – честное «не проверялось»: красить красным собственную
+         слепоту нельзя.
+      4. Ссылки в КП нет вовсе – судим по сопоставлению: карточка на строку
+         села – живая, не села – в Яндексе города нет (то же самое говорит
+         и плашка «Нет в Яндексе»).
+    """
+    probes = link_probes or {}
+    cid = company_id_from_url(item.get("link", ""))
+    if cid:
+        co = by_id.get(cid)
+        if co is not None:
+            pub = co.get("publishing") or ""
+            return {"state": "alive",
+                    "published": (pub == "publish") if pub else None,
+                    "note": ("карточка в аккаунте, опубликована" if pub == "publish"
+                             else f"карточка не опубликована ({pub})" if pub
+                             else "карточка в аккаунте"),
+                    "url": card_url(str(co.get("id") or cid))}
+        probe = probes.get(cid) or {}
+        if probe.get("state") == "absent":
+            return {"state": "absent", "published": None,
+                    "note": probe.get("note") or "карточка по ссылке не открылась (404)",
+                    "url": card_url(cid)}
+        if probe:
+            return {"state": "unknown", "published": None,
+                    "note": probe.get("note") or "карточку проверить не вышло",
+                    "url": card_url(cid)}
+        return {"state": "unknown", "published": None,
+                "note": "карточка не проверялась – перечитайте организации",
+                "url": card_url(cid)}
+    cos = item.get("companies") or []
+    if cos:
+        pub = cos[0].get("publishing") or ""
+        return {"state": "alive", "published": (pub == "publish") if pub else None,
+                "note": "нашлась по названию и адресу (ссылки в КП нет)",
+                "url": card_url(str(cos[0].get("id") or ""))}
+    return {"state": "absent", "published": None,
+            "note": "ссылки в КП нет, и по названию карточка не нашлась", "url": ""}
+
+
+def gis_state(item: dict, gis_states: dict | None) -> dict:
+    """
+    Что с карточкой 2ГИС: по обходу кабинетов, записанному при сборе.
+
+    gis_states – {номер организации: {'state': alive|deleted|login|error, …}}.
+    """
+    states = gis_states or {}
+    oid = gis_org_id(item.get("gisLink", ""))
+    if not oid:
+        return {"state": "unknown", "published": None,
+                "note": "в КП нет ссылки на кабинет 2ГИС", "url": ""}
+    url = gis_cabinet_url(oid)
+    st = states.get(oid) or {}
+    kind = st.get("state") or ""
+    if kind == "alive":
+        return {"state": "alive", "published": True,
+                "note": "кабинет открывается, карточка живая", "url": url}
+    if kind == "deleted":
+        return {"state": "absent", "published": None,
+                "note": "кабинет пишет «удалена из справочника 2ГИС»", "url": url}
+    if kind == "login":
+        return {"state": "unknown", "published": None,
+                "note": "сессия 2ГИС не действует – войдите в 2ГИС заново", "url": url}
+    if st:
+        return {"state": "unknown", "published": None,
+                "note": st.get("note") or "кабинет 2ГИС проверить не вышло", "url": url}
+    return {"state": "unknown", "published": None,
+            "note": "кабинет 2ГИС не проверялся – перечитайте организации", "url": url}
+
+
+def check_status(kp_status: str, actual: dict) -> dict:
+    """
+    Вердикт по одной площадке: {'verdict': ok|bad|skip, 'note'}.
+
+    'bad' – только когда в фактическом состоянии уверены. Слетевшая сессия
+    или сбой сети – это «не проверено», а не расхождение: красить надо
+    ошибки КП, а не собственную слепоту.
+    """
+    status = (kp_status or "").strip()
+    expect = expected_state(status)
+    if not expect:
+        if not status:
+            return {"verdict": "skip", "note": "статус в КП не проставлен"}
+        return {"verdict": "skip", "note": f"незнакомый статус «{status}» – не сверяем"}
+    if actual.get("state") == "unknown":
+        return {"verdict": "skip", "note": actual.get("note") or "проверить не вышло"}
+    alive = actual.get("state") == "alive"
+    if expect == "absent":
+        if alive:
+            return {"verdict": "bad", "note": f"в КП «{status}», а карточка на площадке живая"}
+        return {"verdict": "ok", "note": f"в КП «{status}» – карточки на площадке нет"}
+    if not alive:
+        return {"verdict": "bad", "note": f"в КП «{status}», а карточки на площадке нет"}
+    if expect == "alive" and actual.get("published") is False:
+        return {"verdict": "bad", "note": f"в КП «{status}», а карточка не опубликована"}
+    return {"verdict": "ok", "note": f"в КП «{status}» – так и есть"}
+
+
+def status_entries(result: dict, verdict: str) -> list[dict]:
+    """
+    Плоский список проверок статусов с нужным вердиктом – по записи на
+    площадку, а не на строку: у города могут разойтись обе.
+
+    Для 'skip' отдаём только строки, где статус в КП проставлен: пустая
+    ячейка – не «не смогли проверить», а «нечего сверять».
+    """
+    out: list[dict] = []
+    for it in result.get("items") or []:
+        for side, label in (("ya", "Яндекс"), ("gis", "2ГИС")):
+            chk = (it.get("statusCheck") or {}).get(side) or {}
+            if chk.get("verdict") != verdict:
+                continue
+            if verdict == "skip" and not chk.get("kp"):
+                continue
+            actual = chk.get("actual") or {}
+            out.append({"country": it.get("country", ""), "city": it.get("city", ""),
+                        "platform": label, "kp": chk.get("kp", ""),
+                        "fact": actual.get("note", ""), "note": chk.get("note", ""),
+                        "url": actual.get("url", "")})
+    return out
+
+
+STATUS_SHEET_HEADERS = ["Страна", "Город", "Площадка", "Статус в КП", "На самом деле",
+                        "Ссылка на карточку"]
+
+
+def status_rows(result: dict) -> list[list[str]]:
+    """
+    Лист «Статусы»: только строки, где КП и площадка говорят разное, –
+    ровно как просили: «делаем для тех, которые не совпадают». Ниже них –
+    то, что проверить не вышло: молчать об этом нельзя, иначе пустой лист
+    выглядит как «всё сошлось», когда на деле сессия слетела.
+    """
+    out = [list(STATUS_SHEET_HEADERS)]
+    for e in status_entries(result, "bad"):
+        out.append([e["country"], e["city"], e["platform"], e["kp"], e["fact"], e["url"]])
+    for e in status_entries(result, "skip"):
+        out.append([e["country"], e["city"], e["platform"], e["kp"],
+                    f"не проверено: {e['fact']}", e["url"]])
+    return out
+
+
 # ─── Сборка отчёта ──────────────────────────────────────────────────
 
 STATUS_MARK = {"найдена": "✅ найдена", "несколько": "❗ несколько", "нет": "❌ нет"}
@@ -569,9 +813,15 @@ def _join(values: Iterable[str]) -> str:
     return "\n".join(out)
 
 
-def build(rows: list[list[str]], companies: list[dict], yandex_total: int = 0) -> dict:
+def build(rows: list[list[str]], companies: list[dict], yandex_total: int = 0,
+          link_probes: dict | None = None, gis_states: dict | None = None) -> dict:
     """
     Сверка целиком: разобрать КП, разложить организации, сравнить поля.
+
+    link_probes – исход открытия карточек Яндекса по ссылкам из КП (сборщик
+    добирает те, что список не отдал; 404 значит карточка удалена).
+    gis_states – обход кабинетов 2ГИС: живая карточка или удалена.
+    По ним считается проверка статусов – см. check_status.
 
     Возвращает всё, что нужно и экрану, и выгрузке:
       sheet   – разбор листа,
@@ -590,6 +840,8 @@ def build(rows: list[list[str]], companies: list[dict], yandex_total: int = 0) -
     totals = {"rows": len(sheet["items"]), "found": 0, "several": 0, "missing": 0,
               "mismatch": 0, "clean": 0, "noLink": 0, "extra": len(found["extra"]),
               "chains": len(found["chains"]), "companies": len(companies),
+              # Проверка статусов: совпало / разошлось / хотели, но не смогли.
+              "statusOk": 0, "statusBad": 0, "statusUnchecked": 0,
               # Сколько организаций насчитал сам Яндекс: меньше прочитанного –
               # список отдал не всё, и отчёт скажет об этом прямо.
               "yandexTotal": int(yandex_total or 0)}
@@ -599,11 +851,29 @@ def build(rows: list[list[str]], companies: list[dict], yandex_total: int = 0) -
     all_ids: set[str] = set()
     for co in companies:
         all_ids |= company_ids(co)
+    by_id = companies_by_ids(companies)
 
     for it in sheet["items"]:
         cos = found["byRow"].get(it["rowIdx"], [])
         cmp = compare(it, cos, all_ids)
-        items.append({**it, "companies": cos, "cmp": cmp})
+        entry = {**it, "companies": cos, "cmp": cmp}
+        ya_actual = yandex_state(entry, by_id, link_probes)
+        gi_actual = gis_state(entry, gis_states)
+        entry["statusCheck"] = {
+            "ya": {**check_status(it.get("status", ""), ya_actual),
+                   "actual": ya_actual, "kp": (it.get("status") or "").strip()},
+            "gis": {**check_status(it.get("gisStatus", ""), gi_actual),
+                    "actual": gi_actual, "kp": (it.get("gisStatus") or "").strip()},
+        }
+        items.append(entry)
+        for side in ("ya", "gis"):
+            chk = entry["statusCheck"][side]
+            if chk["verdict"] == "ok":
+                totals["statusOk"] += 1
+            elif chk["verdict"] == "bad":
+                totals["statusBad"] += 1
+            elif chk["kp"]:
+                totals["statusUnchecked"] += 1
         if cmp["status"] == "нет":
             totals["missing"] += 1
         elif cmp["status"] == "несколько":
@@ -969,6 +1239,13 @@ LEGEND = [
      "дубль независимо от таблицы. Город берётся из адреса карточки.", False),
     ("Нет в Яндексе – города из КП, для которых карточки не нашлось.", False),
     ("Расхождения – каждое расхождение отдельной строкой: слева КП, справа Яндекс.", False),
+    ("Статусы – колонка «Статус» из КП против того, что на площадках на самом "
+     "деле. «Активная» и «Онлайн» – карточка должна открываться и быть "
+     "опубликованной, «Удалена» и «Добавить» – карточки быть не должно, "
+     "«Тех. проблемы» – карточка есть, а публикация не важна. В листе только "
+     "строки, где КП и площадка говорят разное, и те, что проверить не вышло. "
+     "Статус 2ГИС проверяется по кабинету: карточка живая или «удалена из "
+     "справочника».", False),
     ("Сверка – сетка ✓/✗ по всем городам, одна строка на город.", False),
     ("КП с данными – ваша таблица без единого изменения плюс колонки из Яндекса "
      "справа. Нужна, когда хочется видеть всё разом.", False),
@@ -1110,6 +1387,7 @@ def _dashboard(ws, result: dict, sheet_name: str, when: str) -> None:
         for key, label in (("site", "Сайт"), ("phone", "Телефон"), ("email", "Почта")):
             if cmp.get(key) in BAD_VERDICTS:
                 by_field[label] += 1
+    by_field["Статус (ЯБ и 2ГИС)"] = int(t.get("statusBad") or 0)
 
     ws.merge_cells("B11:H11")
     ws["B11"] = "Расхождения по типу данных"
@@ -1130,8 +1408,9 @@ def _dashboard(ws, result: dict, sheet_name: str, when: str) -> None:
     ws.append([])
     row = ws.max_row + 1
     ws.cell(row=row, column=2, value="Подробности – на листах «Нет в КП», «Нет ссылки в КП», "
-                                     "«Дубли», «Нет в Яндексе» и «Расхождения». Как читать "
-                                     "значки – на листе «Как читать».").font = Font(color=C_GREY)
+                                     "«Дубли», «Нет в Яндексе», «Расхождения» и «Статусы». "
+                                     "Как читать значки – на листе «Как читать»."
+                                     ).font = Font(color=C_GREY)
 
     for col, width in (("A", 2), ("B", 24), ("C", 13), ("D", 22), ("E", 13),
                        ("F", 22), ("G", 13), ("H", 24)):
@@ -1317,6 +1596,11 @@ def to_xlsx(rows: list[list[str]], result: dict, sheet_name: str = "Сверка
     _list_sheet(wb, "Расхождения", diff_rows(result), link_col=6, link_label="Открыть карточку",
                 note="Слева значение из КП, справа – из карточки Яндекса.",
                 empty_note="Расхождений не найдено 🎉")
+    _list_sheet(wb, "Статусы", status_rows(result), link_col=6, link_label="Открыть карточку",
+                note="Колонка «Статус» из КП против площадок: «Активная» – карточка должна "
+                     "открываться, «Удалена» – её быть не должно. Здесь только строки, где "
+                     "КП и площадка говорят разное, и те, что проверить не вышло.",
+                empty_note="Все статусы совпадают 🎉")
 
     _grid_sheet(wb, result)
     _full_sheet(wb, rows, result)

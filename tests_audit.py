@@ -562,7 +562,7 @@ def test_report_sheets() -> None:
     wb = load_workbook(io.BytesIO(blob))
     eq("листы книги", wb.sheetnames,
        ["Дашборд", "Как читать", "Нет в КП", "Нет ссылки в КП", "Дубли",
-        "Нет в Яндексе", "Расхождения", "Сверка", "КП с данными"])
+        "Нет в Яндексе", "Расхождения", "Статусы", "Сверка", "КП с данными"])
 
     nl = wb["Нет ссылки в КП"]
     _texts = [str(c.value or "") for row in nl.iter_rows() for c in row]
@@ -705,6 +705,195 @@ def test_yandex_pages() -> None:
     eq("телефоны сошлись у всех найденных", bad, [])
 
 
+# ════════════════════════════════════════════════════════════════════
+#  Статусы: КП против площадок
+# ════════════════════════════════════════════════════════════════════
+#
+# Шапка настоящего КП МПИ: три площадки подряд, у каждой свой блок
+# «Аккаунт – Карта – Статус», и все три статуса называются одинаково –
+# просто «Статус». Различает их только положение относительно ссылок.
+KP2_HEAD_TOP = ["", "", "", "Яндекс Бизнес", "", "", "2ГИС", "", ""]
+KP2_HEADER = ["Страна", "Город", "url", "Аккаунт", "Карта", "Статус",
+              "Аккаунт", "Карта", "Статус"]
+
+
+def kp2(*rows: list[str]) -> list[list[str]]:
+    return [list(KP2_HEAD_TOP), list(KP2_HEADER), *[list(r) for r in rows]]
+
+
+def test_status_columns() -> None:
+    print("\n▸ Статусы: разбор блоков площадок")
+
+    rows = kp2(
+        ["Россия", "Москва", "https://metpromintex.ru",
+         "https://yandex.ru/sprav/36559471/edit/posts/", "https://yandex.ru/maps/org/x/1/",
+         "Активная",
+         "account.2gis.com/orgs/70000001058778085/dashboard", "https://2gis.ru/moscow/", "Удалена"],
+        ["Россия", "Казань", "https://kazan.metpromintex.ru",
+         "https://yandex.ru/sprav/36347620/edit/posts/", "", "Онлайн", "", "", ""])
+    got = A.parse_sheet(rows)
+    cols = got["columns"]
+    eq("ссылки Яндекса – колонка 3", cols["link"], 3)
+    eq("ссылки 2ГИС – колонка 6", cols["gisLink"], 6)
+    eq("статус Яндекса – свой", cols["status"], 5)
+    eq("статус 2ГИС – свой", cols["gisStatus"], 8)
+    eq("статус Яндекса прочитан", got["items"][0]["status"], "Активная")
+    eq("статус 2ГИС прочитан", got["items"][0]["gisStatus"], "Удалена")
+    eq("номер организации 2ГИС", A.gis_org_id(got["items"][0]["gisLink"]), "70000001058778085")
+    eq("нет ссылки 2ГИС – нет номера", A.gis_org_id(got["items"][1]["gisLink"]), "")
+
+    # Номер филиала с публичной карты кабинету не годится – его брать нельзя.
+    eq("публичная карта – не кабинет",
+       A.gis_org_id("https://2gis.ru/spb/inside/534866/firm/70000001081104279"), "")
+
+
+def test_expected_state() -> None:
+    print("\n▸ Статусы: чего ждём от площадки")
+
+    eq("Активная – живая и опубликованная", A.expected_state("Активная"), "alive")
+    eq("Онлайн – тоже живая", A.expected_state("Онлайн"), "alive")
+    eq("Тех. проблемы – живая, публикация не важна",
+       A.expected_state("Тех. проблемы"), "alive-any")
+    eq("Удалена – карточки быть не должно", A.expected_state("Удалена"), "absent")
+    eq("Добавить – карточки ещё нет", A.expected_state("Добавить"), "absent")
+    eq("Заблокирована – карточки нет", A.expected_state("Заблокирована"), "absent")
+    # «не активная» содержит «актив» – проверяться должна раньше, иначе
+    # удалённая карточка сойдёт за живую.
+    eq("не активная – карточки нет", A.expected_state("Не активная"), "absent")
+    eq("пусто – сверять нечего", A.expected_state(""), "")
+    eq("незнакомое – сверять нечего", A.expected_state("Что-то своё"), "")
+
+
+def test_check_status() -> None:
+    print("\n▸ Статусы: вердикты")
+
+    alive = {"state": "alive", "published": True, "note": "живая"}
+    unpub = {"state": "alive", "published": False, "note": "не опубликована"}
+    gone = {"state": "absent", "published": None, "note": "карточки нет"}
+    dunno = {"state": "unknown", "published": None, "note": "сессия слетела"}
+
+    eq("Активная + живая = ок", A.check_status("Активная", alive)["verdict"], "ok")
+    eq("Активная + нет карточки = ошибка", A.check_status("Активная", gone)["verdict"], "bad")
+    eq("Активная + не опубликована = ошибка",
+       A.check_status("Активная", unpub)["verdict"], "bad")
+    eq("Удалена + нет карточки = ок", A.check_status("Удалена", gone)["verdict"], "ok")
+    eq("Удалена + живая = ошибка", A.check_status("Удалена", alive)["verdict"], "bad")
+    eq("Добавить + живая = ошибка", A.check_status("Добавить", alive)["verdict"], "bad")
+    eq("Тех. проблемы + не опубликована = ок",
+       A.check_status("Тех. проблемы", unpub)["verdict"], "ok")
+    eq("Тех. проблемы + нет карточки = ошибка",
+       A.check_status("Тех. проблемы", gone)["verdict"], "bad")
+
+    # Не проверили – значит не проверили. Своя слепота не ошибка КП.
+    eq("не проверено – не ошибка", A.check_status("Активная", dunno)["verdict"], "skip")
+    eq("пустой статус – не сверяем", A.check_status("", alive)["verdict"], "skip")
+
+
+def test_status_build() -> None:
+    print("\n▸ Статусы: сборка отчёта")
+
+    gis_link = "https://account.2gis.com/orgs/700001/dashboard"
+    rows = kp2(
+        # Всё сходится: карточка в списке, кабинет 2ГИС живой.
+        ["Россия", "Шахты", "https://shahty.aviastal.ru",
+         "https://yandex.ru/sprav/1/edit", "", "Активная", gis_link, "", "Активная"],
+        # В КП «Удалена», а карточка живая – главное расхождение.
+        ["Россия", "Казань", "https://kazan.aviastal.ru",
+         "https://yandex.ru/sprav/2/edit", "", "Удалена", "", "", ""],
+        # В КП «Активная», а Яндекс отдал 404 – второе расхождение.
+        ["Россия", "Псков", "https://pskov.aviastal.ru",
+         "https://yandex.ru/sprav/3/edit", "", "Активная", "", "", ""],
+        # Статус есть, а проверить нечем: карточки нет ни в списке, ни в пробах.
+        ["Россия", "Тверь", "https://tver.aviastal.ru",
+         "https://yandex.ru/sprav/4/edit", "", "Активная", "", "", ""])
+    cos = [company("1", "Ростовская область, Шахты", "https://shahty.aviastal.ru/"),
+           company("2", "Республика Татарстан, Казань", "https://kazan.aviastal.ru/")]
+    probes = {"3": {"state": "absent", "note": "карточка по ссылке не открылась (404)"}}
+    states = {"700001": {"state": "alive", "note": "кабинет открывается"}}
+
+    res = A.build(rows, cos, link_probes=probes, gis_states=states)
+    t = res["totals"]
+    # Шахты дают два совпадения – по Яндексу и по 2ГИС; у остальных городов
+    # статус 2ГИС пуст, и в счёт идёт только Яндекс.
+    eq("совпало две проверки", t["statusOk"], 2)
+    eq("разошлось две", t["statusBad"], 2)
+    eq("не проверили одну", t["statusUnchecked"], 1)
+
+    bad = {(e["city"], e["platform"]) for e in A.status_entries(res, "bad")}
+    eq("расхождения там, где ждали", bad, {("Казань", "Яндекс"), ("Псков", "Яндекс")})
+    skip = [e["city"] for e in A.status_entries(res, "skip")]
+    eq("не проверили Тверь", skip, ["Тверь"])
+    # У Казани и Пскова 2ГИС-статус пуст – в «не проверено» они попасть не должны.
+    check("пустой статус 2ГИС в список не лезет", "Казань" not in skip)
+
+    sheet = A.status_rows(res)
+    eq("в листе «Статусы» три строки", len(sheet) - 1, 3)
+    eq("сначала расхождения", sheet[1][1], "Казань")
+    check("непроверенное помечено отдельно", sheet[3][4].startswith("не проверено:"), sheet[3][4])
+
+    # Ссылка на карточку рядом – иначе непонятно, что открывать.
+    казань = next(e for e in A.status_entries(res, "bad") if e["city"] == "Казань")
+    check("у расхождения есть ссылка", "/sprav/2/" in казань["url"], казань["url"])
+
+
+def test_status_gis_states() -> None:
+    print("\n▸ Статусы: 2ГИС по кабинетам")
+
+    gis_link = "https://account.2gis.com/orgs/700002/dashboard"
+    rows = kp2(["Россия", "Омск", "https://omsk.aviastal.ru", "", "", "", gis_link, "", "Активная"])
+
+    def build(state):
+        return A.build(rows, [], gis_states={"700002": state} if state else {})
+
+    res = build({"state": "deleted", "note": "удалена из справочника"})
+    eq("в КП активная, кабинет говорит «удалена» – ошибка", res["totals"]["statusBad"], 1)
+
+    res = build({"state": "alive", "note": "кабинет открывается"})
+    eq("кабинет живой – совпало", res["totals"]["statusOk"], 1)
+
+    # Сессия слетела – это не ошибка КП, а наша слепота.
+    res = build({"state": "login", "note": "страница входа"})
+    eq("слетевшая сессия – не ошибка", res["totals"]["statusBad"], 0)
+    eq("а «не проверено»", res["totals"]["statusUnchecked"], 1)
+    note = A.status_entries(res, "skip")[0]["fact"]
+    check("и понятно почему", "сесси" in note.lower(), note)
+
+    res = build(None)
+    eq("кабинет не обходили – не ошибка", res["totals"]["statusBad"], 0)
+    eq("а «не проверено»", res["totals"]["statusUnchecked"], 1)
+
+
+def test_status_real_kp() -> None:
+    """
+    Настоящая шапка КП МетПромИнтекс: три площадки, у всех колонка «Статус».
+
+    Тут ломается всё, что ломается на живом файле: статус Google не должен
+    сесть на 2ГИС, а статус 2ГИС – на Яндекс.
+    """
+    print("\n▸ Статусы: настоящая шапка КП")
+
+    top = ["", "", "", "", "", "", "Телефония/Почта", "", "", "", "", "Мессенджеры", "",
+           "Яндекс Бизнес", "", "", "", "", "2ГИС", "", "", "Google", "", ""]
+    head = ["Страна", "Сортировка", "Город", "Численность", "url", "Адрес", "Почта",
+            "Общий\nГород", "Общий\nСотовый", "Реклама\nГород", "SEO\nГород",
+            "Telegram", "WhatsApp", "Посты", "Отгрузки", "Аккаунт", "Карта", "Статус",
+            "Аккаунт", "Карта", "Статус", "Аккаунт", "Карта", "Статус"]
+    row = ["Россия", "", "Екатеринбург", "1536000", "ekb.metpromintex.ru",
+           "улица Кузнецова, 2Б", "ekaterinburg@metpromintex.ru", "+7 (343) 202-02-88",
+           "", "", "", "", "", "", "",
+           "https://yandex.ru/sprav/36902980/edit", "https://yandex.ru/maps/org/x/1/", "Активная",
+           "https://account.2gis.com/orgs/70000001051648544/branches",
+           "https://2gis.ru/ekaterinburg/search/x", "Удалена",
+           "https://www.google.com/search?q=x", "https://www.google.com/maps/place/x", "Активная"]
+    got = A.parse_sheet([top, head, row])
+    it = got["items"][0]
+    eq("статус Яндекса", it["status"], "Активная")
+    eq("статус 2ГИС", it["gisStatus"], "Удалена")
+    eq("кабинет 2ГИС", A.gis_org_id(it["gisLink"]), "70000001051648544")
+    eq("город на месте", it["city"], "Екатеринбург")
+    eq("сайт не перепутан со ссылкой площадки", it["site"], "ekb.metpromintex.ru")
+
+
 def main() -> int:
     print("═" * 60)
     print("  ПРОВЕРКА СВЕРКИ КП С ЯНДЕКСОМ")
@@ -718,6 +907,12 @@ def main() -> int:
     test_export()
     test_report_sheets()
     test_yandex_pages()
+    test_status_columns()
+    test_expected_state()
+    test_check_status()
+    test_status_build()
+    test_status_gis_states()
+    test_status_real_kp()
 
     print("\n" + "═" * 60)
     if FAILED:

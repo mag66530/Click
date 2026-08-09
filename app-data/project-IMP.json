@@ -7,517 +7,620 @@
         {
           "id": "ct-IMP-0-0-москва",
           "name": "Москва",
-          "url": "https://yandex.ru/sprav/42632247/edit/posts/"
+          "url": "https://yandex.ru/sprav/42632247/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-1-санкт-петербург",
           "name": "Санкт-Петербург",
-          "url": "https://yandex.ru/sprav/42594272/edit/posts/"
+          "url": "https://yandex.ru/sprav/42594272/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-2-новосибирск",
           "name": "Новосибирск",
-          "url": "https://yandex.ru/sprav/42594334/edit/posts/"
+          "url": "https://yandex.ru/sprav/42594334/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-3-екатеринбург",
           "name": "Екатеринбург",
-          "url": "https://yandex.ru/sprav/42729544/edit/posts/"
+          "url": "https://yandex.ru/sprav/42729544/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-4-казань",
           "name": "Казань",
-          "url": "https://yandex.ru/sprav/42594378/edit/posts/"
+          "url": "https://yandex.ru/sprav/42594378/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-5-красноярск",
           "name": "Красноярск",
-          "url": "https://yandex.ru/sprav/42594438/edit/posts/"
+          "url": "https://yandex.ru/sprav/42594438/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-6-нижний-новгород",
           "name": "Нижний Новгород",
-          "url": "https://yandex.ru/sprav/42594408/edit/posts/"
+          "url": "https://yandex.ru/sprav/42594408/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-7-челябинск",
           "name": "Челябинск",
-          "url": "https://yandex.ru/sprav/42594562/edit/posts/"
+          "url": "https://yandex.ru/sprav/42594562/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-8-уфа",
           "name": "Уфа",
-          "url": "https://yandex.ru/sprav/42594591/edit/posts/"
+          "url": "https://yandex.ru/sprav/42594591/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-9-самара",
           "name": "Самара",
-          "url": "https://yandex.ru/sprav/42594619/edit/posts/"
+          "url": "https://yandex.ru/sprav/42594619/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-10-ростов-на-дону",
           "name": "Ростов-на-Дону",
-          "url": "https://yandex.ru/sprav/42594643/edit/posts/"
+          "url": "https://yandex.ru/sprav/42594643/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-11-краснодар",
           "name": "Краснодар",
-          "url": "https://yandex.ru/sprav/42594681/edit/posts/"
+          "url": "https://yandex.ru/sprav/42594681/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-12-омск",
           "name": "Омск",
-          "url": "https://yandex.ru/sprav/42594708/edit/posts/"
+          "url": "https://yandex.ru/sprav/42594708/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-13-воронеж",
           "name": "Воронеж",
-          "url": "https://yandex.ru/sprav/42594730/edit/posts/"
+          "url": "https://yandex.ru/sprav/42594730/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-14-пермь",
           "name": "Пермь",
-          "url": "https://yandex.ru/sprav/42612444/edit/posts/"
+          "url": "https://yandex.ru/sprav/42612444/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-15-волгоград",
           "name": "Волгоград",
-          "url": "https://yandex.ru/sprav/42612731/edit/posts/"
+          "url": "https://yandex.ru/sprav/42612731/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-16-донецк",
           "name": "Донецк",
-          "url": "https://yandex.ru/sprav/42756883/edit/posts/"
+          "url": "https://yandex.ru/sprav/42756883/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-17-саратов",
           "name": "Саратов",
-          "url": "https://yandex.ru/sprav/42612778/edit/posts/"
+          "url": "https://yandex.ru/sprav/42612778/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-18-тюмень",
           "name": "Тюмень",
-          "url": "https://yandex.ru/sprav/42612881/edit/posts/"
+          "url": "https://yandex.ru/sprav/42612881/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-19-тольятти",
           "name": "Тольятти",
-          "url": "https://yandex.ru/sprav/42612939/edit/posts/"
+          "url": "https://yandex.ru/sprav/42612939/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-20-махачкала",
           "name": "Махачкала",
-          "url": "https://yandex.ru/sprav/42876820/edit/posts/"
+          "url": "https://yandex.ru/sprav/42876820/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-21-барнаул",
           "name": "Барнаул",
-          "url": "https://yandex.ru/sprav/42612986/edit/posts/"
+          "url": "https://yandex.ru/sprav/42612986/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-22-ижевск",
           "name": "Ижевск",
-          "url": "https://yandex.ru/sprav/42613032/edit/posts/"
+          "url": "https://yandex.ru/sprav/42613032/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-23-хабаровск",
           "name": "Хабаровск",
-          "url": "https://yandex.ru/sprav/42613251/edit/posts/"
+          "url": "https://yandex.ru/sprav/42613251/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-24-ульяновск",
           "name": "Ульяновск",
-          "url": "https://yandex.ru/sprav/42617172/edit/posts/"
+          "url": "https://yandex.ru/sprav/42617172/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-25-иркутск",
           "name": "Иркутск",
-          "url": "https://yandex.ru/sprav/42617220/edit/posts/"
+          "url": "https://yandex.ru/sprav/42617220/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-26-владивосток",
           "name": "Владивосток",
-          "url": "https://yandex.ru/sprav/42617476/edit/posts/"
+          "url": "https://yandex.ru/sprav/42617476/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-27-ярославль",
           "name": "Ярославль",
-          "url": "https://yandex.ru/sprav/42617506/edit/posts/"
+          "url": "https://yandex.ru/sprav/42617506/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-28-севастополь",
           "name": "Севастополь",
-          "url": "https://yandex.ru/sprav/42617525/edit/posts/"
+          "url": "https://yandex.ru/sprav/42617525/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-29-ставрополь",
           "name": "Ставрополь",
-          "url": "https://yandex.ru/sprav/42617561/edit/posts/"
+          "url": "https://yandex.ru/sprav/42617561/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-30-кемерово",
           "name": "Кемерово",
-          "url": "https://yandex.ru/sprav/42617617/edit/posts/"
+          "url": "https://yandex.ru/sprav/42617617/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-31-томск",
           "name": "Томск",
-          "url": "https://yandex.ru/sprav/42617583/edit/posts/"
+          "url": "https://yandex.ru/sprav/42617583/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-32-набережные-челны",
-          "name": "Набережные Челны",
-          "url": "https://yandex.ru/sprav/42729570/edit/posts/"
+          "name": "Набережные челны",
+          "url": "https://yandex.ru/sprav/42729570/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-33-оренбург",
           "name": "Оренбург",
-          "url": "https://yandex.ru/sprav/42617656/edit/posts/"
+          "url": "https://yandex.ru/sprav/42617656/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-34-новокузнецк",
           "name": "Новокузнецк",
-          "url": "https://yandex.ru/sprav/42729597/edit/posts/"
+          "url": "https://yandex.ru/sprav/42729597/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-35-рязань",
           "name": "Рязань",
-          "url": "https://yandex.ru/sprav/42617682/edit/posts/"
+          "url": "https://yandex.ru/sprav/42617682/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-36-чебоксары",
           "name": "Чебоксары",
-          "url": "https://yandex.ru/sprav/42729624/edit/posts/"
+          "url": "https://yandex.ru/sprav/42729624/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-37-калининград",
           "name": "Калининград",
-          "url": "https://yandex.ru/sprav/42618054/edit/posts/"
+          "url": "https://yandex.ru/sprav/42618054/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-IMP-0-38-пенза",
           "name": "Пенза",
-          "url": "https://yandex.ru/sprav/42618189/edit/posts/"
+          "url": "https://yandex.ru/sprav/42618189/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-39-липецк",
           "name": "Липецк",
-          "url": "https://yandex.ru/sprav/42632891/edit/posts/"
+          "url": "https://yandex.ru/sprav/42632891/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-40-киров",
           "name": "Киров",
-          "url": "https://yandex.ru/sprav/42633008/edit/posts/"
+          "url": "https://yandex.ru/sprav/42633008/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-41-астрахань",
           "name": "Астрахань",
-          "url": "https://yandex.ru/sprav/42729653/edit/posts/"
+          "url": "https://yandex.ru/sprav/42729653/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-42-тула",
           "name": "Тула",
-          "url": "https://yandex.ru/sprav/42634635/edit/posts/"
+          "url": "https://yandex.ru/sprav/42634635/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-43-сочи",
           "name": "Сочи",
-          "url": "https://yandex.ru/sprav/42729679/edit/posts/"
+          "url": "https://yandex.ru/sprav/42729679/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-44-курск",
           "name": "Курск",
-          "url": "https://yandex.ru/sprav/42729763/edit/posts/"
+          "url": "https://yandex.ru/sprav/42729763/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-0-45-мариуполь",
+          "id": "ct-IMP-0-45-улан-удэ",
+          "name": "Улан-Удэ",
+          "url": "https://yandex.ru/sprav/37896086396/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-46-мариуполь",
           "name": "Мариуполь",
-          "url": "https://yandex.ru/sprav/42756964/edit/posts/"
+          "url": "https://yandex.ru/sprav/42756964/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-IMP-0-46-сургут",
+          "id": "ct-IMP-0-47-сургут",
           "name": "Сургут",
-          "url": "https://yandex.ru/sprav/42634836/edit/posts/"
+          "url": "https://yandex.ru/sprav/42634836/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-0-47-тверь",
+          "id": "ct-IMP-0-48-тверь",
           "name": "Тверь",
-          "url": "https://yandex.ru/sprav/42634872/edit/posts/"
+          "url": "https://yandex.ru/sprav/42634872/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-IMP-0-48-луганск",
+          "id": "ct-IMP-0-49-луганск",
           "name": "Луганск",
-          "url": "https://yandex.ru/sprav/42757038/edit/posts/"
+          "url": "https://yandex.ru/sprav/42757038/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-IMP-0-49-магнитогорск",
+          "id": "ct-IMP-0-50-магнитогорск",
           "name": "Магнитогорск",
-          "url": "https://yandex.ru/sprav/42729810/edit/posts/"
+          "url": "https://yandex.ru/sprav/42729810/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-0-50-брянск",
+          "id": "ct-IMP-0-51-брянск",
           "name": "Брянск",
-          "url": "https://yandex.ru/sprav/42634899/edit/posts/"
+          "url": "https://yandex.ru/sprav/42634899/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-IMP-0-51-якутск",
+          "id": "ct-IMP-0-52-якутск",
           "name": "Якутск",
-          "url": "https://yandex.ru/sprav/42729835/edit/posts/"
+          "url": "https://yandex.ru/sprav/42729835/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-IMP-0-52-иваново",
-          "name": "Иваново",
-          "url": "https://yandex.ru/sprav/42729854/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-53-владимир",
-          "name": "Владимир",
-          "url": "https://yandex.ru/sprav/42634922/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-54-чита",
-          "name": "Чита",
-          "url": "https://yandex.ru/sprav/42729880/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-55-калуга",
-          "name": "Калуга",
-          "url": "https://yandex.ru/sprav/42729902/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-56-белгород",
-          "name": "Белгород",
-          "url": "https://yandex.ru/sprav/42634986/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-57-вологда",
-          "name": "Вологда",
-          "url": "https://yandex.ru/sprav/42735068/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-58-смоленск",
-          "name": "Смоленск",
-          "url": "https://yandex.ru/sprav/42735092/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-59-курган",
-          "name": "Курган",
-          "url": "https://yandex.ru/sprav/42735119/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-60-архангельск",
-          "name": "Архангельск",
-          "url": "https://yandex.ru/sprav/42735187/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-61-орёл",
-          "name": "Орёл",
-          "url": "https://yandex.ru/sprav/42735204/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-62-нижневартовск",
-          "name": "Нижневартовск",
-          "url": "https://yandex.ru/sprav/42735231/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-63-мурманск",
-          "name": "Мурманск",
-          "url": "https://yandex.ru/sprav/42735268/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-64-кострома",
-          "name": "Кострома",
-          "url": "https://yandex.ru/sprav/42735295/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-65-новороссийск",
-          "name": "Новороссийск",
-          "url": "https://yandex.ru/sprav/42735335/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-66-тамбов",
-          "name": "Тамбов",
-          "url": "https://yandex.ru/sprav/42735360/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-67-таганрог",
-          "name": "Таганрог",
-          "url": "https://yandex.ru/sprav/42754593/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-68-благовещенск",
-          "name": "Благовещенск",
-          "url": "https://yandex.ru/sprav/42755473/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-69-великий-новгород",
-          "name": "Великий Новгород",
-          "url": "https://yandex.ru/sprav/42755712/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-70-сыктывкар",
-          "name": "Сыктывкар",
-          "url": "https://yandex.ru/sprav/42755832/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-71-абакан",
-          "name": "Абакан",
-          "url": "https://yandex.ru/sprav/42756065/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-72-южно-сахалинск",
-          "name": "Южно-Сахалинск",
-          "url": "https://yandex.ru/sprav/42641469/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-73-мелитополь",
-          "name": "Мелитополь",
-          "url": "https://yandex.ru/sprav/42757602/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-74-пятигорск",
-          "name": "Пятигорск",
-          "url": "https://yandex.ru/sprav/42756187/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-75-новый-уренгой",
-          "name": "Новый Уренгой",
-          "url": "https://yandex.ru/sprav/42756290/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-76-ноябрьск",
-          "name": "Ноябрьск",
-          "url": "https://yandex.ru/sprav/42756405/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-77-ангарск",
-          "name": "Ангарск",
-          "url": "https://yandex.ru/sprav/97280321590/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-78-балашиха",
-          "name": "Балашиха",
-          "url": "https://yandex.ru/sprav/137556584336/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-79-бийск",
-          "name": "Бийск",
-          "url": "https://yandex.ru/sprav/38498774496/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-80-братск",
-          "name": "Братск",
-          "url": "https://yandex.ru/sprav/29670697394/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-81-владикавказ",
-          "name": "Владикавказ",
-          "url": "https://yandex.ru/sprav/119187051964/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-82-волжский",
-          "name": "Волжский",
-          "url": "https://yandex.ru/sprav/188025328500/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-83-грозный",
-          "name": "Грозный",
-          "url": "https://yandex.ru/sprav/186162021032/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-84-дзержинск",
-          "name": "Дзержинск",
-          "url": "https://yandex.ru/sprav/45497572260/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-85-йошкар-ола",
-          "name": "Йошкар-Ола",
-          "url": "https://yandex.ru/sprav/142057720685/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-86-комсомольск-на-амуре",
-          "name": "Комсомольск-на-Амуре",
-          "url": "https://yandex.ru/sprav/73405389728/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-87-королёв",
-          "name": "Королёв",
-          "url": "https://yandex.ru/sprav/211132148255/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-88-нальчик",
-          "name": "Нальчик",
-          "url": "https://yandex.ru/sprav/103990463524/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-89-нижнекамск",
-          "name": "Нижнекамск",
-          "url": "https://yandex.ru/sprav/32660321665/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-90-нижний-тагил",
+          "id": "ct-IMP-0-53-нижний-тагил",
           "name": "Нижний Тагил",
-          "url": "https://yandex.ru/sprav/68443844252/p/edit/posts/"
+          "url": "https://yandex.ru/sprav/68443844252/p/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-IMP-0-91-орск",
-          "name": "Орск",
-          "url": "https://yandex.ru/sprav/62091731656/p/edit/posts/"
+          "id": "ct-IMP-0-54-иваново",
+          "name": "Иваново",
+          "url": "https://yandex.ru/sprav/42729854/edit/main",
+          "kpStatus": "Онлайн"
         },
         {
-          "id": "ct-IMP-0-92-петрозаводск",
+          "id": "ct-IMP-0-55-симферополь",
+          "name": "Симферополь",
+          "url": "https://yandex.ru/sprav/95351474275/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-56-владимир",
+          "name": "Владимир",
+          "url": "https://yandex.ru/sprav/42634922/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-57-чита",
+          "name": "Чита",
+          "url": "https://yandex.ru/sprav/42729880/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-58-калуга",
+          "name": "Калуга",
+          "url": "https://yandex.ru/sprav/42729902/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-59-белгород",
+          "name": "Белгород",
+          "url": "https://yandex.ru/sprav/42634986/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-60-саранск",
+          "name": "Саранск",
+          "url": "https://yandex.ru/sprav/47008151083/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-61-волжский",
+          "name": "Волжский",
+          "url": "https://yandex.ru/sprav/188025328500/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-62-череповец",
+          "name": "Череповец",
+          "url": "https://yandex.ru/sprav/59277589480/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-63-вологда",
+          "name": "Вологда",
+          "url": "https://yandex.ru/sprav/42735068/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-64-владикавказ",
+          "name": "Владикавказ",
+          "url": "https://yandex.ru/sprav/119187051964/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-65-смоленск",
+          "name": "Смоленск",
+          "url": "https://yandex.ru/sprav/42735092/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-66-курган",
+          "name": "Курган",
+          "url": "https://yandex.ru/sprav/42735119/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-67-архангельск",
+          "name": "Архангельск",
+          "url": "https://yandex.ru/sprav/42735187/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-68-орёл",
+          "name": "Орёл",
+          "url": "https://yandex.ru/sprav/42735204/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-69-нижневартовск",
+          "name": "Нижневартовск",
+          "url": "https://yandex.ru/sprav/42735231/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-70-стерлитамак",
+          "name": "Стерлитамак",
+          "url": "https://yandex.ru/sprav/159144673121/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-71-грозный",
+          "name": "Грозный",
+          "url": "https://yandex.ru/sprav/186162021032/p/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-72-мурманск",
+          "name": "Мурманск",
+          "url": "https://yandex.ru/sprav/42735268/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-73-кострома",
+          "name": "Кострома",
+          "url": "https://yandex.ru/sprav/42735295/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-74-комсомольск-на-амуре",
+          "name": "Комсомольск-на-Амуре",
+          "url": "https://yandex.ru/sprav/73405389728/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-75-петрозаводск",
           "name": "Петрозаводск",
-          "url": "https://yandex.ru/sprav/84651831460/p/edit/posts/"
+          "url": "https://yandex.ru/sprav/84651831460/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-76-новороссийск",
+          "name": "Новороссийск",
+          "url": "https://yandex.ru/sprav/42735335/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-77-тамбов",
+          "name": "Тамбов",
+          "url": "https://yandex.ru/sprav/42735360/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-78-йошкар-ола",
+          "name": "Йошкар-Ола",
+          "url": "https://yandex.ru/sprav/142057720685/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-79-братск",
+          "name": "Братск",
+          "url": "https://yandex.ru/sprav/29670697394/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-80-таганрог",
+          "name": "Таганрог",
+          "url": "https://yandex.ru/sprav/42754593/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-81-дзержинск",
+          "name": "Дзержинск",
+          "url": "https://yandex.ru/sprav/45497572260/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-82-шахты",
+          "name": "Шахты",
+          "url": "https://yandex.ru/sprav/236218144611/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-83-нальчик",
+          "name": "Нальчик",
+          "url": "https://yandex.ru/sprav/103990463524/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-84-благовещенск",
+          "name": "Благовещенск",
+          "url": "https://yandex.ru/sprav/42755473/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-85-орск",
+          "name": "Орск",
+          "url": "https://yandex.ru/sprav/62091731656/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-86-нижнекамск",
+          "name": "Нижнекамск",
+          "url": "https://yandex.ru/sprav/32660321665/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-87-ангарск",
+          "name": "Ангарск",
+          "url": "https://yandex.ru/sprav/97280321590/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-88-королёв",
+          "name": "Королёв",
+          "url": "https://yandex.ru/sprav/211132148255/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-89-великий-новгород",
+          "name": "Великий Новгород",
+          "url": "https://yandex.ru/sprav/42755712/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-90-старый-оскол",
+          "name": "Старый Оскол",
+          "url": "https://yandex.ru/sprav/15966111990/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-91-сыктывкар",
+          "name": "Сыктывкар",
+          "url": "https://yandex.ru/sprav/42755832/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-92-балашиха",
+          "name": "Балашиха",
+          "url": "https://yandex.ru/sprav/137556584336/p/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-0-93-прокопьевск",
           "name": "Прокопьевск",
-          "url": "https://yandex.ru/sprav/205983839411/p/edit/posts/"
+          "url": "https://yandex.ru/sprav/205983839411/p/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-0-94-псков",
-          "name": "Псков",
-          "url": "https://yandex.ru/sprav/99590766901/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-95-саранск",
-          "name": "Саранск",
-          "url": "https://yandex.ru/sprav/47008151083/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-96-симферополь",
-          "name": "Симферополь",
-          "url": "https://yandex.ru/sprav/95351474275/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-97-старый-оскол",
-          "name": "Старый Оскол",
-          "url": "https://yandex.ru/sprav/15966111990/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-98-стерлитамак",
-          "name": "Стерлитамак",
-          "url": "https://yandex.ru/sprav/159144673121/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-99-улан-удэ",
-          "name": "Улан-Удэ",
-          "url": "https://yandex.ru/sprav/37896086396/p/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-0-100-химки",
+          "id": "ct-IMP-0-94-химки",
           "name": "Химки",
-          "url": "https://yandex.ru/sprav/99770806216/p/edit/posts/"
+          "url": "https://yandex.ru/sprav/99770806216/p/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-0-101-череповец",
-          "name": "Череповец",
-          "url": "https://yandex.ru/sprav/59277589480/p/edit/posts/"
+          "id": "ct-IMP-0-95-псков",
+          "name": "Псков",
+          "url": "https://yandex.ru/sprav/99590766901/p/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-0-102-шахты",
-          "name": "Шахты",
-          "url": "https://yandex.ru/sprav/236218144611/p/edit/posts/"
+          "id": "ct-IMP-0-96-бийск",
+          "name": "Бийск",
+          "url": "https://yandex.ru/sprav/38498774496/p/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-97-абакан",
+          "name": "Абакан",
+          "url": "https://yandex.ru/sprav/42756065/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-98-южно-сахалинск",
+          "name": "Южно-Сахалинск",
+          "url": "https://yandex.ru/sprav/42641469/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-99-мелитополь",
+          "name": "Мелитополь",
+          "url": "https://yandex.ru/sprav/42757602/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-0-100-пятигорск",
+          "name": "Пятигорск",
+          "url": "https://yandex.ru/sprav/42756187/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-101-новый-уренгой",
+          "name": "Новый Уренгой",
+          "url": "https://yandex.ru/sprav/42756290/edit/main",
+          "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-IMP-0-102-ноябрьск",
+          "name": "Ноябрьск",
+          "url": "https://yandex.ru/sprav/42756405/edit/main",
+          "kpStatus": "Онлайн"
         }
       ]
     },
@@ -528,32 +631,38 @@
         {
           "id": "ct-IMP-1-0-минск",
           "name": "Минск",
-          "url": "https://yandex.ru/sprav/41024552/edit/posts/"
+          "url": "https://yandex.ru/sprav/41024552/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-1-1-гомель",
           "name": "Гомель",
-          "url": "https://yandex.ru/sprav/41026296/edit/posts/"
+          "url": "https://yandex.ru/sprav/41026296/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-1-2-брест",
           "name": "Брест",
-          "url": "https://yandex.ru/sprav/41024653/edit/posts/"
+          "url": "https://yandex.ru/sprav/41024653/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-1-3-витебск",
           "name": "Витебск",
-          "url": "https://yandex.ru/sprav/41026029/edit/posts/"
+          "url": "https://yandex.ru/sprav/41026029/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-1-4-гродно",
           "name": "Гродно",
-          "url": "https://yandex.ru/sprav/41026430/edit/posts/"
+          "url": "https://yandex.ru/sprav/41026430/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-1-5-могилев",
           "name": "Могилев",
-          "url": "https://yandex.ru/sprav/41029471/edit/posts/"
+          "url": "https://yandex.ru/sprav/41029471/edit/main",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -562,114 +671,136 @@
       "name": "Казахстан",
       "cities": [
         {
-          "id": "ct-IMP-2-0-актау",
-          "name": "Актау",
-          "url": "https://yandex.ru/sprav/42777143/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-2-1-актобе",
-          "name": "Актобе",
-          "url": "https://yandex.ru/sprav/42763400/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-2-2-алматы",
-          "name": "Алматы",
-          "url": "https://yandex.ru/sprav/42763308/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-2-3-астана",
+          "id": "ct-IMP-2-0-астана",
           "name": "Астана",
-          "url": "https://yandex.ru/sprav/42763815/edit/posts/"
+          "url": "https://yandex.ru/sprav/42763815/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-2-4-атырау",
-          "name": "Атырау",
-          "url": "https://yandex.ru/sprav/42763374/edit/posts/"
+          "id": "ct-IMP-2-1-алматы",
+          "name": "Алматы",
+          "url": "https://yandex.ru/sprav/42763308/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-2-5-жанаозен",
-          "name": "Жанаозен",
-          "url": "https://yandex.ru/sprav/42783737/edit/posts/"
+          "id": "ct-IMP-2-2-шымкент",
+          "name": "Шымкент",
+          "url": "https://yandex.ru/sprav/42774823/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-2-6-жезказган",
-          "name": "Жезказган",
-          "url": "https://yandex.ru/sprav/42783328/edit/posts/"
+          "id": "ct-IMP-2-3-актобе",
+          "name": "Актобе",
+          "url": "https://yandex.ru/sprav/42763400/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-2-7-караганда",
+          "id": "ct-IMP-2-4-караганда",
           "name": "Караганда",
-          "url": "https://yandex.ru/sprav/42777373/edit/posts/"
+          "url": "https://yandex.ru/sprav/42777373/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-2-8-кокшетау",
-          "name": "Кокшетау",
-          "url": "https://yandex.ru/sprav/42876523/edit/posts/"
+          "id": "ct-IMP-2-5-тараз",
+          "name": "Тараз",
+          "url": "https://yandex.ru/sprav/42777276/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-2-9-костанай",
-          "name": "Костанай",
-          "url": "https://yandex.ru/sprav/42774859/edit/posts/"
+          "id": "ct-IMP-2-6-усть-каменогорск",
+          "name": "Усть-Каменогорск",
+          "url": "https://yandex.ru/sprav/42763346/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-2-7-павлодар",
+          "name": "Павлодар",
+          "url": "https://yandex.ru/sprav/42763775/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-2-8-атырау",
+          "name": "Атырау",
+          "url": "https://yandex.ru/sprav/42763374/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-2-9-семей",
+          "name": "Семей",
+          "url": "https://yandex.ru/sprav/42777335/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-2-10-кызылорда",
           "name": "Кызылорда",
-          "url": "https://yandex.ru/sprav/42875750/edit/posts/"
+          "url": "https://yandex.ru/sprav/42875750/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-2-11-павлодар",
-          "name": "Павлодар",
-          "url": "https://yandex.ru/sprav/42763775/edit/posts/"
+          "id": "ct-IMP-2-11-актау",
+          "name": "Актау",
+          "url": "https://yandex.ru/sprav/42777143/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-2-12-петропавловск",
-          "name": "Петропавловск",
-          "url": "https://yandex.ru/sprav/42774966/edit/posts/"
+          "id": "ct-IMP-2-12-костанай",
+          "name": "Костанай",
+          "url": "https://yandex.ru/sprav/42774859/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-2-13-семей",
-          "name": "Семей",
-          "url": "https://yandex.ru/sprav/42777335/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-2-14-талдыкорган",
-          "name": "Талдыкорган",
-          "url": "https://yandex.ru/sprav/42783182/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-2-15-тараз",
-          "name": "Тараз",
-          "url": "https://yandex.ru/sprav/42777276/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-2-16-темиртау",
-          "name": "Темиртау",
-          "url": "https://yandex.ru/sprav/42875798/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-2-17-туркестан",
-          "name": "Туркестан",
-          "url": "https://yandex.ru/sprav/42875771/edit/posts/"
-        },
-        {
-          "id": "ct-IMP-2-18-уральск",
+          "id": "ct-IMP-2-13-уральск",
           "name": "Уральск",
-          "url": "https://yandex.ru/sprav/42777230/edit/posts/"
+          "url": "https://yandex.ru/sprav/42777230/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-2-19-усть-каменогорск",
-          "name": "Усть-Каменогорск",
-          "url": "https://yandex.ru/sprav/42763346/edit/posts/"
+          "id": "ct-IMP-2-14-петропавловск",
+          "name": "Петропавловск",
+          "url": "https://yandex.ru/sprav/42774966/edit/main",
+          "kpStatus": "Активная"
         },
         {
-          "id": "ct-IMP-2-20-шымкент",
-          "name": "Шымкент",
-          "url": "https://yandex.ru/sprav/42774823/edit/posts/"
+          "id": "ct-IMP-2-15-жанаозен",
+          "name": "Жанаозен",
+          "url": "https://yandex.ru/sprav/42783737/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-2-16-жезказган",
+          "name": "Жезказган",
+          "url": "https://yandex.ru/sprav/42783328/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-2-17-кокшетау",
+          "name": "Кокшетау",
+          "url": "https://yandex.ru/sprav/42876523/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-2-18-талдыкорган",
+          "name": "Талдыкорган",
+          "url": "https://yandex.ru/sprav/42783182/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-2-19-темиртау",
+          "name": "Темиртау",
+          "url": "https://yandex.ru/sprav/42875798/edit/main",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-2-20-туркестан",
+          "name": "Туркестан",
+          "url": "https://yandex.ru/sprav/42875771/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-2-21-экибастуз",
           "name": "Экибастуз",
-          "url": "https://yandex.ru/sprav/42783237/edit/posts/"
+          "url": "https://yandex.ru/sprav/42783237/edit/main",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -680,17 +811,20 @@
         {
           "id": "ct-IMP-3-0-наманган",
           "name": "Наманган",
-          "url": "https://yandex.ru/sprav/42783863/edit/posts/"
+          "url": "https://yandex.ru/sprav/42783863/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-3-1-самарканд",
           "name": "Самарканд",
-          "url": "https://yandex.ru/sprav/42783923/edit/posts/"
+          "url": "https://yandex.ru/sprav/42783923/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-3-2-ташкент",
           "name": "Ташкент",
-          "url": "https://yandex.ru/sprav/42783818/edit/posts/"
+          "url": "https://yandex.ru/sprav/42783818/edit/main",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -701,22 +835,26 @@
         {
           "id": "ct-IMP-4-0-бишкек",
           "name": "Бишкек",
-          "url": "https://yandex.ru/sprav/42762396/edit/posts/"
+          "url": "https://yandex.ru/sprav/42762396/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-4-1-джалал-абад",
           "name": "Джалал-Абад",
-          "url": "https://yandex.ru/sprav/42762858/edit/posts/"
+          "url": "https://yandex.ru/sprav/42762858/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-4-2-каракол",
           "name": "Каракол",
-          "url": "https://yandex.ru/sprav/42763181/edit/posts/"
+          "url": "https://yandex.ru/sprav/42763181/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-4-3-ош",
           "name": "Ош",
-          "url": "https://yandex.ru/sprav/42762825/edit/posts/"
+          "url": "https://yandex.ru/sprav/42762825/edit/main",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -727,17 +865,20 @@
         {
           "id": "ct-IMP-5-0-баку",
           "name": "Баку",
-          "url": "https://yandex.ru/sprav/42877902/edit/posts/"
+          "url": "https://yandex.ru/sprav/42877902/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-5-1-сумгаит",
           "name": "Сумгаит",
-          "url": "https://yandex.ru/sprav/42876612/edit/posts/"
+          "url": "https://yandex.ru/sprav/42876612/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-5-2-гянджа",
           "name": "Гянджа",
-          "url": "https://yandex.ru/sprav/42923834/edit/posts/"
+          "url": "https://yandex.ru/sprav/42923834/edit/main",
+          "kpStatus": "Активная"
         }
       ]
     },
@@ -748,21 +889,220 @@
         {
           "id": "ct-IMP-6-0-ереван",
           "name": "Ереван",
-          "url": "https://yandex.ru/sprav/42876867/edit/posts/"
+          "url": "https://yandex.ru/sprav/42876867/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-6-1-гюмри",
           "name": "Гюмри",
-          "url": "https://yandex.ru/sprav/42876926/edit/posts/"
+          "url": "https://yandex.ru/sprav/42876926/edit/main",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-IMP-6-2-ванадзор",
           "name": "Ванадзор",
-          "url": "https://yandex.ru/sprav/42876973/edit/posts/"
+          "url": "https://yandex.ru/sprav/42876973/edit/main",
+          "kpStatus": "Активная"
+        }
+      ]
+    }
+  ],
+  "countriesGis": [
+    {
+      "id": "c-IMP-gis-0-россия",
+      "name": "Россия",
+      "cities": [
+        {
+          "id": "ct-IMP-gis-0-0-москва",
+          "name": "Москва",
+          "url": "https://account.2gis.com/orgs/70000001082688017/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-1-санкт-петербург",
+          "name": "Санкт-Петербург",
+          "url": "https://account.2gis.com/orgs/70000001091794006/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-2-новосибирск",
+          "name": "Новосибирск",
+          "url": "https://account.2gis.com/orgs/70000001091804610/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-3-екатеринбург",
+          "name": "Екатеринбург",
+          "url": "https://account.2gis.com/orgs/70000001090474889/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-4-красноярск",
+          "name": "Красноярск",
+          "url": "https://account.2gis.com/orgs/70000001092798653/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-5-нижний-новгород",
+          "name": "Нижний Новгород",
+          "url": "https://account.2gis.com/orgs/70000001091838208/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-6-челябинск",
+          "name": "Челябинск",
+          "url": "https://account.2gis.com/orgs/70000001051918058/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-7-ростов-на-дону",
+          "name": "Ростов-на-Дону",
+          "url": "https://account.2gis.com/orgs/70000001093091072/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-8-краснодар",
+          "name": "Краснодар",
+          "url": "https://account.2gis.com/orgs/70000001092842841/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-9-омск",
+          "name": "Омск",
+          "url": "https://account.2gis.com/orgs/70000001093346789/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-10-воронеж",
+          "name": "Воронеж",
+          "url": "https://account.2gis.com/orgs/70000001093346878/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-11-пермь",
+          "name": "Пермь",
+          "url": "https://account.2gis.com/orgs/70000001093347456/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-12-волгоград",
+          "name": "Волгоград",
+          "url": "https://account.2gis.com/orgs/70000001094635635/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-13-тюмень",
+          "name": "Тюмень",
+          "url": "https://account.2gis.com/orgs/70000001094649447/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-14-тольятти",
+          "name": "Тольятти",
+          "url": "https://account.2gis.com/orgs/70000001094648860/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-15-барнаул",
+          "name": "Барнаул",
+          "url": "https://account.2gis.com/orgs/70000001094668255",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-16-ижевск",
+          "name": "Ижевск",
+          "url": "https://account.2gis.com/orgs/70000001094675071/",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-17-ульяновск",
+          "name": "Ульяновск",
+          "url": "https://account.2gis.com/orgs/70000001094681971",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-18-кемерово",
+          "name": "Кемерово",
+          "url": "https://account.2gis.com/orgs/70000001095049997",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-19-оренбург",
+          "name": "Оренбург",
+          "url": "https://account.2gis.com/orgs/70000001095024212",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-20-рязань",
+          "name": "Рязань",
+          "url": "https://account.2gis.com/orgs/70000001094769971",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-21-липецк",
+          "name": "Липецк",
+          "url": "https://account.2gis.com/orgs/70000001094706164",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-22-киров",
+          "name": "Киров",
+          "url": "https://account.2gis.com/orgs/70000001094993872",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-23-сочи",
+          "name": "Сочи",
+          "url": "https://account.2gis.com/orgs/70000001095023700",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-24-сургут",
+          "name": "Сургут",
+          "url": "https://account.2gis.com/orgs/70000001094978519",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-25-тверь",
+          "name": "Тверь",
+          "url": "https://account.2gis.com/orgs/70000001094997515",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-26-брянск",
+          "name": "Брянск",
+          "url": "https://account.2gis.com/orgs/70000001094746418",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-27-вологда",
+          "name": "Вологда",
+          "url": "https://account.2gis.com/orgs/70000001094809590",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-IMP-gis-0-28-южно-сахалинск",
+          "name": "Южно-Сахалинск",
+          "url": "https://account.2gis.com/orgs/70000001095048936",
+          "kpStatus": "Активная"
+        }
+      ]
+    },
+    {
+      "id": "c-IMP-gis-1-казахстан",
+      "name": "Казахстан",
+      "cities": [
+        {
+          "id": "ct-IMP-gis-1-0-экибастуз",
+          "name": "Экибастуз",
+          "url": "https://account.2gis.com/orgs/70000001095218471",
+          "kpStatus": "Активная"
         }
       ]
     }
   ],
   "email": "inmetprom77@yandex.ru",
-  "kpSheetUrl": "https://docs.google.com/spreadsheets/d/1jj9oVldRJRxwfQS6qdIj0pgHK2RExjQ7mGDJF7Tp0PA/edit?gid=472188776#gid=472188776"
+  "kpSheetUrl": "https://docs.google.com/spreadsheets/d/1jj9oVldRJRxwfQS6qdIj0pgHK2RExjQ7mGDJF7Tp0PA/edit?gid=472188776#gid=472188776",
+  "kpSheetTitle": "Карта присутствия",
+  "kpSyncedAt": "2026-08-09T11:12:38.955489+00:00"
 }

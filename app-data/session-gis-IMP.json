@@ -11,16 +11,6 @@
       "sameSite": "None"
     },
     {
-      "name": "dg_country_code",
-      "value": "US",
-      "domain": "account.2gis.com",
-      "path": "/",
-      "expires": 1786274063.933,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
       "name": "dg_session_token",
       "value": "fe6ecfe195a585164a27636cc24c5262ddc5ab80",
       "domain": ".2gis.com",
@@ -41,21 +31,791 @@
       "sameSite": "None"
     },
     {
-      "name": "dg_user_locale",
-      "value": "ru",
+      "name": "add_firms_popup",
+      "value": "hidden",
       "domain": "account.2gis.com",
       "path": "/",
-      "expires": 1794222813,
+      "expires": 1794222843,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
     },
     {
-      "name": "_gid",
-      "value": "GA1.3.313954240.1786274013",
-      "domain": ".account.2gis.com",
+      "name": "banner_advert_version_branch_70000001082688017",
+      "value": "3.0",
+      "domain": "account.2gis.com",
       "path": "/",
-      "expires": 1786360413,
+      "expires": 1786360444,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001082688017",
+      "value": "premiumcard-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360446,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001082688017",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360454,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001091794006",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360463,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001091794006",
+      "value": "geocontext-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360464,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001091794006",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360470,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001091804610",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360480,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001091804610",
+      "value": "rocketdata-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360481,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001091804610",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360488,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001090474889",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360497,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001090474889",
+      "value": "geocontext-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360498,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001090474889",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360505,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001092798653",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360523,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001092798653",
+      "value": "premiumcard-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360524,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001092798653",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360531,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001091838208",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360541,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001091838208",
+      "value": "premiumcard-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360542,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001091838208",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360550,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001051918058",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360559,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001051918058",
+      "value": "premiumcard-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360560,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001051918058",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360567,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001093091072",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360577,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001093091072",
+      "value": "rocketdata-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360578,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001093091072",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360585,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001092842841",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360603,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001092842841",
+      "value": "geocontext-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360604,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001092842841",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360611,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001093346789",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360621,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001093346789",
+      "value": "premiumcard-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360622,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001093346789",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360630,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001093346878",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360638,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001093346878",
+      "value": "rocketdata-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360639,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001093346878",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360646,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001093347456",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360665,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001093347456",
+      "value": "geocontext-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360666,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001093347456",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360673,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001094635635",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360682,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094635635",
+      "value": "premiumcard-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360683,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094635635",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360688,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001094649447",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360697,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094649447",
+      "value": "rocketdata-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360698,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094649447",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360703,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001094648860",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360721,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094648860",
+      "value": "premiumcard-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360722,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094648860",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360729,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001094668255",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360739,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094668255",
+      "value": "rocketdata-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360740,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094668255",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360747,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001094675071",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360756,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094675071",
+      "value": "geocontext-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360757,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094675071",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360763,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001094681971",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360782,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094681971",
+      "value": "geocontext-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360783,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094681971",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360790,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001095049997",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360800,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001095049997",
+      "value": "geocontext-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360801,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001095049997",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360808,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001095024212",
+      "value": "2.1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360817,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001095024212",
+      "value": "geocontext-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360818,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001095024212",
+      "value": "2.1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360824,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001094769971",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360843,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094769971",
+      "value": "geocontext-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360844,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094769971",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360851,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001094706164",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360860,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094706164",
+      "value": "premiumcard-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360861,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094706164",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360869,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001094993872",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360877,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094993872",
+      "value": "rocketdata-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360879,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094993872",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360885,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001095023700",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360904,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001095023700",
+      "value": "premiumcard-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360905,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001095023700",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360912,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001094978519",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360922,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094978519",
+      "value": "premiumcard-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360923,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094978519",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360931,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001094997515",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360939,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094997515",
+      "value": "rocketdata-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360940,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094997515",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360947,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
@@ -65,17 +825,7 @@
       "value": "1",
       "domain": ".account.2gis.com",
       "path": "/",
-      "expires": 1786274073,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "_ga",
-      "value": "GA1.3.1925385396.1786274013",
-      "domain": ".account.2gis.com",
-      "path": "/",
-      "expires": 1820834013.297,
+      "expires": 1786274622,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
@@ -85,17 +835,147 @@
       "value": "1",
       "domain": ".account.2gis.com",
       "path": "/",
-      "expires": 1786274073,
+      "expires": 1786274622,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
     },
     {
-      "name": "_ga_DEN30CPV6D",
-      "value": "GS2.3.s1786274013$o1$g0$t1786274013$j60$l0$h0",
+      "name": "banner_advert_version_branch_70000001094746418",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360966,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094746418",
+      "value": "geocontext-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360966,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094746418",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360974,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001094809590",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360984,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001094809590",
+      "value": "rocketdata-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360985,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_reviews_70000001094809590",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786360991,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001095048936",
+      "value": "3.0",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786361001,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001095048936",
+      "value": "premiumcard-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786361002,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_branch_70000001095218471",
+      "value": "2.1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786361016,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_banner_company-top_70000001095218471",
+      "value": "geocontext-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786361017,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_country_code",
+      "value": "US",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786274680.007,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_user_locale",
+      "value": "ru",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1794223421,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "_gid",
+      "value": "GA1.3.313954240.1786274013",
       "domain": ".account.2gis.com",
       "path": "/",
-      "expires": 1820834013.469,
+      "expires": 1786361021,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ga",
+      "value": "GA1.3.1925385396.1786274013",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1820834621.2,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
@@ -105,27 +985,37 @@
       "value": "ee618a36-5c84-4fc0-ae94-426deb8738c8",
       "domain": "account.2gis.com",
       "path": "/",
-      "expires": 1786275814,
+      "expires": 1786276421,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ga_DEN30CPV6D",
+      "value": "GS2.3.s1786274013$o1$g1$t1786274621$j1$l0$h0",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1820834621.439,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
     },
     {
       "name": "__ddg8_",
-      "value": "n8eR2xmCNpsmq6oF",
+      "value": "kdnYy9rDM8VsUBHB",
       "domain": ".2gis.com",
       "path": "/",
-      "expires": 1786275214.822,
+      "expires": 1786275822.038,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
     },
     {
       "name": "__ddg10_",
-      "value": "1786274014",
+      "value": "1786274621",
       "domain": ".2gis.com",
       "path": "/",
-      "expires": 1786275214.822,
+      "expires": 1786275822.038,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
@@ -135,7 +1025,7 @@
       "value": "35.203.151.101",
       "domain": ".2gis.com",
       "path": "/",
-      "expires": 1786275214.822,
+      "expires": 1786275822.038,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"

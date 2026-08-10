@@ -20,7 +20,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import streamlit as st
@@ -64,6 +64,8 @@ def _settle_imports() -> None:
 _settle_imports()
 
 import apptime  # noqa: E402
+import content_plan  # noqa: E402
+import crosspost_state as cps  # noqa: E402
 import gis_playwright as gis  # noqa: E402
 import kp_audit  # noqa: E402
 import kp_sheet  # noqa: E402
@@ -110,8 +112,14 @@ USERS_DATA = paths.data_root()
 st.set_page_config(page_title="Click – публикация постов", page_icon="📮", layout="wide")
 
 SALT = "click-salt-v1-2026"
-SECTIONS = ["🚀 Запуск", "📤 Публикация", "🔄 Актуализация", "🏙 Города", "📊 Отчёт",
-            "⚙️ Настройки", "🔎 Сверка"]
+SECTIONS = ["🚀 Запуск", "📤 Публикация", "🗓 Кросспостинг", "🔄 Актуализация", "🏙 Города",
+            "📊 Отчёт", "⚙️ Настройки", "🔎 Сверка"]
+
+# Разделы адресуются ИМЕНАМИ, а не номерами. Раньше по коду были разбросаны
+# SECTIONS[4] и SECTIONS[2]; стоило вставить раздел в середину – и кнопка
+# «к отчёту» молча уводила в «Города». Имена от перестановки не страдают.
+(SEC_RUN, SEC_COMPOSE, SEC_CROSSPOST, SEC_ACTUALIZE,
+ SEC_CITIES, SEC_REPORT, SEC_SETTINGS, SEC_AUDIT) = SECTIONS
 
 
 def _hash(password: str) -> str:
@@ -1169,7 +1177,7 @@ def _open_report(kind: str, run_id: str = "") -> None:
     """Уйти на вкладку «Отчёт» и показать там нужный вид отчёта."""
     st.session_state["report-kind"] = kind
     st.session_state.pop("report-select", None)   # выбор из другого вида не подойдёт
-    goto_section(SECTIONS[4])
+    goto_section(SEC_REPORT)
     st.rerun()
 
 
@@ -1798,7 +1806,7 @@ def tab_compose(project_id: str, config: dict) -> None:
                 saved = save_queue_to_tasks(project_id, config, queue)
                 st.session_state["queue"] = []
                 st.session_state.pop("compose-note", None)
-                goto_section(SECTIONS[0])       # дальше человеку всё равно на «Запуск»
+                goto_section(SEC_RUN)          # дальше человеку всё равно на «Запуск»
                 # Новое поколение ключей очищает загрузчики файлов: их состояние
                 # переживает перерисовки, и старые картинки тихо прицеплялись к
                 # СЛЕДУЮЩЕМУ посту («я вообще ничего не прикрепляла»).
@@ -3132,6 +3140,205 @@ _REPORT_KINDS = {"publish": "📤 Публикация", "actualize": "🔄 Ак
                  "actualize-gis": "2ГИС"}
 
 
+# ════════════════════════════════════════════════════════════════════
+#  Кросспостинг: план из реестра
+# ════════════════════════════════════════════════════════════════════
+# Реестр («контент-план») – Google-таблица, которую заказчик ведёт руками:
+# лист на бренд, пост – блок строк (дата, текст, фото, тип и ниже строки по
+# соцсетям). Раздел показывает этот план внутри Click и то, что с ним уже
+# сделано. Разбор таблицы – content_plan.py, память о сделанном – crosspost_state.py.
+
+CROSSPOST_HORIZON_DAYS = 14      # на сколько дней вперёд показываем план
+
+
+def _crosspost_source_block(project_id: str, config: dict) -> bool:
+    """
+    Источник реестра. Доступ – тот же сервисный аккаунт Google, что читает КП:
+    заказчику достаточно расшарить на него таблицу реестра, новых ключей не нужно.
+    Возвращает True, если из чего читать.
+    """
+    saved = (config.get("planSheetUrl") or "").strip()
+    has_key = kp_sheet.service_account_info() is not None
+
+    with st.expander("🗓 Источник реестра – Google-таблица контент-плана",
+                     expanded=not saved and not st.session_state.get(f"plan-file-{project_id}")):
+        url = st.text_input("Ссылка на таблицу реестра", value=saved,
+                            key=f"plan-url-{project_id}",
+                            placeholder="https://docs.google.com/spreadsheets/d/…")
+        if url.strip() != saved:
+            config["planSheetUrl"] = url.strip()
+            save_config(project_id)
+            st.rerun()
+
+        st.caption(f"Лист бренда в таблице – «{project_id}» или его русское имя "
+                   f"(СМУ, ИМП, МПЭ, МПИ, АПС). Читаются колонки «Когда выложить», "
+                   f"«Соцсеть», «Ссылка», «Формат», «Тип», «Пост», «Фото».")
+        if not has_key:
+            st.warning(
+                "Не найден ключ сервисного аккаунта Google – тот же, что читает КП. "
+                "Расшарьте таблицу реестра на него как Читателя. Пока ключа нет, "
+                "план можно посмотреть, загрузив файл ниже.", icon="🔑")
+
+        # Файл – запасной путь: посмотреть свой план можно сразу, не дожидаясь
+        # доступов. Файл живёт только в этой вкладке и никуда не сохраняется.
+        up = st.file_uploader("…или загрузите выгрузку реестра (.xlsx) для просмотра",
+                              type=["xlsx"], key=f"plan-file-{project_id}")
+        if up is not None:
+            st.session_state[f"plan-upload-bytes-{project_id}"] = up.getvalue()
+
+    return bool((config.get("planSheetUrl") or "").strip()
+                or st.session_state.get(f"plan-upload-bytes-{project_id}"))
+
+
+def _crosspost_load_posts(project_id: str, config: dict) -> tuple[list[dict], str]:
+    """
+    Посты реестра: (список, ошибка). Таблица – источник правды, поэтому читаем
+    её заново по кнопке и при первом открытии, а между перерисовками держим в
+    session_state: Streamlit перезапускает скрипт на каждое нажатие, и без
+    этого раздел ходил бы в Google на каждый клик.
+    """
+    cache_key = f"plan-posts-{project_id}"
+    if st.session_state.get(cache_key) is not None and not st.session_state.pop(f"plan-refresh-{project_id}", False):
+        return st.session_state[cache_key], ""
+
+    raw = st.session_state.get(f"plan-upload-bytes-{project_id}")
+    try:
+        if raw:
+            import io
+            posts = content_plan.parse_workbook_bytes(io.BytesIO(raw), project_id)
+        else:
+            url = (config.get("planSheetUrl") or "").strip()
+            if not url:
+                return [], ""
+            posts = content_plan.load_from_google(url, project_id)
+    except Exception as e:  # noqa: BLE001 – причину показываем человеку словами
+        return [], str(e)
+
+    st.session_state[cache_key] = posts
+    return posts, ""
+
+
+def _crosspost_targets_html(post: dict, state: dict) -> str:
+    """Строка площадок поста: «ВК 🕓 · ОК ✅ · ТГ —»."""
+    # Видео и статьи Click не формирует. Показываем это прямо в строке, иначе
+    # человек будет ждать, что пост «поедет», и не поймёт, почему он стоит.
+    fmt = (post.get("format") or "Пост").strip()
+    if fmt.lower() != "пост":
+        return f'<span class="cp-net cp-net-off">{T.esc(fmt.lower())} – вручную</span>'
+    bits = []
+    for t in post.get("targets", []):
+        net = t.get("network") or ""
+        name = cps.network_ru(net)
+        if net not in content_plan.SUPPORTED:
+            bits.append(f'<span class="cp-net cp-net-off">{T.esc(name)} ⏸</span>')
+            continue
+        link = (t.get("published_link") or "").strip()
+        if link:
+            bits.append(f'<a class="cp-net cp-net-ok" href="{T.esc(link)}" target="_blank">'
+                        f'{T.esc(name)} ✅</a>')
+            continue
+        status = cps.status_of(state, post, net)
+        ico, _, cls = cps.HUMAN[status]
+        bits.append(f'<span class="cp-net cp-net-{cls or "wait"}">{T.esc(name)} {ico}</span>')
+    return " ".join(bits)
+
+
+def _crosspost_plan_row(post: dict, state: dict) -> str:
+    """Одна строка плана: дата и час, тип, текст, площадки."""
+    when = apptime.to_local(post.get("when"))
+    day = when.strftime("%d.%m") if when else post.get("date", "")
+    weekday = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"][when.weekday()] if when else ""
+    text = " ".join((post.get("text") or "").split())
+    if len(text) > 90:
+        text = text[:90] + "…"
+    photos = f'📷 {len(post["images"])}' if post.get("images") else "—"
+    return (
+        '<div class="report-row">'
+        f'<span class="cp-day">{T.esc(day)} <em>{T.esc(weekday)}</em> '
+        f'{T.esc(post.get("time", ""))}</span>'
+        f'<span class="cp-type">{T.esc(post.get("post_type") or "—")}</span>'
+        f'<span class="report-row-reason">{T.esc(text or "нет текста")}</span>'
+        f'<span class="cp-photos">{T.esc(photos)}</span>'
+        f'<span class="cp-nets">{_crosspost_targets_html(post, state)}</span>'
+        '</div>'
+    )
+
+
+def tab_crosspost(project_id: str, config: dict) -> None:
+    html(T.crosspost_css())
+    have_source = _crosspost_source_block(project_id, config)
+
+    c1, c2 = st.columns([1, 4])
+    if c1.button("🔄 Обновить план", key=f"plan-refresh-btn-{project_id}",
+                 use_container_width=True, disabled=not have_source):
+        st.session_state[f"plan-refresh-{project_id}"] = True
+        st.session_state.pop(f"plan-posts-{project_id}", None)
+        st.rerun()
+
+    if not have_source:
+        html(T.empty("🗓", "Реестр не подключён",
+                     "Укажите ссылку на таблицу контент-плана выше – или загрузите "
+                     "выгрузку .xlsx, чтобы посмотреть план прямо сейчас."))
+        return
+
+    posts, err = _crosspost_load_posts(project_id, config)
+    if err:
+        st.error(f"Не удалось прочитать реестр: {err}")
+        return
+    if not posts:
+        html(T.empty("🗓", "В листе бренда постов не нашлось",
+                     f"Проверьте, что в таблице есть лист «{project_id}» (или СМУ/ИМП/МПЭ/МПИ/АПС) "
+                     "с колонками «Когда выложить», «Соцсеть», «Пост»."))
+        return
+
+    today = apptime.now().date()
+    horizon = today + timedelta(days=CROSSPOST_HORIZON_DAYS)
+    upcoming = [p for p in posts
+                if (d := content_plan.parse_date(p["date"])) and today <= d <= horizon]
+    state = cps.load(project_id)
+
+    # ─── Сводка: цифры по целям, а не по постам ───
+    total = cps.summarize(state, upcoming)
+    c2.caption(f"В листе {len(posts)} постов · впереди {len(upcoming)} "
+               f"(ближайшие {CROSSPOST_HORIZON_DAYS} дней) · час выхода "
+               f"{content_plan.brand_default_time(project_id)} по Екатеринбургу")
+    m = st.columns(4)
+    m[0].metric("Ждут формирования", total[cps.WAITING])
+    m[1].metric("Отложки стоят", total[cps.SCHEDULED])
+    m[2].metric("Вышли", total[cps.SENT] + total[cps.SENT_LATE])
+    m[3].metric("Ошибки", total[cps.FAILED] + total[cps.MISSED])
+
+    # ─── Что требует внимания ───
+    troubles = cps.problems(state, upcoming)
+    if troubles:
+        with st.expander(f"⚠️ Требует внимания – {len(troubles)}", expanded=True):
+            for tr in troubles:
+                p = tr["post"]
+                who = f' · {cps.network_ru(tr["network"])}' if tr.get("network") else ""
+                st.write(f'**{p["date"]}**{who} – {tr["what"]}')
+
+    # ─── План ───
+    html('<div class="card-title">План на ближайшие две недели</div>')
+    if not upcoming:
+        html(T.empty("📭", "На ближайшие две недели постов нет",
+                     "Появятся здесь, как только в реестре будут строки с будущей датой."))
+    else:
+        html("".join(_crosspost_plan_row(p, state) for p in upcoming))
+
+    # Честно говорим, где мы находимся: формирование отложек – следующий этап.
+    # Без этой строки человек будет ждать, что план «сам поедет», и не дождётся.
+    st.info("Пока это только просмотр плана: Click читает реестр и показывает, что и когда "
+            "должно выйти. Формирование отложек (ВК, ОК) и отправка по времени (Телеграм, "
+            "МАКС, Яндекс.Бизнес) подключаются следующими этапами – см. ПЛАН-Кросспостинг.md.",
+            icon="ℹ️")
+
+    with st.expander("Показать весь реестр листа (включая прошлые)"):
+        st.caption("Прошлые посты со ссылкой в колонке «Ссылка» считаются вышедшими.")
+        past = [p for p in posts if (d := content_plan.parse_date(p["date"])) and d < today]
+        html("".join(_crosspost_plan_row(p, state) for p in past[-40:]) or
+             T.empty("—", "Прошлых постов нет", ""))
+
+
 def _last_run_kind(project_id: str) -> str:
     """
     Какой прогон был последним – его отчёт и показываем по умолчанию.
@@ -4309,9 +4516,9 @@ def show_main(project_id: str) -> None:
     # ВАЖНО: активный раздел держим в СВОЁМ ключе, а не только в ключе виджета.
     # Streamlit удаляет состояние виджетов, которые не успели отрисоваться в прогоне
     # (а кнопка темы выше делает st.rerun() до радио) – и вкладка сбрасывалась на первую.
-    current = st.session_state.get("section_name", SECTIONS[0])
+    current = st.session_state.get("section_name", SEC_RUN)
     if current not in SECTIONS:
-        current = SECTIONS[0]
+        current = SEC_RUN
     # Счётчик на вкладке «Актуализация»: после прогона с отзывами человек
     # иначе не догадается, что где-то ждут готовые ответы. Первый боевой
     # прогон это и показал – черновики были, а найти их было негде.
@@ -4319,7 +4526,7 @@ def show_main(project_id: str) -> None:
                   for pf in (rv.YANDEX, rv.GIS))
 
     def _section_label(name: str) -> str:
-        if name == SECTIONS[2] and waiting:
+        if name == SEC_ACTUALIZE and waiting:
             return f"{name} · 💬 {waiting}"
         return name
 
@@ -4329,17 +4536,19 @@ def show_main(project_id: str) -> None:
                            key=f"main-section-{st.session_state.get('nav-gen', 0)}")
     st.session_state["section_name"] = section
 
-    if section == SECTIONS[0]:
+    if section == SEC_RUN:
         tab_run(project_id, config)
-    elif section == SECTIONS[1]:
+    elif section == SEC_COMPOSE:
         tab_compose(project_id, config)
-    elif section == SECTIONS[2]:
+    elif section == SEC_CROSSPOST:
+        tab_crosspost(project_id, config)
+    elif section == SEC_ACTUALIZE:
         tab_actualize(project_id, config)
-    elif section == SECTIONS[3]:
+    elif section == SEC_CITIES:
         tab_cities(project_id, config)
-    elif section == SECTIONS[4]:
+    elif section == SEC_REPORT:
         tab_report(project_id)
-    elif section == SECTIONS[5]:
+    elif section == SEC_SETTINGS:
         tab_settings(project_id, config)
     else:
         tab_audit(project_id, config)

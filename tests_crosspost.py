@@ -149,8 +149,35 @@ def test_real_file_optional() -> None:
     check("распознаны vk/ok/tg/max", {"vk", "ok", "max"} <= nets, str(sorted(nets)))
 
 
+def test_state() -> None:
+    print("Память о сформированном (crosspost_state)")
+    import crosspost_state as cps
+    p = {"brand": "SMU", "date": "2099-01-10", "when": "2099-01-10T11:00:00+05:00",
+         "format": "Пост", "text": "Привет", "images": ["a.jpg"],
+         "targets": [{"network": "vk", "raw": "Вконтакте", "published_link": ""},
+                     {"network": "ok", "raw": "Однокласники", "published_link": "https://ok.ru/x"}]}
+    check("ключ поста стабилен", cps.post_key(p) == cps.post_key(dict(p)))
+    p2 = {**p, "text": "Другой текст"}
+    check("правка текста меняет ключ", cps.post_key(p) != cps.post_key(p2))
+    check("по умолчанию — не сформировано", cps.status_of({}, p, "vk") == cps.WAITING)
+    check("ссылка в реестре = вышло", cps.summarize({}, [p])[cps.SENT] == 1)
+    check("вторая площадка ждёт", cps.summarize({}, [p])[cps.WAITING] == 1)
+    check("is_done по умолчанию False", cps.is_done({}, p, "vk") is False)
+
+    st_ = {cps.post_key(p): {"targets": {"vk": {"state": cps.SCHEDULED}}}}
+    check("отложка стоит → формировать не надо", cps.is_done(st_, p, "vk") is True)
+    check("ошибка попадает в «требует внимания»",
+          len(cps.problems({cps.post_key(p): {"targets": {"vk": {"state": cps.FAILED,
+                                                                 "error": "сессия слетела"}}}}, [p])) == 1)
+
+    video = {**p, "format": "Видео", "text": "", "images": []}
+    check("видео вне scope не считается проблемой", cps.problems({}, [video]) == [])
+    check("название площадки по-русски", cps.network_ru("tg-staff") == "ТГ сотрудники")
+
+
 def main() -> int:
     print("═" * 60)
+    test_state()
     test_network_mapping()
     test_dates_and_time()
     test_parse_blocks()

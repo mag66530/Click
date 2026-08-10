@@ -253,6 +253,27 @@ def load_from_google(sheet_url: str, brand: str) -> list[dict]:
     return parse_sheet(read(title), brand)
 
 
+def parse_workbook_bytes(stream, brand: str) -> list[dict]:
+    """
+    Прочитать лист бренда из уже загруженного файла (BytesIO из «Кросспостинга»).
+
+    Нужен, чтобы посмотреть свой план сразу, не дожидаясь доступа к Google:
+    заказчик выгружает реестр в .xlsx и загружает файл во вкладке. Файл нигде
+    не сохраняется — живёт только в текущей сессии.
+    """
+    from openpyxl import load_workbook
+    wb = load_workbook(stream, data_only=True, read_only=True)
+    try:
+        title = _pick_brand_sheet(wb.sheetnames, brand)
+        if not title:
+            raise RuntimeError(f"В файле нет листа для бренда {brand}. Листы: {', '.join(wb.sheetnames)}")
+        ws = wb[title]
+        rows = [[("" if c.value is None else str(c.value)) for c in row] for row in ws.iter_rows()]
+    finally:
+        wb.close()
+    return parse_sheet(rows, brand)
+
+
 def load_from_xlsx(path: str, brand: str) -> list[dict]:
     """Прочитать лист бренда из .xlsx на диске — для локальной проверки."""
     from openpyxl import load_workbook

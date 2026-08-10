@@ -231,11 +231,42 @@ def _record(project_id: str, task: dict, status: str, link: str = "", error: str
     cps.set_status(project_id, post, task.get("network", ""), status, link=link, error=error)
 
 
+def _default_yb_start(task: dict) -> dict:
+    """
+    Запуск прогона публикации ЯБ — тем же start_publish, что и кнопка
+    «Опубликовать»: все локи и защиты от дублей действуют. «Занято» и
+    «очередь пуста» — не провал, а «подождём»: лок освободится, очередь
+    соберут, дедлайн всё равно закроет вопрос.
+    """
+    import runner
+    started, msg = runner.start_publish(
+        task.get("project", ""),
+        headless=bool(task.get("headless", True)),
+        expected_email=task.get("expectedEmail", ""),
+        strict_account_check=bool(task.get("expectedEmail")))
+    if started:
+        return {"ok": True}
+    return {"ok": False, "retryable": True, "error": msg}
+
+
+def cancel_task(project_id: str, task_id: str) -> bool:
+    """Отменить невыполненное задание. Выполненное не трогаем."""
+    tasks = load_tasks(project_id)
+    for t in tasks:
+        if t.get("id") == task_id and t.get("state") in ("waiting", "retry"):
+            t["state"] = "cancelled"
+            _save_tasks(project_id, tasks)
+            log(f"{project_id} {task_id}: отменено человеком")
+            return True
+    return False
+
+
 def tick(now: datetime | None = None,
-         senders: dict[str, Callable[[dict], dict]] | None = None) -> int:
+         senders: dict[str, Callable[[dict], dict]] | None = None,
+         yb_start: Callable[[dict], dict] | None = None) -> int:
     """
     Один проход по всем заданиям всех проектов. Возвращает, сколько заданий
-    поменяло состояние. senders подменяются в тестах.
+    поменяло состояние. senders и yb_start подменяются в тестах.
     """
     if not config()["enabled"]:
         return 0
@@ -244,6 +275,7 @@ def tick(now: datetime | None = None,
     try:
         now = now or apptime.now()
         senders = senders or _default_senders()
+        yb_start = yb_start or _default_yb_start
         late_window_s = config()["lateWindowHours"] * 3600
         changed = 0
 
@@ -270,6 +302,33 @@ def tick(now: datetime | None = None,
                     continue
 
                 family = (task.get("network") or "").split("-")[0]
+
+                # ЯБ — не отправка, а запуск прогона. «Занято» и «очередь
+                # пуста» — повод подождать следующий тик, а не жечь попытки.
+                if family == "yb":
+                    res = yb_start(task)
+                    if res.get("ok"):
+                        task["state"] = "done-late" if action == "send-late" else "done"
+                        task["sentAt"] = now.isoformat(timespec="seconds")
+                        log(f"{project_id} {task['id']}: прогон ЯБ запущен"
+                            + (" (с опозданием)" if action == "send-late" else ""))
+                        dirty = True
+                        changed += 1
+                    elif res.get("retryable"):
+                        note = res.get("error", "")
+                        if task.get("lastNote") != note:   # без спама в журнал каждый тик
+                            task["lastNote"] = note
+                            log(f"{project_id} {task['id']}: жду — {note}")
+                            dirty = True
+                    else:
+                        task["state"] = "failed"
+                        log(f"{project_id} {task['id']}: ошибка — {res.get('error', '')}")
+                        _alert(f"❌ Click: прогон ЯБ {task.get('date')} не запустился: "
+                               f"{res.get('error', '')}")
+                        dirty = True
+                        changed += 1
+                    continue
+
                 sender = senders.get(family)
                 if sender is None:
                     task["state"] = "failed"
@@ -316,7 +375,7 @@ def _purge_old(tasks: list[dict], now: datetime) -> list[dict]:
     """Выполненное старше DONE_KEEP_DAYS убираем — журнал не должен пухнуть вечно."""
     keep: list[dict] = []
     for t in tasks:
-        if t.get("state") in ("done", "done-late", "missed", "failed"):
+        if t.get("state") in ("done", "done-late", "missed", "failed", "cancelled"):
             try:
                 when = datetime.fromisoformat(t["when"])
                 if (now - when) > timedelta(days=DONE_KEEP_DAYS):

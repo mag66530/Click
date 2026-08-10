@@ -18,4 +18,4 @@ build.py – метка сборки Click. Одна на всё приложе�
 меняет поведение модулей или вёрстку.
 """
 
-BUILD = "2026-08-10-crosspost-scheduler"
+BUILD = "2026-08-10-crosspost-full-cycle"

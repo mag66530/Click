@@ -352,6 +352,33 @@ def test_scheduler() -> None:
         check("старое задание — «пропущено», не отправлено",
               late_state["state"] == "missed" and len(sent) == 1)
 
+        # ЯБ: «занято» — ждём без сжигания попыток; лок освободился — прогон запущен
+        yb_task = {"id": "yb|SMU|2026-08-14T11:00", "project": "SMU", "brand": "SMU",
+                   "network": "yb", "when": when.replace(day=14).isoformat(),
+                   "date": "2026-08-14"}
+        scheduler.queue_task("SMU", yb_task)
+        yb_now = when.replace(day=14) + timedelta(minutes=1)
+        busy_yb = lambda tk: {"ok": False, "retryable": True, "error": "Идёт актуализация"}
+        scheduler.tick(now=yb_now, senders=senders, yb_start=busy_yb)
+        t_yb = next(t2 for t2 in scheduler.load_tasks("SMU") if t2["network"] == "yb")
+        check("ЯБ занято → ждём, попытки не горят",
+              t_yb["state"] == "waiting" and t_yb.get("attempts", 0) == 0)
+        scheduler.tick(now=yb_now + timedelta(minutes=5), senders=senders,
+                       yb_start=lambda tk: {"ok": True})
+        t_yb = next(t2 for t2 in scheduler.load_tasks("SMU") if t2["network"] == "yb")
+        # через 6 минут после планового времени это уже «с опозданием» — и это правда
+        check("ЯБ лок свободен → прогон запущен", t_yb["state"] in ("done", "done-late"))
+
+        # отмена задания человеком
+        c_task = {**task, "id": "SMU|2026-08-20|zzz|tg-client", "date": "2026-08-20",
+                  "when": when.replace(day=20).isoformat(), "sourceText": "отменю"}
+        scheduler.queue_task("SMU", c_task)
+        check("отмена работает", scheduler.cancel_task("SMU", c_task["id"]) is True)
+        cancelled = next(t2 for t2 in scheduler.load_tasks("SMU") if t2["id"] == c_task["id"])
+        check("отменённое не отправляется",
+              cancelled["state"] == "cancelled"
+              and scheduler.tick(now=when.replace(day=20, hour=12), senders=senders) == 0)
+
         scheduler.set_config(enabled=False)
         check("выключатель останавливает тик",
               scheduler.tick(now=when + timedelta(days=1), senders=senders) == 0)

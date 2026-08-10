@@ -1273,115 +1273,109 @@
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-7-челябинск",
-          "name": "Челябинск",
-          "url": "https://account.2gis.com/orgs/70000001045737559/branches/70000001045737560",
-          "kpStatus": "Активная"
-        },
-        {
-          "id": "ct-APS-gis-0-8-уфа",
+          "id": "ct-APS-gis-0-7-уфа",
           "name": "Уфа",
           "url": "https://account.2gis.com/orgs/70000001043325182/branches/70000001043325183",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-9-ростов-на-дону",
+          "id": "ct-APS-gis-0-8-ростов-на-дону",
           "name": "Ростов-на-Дону",
           "url": "https://account.2gis.com/orgs/70000001036115347/branches/70000001036115348",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-10-омск",
+          "id": "ct-APS-gis-0-9-омск",
           "name": "Омск",
           "url": "https://account.2gis.com/orgs/70000001047637246/branches/70000001047637247",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-11-воронеж",
+          "id": "ct-APS-gis-0-10-воронеж",
           "name": "Воронеж",
           "url": "https://account.2gis.com/orgs/70000001047575400/dashboard",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-12-пермь",
+          "id": "ct-APS-gis-0-11-пермь",
           "name": "Пермь",
           "url": "https://account.2gis.com/orgs/70000001021596782/branches/70000001021596783",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-13-волгоград",
+          "id": "ct-APS-gis-0-12-волгоград",
           "name": "Волгоград",
           "url": "https://account.2gis.com/orgs/70000001047564288/branches/70000001047564289",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-14-саратов",
+          "id": "ct-APS-gis-0-13-саратов",
           "name": "Саратов",
           "url": "https://account.2gis.com/orgs/70000001047642177/branches/70000001047642178",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-15-тюмень",
+          "id": "ct-APS-gis-0-14-тюмень",
           "name": "Тюмень",
           "url": "https://account.2gis.com/orgs/70000001047641457/branches/70000001047641458",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-16-тольятти",
+          "id": "ct-APS-gis-0-15-тольятти",
           "name": "Тольятти",
           "url": "https://account.2gis.com/orgs/70000001047640240/branches/70000001047640241",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-17-барнаул",
+          "id": "ct-APS-gis-0-16-барнаул",
           "name": "Барнаул",
           "url": "https://account.2gis.com/orgs/70000001047561210/dashboard",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-18-ижевск",
+          "id": "ct-APS-gis-0-17-ижевск",
           "name": "Ижевск",
           "url": "https://account.2gis.com/orgs/70000001047584931/dashboard",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-19-иркутск",
+          "id": "ct-APS-gis-0-18-иркутск",
           "name": "Иркутск",
           "url": "https://account.2gis.com/orgs/70000001047582144/branches/70000001047582145",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-20-ярославль",
+          "id": "ct-APS-gis-0-19-ярославль",
           "name": "Ярославль",
           "url": "https://account.2gis.com/orgs/70000001047644604/branches/70000001047644605",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-21-кемерово",
+          "id": "ct-APS-gis-0-20-кемерово",
           "name": "Кемерово",
           "url": "https://account.2gis.com/orgs/70000001047563505/dashboard",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-22-новокузнецк",
+          "id": "ct-APS-gis-0-21-новокузнецк",
           "name": "Новокузнецк",
           "url": "https://account.2gis.com/orgs/70000001047614988/branches/70000001047614989",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-23-оренбург",
+          "id": "ct-APS-gis-0-22-оренбург",
           "name": "Оренбург",
           "url": "https://account.2gis.com/orgs/70000001047638393/branches/70000001047638394",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-24-тула",
+          "id": "ct-APS-gis-0-23-тула",
           "name": "Тула",
           "url": "https://account.2gis.com/orgs/70000001047653983/branches/70000001047653984",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-0-25-нижневартовск",
+          "id": "ct-APS-gis-0-24-нижневартовск",
           "name": "Нижневартовск",
           "url": "https://account.2gis.com/orgs/70000001047615655/dashboard",
           "kpStatus": "Активная"
@@ -1399,55 +1393,43 @@
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-1-1-тараз",
-          "name": "Тараз",
-          "url": "https://account.2gis.com/orgs/70000001063456459/branches/70000001063456460",
+          "id": "ct-APS-gis-1-1-астана",
+          "name": "Астана",
+          "url": "https://account.2gis.com/orgs/70000001047605235/dashboard",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-1-2-усть-каменогорск",
+          "id": "ct-APS-gis-1-2-актобе",
+          "name": "Актобе",
+          "url": "https://account.2gis.com/orgs/70000001056671951/branches/70000001056671952",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-APS-gis-1-3-караганда",
+          "name": "Караганда",
+          "url": "https://account.2gis.com/orgs/70000001056669988/branches/70000001056669989",
+          "kpStatus": "Активная"
+        },
+        {
+          "id": "ct-APS-gis-1-4-усть-каменогорск",
           "name": "Усть-Каменогорск",
           "url": "https://account.2gis.com/orgs/70000001056690051/dashboard",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-1-3-павлодар",
-          "name": "Павлодар",
-          "url": "https://account.2gis.com/orgs/70000001056663641/branches/70000001056663642",
-          "kpStatus": "Активная"
-        },
-        {
-          "id": "ct-APS-gis-1-4-семей",
+          "id": "ct-APS-gis-1-5-семей",
           "name": "Семей",
           "url": "https://account.2gis.com/orgs/70000001063471759/branches/70000001063471760",
           "kpStatus": "Активная"
-        },
-        {
-          "id": "ct-APS-gis-1-5-актау",
-          "name": "Актау",
-          "url": "https://account.2gis.com/orgs/70000001063445277/branches/70000001063445278",
-          "kpStatus": "Активная"
         }
       ]
     },
     {
-      "id": "c-APS-gis-2-азербайджан",
-      "name": "Азербайджан",
-      "cities": [
-        {
-          "id": "ct-APS-gis-2-0-баку",
-          "name": "Баку",
-          "url": "https://account.2gis.com/orgs/70000001077187774/dashboard",
-          "kpStatus": "Активная"
-        }
-      ]
-    },
-    {
-      "id": "c-APS-gis-3-беларусь",
+      "id": "c-APS-gis-2-беларусь",
       "name": "Беларусь",
       "cities": [
         {
-          "id": "ct-APS-gis-3-0-минск",
+          "id": "ct-APS-gis-2-0-минск",
           "name": "Минск",
           "url": "https://account.2gis.com/orgs/70000001058997858/branches/70000001058997859",
           "kpStatus": "Активная"
@@ -1455,11 +1437,11 @@
       ]
     },
     {
-      "id": "c-APS-gis-4-узбекистан",
+      "id": "c-APS-gis-3-узбекистан",
       "name": "Узбекистан",
       "cities": [
         {
-          "id": "ct-APS-gis-4-0-ташкент",
+          "id": "ct-APS-gis-3-0-ташкент",
           "name": "Ташкент",
           "url": "https://account.2gis.com/orgs/70000001069567504/dashboard",
           "kpStatus": "Активная"
@@ -1470,5 +1452,5 @@
   "email": "aviastalru@yandex.ru",
   "kpSheetUrl": "https://docs.google.com/spreadsheets/d/17G2YlY7g0LKOV7IBDsrX7uulwqh0wsaFOqKGw9bLVEc/edit?gid=1223548196#gid=1223548196",
   "kpSheetTitle": "КП",
-  "kpSyncedAt": "2026-08-07T13:53:58.015050+00:00"
+  "kpSyncedAt": "2026-08-10T06:12:16.357196+00:00"
 }

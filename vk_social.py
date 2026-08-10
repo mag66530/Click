@@ -32,7 +32,10 @@ import yb_playwright as yb
 # Метка сборки – одна на всё приложение (см. build.py).
 from build import BUILD  # noqa: F401
 
-BASE = "https://vk.com"
+# Вход ведём на vk.ru – это домен, которым пользуется заказчик (ссылки на
+# сообщества у неё тоже vk.ru). Домены vk.ru и vk.com разные, и куки у них
+# РАЗНЫЕ: войти на одном и постить на другом не выйдет.
+BASE = "https://vk.ru"
 
 # Часовой пояс браузера. Календарь ВК показывает время по часам браузера,
 # поэтому жёстко ставим Екатеринбург – тот же пояс, в котором живёт весь Click
@@ -109,11 +112,78 @@ def vk_frames(page):
         return [page]
 
 
+# Читать страницу надо ПО ВСЕМ КОРНЯМ, а не только по body.
+#
+# Проверено экспериментом (2026-08-10): капча ВК живёт в ТЕНЕВОМ КОРНЕ
+# внутри кадра, и обычный inner_text("body") возвращает для неё ПУСТУЮ
+# строку. Именно поэтому Click видел на снимке «Подтвердите, что вы не
+# робот», а в тексте страницы – ничего, и честно писал «не разобрал, что
+# за шаг». Тот же приём давно применяется в 2ГИС (см. gis_playwright).
+_DEEP_TEXT_JS = """() => {
+  const parts = [], seen = new Set();
+  const walk = (root) => {
+    if (!root || seen.has(root)) return;
+    seen.add(root);
+    try { parts.push(root.body ? root.body.innerText : (root.textContent || '')); } catch (e) {}
+    let all = [];
+    try { all = root.querySelectorAll('*'); } catch (e) { return; }
+    for (const el of all) if (el.shadowRoot) walk(el.shadowRoot);
+  };
+  walk(document);
+  return parts.join('\\n');
+}"""
+
+# Нажать по тексту – тоже сквозь теневые корни. Галочку узнаём по подписи
+# рядом с ней: у самого <input> текста нет.
+_DEEP_CLICK_JS = """(labels) => {
+  const seen = new Set(), roots = [];
+  const walk = (root) => {
+    if (!root || seen.has(root)) return;
+    seen.add(root); roots.push(root);
+    let all = [];
+    try { all = root.querySelectorAll('*'); } catch (e) { return; }
+    for (const el of all) if (el.shadowRoot) walk(el.shadowRoot);
+  };
+  walk(document);
+  for (const label of labels) {
+    for (const root of roots) {
+      let all = [];
+      try {
+        all = root.querySelectorAll(
+          'button, a, label, input[type=checkbox], [role=button], [role=checkbox]');
+      } catch (e) { continue; }
+      for (const el of all) {
+        const own = (el.innerText || el.textContent || '').trim();
+        const near = el.tagName === 'INPUT'
+          ? ((el.closest('label') || {}).innerText || '') : own;
+        if ((own && own.includes(label)) || (near && near.includes(label))) {
+          el.click();
+          return label;
+        }
+      }
+    }
+  }
+  return '';
+}"""
+
+
 def frame_text(fr) -> str:
+    """Весь видимый текст кадра, включая теневые корни."""
     try:
-        return (fr.inner_text("body") or "")[:6000]
+        return (fr.evaluate(_DEEP_TEXT_JS) or "")[:8000]
     except Exception:  # noqa: BLE001 – кадр мог отвалиться
-        return ""
+        try:
+            return (fr.inner_text("body") or "")[:8000]
+        except Exception:  # noqa: BLE001
+            return ""
+
+
+def deep_click(fr, labels) -> str:
+    """Нажать элемент с одной из подписей, сквозь теневые корни. Что нажали."""
+    try:
+        return fr.evaluate(_DEEP_CLICK_JS, list(labels)) or ""
+    except Exception:  # noqa: BLE001
+        return ''
 
 
 def find_frame(page, marks) -> object | None:
@@ -139,8 +209,12 @@ def captcha_frame(page):
 
 def click_in_frames(page, texts, timeout: int = 5000) -> bool:
     """
-    Нажать первую попавшуюся кнопку/ссылку с одним из текстов – в любом
-    кадре. True, если нажали.
+    Нажать кнопку/ссылку с одним из текстов – в любом кадре, включая
+    теневые корни. True, если нажали.
+
+    Сначала обычный поиск (он умеет ждать и прокручивать), потом обход
+    корней: часть кнопок ВК живёт в теневом корне, где обычный поиск их
+    не видит вовсе.
     """
     for fr in vk_frames(page):
         for label in texts:
@@ -153,6 +227,9 @@ def click_in_frames(page, texts, timeout: int = 5000) -> bool:
                         return True
                 except Exception:  # noqa: BLE001
                     continue
+    for fr in vk_frames(page):
+        if deep_click(fr, texts):
+            return True
     return False
 
 
@@ -160,29 +237,22 @@ def press_captcha_in(frame) -> bool:
     """
     Пройти проверку «вы не робот» в кадре. True – нашли и нажали.
 
-    Проверка бывает двух видов, оба живые: кнопка «Продолжить» и ГАЛОЧКА
-    «Я не робот». Галочку пробуем первой – она встречается чаще.
+    Проверка бывает двух видов, оба живые: ГАЛОЧКА «Я не робот» и кнопка
+    «Продолжить». И то и другое лежит в теневом корне, поэтому основной
+    путь – обход корней (deep_click); обычный поиск оставлен как запасной.
 
-    Крестик закрытия не трогаем никогда: раньше в конце стоял запасной
-    селектор «любая кнопка», он попадал именно в крестик, проверка
-    схлопывалась и ВК выбрасывал на главную. Лучше не нажать ничего.
+    Крестик закрытия не трогаем никогда: он однажды уже схлопнул проверку,
+    и ВК выбросил на главную. Лучше не нажать ничего.
     """
-    # Галочка: сам input, метка рядом с ним или текст «Я не робот».
+    labels = ("Я не робот", "Продолжить", "Начать")
+    if deep_click(frame, labels):
+        return True
     for sel in ('input[type="checkbox"]', 'label:has-text("Я не робот")',
-                'text="Я не робот"'):
+                'button:has-text("Продолжить")', 'button:has-text("Начать")'):
         try:
             el = frame.locator(sel).first
             if el.count():
                 el.click(timeout=6000)
-                return True
-        except Exception:  # noqa: BLE001
-            continue
-    for sel in ('button:has-text("Продолжить")', 'text="Продолжить"',
-                'button:has-text("Начать")'):
-        try:
-            btn = frame.locator(sel).first
-            if btn.count():
-                btn.click(timeout=6000)
                 return True
         except Exception:  # noqa: BLE001
             continue

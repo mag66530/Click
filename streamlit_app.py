@@ -71,6 +71,7 @@ import kp_audit  # noqa: E402
 import kp_sheet  # noqa: E402
 import llm  # noqa: E402
 import paths  # noqa: E402
+import post_text  # noqa: E402
 import projects_data as pdata  # noqa: E402
 import repo_store  # noqa: E402
 import secrets_local  # noqa: E402
@@ -3248,7 +3249,8 @@ def _crosspost_plan_row(post: dict, state: dict) -> str:
     when = apptime.to_local(post.get("when"))
     day = when.strftime("%d.%m") if when else post.get("date", "")
     weekday = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"][when.weekday()] if when else ""
-    text = " ".join((post.get("text") or "").split())
+    # В превью — текст без разметки: маркеры **…** здесь только мусорят.
+    text = " ".join(post_text.strip_markup(post.get("text") or "").split())
     if len(text) > 90:
         text = text[:90] + "…"
     photos = f'📷 {len(post["images"])}' if post.get("images") else "—"
@@ -3325,12 +3327,61 @@ def tab_crosspost(project_id: str, config: dict) -> None:
     else:
         html("".join(_crosspost_plan_row(p, state) for p in upcoming))
 
+    _crosspost_vk_probe(project_id, config)
+
     # Честно говорим, где мы находимся: формирование отложек – следующий этап.
     # Без этой строки человек будет ждать, что план «сам поедет», и не дождётся.
-    st.info("Пока это только просмотр плана: Click читает реестр и показывает, что и когда "
-            "должно выйти. Формирование отложек (ВК, ОК) и отправка по времени (Телеграм, "
-            "МАКС, Яндекс.Бизнес) подключаются следующими этапами – см. ПЛАН-Кросспостинг.md.",
+    st.info("Пока это просмотр плана и пробная отложка ВК. Формирование всего плана "
+            "одной кнопкой, ОК, Телеграм, МАКС и Яндекс.Бизнес по времени подключаются "
+            "следующими этапами – см. ПЛАН-Кросспостинг.md.",
             icon="ℹ️")
+
+
+def _crosspost_vk_probe(project_id: str, config: dict) -> None:
+    """
+    Пробная отложка ВК: один тестовый пост в сообщество бренда на +N минут.
+    Это боевой пилот механики (форма поста → календарь → «Добавить в очередь»)
+    под сохранённой сессией. Ничего не публикуется сразу: запись видна в
+    «Отложенных записях» сообщества, там же её можно удалить.
+    """
+    import vk_social
+
+    with st.expander("🧪 Пробная отложка ВК — проверить механику одним постом"):
+        if not vk_social.has_saved_session(project_id):
+            st.caption("Сначала войдите в ВК: «Настройки» → «Вход в ВК (кросспостинг)».")
+            return
+        group_url = (config.get("vkGroupUrl") or "").strip()
+        if not group_url:
+            st.caption("Укажите ссылку на сообщество бренда: «Настройки» → «Вход в ВК (кросспостинг)».")
+            return
+
+        st.caption(f"Сообщество: {group_url}. Запись встанет в «Отложенные записи» — "
+                   "оттуда её можно удалить.")
+        text = st.text_area("Текст пробного поста", key=f"vk-probe-text-{project_id}",
+                            value="Проверка планировщика Click — тестовая отложенная запись, "
+                                  "можно удалить.")
+        minutes = st.number_input("Опубликовать через, минут", 10, 24 * 60, 40, step=5,
+                                  key=f"vk-probe-min-{project_id}",
+                                  help="ВК не даёт планировать ближе чем на несколько минут — "
+                                       "меньше 10 не ставим.")
+        busy = runner.busy_reason(project_id, "publish")
+        if busy:
+            st.caption(f"Сейчас нельзя: {busy}. Дождитесь окончания прогона.")
+            return
+        if st.button("Поставить пробную отложку", type="primary",
+                     key=f"vk-probe-go-{project_id}", disabled=not text.strip()):
+            when = apptime.now() + timedelta(minutes=int(minutes))
+            worker = get_worker()
+            with st.spinner("Открываю ВК и ставлю отложку — обычно меньше минуты…"):
+                res = worker.call(
+                    vk_social.schedule_postponed_post, project_id, group_url,
+                    text.strip(), [], when,
+                    headless=bool(get_settings(project_id)["headless"]))
+            if res.get("ok"):
+                st.success(f"Готово: отложка на {when.strftime('%H:%M')} стоит. Проверьте "
+                           f"«Отложенные записи» сообщества — и удалите тестовую запись.")
+            else:
+                st.error(f"Не получилось: {res.get('error')}")
 
     with st.expander("Показать весь реестр листа (включая прошлые)"):
         st.caption("Прошлые посты со ссылкой в колонке «Ссылка» считаются вышедшими.")
@@ -3534,6 +3585,9 @@ def tab_settings(project_id: str, config: dict) -> None:
 
     st.divider()
     _gis_login_block(project_id, config)
+
+    st.divider()
+    _vk_login_block(project_id, config)
 
     st.divider()
     _web_keys_block()
@@ -3851,6 +3905,101 @@ def _gis_login_block(project_id: str, config: dict) -> None:
             pass
         st.session_state.pop("gis_flow", None)
         st.session_state.pop("gis_state", None)
+        st.rerun()
+
+
+def _vk_login_block(project_id: str, config: dict) -> None:
+    """
+    Вход в ВК для кросспостинга — тот же порядок, что у Яндекса и 2ГИС:
+    скриншот вместо окна, шаги распознаются, сессия сохраняется в файл.
+    Телефон и пароль в конфиг НЕ пишутся: телефон достаточно ввести при
+    входе, пароль тем более — сессия дальше живёт сама.
+    """
+    import vk_social
+
+    worker = get_worker()
+    html('<div class="card-title">🔐 Вход в ВК (кросспостинг)</div>')
+
+    group_url = st.text_input(
+        "Ссылка на сообщество ВК этого бренда", value=config.get("vkGroupUrl", ""),
+        key=f"vk-group-{project_id}", placeholder="https://vk.com/club… или https://vk.com/stalmetural")
+    if group_url.strip() != (config.get("vkGroupUrl") or ""):
+        config["vkGroupUrl"] = group_url.strip()
+        save_config(project_id)
+
+    if vk_social.has_saved_session(project_id):
+        st.success("Сессия ВК сохранена — отложки будут ставиться без повторного входа.")
+        with st.container(key="danger-reset-vk"):
+            if st.button("Войти заново (сбросить сессию)", key="vk-reset"):
+                vk_social.session_path(project_id).unlink(missing_ok=True)
+                for k in ("vk_flow", "vk_state"):
+                    st.session_state.pop(k, None)
+                st.rerun()
+        return
+
+    flow = st.session_state.get("vk_flow")
+    if flow is None:
+        st.caption("Нужен аккаунт-администратор сообщества — тот, кем постят руками. "
+                   "Click откроет форму входа ВК: телефон, пароль или код из SMS "
+                   "вводятся здесь же, по снимку экрана.")
+        if st.button("🔑 Войти в ВК", type="primary", key="vk-login", use_container_width=True):
+            try:
+                flow = vk_social.VkLoginFlow(project_id,
+                                             headless=bool(get_settings(project_id)["headless"]))
+                with st.spinner("Открываю форму входа ВК…"):
+                    st.session_state["vk_state"] = worker.call(flow.start)
+                st.session_state["vk_flow"] = flow
+                st.rerun()
+            except Exception as e:  # noqa: BLE001
+                _browser_error(e)
+        return
+
+    state = st.session_state.get("vk_state") or {}
+    if state.get("screenshot"):
+        st.image(state["screenshot"], use_container_width=True)
+        st.caption("Это то, что Click видит на странице входа ВК прямо сейчас.")
+
+    step = state.get("step")
+    if step == "done":
+        try:
+            worker.call(flow.save_session)
+        finally:
+            worker.call(flow.close)
+        st.session_state.pop("vk_flow", None)
+        st.session_state.pop("vk_state", None)
+        if vk_social.has_saved_session(project_id):
+            st.success("Вошли в ВК. Сессия сохранена.")
+        else:
+            st.warning("ВК пустил, но сессия не сохранилась — попробуйте ещё раз.")
+        time.sleep(1.0)
+        st.rerun()
+    elif step == "phone":
+        phone = st.text_input("Телефон аккаунта ВК", key="vk-phone", placeholder="+7…")
+        if st.button("Далее", key="vk-phone-go", type="primary") and phone.strip():
+            st.session_state["vk_state"] = worker.call(flow.submit_phone, phone)
+            st.rerun()
+    elif step == "password":
+        pwd = st.text_input("Пароль ВК", type="password", key="vk-pass")
+        if st.button("Войти", key="vk-pass-go", type="primary") and pwd:
+            st.session_state["vk_state"] = worker.call(flow.submit_password, pwd)
+            st.rerun()
+    elif step == "code":
+        st.caption("ВК просит код подтверждения — из SMS или приложения.")
+        code = st.text_input("Код", key="vk-code")
+        if st.button("Подтвердить", key="vk-code-go", type="primary") and code.strip():
+            st.session_state["vk_state"] = worker.call(flow.submit_code, code)
+            st.rerun()
+    else:
+        st.warning("Не разобрал, что за шаг на странице, — смотрите снимок выше. "
+                   "Можно ввести данные на нужном шаге ещё раз или отменить вход.")
+
+    if st.button("Отменить вход", key="vk-cancel"):
+        try:
+            worker.call(flow.close)
+        except Exception:  # noqa: BLE001
+            pass
+        st.session_state.pop("vk_flow", None)
+        st.session_state.pop("vk_state", None)
         st.rerun()
 
 

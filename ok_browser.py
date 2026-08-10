@@ -192,7 +192,10 @@ class OkViaVkLoginFlow:
                 btn.click()
             self.popup = info.value
             self.popup.wait_for_load_state("domcontentloaded")
-            self.popup.wait_for_timeout(2500)
+            self.popup.wait_for_timeout(4000)
+            # В окне ВК тоже сперва предлагают QR – уходим на телефон.
+            if _vk.click_in_frames(self.popup, ("Войти другим способом", "Другой способ")):
+                self.popup.wait_for_timeout(3000)
             return self.state()
         except Exception:
             self.close()

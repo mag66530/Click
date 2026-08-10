@@ -87,28 +87,73 @@ def session_path(project_id: str) -> Path:
     return d / "vk-state.json"
 
 
+# Слова, по которым узнаём экраны VK ID. Проверено по живым снимкам
+# (2026-08-10): вход идёт через виджет id.vk.com, и экранов больше, чем
+# «телефон → пароль»: сначала QR, потом код может прийти в МАКС, а вместо
+# кода бывает звонок-сброс.
+SCREEN_MARKS = {
+    "captcha": ("не робот", "Проверяем, что вы"),
+    "qr": ("Наведите камеру", "Войти другим способом", "QR-код"),
+    "code": ("Введите код", "код из", "звонок-сброс", "последние 6 цифр",
+             "Код отправлен", "Подтвердить другим способом"),
+    "password": ("Введите пароль", "Забыли или не установили пароль"),
+    "phone": ("Вход ВКонтакте", "Телефон"),
+}
+
+
+def vk_frames(page):
+    """Главная страница и все её кадры – форма VK ID живёт в одном из них."""
+    try:
+        return [page] + [f for f in page.frames if f != page.main_frame]
+    except Exception:  # noqa: BLE001
+        return [page]
+
+
+def frame_text(fr) -> str:
+    try:
+        return (fr.inner_text("body") or "")[:6000]
+    except Exception:  # noqa: BLE001 – кадр мог отвалиться
+        return ""
+
+
+def find_frame(page, marks) -> object | None:
+    """Первый кадр, где встречается любое из слов. None – не нашли."""
+    for fr in vk_frames(page):
+        text = frame_text(fr)
+        if any(m in text for m in marks):
+            return fr
+    return None
+
+
 def captcha_frame(page):
     """
     Кадр, в котором сейчас висит проверка «вы не робот». None – проверки нет.
 
-    ИСКАТЬ НАДО ВО ВСЕХ КАДРАХ. Капча ВК рисуется внутри iframe, а обычный
-    поиск по странице внутрь кадров не заглядывает – из-за этого Click
-    видел серую заглушку, не находил ни полей, ни капчи и честно писал
-    «не разобрал, что за шаг». Проверяем главную страницу и каждый кадр.
+    ИСКАТЬ НАДО ВО ВСЕХ КАДРАХ. Форма входа и капча ВК рисуются внутри
+    iframe, а обычный поиск по странице внутрь кадров не заглядывает –
+    из-за этого Click видел картинку с формой, но не находил ни полей, ни
+    кнопок, и честно писал «не разобрал, что за шаг».
     """
-    marks = ("не робот", "Проверяем")
-    try:
-        frames = [page] + list(page.frames)
-    except Exception:  # noqa: BLE001
-        frames = [page]
-    for fr in frames:
-        try:
-            body = (fr.inner_text("body") or "")[:4000]
-        except Exception:  # noqa: BLE001 – кадр мог отвалиться, идём дальше
-            continue
-        if any(m in body for m in marks):
-            return fr
-    return None
+    return find_frame(page, SCREEN_MARKS["captcha"])
+
+
+def click_in_frames(page, texts, timeout: int = 5000) -> bool:
+    """
+    Нажать первую попавшуюся кнопку/ссылку с одним из текстов – в любом
+    кадре. True, если нажали.
+    """
+    for fr in vk_frames(page):
+        for label in texts:
+            for sel in (f'button:has-text("{label}")', f'a:has-text("{label}")',
+                        f'text="{label}"'):
+                try:
+                    el = fr.locator(sel).first
+                    if el.count():
+                        el.click(timeout=timeout)
+                        return True
+                except Exception:  # noqa: BLE001
+                    continue
+    return False
 
 
 def press_captcha_in(frame) -> bool:
@@ -282,13 +327,14 @@ class VkLoginFlow:
             self.context.add_init_script(ANTIBOT_INIT)
             self.page = self.context.new_page()
             self.page.goto(f"{BASE}/login", wait_until="domcontentloaded", timeout=40_000)
-            self.page.wait_for_timeout(2000)
-            # По умолчанию ВК может показать вход по QR – переключаемся на телефон.
-            try:
-                self.page.click("text=Войти другим способом", timeout=4000)
-                self.page.wait_for_timeout(1200)
-            except Exception:  # noqa: BLE001 – кнопки нет, значит уже форма телефона
-                pass
+            # Виджет VK ID грузится в кадре и не сразу: без паузы мы смотрим
+            # на пустую страницу и не находим ни кнопок, ни полей.
+            self.page.wait_for_timeout(4000)
+            # По умолчанию ВК показывает вход по QR-коду, а камеры у нас нет.
+            # Уходим на телефон сразу – кнопка живёт в кадре виджета, поэтому
+            # ищем её по всем кадрам, а не только на главной странице.
+            if click_in_frames(self.page, ("Войти другим способом", "Другой способ")):
+                self.page.wait_for_timeout(3000)
             return self.state()
         except Exception:
             self.close()
@@ -367,14 +413,14 @@ class VkLoginFlow:
         """Висит ли поверх формы проверка «вы не робот»."""
         return captcha_frame(self.page) is not None
 
+    # ─── действия на экранах ────────────────────────────────────────
     def press_captcha_continue(self) -> dict:
         """
         Нажать «Продолжить» в проверке «вы не робот».
 
-        Часто этого достаточно – ВК просто убеждается, что кто-то живой
-        нажал кнопку. Если за ней окажется головоломка, следующий снимок
-        это покажет, и решать её придётся человеку в настоящем окне
-        браузера (выключить «Скрытый браузер» в «Настройках»).
+        Часто этого достаточно – ВК убеждается, что кнопку нажал живой
+        человек. Если за ней окажется головоломка, следующий снимок это
+        покажет, и решать её придётся руками в настоящем окне браузера.
         """
         fr = captcha_frame(self.page)
         if fr is not None:
@@ -382,35 +428,133 @@ class VkLoginFlow:
             self.page.wait_for_timeout(4000)
         return self.state()
 
+    def press_other_way(self) -> dict:
+        """
+        «Войти другим способом» – уйти с экрана QR на вход по телефону.
+        По умолчанию ВК показывает именно QR, а камеры у нас нет.
+        """
+        click_in_frames(self.page, ("Войти другим способом", "Другой способ"))
+        self.page.wait_for_timeout(2500)
+        return self.state()
+
+    def press_other_confirm(self) -> dict:
+        """
+        «Подтвердить другим способом» – сменить способ подтверждения
+        (звонок-сброс → код в МАКС/SMS и наоборот). Живой экран показал,
+        что ВК предлагает звонок, когда код удобнее, и наоборот.
+        """
+        click_in_frames(self.page, ("Подтвердить другим способом",
+                                    "Использовать другой способ"))
+        self.page.wait_for_timeout(2500)
+        return self.state()
+
+    # ─── ввод ───────────────────────────────────────────────────────
+    def submit_phone(self, phone: str) -> dict:
+        for fr in vk_frames(self.page):
+            try:
+                inp = fr.locator(SEL["login_phone"]).first
+                if inp.count():
+                    inp.fill(phone.strip())
+                    if not click_in_frames(self.page, ("Войти", "Продолжить")):
+                        fr.locator(SEL["login_phone"]).first.press("Enter")
+                    self.page.wait_for_timeout(4000)
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        return self.state()
+
+    def submit_password(self, password: str) -> dict:
+        for fr in vk_frames(self.page):
+            try:
+                inp = fr.locator(SEL["login_password"]).first
+                if inp.count():
+                    inp.fill(password)
+                    if not click_in_frames(self.page, ("Продолжить", "Войти")):
+                        inp.press("Enter")
+                    self.page.wait_for_timeout(4000)
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        return self.state()
+
+    def request_code_instead(self) -> dict:
+        """Уйти с пароля на код: у аккаунтов брендов пароля обычно нет."""
+        for label in ("Забыли или не установили пароль?", "Нет, восстановить пароль",
+                      "Отправить код", "Получить код"):
+            if click_in_frames(self.page, (label,), timeout=4000):
+                self.page.wait_for_timeout(1500)
+        self.page.wait_for_timeout(1500)
+        return self.state()
+
+    def submit_code(self, code: str) -> dict:
+        """
+        Ввести код подтверждения. Поле бывает двух видов: одно на весь код
+        или шесть клеток по цифре – встречались оба, поэтому поддерживаем
+        оба, и в любом кадре.
+        """
+        code = code.strip()
+        for fr in vk_frames(self.page):
+            try:
+                single = fr.locator(SEL["login_code_single"])
+                if single.count() >= 1:
+                    single.first.fill(code)
+                    single.first.press("Enter")
+                    self.page.wait_for_timeout(4000)
+                    return self.state()
+                boxes = fr.locator(SEL["login_code_boxes"])
+                if boxes.count() >= len(code):
+                    for i, digit in enumerate(code):
+                        boxes.nth(i).fill(digit)
+                    self.page.wait_for_timeout(4000)
+                    return self.state()
+            except Exception:  # noqa: BLE001
+                continue
+        return self.state()
+
+    # ─── что на экране ──────────────────────────────────────────────
     def page_state(self) -> dict:
         """
-        Какой шаг входа сейчас на экране. Порядок важен: сначала ищем поля
-        формы (они говорят точно), «вошли» ставим ТОЛЬКО по настоящей
-        проверке содержимым – раньше это решалось по адресу страницы, и
-        гость на vk.com/feed засчитывался как вошедший.
+        Какой шаг входа сейчас. Ищем ПО ВСЕМ КАДРАМ: форма VK ID живёт в
+        iframe, и поиск только по главной странице ничего не находил.
 
-        Проверка «вы не робот» идёт ПЕРВОЙ: она висит поверх формы, и пока
-        её не пройти, любые поля под ней недоступны.
+        Порядок проверок – от самого «перекрывающего» к обычному: капча
+        висит поверх всего, экран QR не даёт ввести телефон, и только
+        потом идут поля.
         """
         try:
-            if self._has_captcha():
+            if is_logged_in(self.page):
+                return {"step": "done"}
+            if find_frame(self.page, SCREEN_MARKS["captcha"]) is not None:
                 return {"step": "captcha"}
-            if self.page.locator(SEL["login_password"]).count():
-                return {"step": "password"}
-            if (self.page.locator(SEL["login_code_boxes"]).count() >= 4
-                    or self.page.locator(SEL["login_code_single"]).count()):
+
+            # Поля важнее слов: если есть куда вводить – это и есть шаг.
+            for fr in vk_frames(self.page):
+                try:
+                    if fr.locator(SEL["login_password"]).count():
+                        return {"step": "password"}
+                    if (fr.locator(SEL["login_code_boxes"]).count() >= 4
+                            or fr.locator(SEL["login_code_single"]).count()):
+                        return {"step": "code"}
+                except Exception:  # noqa: BLE001
+                    continue
+
+            if find_frame(self.page, SCREEN_MARKS["code"]) is not None:
                 return {"step": "code"}
-            if self.page.locator(SEL["login_phone"]).count():
-                return {"step": "phone"}
-            if is_logged_in(self.page):
-                return {"step": "done"}
-            # Форм нет, но и не вошли – смотрим ленту: там видно наверняка.
-            self.page.goto(f"{BASE}/feed", wait_until="domcontentloaded", timeout=30_000)
-            self.page.wait_for_timeout(1500)
-            if is_logged_in(self.page):
-                return {"step": "done"}
-            if self.page.locator(SEL["login_phone"]).count():
-                return {"step": "phone"}
+            # Экран QR: телефон ввести негде, нужна кнопка «Войти другим способом».
+            if find_frame(self.page, SCREEN_MARKS["qr"]) is not None:
+                for fr in vk_frames(self.page):
+                    try:
+                        if fr.locator(SEL["login_phone"]).count():
+                            return {"step": "phone"}
+                    except Exception:  # noqa: BLE001
+                        continue
+                return {"step": "qr"}
+            for fr in vk_frames(self.page):
+                try:
+                    if fr.locator(SEL["login_phone"]).count():
+                        return {"step": "phone"}
+                except Exception:  # noqa: BLE001
+                    continue
             return {"step": "unknown"}
         except Exception:  # noqa: BLE001
             return {"step": "unknown"}

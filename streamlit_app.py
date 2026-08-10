@@ -4338,10 +4338,22 @@ def _vk_login_block(project_id: str, config: dict) -> None:
             st.session_state["vk_state"] = worker.call(flow.request_code_instead)
             st.rerun()
     elif step == "code":
-        st.caption("ВК просит код подтверждения – из SMS или приложения.")
-        code = st.text_input("Код", key="vk-code")
-        if st.button("Подтвердить", key="vk-code-go", type="primary") and code.strip():
+        st.caption("ВК просит код подтверждения. Смотрите снимок: код может "
+                   "прийти в МАКС, в SMS – либо вместо кода поступит звонок-сброс, "
+                   "и тогда нужны последние 6 цифр номера, с которого звонили.")
+        code = st.text_input("Код (6 цифр)", key="vk-code")
+        c1, c2 = st.columns(2)
+        if c1.button("Подтвердить", key="vk-code-go", type="primary") and code.strip():
             st.session_state["vk_state"] = worker.call(flow.submit_code, code)
+            st.rerun()
+        if c2.button("🔄 Подтвердить другим способом", key="vk-other-confirm"):
+            st.session_state["vk_state"] = worker.call(flow.press_other_confirm)
+            st.rerun()
+    elif step == "qr":
+        st.caption("ВК предлагает вход по QR-коду – камеры у нас нет. Переходим "
+                   "на вход по телефону.")
+        if st.button("➡️ Войти другим способом", key="vk-other-way", type="primary"):
+            st.session_state["vk_state"] = worker.call(flow.press_other_way)
             st.rerun()
     elif step == "captcha":
         st.caption("ВК проверяет, что вход делает человек. Обычно хватает одного "

@@ -245,25 +245,27 @@ ASSORTMENT_NEAR = 0.75      # насколько абзац похож на эт
 
 
 _MPE_SIGN = "С уважением, команда Метпромэнерго."
-_MPE_SIGN_RX = re.compile(r"\s*С\s+уважением\b.*$", re.S | re.I)
+_SMU_SIGN = "С уважением, команда Стальметурал."
+_SIGN_STRIP_RX = re.compile(r"\s*С\s+уважением\b.*$", re.S | re.I)
 
 
-def fix_mpe_shape(text: str) -> str:
+def _fix_greeting_body_sign_shape(text: str, sign: str, want: str) -> str:
     """
-    Привести ответ МПЭ к трёхабзацной структуре:
-      Абзац 1: приветствие (Имя, спасибо…!)
+    Привести ответ к трёхабзацной структуре:
+      Абзац 1: приветствие (заканчивается «!»)
       Абзац 2: основная часть с эталонной ассортиментной фразой
-      Абзац 3: «С уважением, команда Метпромэнерго.»
+      Абзац 3: подпись (sign)
 
-    Модель нередко сливает приветствие с основным абзацем в один – тогда
-    fix_assortment() не находит похожего абзаца и ничего не меняет.
-    Здесь сначала раскалываем первый абзац по «!», затем ищем
-    ассортиментную фразу на уровне предложений и заменяем на эталон.
+    Общая механика для МПЭ и СМУ – у обоих один и тот же провал: модель
+    сливает приветствие с основным абзацем в один, тогда fix_assortment()
+    не находит похожего абзаца и ничего не меняет. Здесь сначала
+    раскалываем первый абзац по «!», затем ищем ассортиментную фразу на
+    уровне предложений и заменяем на эталон.
     """
-    want = (pdata.REVIEW_ASSORTMENT.get("MPE") or "").strip()
+    want = (want or "").strip()
 
     # Убираем подпись – добавим сами
-    body = _MPE_SIGN_RX.sub("", text).strip()
+    body = _SIGN_STRIP_RX.sub("", text).strip()
 
     # Разбиваем на абзацы
     paras = [p.strip() for p in body.split("\n\n") if p.strip()]
@@ -296,7 +298,15 @@ def fix_mpe_shape(text: str) -> str:
             body_sents.append(want)
 
     body_text = " ".join(s for s in body_sents if s.strip())
-    return f"{greeting}\n\n{body_text}\n\n{_MPE_SIGN}"
+    return f"{greeting}\n\n{body_text}\n\n{sign}"
+
+
+def fix_mpe_shape(text: str) -> str:
+    return _fix_greeting_body_sign_shape(text, _MPE_SIGN, pdata.REVIEW_ASSORTMENT.get("MPE"))
+
+
+def fix_smu_shape(text: str) -> str:
+    return _fix_greeting_body_sign_shape(text, _SMU_SIGN, pdata.REVIEW_ASSORTMENT.get("SMU"))
 
 
 def fix_assortment(project_id: str, text: str) -> str:
@@ -522,6 +532,8 @@ def clean_draft(text: str, project_id: str = "", review: str = "") -> str:
         return fix_mpi_shape(t, review)
     if project_id == "MPE":
         return fix_mpe_shape(t)
+    if project_id == "SMU":
+        return fix_smu_shape(t)
     return fix_assortment(project_id, t) if project_id else t
 
 

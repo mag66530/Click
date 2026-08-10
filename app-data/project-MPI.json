@@ -290,13 +290,13 @@
           "id": "ct-MPI-1-5-тараз",
           "name": "Тараз",
           "url": "https://yandex.ru/sprav/45511216/edit/posts/",
-          "kpStatus": ""
+          "kpStatus": "Тех. проблемы"
         },
         {
           "id": "ct-MPI-1-6-усть-каменогорск",
           "name": "Усть-Каменогорск",
           "url": "https://yandex.ru/sprav/45511245/edit/posts/",
-          "kpStatus": ""
+          "kpStatus": "Тех. проблемы"
         },
         {
           "id": "ct-MPI-1-7-павлодар",
@@ -606,6 +606,6 @@
   "email": "metpromintex@yandex.ru",
   "kpSheetUrl": "https://docs.google.com/spreadsheets/d/1Hb7R1scmyhSPyROUa2mWMzD4jDcdgBcs1IGu0WQ48O4/edit?gid=0#gid=0",
   "kpSheetTitle": "Карта присутсвия",
-  "kpSyncedAt": "2026-08-09T09:00:55.968819+00:00",
+  "kpSyncedAt": "2026-08-10T14:55:08.424347+00:00",
   "gisPhotosDefault": true
 }

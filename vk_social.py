@@ -90,6 +90,28 @@ def session_path(project_id: str) -> Path:
     return d / "vk-state.json"
 
 
+def same_domain(url: str) -> str:
+    """
+    Привести ссылку на сообщество к тому домену, где лежит наша сессия.
+
+    Зачем. vk.ru и vk.com – РАЗНЫЕ сайты для браузера, и куки входа с одного
+    на другой не отправляются. Вошли на vk.ru, а в настройках вписана ссылка
+    вида vk.com/club… – ВК откроет её как гостю, кнопки «Создать» не будет, и
+    человек будет думать, что сломался вход. Ровно это и случилось на первой
+    пробной отложке. Ссылку человек пишет любую – домен подставляем сами.
+    """
+    if not url:
+        return url
+    host = BASE.split("//", 1)[1]                      # vk.ru
+    other = "vk.com" if host == "vk.ru" else "vk.ru"
+    for prefix in (f"https://{other}", f"http://{other}",
+                   f"https://m.{other}", f"http://m.{other}",
+                   f"https://www.{other}", f"http://www.{other}"):
+        if url.startswith(prefix):
+            return BASE + url[len(prefix):]
+    return url
+
+
 # Слова, по которым узнаём экраны VK ID. Проверено по живым снимкам
 # (2026-08-10): вход идёт через виджет id.vk.com, и экранов больше, чем
 # «телефон → пароль»: сначала QR, потом код может прийти в МАКС, а вместо
@@ -343,7 +365,8 @@ def check_session(project_id: str, group_url: str = "",
                                  "сохранилась или истекла: войдите заново.",
                         "shot": _debug_shot(project_id, page, "check")}
             if group_url:
-                page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
+                page.goto(same_domain(group_url), wait_until="domcontentloaded",
+                          timeout=45_000)
                 page.wait_for_timeout(2000)
                 # Кнопка «Создать» есть только у того, кто может публиковать.
                 can_post = page.locator('text="Создать"').count() > 0
@@ -888,8 +911,9 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             context.add_init_script(ANTIBOT_INIT)
             page = context.new_page()
 
-            log(f"Открываю сообщество: {group_url}")
-            page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
+            target = same_domain(group_url)
+            log(f"Открываю сообщество: {target}")
+            page.goto(target, wait_until="domcontentloaded", timeout=45_000)
             page.wait_for_timeout(2500)
             if not is_logged_in(page):
                 return {"ok": False, "shot": _debug_shot(project_id, page, "session"),

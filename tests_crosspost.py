@@ -225,6 +225,36 @@ def test_bold_from_real_file() -> None:
     check("и не сломала распознавание сетей", {"vk", "ok", "max"} <= nets, str(sorted(nets)))
 
 
+def test_vk_domain() -> None:
+    """
+    Домен сообщества обязан совпадать с доменом сессии.
+
+    Почему это отдельная проверка. vk.ru и vk.com – разные сайты для
+    браузера, куки входа между ними не ходят. Ссылку с «чужим» доменом ВК
+    открывает как гостю: кнопки «Создать» нет, и выглядит это как сломанный
+    вход, хотя вход целый. Один раз мы на это уже потратили день.
+    """
+    print("\nВК: домен сообщества")
+    import vk_social
+
+    check("vk.com → vk.ru",
+          vk_social.same_domain("https://vk.com/club123") == "https://vk.ru/club123")
+    check("m.vk.com тоже приводится",
+          vk_social.same_domain("https://m.vk.com/club123") == "https://vk.ru/club123")
+    check("www.vk.com тоже приводится",
+          vk_social.same_domain("http://www.vk.com/abc") == "https://vk.ru/abc")
+    check("свой домен не трогаем",
+          vk_social.same_domain("https://vk.ru/club7") == "https://vk.ru/club7")
+    check("путь и хвост сохраняются",
+          vk_social.same_domain("https://vk.com/club1?w=wall-1_2")
+          == "https://vk.ru/club1?w=wall-1_2")
+    check("пустая ссылка остаётся пустой", vk_social.same_domain("") == "")
+    check("чужой адрес не переписываем",
+          vk_social.same_domain("https://ok.ru/group/1") == "https://ok.ru/group/1")
+    check("похожий домен не ловим по подстроке",
+          vk_social.same_domain("https://notvk.com/x") == "https://notvk.com/x")
+
+
 def test_platform_clients() -> None:
     print("Клиенты площадок: чистая логика")
     from datetime import date as _d, datetime, timezone, timedelta
@@ -398,6 +428,7 @@ def test_scheduler() -> None:
 def main() -> int:
     print("═" * 60)
     test_scheduler()
+    test_vk_domain()
     test_platform_clients()
     test_post_text()
     test_bold_from_real_file()

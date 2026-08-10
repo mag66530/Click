@@ -4272,7 +4272,10 @@ def _vk_login_block(project_id: str, config: dict) -> None:
 
     group_url = st.text_input(
         "Ссылка на сообщество ВК этого бренда", value=config.get("vkGroupUrl", ""),
-        key=f"vk-group-{project_id}", placeholder="https://vk.com/club… или https://vk.com/stalmetural")
+        key=f"vk-group-{project_id}", placeholder="https://vk.ru/club… или https://vk.ru/название")
+    st.caption("Можно писать и vk.com, и vk.ru – Click сам приведёт ссылку к тому "
+               "домену, на котором сохранена сессия. Это разные сайты для браузера, "
+               "и куки входа у них не общие.")
     if group_url.strip() != (config.get("vkGroupUrl") or ""):
         config["vkGroupUrl"] = group_url.strip()
         save_config(project_id)

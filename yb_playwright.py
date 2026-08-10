@@ -1220,6 +1220,16 @@ def publish_to_city(
         result["durationMs"] = int((time.time() - started) * 1000)
         return result
 
+    # Пустой текст – последняя черта, дальше которой не идём. В боевом прогоне
+    # эта функция бодро отчиталась «Текст введён полностью (0 символов)» и
+    # опубликовала пустой пост в трёх городах: задачу «только фото в 2ГИС»
+    # прогон прежней сборки принял за обычную. Пустой пост в карточке
+    # заказчика не исправить ничем, кроме рук, – поэтому проверка стоит и
+    # здесь, у самой кнопки, а не только у того, кто сюда позвал.
+    if not (task.get("postText") or "").strip():
+        warn(f"⛔ {label}: пустой текст поста – публиковать нечего, город пропущен")
+        return finish("failed", "Пустой текст поста – публиковать нечего")
+
     info(f"📍 {label} – начинаем...")
 
     company_id = task.get("companyId") or extract_company_id(task.get("companyUrl"))
@@ -2078,25 +2088,43 @@ _ACTUALIZE_TOAST_JS = r"""
 
 def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict:
     """
-    Статусы (как в actualize.js):
-      'actualized' – кнопку нажали
-      'not-needed' – кнопки нет, актуализация не требуется (это НЕ ошибка)
-      'failed'     – не открылась страница / ошибка клика
+    Статусы (как в actualize.js), плюс сверка со статусом из КП:
+      'actualized'      – кнопку нажали
+      'not-needed'      – кнопки нет, актуализация не требуется (это НЕ ошибка)
+      'status-mismatch' – КП обещал живую карточку («Активная», «Онлайн»…), а
+                          её нет – это не сбой приложения, а неверный статус
+                          в таблице; заходить и жать нечего
+      'failed'          – не открылась страница / ошибка клика
+      'no-session'      – сессия Яндекса не активна
+
+    task['kpStatus'] – значение колонки «Статус» из КП. Сверяем его с тем,
+    что видим в кабинете, и кладём в cardAlive/statusVerdict/statusNote –
+    отдельно от итогового status: «получилось ли актуализировать» и «совпал
+    ли статус» – два разных вопроса, путать их в отчёте нельзя.
     """
+    import kp_sheet
+
     started = time.time()
     label = f"[{idx + 1}/{total}] {task.get('cityName', '?')}"
+    kp_status = (task.get("kpStatus") or "").strip()
     result = {
         "cityName": task.get("cityName"),
         "companyUrl": task.get("companyUrl"),
         "status": "failed",
         "reason": "",
         "durationMs": 0,
+        "kpStatus": kp_status,
+        "cardAlive": None,      # True/False/None – прочитали ли, жива ли карточка
+        "statusVerdict": "",    # 'ok' | 'mismatch' | 'skip' (kp_sheet.status_verdict)
+        "statusNote": "",
     }
 
     def finish(status: str, reason: str) -> dict:
         result["status"] = status
         result["reason"] = reason
         result["durationMs"] = int((time.time() - started) * 1000)
+        verdict, note = kp_sheet.status_verdict(kp_status, result["cardAlive"])
+        result["statusVerdict"], result["statusNote"] = verdict, note
         return result
 
     info(f"🏙  {label} – актуализация...")
@@ -2111,7 +2139,28 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
         return finish("failed", f"Не удалось открыть страницу: {e}")
 
     if is_404(page):
-        return finish("failed", f"Страница не найдена (404): {edit_url}")
+        # Не угадали формат /edit/ ↔ /p/edit/ – пробуем второй, прежде чем
+        # решить, что карточки нет: неверный формат уже путали с удалением
+        # для раздела «Посты» (alt_posts_url – та же подмена подстроки, имя
+        # осталось от исходной задачи, но работает для любого /…/edit/ URL).
+        alt = alt_posts_url(edit_url)
+        if alt and alt != edit_url:
+            info(f"  🔁 404 – пробую другой формат адреса: {alt}")
+            try:
+                page.goto(alt, wait_until="domcontentloaded", timeout=30_000)
+                page.wait_for_timeout(2500)
+            except Exception:  # noqa: BLE001
+                pass
+            else:
+                edit_url = alt
+        if is_404(page):
+            result["cardAlive"] = False
+            verdict, note = kp_sheet.status_verdict(kp_status, False)
+            if verdict == "mismatch":
+                out = finish("status-mismatch", note)
+                warn(f"  🚦 {label}: {note}")
+                return out
+            return finish("failed", f"Страница не найдена (404): {edit_url}")
 
     # Сессия слетела – Яндекс отдаёт страницу входа. Без этой проверки кнопки
     # на ней, разумеется, нет, и город получал «актуализация не требуется»:
@@ -2120,6 +2169,16 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
     if looks_like_login_page(page):
         error("  ❌ Открылась страница входа Яндекса – сессия не активна")
         return finish("no-session", "Сессия Яндекса не активна: открылась страница входа")
+
+    result["cardAlive"] = True
+    verdict, note = kp_sheet.status_verdict(kp_status, True)
+    if verdict == "mismatch":
+        # Карточка живая, а КП обещал, что её быть не должно («Удалена» и
+        # т.п.). В прогон такой город обычно и не попадает – parse_rows его
+        # отсеивает, – но если статус сменили ПОСЛЕ того, как собрали список
+        # задач, это всё равно стоит увидеть. Карточка открыта – жмём как
+        # обычно, расхождение просто едет в отчёте рядом с результатом.
+        warn(f"  🚦 {label}: {note}")
 
     btn = None
     deadline = time.time() + 4

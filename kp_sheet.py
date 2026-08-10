@@ -61,7 +61,14 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly",
           "https://www.googleapis.com/auth/drive.readonly"]
 GOOGLE_SHEET_MIME = "application/vnd.google-apps.spreadsheet"
 
-SPRAV_RX = re.compile(r"yandex\.[a-z.]+/sprav/\d+", re.I)
+# Яндекс завёл второй адрес той же карточки:
+#   старый  yandex.ru/sprav/21461411/edit/
+#   новый   yandex.ru/business/companies/company/70210624498/
+# Номер в обоих один и тот же (тот же случай уже решён в yb_playwright.py –
+# COMPANY_ID_RX). Раньше здесь matчился только старый вид: город с новой
+# ссылкой не получал url вовсе и молча выпадал из списка Яндекса, хотя
+# статус в КП был «Активная» – заказчик находила его в таблице, а Click нет.
+SPRAV_RX = re.compile(r"yandex\.[a-z.]+/(?:sprav|business/companies/company)/\d+", re.I)
 
 # Блок 2ГИС в той же строке КП: «Аккаунт» – ссылка на кабинет организации,
 # «Карта» – её публичная карточка, «Статус» – тот же словарь, что у Яндекса.
@@ -83,6 +90,65 @@ YANDEX, GIS = "yandex", "gis"
 # «активные» и «не активные» неотличимы: в одной строке есть подстрока другой.
 SKIP_STATUS_RX = re.compile(r"удал|добав|заблок|\bне\s*актив", re.I)
 WARN_STATUS_RX = re.compile(r"тех|проблем", re.I)
+_ALIVE_STATUS_RX = re.compile(r"актив|онлайн", re.I)
+
+
+def expected_state(status: str) -> str:
+    """
+    Что колонка «Статус» в КП обещает про карточку на площадке.
+
+    Один словарь на обе площадки (у Яндекса и 2ГИС он одинаковый):
+
+      'absent'    – карточки быть не должно: Удалена, Добавить, Заблокирована,
+                    Не активная;
+      'alive-any' – карточка есть, публикация не важна: Тех. проблемы;
+      'alive'     – карточка есть и работает: Активная, Онлайн;
+      ''          – пусто или незнакомое слово: сверять нечего.
+
+    Это та же логика, по которой parse_rows решает, брать город в работу
+    (SKIP_STATUS_RX), просто названная словами исхода – чтобы актуализация
+    могла сверить обещание КП с тем, что реально в кабинете.
+    """
+    s = _norm(status)
+    if not s:
+        return ""
+    if SKIP_STATUS_RX.search(s):
+        return "absent"
+    if WARN_STATUS_RX.search(s):
+        return "alive-any"
+    if _ALIVE_STATUS_RX.search(s):
+        return "alive"
+    return ""
+
+
+def status_verdict(kp_status: str, card_alive: bool | None) -> tuple[str, str]:
+    """
+    Сверить статус из КП с тем, жива ли карточка. Возвращает (вердикт, текст).
+
+      'ok'       – КП и площадка сходятся;
+      'mismatch' – расходятся (в актуализацию попадают только «живые» города,
+                   так что на деле это всегда «в КП активная – а карточки нет»);
+      'skip'     – сверять нечего: статус пуст/незнаком или состояние карточки
+                   неизвестно (кабинет не открылся, сессия слетела).
+
+    card_alive: True – карточка открылась, False – удалена/404, None – не
+    смогли определить.
+    """
+    expect = expected_state(kp_status)
+    st = (kp_status or "").strip()
+    if not expect or card_alive is None:
+        return "skip", ""
+    if expect in ("alive", "alive-any"):
+        if card_alive:
+            return "ok", f"в КП «{st}» – карточка на месте"
+        return "mismatch", f"в КП «{st}», а карточки на площадке нет"
+    # expect == 'absent' – в актуализацию такой город не попадает, но если
+    # вдруг попал (статус проставили после сбора городов) и карточка жива –
+    # это тоже расхождение.
+    if card_alive:
+        return "mismatch", f"в КП «{st}», а карточка на площадке живая"
+    return "ok", f"в КП «{st}» – карточки нет, всё сходится"
+
 
 # Одна и та же страна пишется в КП по-разному. Без сведения к одному имени
 # Click рисует две плитки («РФ» и «Россия»), а окончания постов ищутся по
@@ -347,9 +413,31 @@ def open_book(file_id: str, sa_info: dict, gid: str = "") -> tuple[list[str], An
     return titles, read, prefer
 
 
-def _read_values(file_id: str, sa_info: dict, gid: str = "") -> list[list[str]]:
-    """Значения таблицы. Нативную читаем через Sheets API, залитый .xlsx – качаем."""
+def _read_values(file_id: str, sa_info: dict, gid: str = "",
+                 title: str = "") -> tuple[list[list[str]], str]:
+    """
+    Значения таблицы: (строки, название использованного листа).
+
+    title передан (лист выбран явно в «Настройках») – читаем именно его,
+    без эвристики; лист успели переименовать или удалить – понятная ошибка,
+    а не молчаливый переход на другой лист. Не передан – прежнее
+    автоопределение по содержимому (_pick_sheet), для проектов, где лист
+    ещё не выбрали явно.
+    """
     titles, read, prefer = open_book(file_id, sa_info, gid)
+    if title:
+        want = title
+        if want not in titles:
+            # Название могло прийти с лишними пробелами или в другом регистре.
+            low = {t.strip().lower(): t for t in titles}
+            want = low.get(want.strip().lower(), "")
+        if not want:
+            raise RuntimeError(
+                f"Лист «{title}» не нашёлся в таблице – его могли переименовать "
+                f"или удалить. Выберите лист заново в «⚙️ Настройки». "
+                f"Сейчас в таблице есть: {', '.join(titles[:20])}"
+            )
+        return read(want), want
     return _pick_sheet(titles, read, prefer)
 
 
@@ -388,12 +476,24 @@ def read_sheet(project_id: str, title: str, from_config: str = "") -> list[list[
         low = {t.strip().lower(): t for t in titles}
         want = low.get((want or "").strip().lower(), "")
     if not want:
-        raise RuntimeError(f"В таблице нет листа «{title}». Есть: {', '.join(titles[:20])}")
+        if title:
+            raise RuntimeError(
+                f"Лист «{title}» не нашёлся в таблице – его могли переименовать или "
+                f"удалить. Выберите лист заново в «⚙️ Настройки». "
+                f"Сейчас в таблице есть: {', '.join(titles[:20])}"
+            )
+        raise RuntimeError(f"В таблице нет ни одного листа. Есть: {', '.join(titles[:20])}")
     return read(want)
 
 
-def _pick_sheet(titles: list[str], read, prefer: str = "") -> list[list[str]]:
-    """Первый лист, на котором нашлись города со ссылками на Яндекс.Бизнес."""
+def _pick_sheet(titles: list[str], read, prefer: str = "") -> tuple[list[list[str]], str]:
+    """
+    Первый лист, на котором нашлись города со ссылками на Яндекс.Бизнес.
+
+    Возвращает (строки, название выбранного листа) – имя нужно, чтобы после
+    первой автоматической загрузки запомнить выбор в конфиге проекта явно
+    и больше не гадать при следующих загрузках.
+    """
     if not titles:
         raise RuntimeError("В таблице нет листов")
     # Старые копии не читаем ВООБЩЕ – ровно этого просила заказчик. К ним
@@ -411,7 +511,7 @@ def _pick_sheet(titles: list[str], read, prefer: str = "") -> list[list[str]]:
             continue
         cities, diag = parse_rows(rows)
         if cities:
-            return rows
+            return rows, title
         tried.append(f"«{title}»: {diag.get('error') or 'городов не нашлось'}")
     raise RuntimeError("Ни на одном листе не нашлось таблицы с городами и ссылками "
                        "на Яндекс.Бизнес. Проверено – " + "; ".join(tried[:6]))
@@ -446,6 +546,18 @@ def _sheet_order(titles: list[str], prefer: str = "") -> list[str]:
         return (old + 2, 0)
 
     return sorted(titles, key=key)
+
+
+def guess_sheet(titles: list[str], prefer: str = "") -> str:
+    """
+    Лист-подсказка по названию – только для выпадающего списка в «Настройках».
+
+    Не читает содержимое (в отличие от _pick_sheet): это лишь то, что
+    предложить человеку по умолчанию, а не окончательный выбор – его
+    делает сам человек, глядя на список листов.
+    """
+    order = _sheet_order(titles, prefer)
+    return order[0] if order else ""
 
 
 def _norm(s: str) -> str:
@@ -613,8 +725,16 @@ def _status_column(header: list[str], from_col: int, avoid: str) -> int:
     return -1
 
 
-def load_cities(project_id: str, from_config: str = "") -> tuple[list[dict], dict]:
-    """Скачать и разобрать КП проекта. Бросает RuntimeError с понятным текстом."""
+def load_cities(project_id: str, from_config: str = "", title: str = "") -> tuple[list[dict], dict]:
+    """
+    Скачать и разобрать КП проекта. Бросает RuntimeError с понятным текстом.
+
+    title – лист, выбранный явно в «⚙️ Настройки». Пусто – прежнее
+    автоопределение по содержимому (для проектов, где лист ещё не выбрали).
+    В diag['usedSheet'] всегда лежит название реально прочитанного листа –
+    вызывающий код (kp_pull) сохраняет его в конфиг при первой загрузке,
+    чтобы дальше выбор был явным и не менялся сам по себе.
+    """
     url = sheet_url(project_id, from_config)
     fid = sheet_id(url)
     if not fid:
@@ -625,19 +745,27 @@ def load_cities(project_id: str, from_config: str = "") -> tuple[list[dict], dic
             "Не найден ключ сервисного аккаунта Google. Добавьте в секреты приложения "
             "gcp_service_account_b64 (весь JSON-ключ в base64) или секцию [gcp_service_account]."
         )
-    return parse_rows(_read_values(fid, sa, sheet_gid(url)))
+    rows, used_title = _read_values(fid, sa, sheet_gid(url), title)
+    cities, diag = parse_rows(rows)
+    diag["usedSheet"] = used_title
+    return cities, diag
 
 
 def to_countries(cities: list[dict], project_id: str, platform: str = YANDEX) -> list[dict]:
     """
-    Список городов → структура конфига Click: [{id, name, cities:[{id,name,url}]}].
+    Список городов → структура конфига Click: [{id, name, cities:[{id,name,url,kpStatus}]}].
     Порядок стран и городов сохраняется как в таблице.
 
     platform выбирает площадку: у 2ГИС свои ссылки и свой статус, и городов
     там обычно заметно меньше – карточка заведена не везде. Идентификаторы у
     площадок разные, иначе выбранные галочки одной перепутались бы с другой.
+
+    kpStatus – статус из КП той же площадки (у Яндекса «status», у 2ГИС
+    «gisStatus»). Едет вместе с городом до самой актуализации: там, открыв
+    кабинет, есть с чем сверить обещание таблицы.
     """
     key = "url" if platform == YANDEX else "gisUrl"
+    status_key = "status" if platform == YANDEX else "gisStatus"
     mark = "" if platform == YANDEX else f"{platform}-"
 
     def slug(s: str) -> str:
@@ -656,7 +784,7 @@ def to_countries(cities: list[dict], project_id: str, platform: str = YANDEX) ->
             "name": country,
             "cities": [
                 {"id": f"ct-{project_id}-{mark}{n}-{i}-{slug(it['name'])}",
-                 "name": it["name"], "url": it[key]}
+                 "name": it["name"], "url": it[key], "kpStatus": it.get(status_key, "")}
                 for i, it in enumerate(items)
             ],
         })

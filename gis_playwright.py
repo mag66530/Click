@@ -38,6 +38,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import struct
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1142,19 +1143,34 @@ def _confirmed(page: Page, had_banner: bool, seconds: float | None = None) -> st
 def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict:
     """
     Статусы – те же, что у Яндекса, чтобы отчёт был общий:
-      'actualized' – кнопку «Данные верны» нажали, и кабинет это подтвердил
-      'not-needed' – плашки нет, подтверждать нечего (это НЕ ошибка)
-      'failed'     – страница не открылась, кнопка не нашлась или клик не прошёл
+      'actualized'      – кнопку «Данные верны» нажали, и кабинет это подтвердил
+      'not-needed'      – плашки нет, подтверждать нечего (это НЕ ошибка)
+      'status-mismatch' – КП обещал живую карточку, а кабинет пишет «удалена
+                          из справочника» – это не сбой приложения, а неверный
+                          статус в таблице; подтверждать нечего
+      'failed'          – страница не открылась, кнопка не нашлась или клик
+                          не прошёл
+      'no-session'      – сессия 2ГИС не активна
+
+    task['kpStatus'] – значение колонки «Статус» 2ГИС из КП. Сверяем его с
+    тем, что видим в кабинете (см. kp_sheet.status_verdict), и кладём в
+    cardAlive/statusVerdict/statusNote отдельно от итогового status.
     """
+    import kp_sheet
+
     started = time.time()
     label = f"[{idx + 1}/{total}] {task.get('cityName', '?')}"
+    kp_status = (task.get("kpStatus") or "").strip()
     result = {"cityName": task.get("cityName"), "companyUrl": task.get("gisUrl") or task.get("companyUrl"),
-              "status": "failed", "reason": "", "durationMs": 0, "platform": "gis"}
+              "status": "failed", "reason": "", "durationMs": 0, "platform": "gis",
+              "kpStatus": kp_status, "cardAlive": None, "statusVerdict": "", "statusNote": ""}
 
     def finish(status: str, reason: str) -> dict:
         result["status"] = status
         result["reason"] = reason
         result["durationMs"] = int((time.time() - started) * 1000)
+        verdict, note = kp_sheet.status_verdict(kp_status, result["cardAlive"])
+        result["statusVerdict"], result["statusNote"] = verdict, note
         return result
 
     info(f"🏙  {label} – актуализация 2ГИС...")
@@ -1174,14 +1190,26 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
     spot = look.get("spot")
     had_banner = bool(look.get("banner"))
 
+    # Жива ли карточка? «Удалена» – точно нет; «мы на странице „Данные о
+    # компании“» или сама плашка нашлась – точно да. Иначе не уверены, и
+    # путать неуверенность с расхождением статуса нельзя.
+    if look.get("deleted"):
+        result["cardAlive"] = False
+    elif look.get("onCompany") or spot:
+        result["cardAlive"] = True
+    verdict, note = kp_sheet.status_verdict(kp_status, result["cardAlive"])
+    if verdict == "mismatch":
+        warn(f"  🚦 {label}: {note}")
+
     if not spot:
         if not look:
             return finish("failed", "Страницу «Данные о компании» прочитать не вышло "
                                     "(браузер не ответил). Попробуйте ещё раз")
         # Карточки нет в справочнике – это состояние карточки, а не поломка.
         if look.get("deleted"):
-            out = finish("failed", "Карточка удалена из справочника 2ГИС – "
-                                   "подтверждать нечего. Проверьте статус в КП")
+            if verdict == "mismatch":
+                return finish("status-mismatch", note)
+            out = finish("failed", "Карточка удалена из справочника 2ГИС – подтверждать нечего")
             warn(f"  🗑 {label}: {out['reason']}")
             return out
         if not look.get("onCompany"):
@@ -1250,7 +1278,99 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
 
 # 2ГИС принимает не всё: gif не примет, и молча – просто ничего не произойдёт.
 MEDIA_TYPES = (".jpg", ".jpeg", ".png", ".webp")
-MEDIA_WAIT_MS = 25_000           # столько ждём, пока снимок появится в альбоме
+MEDIA_WAIT_MS = 60_000           # столько ждём, пока снимок появится в альбоме
+
+# Требования 2ГИС к фото (из подсказки в интерфейсе кабинета).
+GIS_MIN_PX   = 600               # минимальный размер стороны, px
+GIS_MAX_PX   = 7000              # максимальный размер стороны, px
+GIS_MAX_SIDE_RATIO = 5           # максимальное соотношение сторон (длинная / короткая)
+GIS_MAX_BYTES = 10 * 1024 * 1024 # максимальный размер файла, байт
+
+
+def _image_dims(path: str) -> tuple[int, int] | None:
+    """
+    Ширина и высота в пикселях – без PIL, из бинарных заголовков.
+
+    Поддерживает JPEG (SOF-маркеры), PNG (IHDR-чанк) и WEBP (VP8/VP8L/VP8X).
+    Возвращает None, если формат не распознан или файл повреждён.
+    """
+    try:
+        with open(path, "rb") as f:
+            hdr = f.read(32)
+
+        # ── PNG ────────────────────────────────────────────────
+        if hdr[:8] == b'\x89PNG\r\n\x1a\n':
+            w, h = struct.unpack('>II', hdr[16:24])
+            return w, h
+
+        # ── JPEG ───────────────────────────────────────────────
+        if hdr[:2] == b'\xff\xd8':
+            with open(path, "rb") as f:
+                data = f.read()
+            i = 2
+            while i + 8 < len(data):
+                if data[i] != 0xFF:
+                    break
+                m = data[i + 1]
+                # SOF-маркеры, в которых записаны размеры кадра
+                if m in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+                         0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                    h, w = struct.unpack('>HH', data[i + 5: i + 9])
+                    return w, h
+                seg_len = struct.unpack('>H', data[i + 2: i + 4])[0]
+                i += 2 + seg_len
+
+        # ── WEBP ───────────────────────────────────────────────
+        if hdr[:4] == b'RIFF' and hdr[8:12] == b'WEBP':
+            chunk = hdr[12:16]
+            with open(path, "rb") as f:
+                f.seek(12)
+                body = f.read(30)
+            if chunk == b'VP8X':          # extended
+                w = struct.unpack('<I', body[8:11] + b'\x00')[0] + 1
+                h = struct.unpack('<I', body[11:14] + b'\x00')[0] + 1
+                return w, h
+            if chunk == b'VP8 ':          # lossy
+                bits = struct.unpack('<HH', body[14:18])
+                return bits[0] & 0x3FFF, bits[1] & 0x3FFF
+            if chunk == b'VP8L':          # lossless
+                packed = int.from_bytes(body[9:13], 'little')
+                return (packed & 0x3FFF) + 1, ((packed >> 14) & 0x3FFF) + 1
+
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def check_gis_photo(path: str) -> str:
+    """
+    Проверяет файл на соответствие требованиям 2ГИС.
+
+    Возвращает пустую строку если всё в порядке, иначе – причину отказа.
+    """
+    size = Path(path).stat().st_size
+    if size > GIS_MAX_BYTES:
+        mb = size / 1024 / 1024
+        return f"файл {mb:.1f} МБ – 2ГИС принимает до 10 МБ"
+
+    dims = _image_dims(path)
+    if dims is None:
+        return ""   # не смогли прочитать – пусть пробует, 2ГИС сам скажет
+
+    w, h = dims
+    name = Path(path).name
+    if w < GIS_MIN_PX or h < GIS_MIN_PX:
+        return (f"{name}: размер {w}×{h} пкс – 2ГИС требует минимум "
+                f"{GIS_MIN_PX}×{GIS_MIN_PX} пкс")
+    if w > GIS_MAX_PX or h > GIS_MAX_PX:
+        return (f"{name}: размер {w}×{h} пкс – 2ГИС принимает максимум "
+                f"{GIS_MAX_PX}×{GIS_MAX_PX} пкс")
+    long_side, short_side = max(w, h), min(w, h)
+    if short_side > 0 and long_side / short_side > GIS_MAX_SIDE_RATIO:
+        ratio = long_side / short_side
+        return (f"{name}: соотношение сторон {ratio:.1f}:1 – "
+                f"2ГИС допускает не более {GIS_MAX_SIDE_RATIO}:1")
+    return ""
 
 
 def build_media_url(url: str | None) -> str | None:
@@ -1265,6 +1385,12 @@ def build_media_url(url: str | None) -> str | None:
 # что видно человеку: плитка альбома – это картинка заметного размера. Иконки
 # и значки рисуются через svg и под этот счёт не попадают. Заодно снимаем
 # число со вкладки «Все фото и видео N» – как второй свидетель.
+#
+# Важно: getBoundingClientRect возвращает 0 для элементов ЗА нижней границей
+# viewport (ниже прокрутки). В headless-браузере страница не прокручивается,
+# поэтому новые снимки, добавленные в конец длинного альбома, не попадают в
+# поле зрения. Используем offsetWidth/offsetHeight как резерв: они возвращают
+# CSS-размер элемента независимо от положения на странице.
 _MEDIA_LOOK_JS = r"""
 () => {
   const norm = s => (s || '').replace(/\s+/g, ' ').trim();
@@ -1281,13 +1407,21 @@ _MEDIA_LOOK_JS = r"""
   for (const img of document.querySelectorAll('img')) {
     if (!img.getAttribute('src')) continue;
     const r = img.getBoundingClientRect();
-    if (r.width >= 60 && r.height >= 60) tiles++;
+    // Новые плитки в конце длинного альбома находятся ниже viewport:
+    // getBoundingClientRect возвращает 0, offsetWidth/offsetHeight – нет.
+    const w = r.width || img.offsetWidth;
+    const h = r.height || img.offsetHeight;
+    if (w >= 60 && h >= 60) tiles++;
   }
 
   let counter = null;
   const body = norm(document.body.innerText || '');
   const m = body.match(/все\s+фото\s+и\s+видео\s+(\d+)/i);
   if (m) counter = parseInt(m[1], 10);
+
+  // Если 2ГИС показал ошибку валидации загруженного файла – подсказка содержит
+  // текст о требованиях. Ловим это, чтобы не ждать полный таймаут впустую.
+  const uploadError = /600.?600|7000.?7000|соотношение\s+сторон|до\s+10\s+мб/i.test(body);
 
   const field = document.querySelector('input[type="file"]');
   return {
@@ -1299,6 +1433,7 @@ _MEDIA_LOOK_JS = r"""
     title: norm(document.title || '').slice(0, 120),
     path: location.pathname || '',
     size: norm(body).length,
+    uploadError: uploadError,
   };
 }
 """
@@ -1380,6 +1515,16 @@ def upload_media(page: Page, gis_url: str | None, files: list[str], label: str =
     if bad:
         names = ", ".join(Path(b).name for b in bad[:3])
         warn(f"  📸 {label}2ГИС не принимает такие файлы (только jpg, png, webp): {names}")
+
+    # Проверяем размеры изображений до отправки: 2ГИС молча показывает красный
+    # крест если фото не соответствует требованиям, и в отчёте это выглядит как
+    # «файлы переданы, но не появились». Лучше сказать сразу, в чём проблема.
+    dim_errors = [check_gis_photo(p) for p in good]
+    dim_errors = [e for e in dim_errors if e]
+    if dim_errors:
+        out["reason"] = "Фото не соответствуют требованиям 2ГИС: " + "; ".join(dim_errors)
+        warn(f"  📸 {label}2ГИС: {out['reason']}")
+        return out
     if not good:
         out["reason"] = "Ни один файл не подходит для 2ГИС (принимаются jpg, png, webp)"
         return out
@@ -1432,32 +1577,60 @@ def upload_media(page: Page, gis_url: str | None, files: list[str], label: str =
 
     before = int(look.get("tiles") or 0)
     was_counter = look.get("counter")
+    media_url = page.url          # вернуться сюда же после перепроверки
     try:
         page.locator('input[type="file"]').first.set_input_files(good, timeout=15_000)
     except Exception as e:  # noqa: BLE001
         out["reason"] = f"Не удалось передать файлы: {yb._short_error(e)}"
         return out
 
-    # Успех – только доказанный: снимки должны появиться в альбоме.
+    # Ждём роста альбома в браузере – но это пока не доказательство, а только
+    # надежда. Кабинет рисует плитку сразу, «оптимистично», ещё до того, как
+    # сервер файл принял; если сервер его отверг, плитка тихо пропадает. Мы
+    # проверяли рост и останавливались, как только его видели, – и в боевом
+    # прогоне это дало ложный успех: лог написал «снимков добавлено 1 из 1»,
+    # а в самом кабинете альбом остался пустым. Здесь только ждём подольше,
+    # решение принимается ниже.
     deadline = time.time() + MEDIA_WAIT_MS / 1000
-    grown = 0
+    upload_rejected = False
     while time.time() < deadline:
         page.wait_for_timeout(700)
         now = _media_look(page)
         if not now:
             continue
-        grown = max(grown, int(now.get("tiles") or 0) - before)
+        # 2ГИС показал ошибку валидации (красный крест с подсказкой о требованиях):
+        # ждать дальше бессмысленно, выходим сразу.
+        if now.get("uploadError"):
+            upload_rejected = True
+            break
+        seen = int(now.get("tiles") or 0) - before
         if was_counter is not None and now.get("counter") is not None:
-            grown = max(grown, int(now["counter"]) - int(was_counter))
-        if grown >= len(good):
+            seen = max(seen, int(now["counter"]) - int(was_counter))
+        if seen >= len(good):
             break
 
+    # Доказательство только одно – то, что страница покажет ПОСЛЕ перезагрузки
+    # с сервера, а не то, что успел нарисовать браузер по своей инициативе.
+    try:
+        page.goto(media_url, wait_until="domcontentloaded", timeout=40_000)
+        confirmed = _media_settle(page, want_field=False)
+    except Exception as e:  # noqa: BLE001
+        out["reason"] = f"Не удалось перепроверить альбом после загрузки: {yb._short_error(e)}"
+        return out
+
+    grown = int(confirmed.get("tiles") or 0) - before
+    if was_counter is not None and confirmed.get("counter") is not None:
+        grown = max(grown, int(confirmed["counter"]) - int(was_counter))
     out["uploaded"] = min(grown, len(good)) if grown > 0 else 0
     if out["uploaded"] >= len(good):
         info(f"  📸 {label}2ГИС: снимков добавлено {out['uploaded']} из {len(good)}")
     elif out["uploaded"]:
         out["reason"] = (f"В альбоме появилось {out['uploaded']} из {len(good)} – "
                          "остальные проверьте вручную")
+        warn(f"  📸 {label}2ГИС: {out['reason']}")
+    elif upload_rejected:
+        out["reason"] = ("2ГИС отклонил фото: не соответствует требованиям "
+                         "(мин. 600×600 пкс, макс. 7000×7000, соотношение ≤ 1:5, до 10 МБ)")
         warn(f"  📸 {label}2ГИС: {out['reason']}")
     else:
         out["reason"] = ("Файлы переданы, но в альбоме они не появились – "

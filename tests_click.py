@@ -492,6 +492,10 @@ def test_report_render() -> None:
     row = T.report_row({"status": "unknown", "cityName": "Казань", "reason": "не подтверждено",
                         "durationMs": 12345})
     check("неопределённый статус рисуется отдельным стилем", "report-row warn" in row and "⚠️" in row)
+    mismatch = T.report_row({"status": "status-mismatch", "cityName": "Пермь",
+                             "reason": "в КП «Активная», а карточки на площадке нет"})
+    check("расхождение статуса – жёлтым, не красным (это не сбой Click)",
+          "report-row warn" in mismatch and "🚦" in mismatch, mismatch)
     check("XSS в названии города экранируется",
           "&lt;script&gt;" in T.report_row({"status": "ok", "cityName": "<script>x</script>"}))
     check("страна в строке показывается по требованию",
@@ -505,6 +509,13 @@ def test_report_render() -> None:
     check("короткое время в секундах", app._dur_text(45) == "45 сек")  # noqa: SLF001
     check("пустой лог даёт заглушку", "log-placeholder" in T.log_box(""))
     check("строки лога раскрашиваются", "log-err" in T.log_box("[ERROR] всё плохо"))
+
+    notes = app._report_notes({}, {"statusMismatch": 3})  # noqa: SLF001
+    check("расхождение статусов – своя подсказка",
+          any("🚦" in n and "не сбой Click" in n for n in notes), notes)
+    check("без расхождений подсказки нет",
+          not any("🚦" in n for n in app._report_notes({}, {"statusMismatch": 0})),  # noqa: SLF001
+          app._report_notes({}, {"statusMismatch": 0}))  # noqa: SLF001
 
 
 def test_browser_fallback() -> None:
@@ -1004,12 +1015,15 @@ def test_kp_sheet_choice() -> None:
             ["Казахстан", "Алматы", "https://yandex.ru/sprav/3/edit", "активные"],
         ],
     }
-    rows = kp_sheet._pick_sheet(list(sheets), lambda t: sheets[t])  # noqa: SLF001
+    rows, picked = kp_sheet._pick_sheet(list(sheets), lambda t: sheets[t])  # noqa: SLF001
     eq("взят «кп», а не старая копия", len(kp_sheet.parse_rows(rows)[0]), 3)
-    rows = kp_sheet._pick_sheet(list(sheets), lambda t: sheets[t],  # noqa: SLF001
-                                prefer="карта присутсвия Аэросталь (OLD")
+    eq("и название выбранного листа возвращается", picked, "кп")
+    rows, picked = kp_sheet._pick_sheet(list(sheets), lambda t: sheets[t],  # noqa: SLF001
+                                        prefer="карта присутсвия Аэросталь (OLD")
     eq("если ссылка указывает на старый лист – берём его",
        len(kp_sheet.parse_rows(rows)[0]), 1)
+    eq("и это отражено в названии выбранного листа",
+       picked, "карта присутсвия Аэросталь (OLD")
 
     # Старая копия – последняя очередь: сначала ВСЕ рабочие листы, и только
     # если ни на одном городов нет, берём её. Так таблица не остаётся без
@@ -1018,16 +1032,48 @@ def test_kp_sheet_choice() -> None:
         "карта присутсвия Аэросталь (OLD": sheets["карта присутсвия Аэросталь (OLD"],
         "кп": [["Страна", "Город", "Аккаунт"], ["", "", ""]],
     }
-    rows = kp_sheet._pick_sheet(list(with_empty), lambda t: with_empty[t])  # noqa: SLF001
+    rows, picked = kp_sheet._pick_sheet(list(with_empty), lambda t: with_empty[t])  # noqa: SLF001
     eq("рабочий лист пуст – старая копия идёт запасным вариантом",
        len(kp_sheet.parse_rows(rows)[0]), 1)
 
     # Если рабочих листов нет вовсе – старый читаем, иначе таблица с
     # единственным листом «…OLD» перестала бы работать.
     only_old = {"карта присутсвия (OLD": sheets["карта присутсвия Аэросталь (OLD"]}
-    rows = kp_sheet._pick_sheet(list(only_old), lambda t: only_old[t])  # noqa: SLF001
+    rows, picked = kp_sheet._pick_sheet(list(only_old), lambda t: only_old[t])  # noqa: SLF001
     eq("единственный лист читается, даже если назван OLD",
        len(kp_sheet.parse_rows(rows)[0]), 1)
+    eq("и он же назван выбранным", picked, "карта присутсвия (OLD")
+
+    # Лист выбран явно в «Настройках» – читаем ЕГО, без всякой эвристики.
+    # Живой сценарий: старая копия «…OLD» подходила бы по содержимому, но
+    # раз в настройках стоит «кп» – эвристика тут вообще не участвует.
+    old_open_book = kp_sheet.open_book
+    kp_sheet.open_book = lambda fid, sa, gid="": (list(sheets), lambda t: sheets[t], "")  # noqa: SLF001
+    try:
+        rows, used = kp_sheet._read_values("fid", {}, title="кп")  # noqa: SLF001
+        eq("явный выбор листа читается напрямую", used, "кп")
+        eq("и именно с него берутся города", len(kp_sheet.parse_rows(rows)[0]), 3)
+
+        # Регистр и пробелы вокруг названия не должны мешать совпадению.
+        rows, used = kp_sheet._read_values("fid", {}, title="  КП  ")  # noqa: SLF001
+        eq("совпадение нечувствительно к регистру и пробелам", used, "кп")
+
+        # Лист переименовали или удалили – понятная ошибка, а НЕ молчаливый
+        # переход на другой лист (иначе ровно та путаница, ради которой и
+        # затевался явный выбор, вернулась бы с другой стороны).
+        try:
+            kp_sheet._read_values("fid", {}, title="Такого листа больше нет")  # noqa: SLF001
+            check("пропавший лист должен бросать ошибку", False)
+        except RuntimeError as e:
+            check("сказано, что лист мог пропасть", "переименовать" in str(e), str(e))
+            check("и куда идти, чтобы выбрать заново", "Настройки" in str(e), str(e))
+
+        # Лист не задан вовсе (проект ещё не мигрировал на явный выбор) –
+        # прежнее поведение: эвристика по содержимому, как раньше.
+        rows, used = kp_sheet._read_values("fid", {})  # noqa: SLF001
+        eq("без явного выбора – прежняя эвристика по содержимому", used, "кп")
+    finally:
+        kp_sheet.open_book = old_open_book
 
 
 def test_kp_sheet() -> None:
@@ -1054,6 +1100,14 @@ def test_kp_sheet() -> None:
         ["Россия", "Омск", "1104000", "https://omsk.metpromintex.ru", "", "",
          "", "https://yandex.ru/sprav/299334/p/edit/posts/", "", "Удалена", "", "", "Удалена"],
         ["Россия", "БезСсылки", "1000", "https://x.ru", "", "", "", "", "", "Активная", "", "", ""],
+        # Яндекс завёл второй вид ссылки на ту же карточку – yb_playwright.py
+        # его давно распознаёт (COMPANY_ID_RX), а kp_sheet.SPRAV_RX до сих пор
+        # искал только старый /sprav/. Живой случай: в КП заказчика Волгоград,
+        # Красноярск и Ижевск стояли «Активная» с такой ссылкой, а Click их в
+        # список Яндекса не брал вовсе – город просто пропадал молча.
+        ["Россия", "Волгоград", "1019000", "https://volgograd.metpromintex.ru", "", "",
+         "", "https://yandex.ru/business/companies/company/70210624498/?utm_source=maps",
+         "", "Активная", "", "", ""],
     ]
     cities, diag = kp_sheet.parse_rows(rows)
 
@@ -1062,12 +1116,21 @@ def test_kp_sheet() -> None:
        diag.get("urlHeader"), "Аккаунт")
     eq("взята именно колонка Яндекса", diag.get("urlColumn"), 7)
     eq("статус берётся справа от неё (Яндекса, не 2ГИС)", diag.get("statusColumn"), 9)
-    eq("городов после фильтра", len(cities), 3)
+    eq("городов после фильтра", len(cities), 4)
     check("Омск со статусом «Удалена» отброшен", all(c["name"] != "Омск" for c in cities))
     check("город без ссылки на ЯБ отброшен", all(c["name"] != "БезСсылки" for c in cities))
     check("Питер оставлен: у него удалён только 2ГИС, а Яндекс «Онлайн»",
           any(c["name"] == "Санкт-Петербург" for c in cities))
     eq("ссылка сохранена как есть", cities[0]["url"], "https://yandex.ru/sprav/365594/p/edit/posts/")
+
+    volgograd = next((c for c in cities if c["name"] == "Волгоград"), None)
+    check("Волгоград с новым видом ссылки НЕ пропадает", volgograd is not None)
+    if volgograd:
+        eq("ссылка нового вида сохранена целиком", volgograd["url"],
+           "https://yandex.ru/business/companies/company/70210624498/?utm_source=maps")
+        eq("статус тоже на месте", volgograd["status"], "Активная")
+        eq("и по ней всё равно достаётся ID компании",
+           yb_extract(volgograd["url"]), "70210624498")
 
     countries = kp_sheet.to_countries(cities, "IMP")
     eq("стран получилось", len(countries), 2)
@@ -1150,10 +1213,58 @@ def test_kp_sheet() -> None:
     eq("контакты города подтянулись: почта", rc[0]["email"], "moscow@metpromintex.ru")
     eq("контакты города подтянулись: телефон", rc[0]["phone"], "+7 (495) 729-83-58")
 
+    # ── kpStatus едет вместе с городом до самой актуализации ──
+    real_countries = kp_sheet.to_countries(rc, "IMP")
+    moscow_ct = next(ct for c in real_countries for ct in c["cities"] if ct["name"] == "Москва")
+    eq("статус Яндекса приехал в конфиг", moscow_ct["kpStatus"], "Активная")
+    tehprob_ct = next(ct for c in real_countries for ct in c["cities"]
+                      if ct["name"] == "СТехПроблемой")
+    eq("«Тех. проблемы» тоже сохранён как есть", tehprob_ct["kpStatus"], "Тех. проблемы")
+
     order = kp_sheet._sheet_order(
         ["Сводка", "Карта присутсвия", "НЕ ТРОГАТЬ", "2ГИС", "Приоритеты"])
     eq("лист «Карта присутсвия» (с опечаткой) идёт первым", order[0], "Карта присутсвия")
     check("служебные листы уходят в конец", order[-1] in {"Сводка", "НЕ ТРОГАТЬ", "Приоритеты"})
+
+
+def test_kp_status_verdict() -> None:
+    """
+    Статус из КП против того, что реально в кабинете – чистая логика,
+    без сети. Актуализация ходит только по «живым» по КП городам, поэтому
+    на практике 'mismatch' почти всегда означает «в КП активная, а карточки
+    нет» – но проверяем и обратный край, вдруг статус поменяли задним числом.
+    """
+    import kp_sheet as KS
+    print("\n▸ Статус КП против кабинета")
+
+    eq("Активная → ждём живую карточку", KS.expected_state("Активная"), "alive")
+    eq("Онлайн → тоже живую", KS.expected_state("Онлайн"), "alive")
+    eq("Тех. проблемы → живую, публикация не важна",
+       KS.expected_state("Тех. проблемы"), "alive-any")
+    eq("Удалена → карточки быть не должно", KS.expected_state("Удалена"), "absent")
+    eq("Добавить → тоже не должно", KS.expected_state("Добавить"), "absent")
+    eq("Заблокирована → тоже", KS.expected_state("Заблокирована"), "absent")
+    eq("не активная → тоже (и не путается с «активная»)",
+       KS.expected_state("не активная"), "absent")
+    eq("пусто → сверять нечего", KS.expected_state(""), "")
+    eq("незнакомое слово → сверять нечего", KS.expected_state("Приостановлена навсегда"), "")
+
+    ok, note = KS.status_verdict("Активная", True)
+    eq("КП «Активная» + карточка жива → ok", ok, "ok")
+    check("текст вердикта не пустой", bool(note))
+    bad, _ = KS.status_verdict("Активная", False)
+    eq("КП «Активная» + карточки нет → mismatch", bad, "mismatch")
+    okgone, _ = KS.status_verdict("Удалена", False)
+    eq("КП «Удалена» + карточки правда нет → ok", okgone, "ok")
+    badalive, _ = KS.status_verdict("Удалена", True)
+    eq("КП «Удалена» + карточка живая → mismatch", badalive, "mismatch")
+
+    skip1, _ = KS.status_verdict("Активная", None)
+    eq("состояние карточки неизвестно → skip, не mismatch", skip1, "skip")
+    skip2, _ = KS.status_verdict("", True)
+    eq("статус в КП пуст → skip", skip2, "skip")
+    skip3, _ = KS.status_verdict("Что-то новое", True)
+    eq("незнакомый статус → skip, а не тихое ok", skip3, "skip")
 
 
 def test_kp_autosync(tmp: Path) -> None:
@@ -1221,7 +1332,13 @@ def test_kp_autosync(tmp: Path) -> None:
                    "status": "Активная", "site": "", "email": "", "phone": ""},
                   {"country": "Россия", "name": "Пермь", "url": "https://yandex.ru/sprav/2",
                    "status": "Активная", "site": "", "email": "", "phone": ""}]
-        app.kp_sheet.load_cities = lambda pid, url="": (cities, {"countries": 1, "skippedDeleted": 3})
+        seen_titles = []
+
+        def fake_load(pid, url="", title=""):
+            seen_titles.append(title)
+            return cities, {"countries": 1, "skippedDeleted": 3, "usedSheet": title or "кп"}
+
+        app.kp_sheet.load_cities = fake_load
         config = {"id": "p-mpe-default", "countries": [], "kpSheetUrl": "", "kpSyncedAt": stale}
         st.session_state["_cfg_MPE"] = {"projects": [config], "activeProjectId": "p-mpe-default"}
         ok, note = app.kp_pull("MPE", config)
@@ -1231,8 +1348,21 @@ def test_kp_autosync(tmp: Path) -> None:
         check("отметка времени обновилась", app._hours_since(config["kpSyncedAt"]) < 1)  # noqa: SLF001
         check("сказано, сколько пропущено удалённых", "3" in note, note)
 
+        # 4а. Лист ещё не выбирали явно – kp_pull запоминает угаданный лист
+        # в конфиге, чтобы дальше выбор был явным (см. diag['usedSheet']).
+        eq("лист не был передан явно (title ещё не выбран)", seen_titles[-1], "")
+        eq("а угаданный лист сам лёг в конфиг", config["kpSheetTitle"], "кп")
+
+        # 4б. Лист УЖЕ выбран явно – kp_pull передаёт его дальше как есть и
+        # не трогает после успешной загрузки, даже если что-то поменялось.
+        config["kpSheetTitle"] = "Карта присутствия"
+        ok, note = app.kp_pull("MPE", config)
+        check("загрузка с явным листом тоже прошла", ok, note)
+        eq("явно выбранный лист передан в load_cities", seen_titles[-1], "Карта присутствия")
+        eq("и остался таким же после загрузки", config["kpSheetTitle"], "Карта присутствия")
+
         # 5. Таблица недоступна – работаем на прежнем списке, а не на пустом.
-        def boom(pid, url=""):
+        def boom(pid, url="", title=""):
             raise RuntimeError("Google отказал (403)")
         app.kp_sheet.load_cities = boom
         before = config["countries"]
@@ -1512,6 +1642,57 @@ def test_gis_reviews_on_real_page() -> None:
             browser.close()
 
 
+def test_gis_photo_validation() -> None:
+    """Предварительная проверка размеров фото перед отправкой в 2ГИС."""
+    import gis_playwright as gis
+    import struct
+    import tempfile
+
+    print("\n▸ 2ГИС: предварительная валидация фото")
+
+    def make_png(w: int, h: int) -> bytes:
+        sig = b'\x89PNG\r\n\x1a\n'
+        ihdr_data = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)
+        import zlib
+        crc = zlib.crc32(b'IHDR' + ihdr_data) & 0xFFFFFFFF
+        ihdr = struct.pack('>I', 13) + b'IHDR' + ihdr_data + struct.pack('>I', crc)
+        iend_crc = zlib.crc32(b'IEND') & 0xFFFFFFFF
+        iend = struct.pack('>I', 0) + b'IEND' + struct.pack('>I', iend_crc)
+        return sig + ihdr + iend
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # 600×600 – минимально допустимый размер
+        p600 = str(Path(tmp) / "ok_600x600.png")
+        Path(p600).write_bytes(make_png(600, 600))
+        check("600×600 проходит", gis.check_gis_photo(p600) == "", gis.check_gis_photo(p600))
+
+        # 599×600 – меньше минимума
+        p599 = str(Path(tmp) / "small_599x600.png")
+        Path(p599).write_bytes(make_png(599, 600))
+        err = gis.check_gis_photo(p599)
+        check("599×600 не проходит", "600" in err, err)
+        check("размер указан в сообщении", "599" in err, err)
+
+        # 7001×700 – выше максимума
+        p7001 = str(Path(tmp) / "big_7001x700.png")
+        Path(p7001).write_bytes(make_png(7001, 700))
+        err = gis.check_gis_photo(p7001)
+        check("7001×700 не проходит", "7000" in err, err)
+
+        # 3000×200 – соотношение 15:1, больше 5:1
+        p_ratio = str(Path(tmp) / "wide_3000x200.png")
+        Path(p_ratio).write_bytes(make_png(3000, 200))
+        err = gis.check_gis_photo(p_ratio)
+        check("3000×200 не проходит (соотношение)", "соотношение" in err.lower(), err)
+
+        # _image_dims читает корректные размеры
+        dims = gis._image_dims(p600)   # noqa: SLF001
+        eq("PNG: размер прочитан верно", dims, (600, 600))
+
+        dims7 = gis._image_dims(p7001)  # noqa: SLF001
+        eq("PNG: большой размер", dims7, (7001, 700))
+
+
 def test_gis_media_upload() -> None:
     """
     Фото отгрузки в «Фото и видео» 2ГИС – на настоящей странице кабинета.
@@ -1552,17 +1733,53 @@ def test_gis_media_upload() -> None:
                 browser = pw.chromium.launch()
             try:
                 page = browser.new_context(viewport={"width": 1100, "height": 800}).new_page()
-                box = {"html": page_html}
-                page.route("**/*", lambda route: route.fulfill(
-                    status=200, content_type="text/html; charset=utf-8", body=box["html"]))
+                # box["confirmed"] – это «сервер»: сколько файлов кабинет ДЕЙСТВИТЕЛЬНО
+                # принял бы, не то, что нарисовал браузер. Фикстура шлёт отдельный
+                # запрос на каждый файл – это позволяет отличить «клиент нарисовал
+                # плитку сразу» от «сервер файл принял», ровно так, как это различает
+                # проверка после перезагрузки в upload_media().
+                box = {"html": page_html, "confirmed": 0, "confirm": True}
+                TILE = ('<div class="tile"><img alt="Фотография от владельца" width="220" '
+                       'height="220" src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5'
+                       'BAEAAAAALAAAAAABAAEAAAICRAEAOw=="></div>')
+
+                def handle(route):
+                    req = route.request
+                    if req.method == "POST" and "__gis_upload__" in req.url:
+                        if box["confirm"]:
+                            box["confirmed"] += 1
+                        route.fulfill(status=200, content_type="application/json", body="{}")
+                        return
+                    html = box["html"]
+                    if box["confirmed"] and '<div class="grid" id="grid">' in html:
+                        html = html.replace('<div class="grid" id="grid">',
+                                            '<div class="grid" id="grid">'
+                                            + TILE * box["confirmed"], 1)
+                        html = re.sub(r"Все\s+фото\s+и\s+видео\s+\d+",
+                                      f"Все фото и видео {1 + box['confirmed']}", html)
+                    route.fulfill(status=200, content_type="text/html; charset=utf-8", body=html)
+
+                page.route("**/*", handle)
                 url = "https://account.2gis.com/orgs/70000001081103893/"
 
                 res = gis.upload_media(page, url, shots, label="Самара: ")
                 eq("оба снимка встали в альбом", res["uploaded"], 2)
                 eq("gif отброшен, а не отправлен", res["skipped"], 1)
                 eq("и это не ошибка", res["reason"], "")
-                eq("в альбоме стало три плитки",
+                eq("в альбоме стало три плитки – ПОСЛЕ перезагрузки, не по памяти браузера",
                    page.evaluate("() => document.querySelectorAll('#grid img').length"), 3)
+
+                # Живой случай: лог написал «снимков добавлено», а в самом кабинете
+                # альбом остался пустым. Кабинет рисует плитку сразу, «оптимистично» –
+                # раньше, чем сервер файл принял; если сервер не подтвердил, эта
+                # проверка обязана распознать неудачу, а не поверить браузеру на слово.
+                box["confirmed"] = 0
+                box["confirm"] = False            # сервер файл не принимает
+                box["html"] = page_html            # но клиент по-прежнему рисует плитку сам
+                fooled = gis.upload_media(page, url, shots[:1], label="Самара: ")
+                eq("клиентскую плитку без ответа сервера успехом не считаем",
+                   fooled["uploaded"], 0)
+                check("и сказано, что делать", "вручную" in fooled["reason"], fooled["reason"])
 
                 # Ссылка на раздел берётся из меню, а не складывается из кусков:
                 # на складывании адреса Click уже обжёгся с «Данными о компании».
@@ -1579,10 +1796,20 @@ def test_gis_media_upload() -> None:
                       page.evaluate("() => document.querySelector('.gmcYaKQ4')"
                                     ".getAttribute('href')").startswith("/"))
 
-                # Альбом не вырос – успехом это не считаем.
+                # Альбом не вырос вовсе – ни в браузере, ни на сервере. Честная
+                # неудача, не в чём ловить. Таймаут на время теста сжимаем: нам
+                # нужно убедиться, что молчаливый отказ детектируется, а не что
+                # мы терпеливо ждём 60 секунд.
+                box["confirmed"] = 0
+                box["confirm"] = False
                 box["html"] = page_html.replace(
                     "grid.appendChild(tile);", "void tile;")
-                quiet = gis.upload_media(page, url, shots[:1], label="Самара: ")
+                was_wait = gis.MEDIA_WAIT_MS
+                gis.MEDIA_WAIT_MS = 3_000
+                try:
+                    quiet = gis.upload_media(page, url, shots[:1], label="Самара: ")
+                finally:
+                    gis.MEDIA_WAIT_MS = was_wait
                 eq("молчаливый отказ успехом не считаем", quiet["uploaded"], 0)
                 check("и человеку сказано, что делать", "вручную" in quiet["reason"], quiet["reason"])
 
@@ -1847,6 +2074,20 @@ def gis_actualize_checks(gis, page) -> None:
         serve("")
         none = gis.actualize_city(page, task)
         eq("без плашки – «не требуется»", none["status"], "not-needed")
+        eq("КП статус пуст – сверять нечего, cardAlive всё равно True",
+           (none["cardAlive"], none["statusVerdict"]), (True, "skip"))
+
+        # ── Карточка живая, а КП говорит «Удалена» – редкий обратный край:
+        #    статус сменили ПОСЛЕ того, как собрали список задач. Карточка
+        #    открыта – действуем как обычно (жать нечего – «не требуется»),
+        #    но расхождение видно в statusVerdict ──
+        serve("")
+        reverse_task = {**task, "kpStatus": "Удалена"}
+        reverse = gis.actualize_city(page, reverse_task)
+        eq("живая карточка при этом не мешает обычному «не требуется»",
+           reverse["status"], "not-needed")
+        eq("но statusVerdict честно говорит «расходится»",
+           reverse["statusVerdict"], "mismatch")
 
         # ── Кабинет сменил слова на надписи – ищем внутри плашки ────
         serve("""<div class="CQydym6f" style="padding:12px">Данные о компании не обновлялись
@@ -1894,14 +2135,37 @@ def gis_actualize_checks(gis, page) -> None:
         eq("филиал – это не «увели не туда»", branch["status"], "actualized")
 
         # ── Карточку удалили из справочника ────────────────────────
-        serve("""<script>document.title = 'Личный кабинет 2ГИС';
+        deleted_html = ("""<script>document.title = 'Личный кабинет 2ГИС';
                  history.replaceState({}, '', '/orgs/70000001079192862/restore')</script>
                  <div>Компания «МетПромИнтекс» удалена из справочника 2ГИС.
                  Не нашли вашу компанию?</div>""")
+        serve(deleted_html)
         gone = gis.actualize_city(page, task)
-        eq("удалённая карточка – отдельный случай", gone["status"], "failed")
+        eq("удалённая карточка без статуса КП – отдельный случай", gone["status"], "failed")
         check("и сказано человеческими словами",
               "удалена из справочника" in gone["reason"], gone["reason"])
+        eq("cardAlive сохранён как False", gone["cardAlive"], False)
+
+        # ── Тот же случай, но КП говорит «Активная» – это статус-расхождение,
+        #    ровно то, ради чего вся сверка затевалась: не заходить с кнопкой
+        #    в мёртвую карточку, а сразу сказать человеку, что КП врёт ──
+        serve(deleted_html)
+        mismatch_task = {**task, "kpStatus": "Активная"}
+        bad = gis.actualize_city(page, mismatch_task)
+        eq("КП «Активная» + карточки нет → status-mismatch", bad["status"], "status-mismatch")
+        check("причина – про КП, а не про поломку приложения",
+              "в кп" in bad["reason"].lower(), bad["reason"])
+        eq("statusVerdict тоже mismatch", bad["statusVerdict"], "mismatch")
+
+        # ── А если КП и площадка согласны («Удалена» + карточки нет) –
+        #    это по-прежнему «failed» (подтверждать нечего), но БЕЗ пометки
+        #    расхождения: КП тут ни при чём, оно право ──
+        serve(deleted_html)
+        agree_task = {**task, "kpStatus": "Удалена"}
+        agree = gis.actualize_city(page, agree_task)
+        eq("КП «Удалена» + карточки нет → обычный failed, не mismatch",
+           agree["status"], "failed")
+        eq("statusVerdict – ok, КП было право", agree["statusVerdict"], "ok")
 
         # ── Кабинет увёл на другую страницу ────────────────────────
         serve("""<script>document.title = 'Личный кабинет 2ГИС: Обзор';
@@ -3397,11 +3661,23 @@ def test_two_people_at_once(tmp: Path) -> None:
     print("\n▸ Двое одновременно")
 
     # ── Гонки импортов больше нет ──
+    #
+    # Раньше здесь стояло «importlib.reload не встречается вовсе». Запрет был
+    # выстрадан: перезагрузка шла на КАЖДОЙ перерисовке и из любого потока,
+    # соседний поток в это время импортировал те же модули – и падал.
+    #
+    # Но полный запрет обошёлся дороже: после обновления облако оставляет
+    # модули в памяти прежними, и приложение работает вразнобой – экран новый,
+    # прогон старый. Заказчик получила от этого пустые посты в пяти живых
+    # карточках. Поэтому перезагрузка вернулась, но зажата со всех сторон, и
+    # проверяем мы теперь именно зажим, а не сам факт вызова.
     src = (Path(__file__).parent / "streamlit_app.py").read_text(encoding="utf-8")
     body = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
-    check("модули не перезагружаются вручную", "importlib.reload" not in body)
     check("sys.modules не правится", "sys.modules[" not in body)
     check("метка сборки осталась – её показываем", bool(app.UI_BUILD))
+    check("перезагрузка живёт в одном месте", _reload_callers(src) == {"refresh_stale_modules"},
+          str(_reload_callers(src)))
+    check("и только под общим замком", "_REFRESH_LOCK" in body)
 
     # ── Потолок общий на всё приложение ──
     saved_root, saved_mem = r.USERS_DATA, r.memory_mb
@@ -3725,6 +4001,47 @@ def test_look_and_order() -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+def test_mpe_review_shape() -> None:
+    """
+    МПЭ: модель часто сливает приветствие и тело в один абзац без пустой
+    строки, а фразу «Наш ассортимент» пишет как «Ассортимент». Живой случай:
+    заказчик прислала скрин черновика ровно с этими двумя огрехами.
+
+    fix_mpe_shape() чинит форму кодом – промпт не может гарантировать это
+    сам, модель нарушает структуру не всегда предсказуемо.
+    """
+    import reviews as rv
+    print("\n▸ МПЭ: форма ответа на отзыв")
+
+    # Живой случай: одно предложение вместо трёх абзацев, фраза без «Наш».
+    slit = ("Иван, спасибо за отзыв! Рады, что доставка бериллия точно в срок "
+            "и готовые документы сэкономили ваше время и бюджет. Ассортимент "
+            "закрывает большинство потребностей клиентов: цветной металл, "
+            "нержавейка, сортовой и листовой прокат, трубная продукция, "
+            "арматура.\n\nС уважением, команда Метпромэнерго.")
+    out = rv.clean_draft(slit, "MPE")
+    parts = out.split("\n\n")
+    eq("три абзаца", len(parts), 3)
+    eq("первый абзац – только приветствие", parts[0], "Иван, спасибо за отзыв!")
+    check("«Наш ассортимент» подставлен", "Наш ассортимент закрывает" in parts[1])
+    check("фраза оканчивается точкой", parts[1].rstrip().endswith("."))
+    eq("подпись на месте", parts[2], "С уважением, команда Метпромэнерго.")
+
+    # Уже правильная форма – не портим повторной чисткой.
+    eq("идемпотентность", rv.clean_draft(out, "MPE"), out)
+
+    # Модель написала фразу без «Наш» уже отдельным предложением – тоже чиним.
+    almost = ("Анастасия, спасибо за обратную связь!\n\n"
+              "Рады, что вы остались довольны качеством ниобия и быстрой "
+              "доставкой. Ассортимент закрывает большинство потребностей "
+              "клиентов: цветной металл, нержавейка, сортовой и листовой "
+              "прокат, трубная продукция, арматура.\n\n"
+              "С уважением, команда Метпромэнерго.")
+    out2 = rv.clean_draft(almost, "MPE")
+    check("«Наш» подставлен и во втором случае",
+          "Наш ассортимент закрывает" in out2 and "\nАссортимент закрывает" not in out2)
+
+
 def test_assortment_verbatim() -> None:
     """
     Ассортиментная фраза уходит в Яндекс ДОСЛОВНО.
@@ -3831,6 +4148,7 @@ def test_gis_photos_wiring() -> None:
     Ссылку кладём в САМУ задачу: задача уезжает в файл и должна пережить
     перезапуск облака, а искать её потом посреди прогона негде.
     """
+    import runner
     import streamlit_app as app
     print("\n▸ Фото отгрузки ещё и в 2ГИС")
 
@@ -3862,8 +4180,10 @@ def test_gis_photos_wiring() -> None:
        "https://account.2gis.com/orgs/70000001094798575/")
 
     with tempfile.TemporaryDirectory() as tmp:
-        saved = app.USERS_DATA
-        app.USERS_DATA = Path(tmp)
+        # Корень подменяем ОБОИМ: очередь пишет экран, а читает её прогон –
+        # проверять надо ровно то, что он увидит.
+        saved, saved_runner = app.USERS_DATA, runner.USERS_DATA
+        app.USERS_DATA = runner.USERS_DATA = Path(tmp)
         try:
             queue = [{"countryId": "c-1", "countryName": "Россия",
                       "cityIds": ["ct-1", "ct-2"], "postType": "shipment",
@@ -3892,9 +4212,17 @@ def test_gis_photos_wiring() -> None:
             (app.project_base("SMU") / "tasks").rename(app.project_base("SMU") / "tasks-only")
             app.save_queue_to_tasks("SMU", config, [{**queue[0], "text": "", "gisOnly": True,
                                                      "productPhotos": ["/tmp/витрина.jpg"]}])
-            files = list((app.project_base("SMU") / "tasks").glob("*.json"))
+            files = list(runner.tasks_folder("SMU", "gis").glob("*.json"))
+            eq("задание уехало в отдельную папку", len(files), 1)
             only = {t["cityName"]: t
                     for t in json.loads(files[0].read_text(encoding="utf-8"))["tasks"]}
+            # Главное: такие задания лежат в СВОЕЙ папке. Прогон прежней сборки
+            # про них не знает и, увидев пустой текст, публикует пустой пост –
+            # так у заказчика и вышло. В чужую папку он не заглянет: её нет в
+            # его коде, очередь для него просто пуста.
+            eq("для обычной очереди этих заданий не существует",
+               runner.count_pending("SMU", "tasks"), (0, 0))
+            eq("а в своей очереди они есть", runner.count_pending("SMU", "gis")[1], 2)
             check("режим доехал до задачи", only["Самара"]["gisOnly"])
             eq("текста поста в задаче нет", only["Самара"]["postText"], "")
             eq("а снимки и ссылка 2ГИС на месте", only["Самара"]["gisUrl"],
@@ -3903,7 +4231,7 @@ def test_gis_photos_wiring() -> None:
                only["Самара"]["productPhotos"], ["/tmp/витрина.jpg"])
             check("обычная задача режимом не помечена", not by_city["Самара"].get("gisOnly"))
         finally:
-            app.USERS_DATA = saved
+            app.USERS_DATA, runner.USERS_DATA = saved, saved_runner
 
     # Отчёт: причина важнее счёта. Голый «0 из 3» выглядит поломкой, а
     # «нет карточки в 2ГИС» объясняет ноль.
@@ -3929,6 +4257,53 @@ def test_gis_photos_wiring() -> None:
     plain = app._report_csv({"results": [{"cityName": "Омск", "status": "ok"}]}).decode("utf-8-sig")
     check("без фото колонки нет", not plain.splitlines()[0].endswith(";Фото_2ГИС"),
           plain.splitlines()[0])
+
+
+def test_actualize_task_kp_status() -> None:
+    """
+    Статус из КП едет в задачу актуализации – для обеих площадок.
+
+    kp_sheet.to_countries кладёт kpStatus в каждый город конфига (свой на
+    Яндекс и на 2ГИС), save_actualize_tasks переносит его в файл задачи –
+    actualize_city сверит его с тем, что реально в кабинете.
+    """
+    import streamlit_app as app
+    print("\n▸ Статус КП в задаче актуализации")
+
+    config = {
+        "countries": [{"id": "c-1", "name": "Россия", "cities": [
+            {"id": "ct-1", "name": "Москва", "url": "https://yandex.ru/sprav/501/",
+             "kpStatus": "Активная"},
+            {"id": "ct-2", "name": "Тула", "url": "https://yandex.ru/sprav/502/",
+             "kpStatus": "Тех. проблемы"},
+        ]}],
+        "countriesGis": [{"id": "c-gis-1", "name": "Россия", "cities": [
+            {"id": "ct-gis-1", "name": "Москва",
+             "url": "https://account.2gis.com/orgs/70000001081103893/",
+             "kpStatus": "Удалена"},
+        ]}],
+    }
+
+    with tempfile.TemporaryDirectory() as tmp:
+        saved = app.USERS_DATA
+        app.USERS_DATA = Path(tmp)
+        try:
+            n = app.save_actualize_tasks("SMU", config, {"c-1": ["ct-1", "ct-2"]})
+            eq("обе выбранные задачи записаны", n, 2)
+            files = list((app.project_base("SMU") / "tasks-actualize").glob("*.json"))
+            tasks = {t["cityName"]: t for t in json.loads(files[0].read_text(encoding="utf-8"))["tasks"]}
+            eq("статус Москвы приехал в задачу", tasks["Москва"]["kpStatus"], "Активная")
+            eq("«Тех. проблемы» тоже, как есть", tasks["Тула"]["kpStatus"], "Тех. проблемы")
+
+            import reviews as rv
+            n_gis = app.save_actualize_tasks("SMU", config, {"c-gis-1": ["ct-gis-1"]},
+                                             platform=rv.GIS)
+            eq("задача 2ГИС записана", n_gis, 1)
+            gis_files = list((app.project_base("SMU") / "tasks-actualize-gis").glob("*.json"))
+            gis_task = json.loads(gis_files[0].read_text(encoding="utf-8"))["tasks"][0]
+            eq("статус 2ГИС приехал в свою задачу", gis_task["kpStatus"], "Удалена")
+        finally:
+            app.USERS_DATA = saved
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -4059,6 +4434,115 @@ def test_module_attrs_exist() -> None:
 
     check("в коде нет обращений к несуществующим именам модулей",
           not bad, "; ".join(sorted(set(bad))[:8]))
+
+
+def _reload_callers(src: str) -> set[str]:
+    """Из каких функций зовётся importlib.reload. Пусто – значит нигде."""
+    import ast
+
+    tree = ast.parse(src)
+    out: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for inner in ast.walk(node):
+            if (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
+                    and inner.func.attr == "reload"):
+                out.add(node.name)
+    return out
+
+
+def test_run_title() -> None:
+    """
+    Заголовок прогона: что именно сейчас делали.
+
+    Заказчик: «в отчёте пусть будет заголовок – типа публикация с добавлением
+    фото в товары и 2ГИС, или публикация информационного поста». Три отчёта
+    подряд выглядели одинаково: цифры те же, а делали разное.
+    """
+    import runner as r
+    print("\n▸ Заголовок прогона")
+
+    def файлы(post_type: str, *tasks: dict):
+        return [(Path("01-Россия.json"), {"postType": post_type, "tasks": list(tasks)})]
+
+    eq("простая публикация",
+       r.publish_title(файлы("info", {"cityName": "Москва", "postText": "текст"})),
+       "Публикация · информационный пост")
+    eq("публикация с фото в «Товары»",
+       r.publish_title(файлы("shipment", {"cityName": "Москва", "postText": "т",
+                                          "productPhotos": ["/tmp/a.jpg"]})),
+       "Публикация · отгрузка + фото в «Товары»")
+    eq("публикация с фото в «Товары» и в 2ГИС",
+       r.publish_title(файлы("shipment", {"cityName": "Москва", "postText": "т",
+                                          "productPhotos": ["/tmp/a.jpg"], "gisPhotos": True})),
+       "Публикация · отгрузка + фото в «Товары» + фото в 2ГИС")
+    eq("только фото в 2ГИС",
+       r.publish_title(файлы("shipment", {"cityName": "Москва", "postText": "",
+                                          "productPhotos": ["/tmp/a.jpg"],
+                                          "gisPhotos": True, "gisOnly": True})),
+       "Только фото в 2ГИС, без постов")
+    eq("несколько типов разом – без выдумок",
+       r.publish_title([(Path("01.json"), {"postType": "info", "tasks": [{"postText": "т"}]}),
+                        (Path("02.json"), {"postType": "shipment", "tasks": [{"postText": "т"}]})]),
+       "Публикация постов")
+    eq("актуализация", r.actualize_title(r.YANDEX, False), "Актуализация Яндекс")
+    eq("актуализация с отзывами", r.actualize_title(r.GIS, True),
+       "Актуализация 2ГИС + проверка отзывов")
+
+
+def test_one_build_at_a_time() -> None:
+    """
+    Приложение не работает вразнобой: экран новый, а модуль старый.
+
+    Так заказчик получила две беды за день. «AttributeError: casual_words» на
+    «Актуализации» – экран новый, reviews в памяти старый. И хуже: новый экран
+    сложил задачи «только фото в 2ГИС», а прогон старым кодом про них не знал
+    и опубликовал пустые посты в трёх городах.
+
+    Перезагружать модули самим нельзя – это уже роняло приложение целиком.
+    Значит, надо не работать: пока метки не сойдутся, страница не рисуется.
+    """
+    import sys
+    import types
+    import streamlit_app as app
+    print("\n▸ Одна сборка на все модули")
+
+    check("метку сборки несут все модули приложения",
+          not [n for n in app._OWN_MODULES  # noqa: SLF001
+               if getattr(sys.modules.get(n), "BUILD", None) != app.UI_BUILD],
+          str([n for n in app._OWN_MODULES  # noqa: SLF001
+               if getattr(sys.modules.get(n), "BUILD", None) != app.UI_BUILD]))
+    eq("на одной сборке жалоб нет", app.stale_modules(), [])
+
+    подделка = types.ModuleType("reviews")
+    подделка.BUILD = "2026-01-01-старая"
+    настоящий = sys.modules["reviews"]
+    sys.modules["reviews"] = подделка
+    try:
+        eq("старый модуль виден по метке", app.stale_modules(), ["reviews"])
+    finally:
+        sys.modules["reviews"] = настоящий
+    eq("и всё вернулось на место", app.stale_modules(), [])
+
+    # А вот на этом проверка и промолчала в первый раз. Streamlit перечитывает
+    # с диска ТОЛЬКО главный скрипт, а build держит в памяти наравне с
+    # остальными. После обновления старыми оказываются и модули, И МЕТКА – всё
+    # «сходится», хотя код разный. Правда только на диске.
+    eq("метка берётся с диска", app.disk_build(), app.UI_BUILD)
+    было = app.UI_BUILD
+    старьё = types.ModuleType("build")
+    старьё.BUILD = "2026-01-01-старая"
+    настоящий_build = sys.modules["build"]
+    app.UI_BUILD = "2026-01-01-старая"          # так выглядит устаревшая метка в памяти
+    sys.modules["build"] = старьё
+    try:
+        check("устаревшая метка в памяти замечена", "build" in app.stale_modules(),
+              str(app.stale_modules()))
+    finally:
+        app.UI_BUILD = было
+        sys.modules["build"] = настоящий_build
+    eq("и снова всё сходится", app.stale_modules(), [])
 
 
 def test_side_page_after_restart() -> None:
@@ -4387,14 +4871,16 @@ def test_one_build() -> None:
            and re.search(r'^BUILD = "', f.read_text(encoding="utf-8"), re.M)]
     eq("метка задана только в build.py", own, [])
 
-    # Самодельной перезагрузки модулей быть не должно ни в каком виде.
-    check("в приложении нет своей перезагрузки модулей",
-          not hasattr(app, "_MODULES") and not hasattr(app, "_same_build"))
+    # Перезагрузка модулей разрешена ровно в одном месте и только когда метки
+    # разошлись – см. «Двое одновременно» и «Одна сборка на все модули».
     src = (root / "streamlit_app.py").read_text(encoding="utf-8")
-    body = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
-    check("importlib.reload не зовётся", "importlib.reload" not in body, "")
+    check("перезагрузка модулей – только в refresh_stale_modules",
+          _reload_callers(src) == {"refresh_stale_modules"}, str(_reload_callers(src)))
+    # Вот это и роняло приложение: выселение модуля из sys.modules посреди
+    # чужого импорта. importlib.reload так не делает – он перечитывает файл в
+    # тот же объект, и читатель в соседнем потоке видит модуль всё время.
     check("sys.modules напрямую не правится",
-          "sys.modules[" not in body and "sys.modules.pop" not in body, "")
+          "sys.modules[" not in src and "sys.modules.pop" not in src, "")
 
 
 
@@ -4489,12 +4975,15 @@ def main() -> int:
         test_city_checkbox_survives_collapse()
         test_reviews_limit_and_stop()
         test_look_and_order()
+        test_mpe_review_shape()
         test_assortment_verbatim()
         test_report_with_reviews()
         test_queue_resets_between_runs()
         test_module_attrs_exist()
         test_call_arity()
         test_side_page_after_restart()
+        test_run_title()
+        test_one_build_at_a_time()
         test_batch_browser_survives_rerun()
         test_one_build()
         test_actualize_selection()
@@ -4517,6 +5006,7 @@ def main() -> int:
         test_login_step_detection()
         test_kp_sheet_choice()
         test_kp_sheet()
+        test_kp_status_verdict()
         test_kp_autosync(tmp)
         test_gis_urls_and_session(tmp)
         test_gis_login_fields()
@@ -4525,6 +5015,7 @@ def main() -> int:
         test_gis_answer_and_actualize()
         test_gis_media_upload()
         test_gis_photos_wiring()
+        test_actualize_task_kp_status()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

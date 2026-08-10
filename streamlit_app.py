@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -253,7 +254,8 @@ def _default_subproject(project_id: str) -> dict:
 
 # Что из конфига храним снаружи (в репозитории). Пароль от Яндекса – НИКОГДА:
 # он остаётся только в этом контейнере.
-_KEPT = ("countries", "countriesGis", "email", "kpSheetUrl", "kpSyncedAt", "gisPhotosDefault")
+_KEPT = ("countries", "countriesGis", "email", "kpSheetUrl", "kpSheetTitle",
+        "kpSyncedAt", "gisPhotosDefault")
 
 
 def load_raw_config(project_id: str) -> dict:
@@ -543,7 +545,9 @@ def kp_pull(project_id: str, config: dict) -> tuple[bool, str]:
     город появляется в списке по-разному в зависимости от того, как его
     загрузили.
     """
-    cities, diag = kp_sheet.load_cities(project_id, (config.get("kpSheetUrl") or "").strip())
+    saved_title = (config.get("kpSheetTitle") or "").strip()
+    cities, diag = kp_sheet.load_cities(project_id, (config.get("kpSheetUrl") or "").strip(),
+                                        title=saved_title)
     if diag.get("error"):
         return False, diag["error"]
     if not cities:
@@ -553,6 +557,11 @@ def kp_pull(project_id: str, config: dict) -> tuple[bool, str]:
     # строках, отдельного чтения не требуется.
     config["countriesGis"] = kp_sheet.to_countries(cities, project_id, platform=kp_sheet.GIS)
     config["kpSyncedAt"] = datetime.now(timezone.utc).isoformat()
+    # Лист ещё не выбирали явно в «⚙️ Настройки» – запоминаем тот, что нашла
+    # эвристика. Дальше выбор явный и не меняется сам по себе: заново гадать
+    # незачем, а вкладка «Настройки» сразу покажет то, что реально читается.
+    if not saved_title and diag.get("usedSheet"):
+        config["kpSheetTitle"] = diag["usedSheet"]
     save_config(project_id)
     note = f'Загружено: {cities_word(len(cities))} в {diag.get("countries", 0)} странах.'
     if diag.get("gisCities"):
@@ -714,8 +723,6 @@ def gis_url_for_city(config: dict, country_name: str, city_name: str) -> str | N
 
 
 def save_queue_to_tasks(project_id: str, config: dict, queue: list[dict]) -> int:
-    tasks_dir = project_base(project_id) / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
     ts = int(time.time() * 1000)
     saved = 0
     for idx, item in enumerate(queue):
@@ -757,8 +764,14 @@ def save_queue_to_tasks(project_id: str, config: dict, queue: list[dict]) -> int
             "headlessMode": True,
             "tasks": city_tasks,
         }
+        # Задания «только фото в 2ГИС» кладём в ОТДЕЛЬНУЮ папку. Это не про
+        # порядок в файлах: прогон прежней сборки про такие задания не знает и,
+        # увидев пустой текст, публикует пустой пост – так у заказчика и вышло.
+        # В чужую папку он не заглянет, потому что в его коде её нет.
+        folder = tasks_dir(project_id, "gis" if item.get("gisOnly") else "tasks")
+        folder.mkdir(parents=True, exist_ok=True)
         name = f"{idx + 1:02d}-{safe_filename(country['name'])}-{ts}.json"
-        (tasks_dir / name).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        (folder / name).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         saved += 1
     return saved
 
@@ -782,7 +795,10 @@ def save_actualize_tasks(project_id: str, config: dict, selection: dict[str, lis
         if not country or not city_ids:
             continue
         city_tasks = [
-            {"cityName": c["name"], "companyUrl": c["url"], "companyId": yb.extract_company_id(c["url"])}
+            {"cityName": c["name"], "companyUrl": c["url"], "companyId": yb.extract_company_id(c["url"]),
+             # Статус из КП едет вместе с городом – actualize_city сверит его
+             # с тем, что реально в кабинете (см. kp_sheet.status_verdict).
+             "kpStatus": c.get("kpStatus", "")}
             for c in country["cities"] if c["id"] in city_ids
         ]
         if not city_tasks:
@@ -797,8 +813,18 @@ def save_actualize_tasks(project_id: str, config: dict, selection: dict[str, lis
     return total
 
 
-def clear_tasks(project_id: str) -> None:
-    for fp in (project_base(project_id) / "tasks").glob("*.json"):
+def tasks_dir(project_id: str, source: str = "tasks") -> Path:
+    """
+    Папка очереди. `gis` – задания «только фото в 2ГИС», они лежат ОТДЕЛЬНО.
+
+    Имя папки спрашиваем у runner: очередь читает он, и знать про неё двоим –
+    это рано или поздно разные имена в двух файлах.
+    """
+    return project_base(project_id) / runner.tasks_folder(project_id, source).name
+
+
+def clear_tasks(project_id: str, source: str = "tasks") -> None:
+    for fp in tasks_dir(project_id, source).glob("*.json"):
         fp.unlink(missing_ok=True)
 
 
@@ -1269,32 +1295,29 @@ def live_panel(project_id: str, running: bool, run_kind: str) -> None:
         st.caption("Обновите страницу, чтобы увидеть свежий прогресс.")
 
 
-def _pending_is_gis_only(project_id: str) -> bool:
-    """
-    Вся очередь – только фото в 2ГИС?
-
-    ВРЕМЕННО, вместе с одноимённым блоком на «Публикации». Нужно, чтобы
-    «Запуск» не врал: постов не будет, и сессия Яндекса для такого прогона
-    не требуется – нужна сессия 2ГИС.
-    """
-    tasks: list[dict] = []
-    for fp in (project_base(project_id) / "tasks").glob("*.json"):
-        try:
-            tasks.extend(json.loads(fp.read_text(encoding="utf-8")).get("tasks") or [])
-        except (json.JSONDecodeError, OSError):
-            continue
-    return bool(tasks) and all(t.get("gisOnly") for t in tasks)
-
-
 def tab_run(project_id: str, config: dict) -> None:
     settings = get_settings(project_id)
     state = runner.read_state(project_id, "publish")
     running = state.get("status") == "running"
     busy = runner.busy_reason(project_id, "publish")   # пусто – запускать можно
-    files, cities = runner.count_pending(project_id)
-    gis_only = _pending_is_gis_only(project_id)
+
+    # Две очереди, и они не смешиваются: посты в своей папке, «только фото в
+    # 2ГИС» – в своей. Заказчик просила отдельную функцию, и отдельная она
+    # именно здесь: у этих заданий своя очередь, свой запуск и свой смысл.
+    files_post, cities_post = runner.count_pending(project_id, "tasks")
+    files_gis, cities_gis = runner.count_pending(project_id, "gis")
+    both = bool(cities_post and cities_gis)
+    gis_only = bool(cities_gis) and not cities_post
+    source = "gis" if gis_only else "tasks"
+    files = files_gis if gis_only else files_post
+    cities = cities_gis if gis_only else cities_post
     has_session = gis.has_saved_session(project_id) if gis_only else yb.has_saved_session(project_id)
     has_creds = bool((config.get("email") or "").strip())
+
+    if both:
+        st.warning(f"В очереди сразу два разных задания: посты ({cities_word(cities_post)}) "
+                   f"и только фото в 2ГИС ({cities_word(cities_gis)}). Запуск заблокирован, "
+                   "чтобы не уехало не то – уберите одно из двух кнопками ниже.")
 
     # ─── Степпер как в оригинале ───
     html(T.step(1, "Вход в 2ГИС" if gis_only else "Вход в Яндекс",
@@ -1305,10 +1328,11 @@ def tab_run(project_id: str, config: dict) -> None:
         st.info("Перейдите в раздел «⚙️ Настройки» → "
                 + ("«Вход в 2ГИС»." if gis_only else "«Вход в Яндекс»."))
 
-    html(T.step(2, "Очередь задач",
-                f"Посты собираются во вкладке «Публикация» и складываются в очередь. "
+    html(T.step(2, "Очередь заданий «только фото в 2ГИС»" if gis_only else "Очередь задач",
+                f"Собирается во вкладке «Публикация». "
                 f"Сейчас: <b>{plural(files, 'файл', 'файла', 'файлов')}</b>, "
-                f"<b>{cities_word(cities)}</b>.",
+                f"<b>{cities_word(cities)}</b>."
+                + (f" Отдельно лежат посты: {cities_word(cities_post)}." if both else ""),
                 "done" if cities else ("active" if has_session else "locked"),
                 f"{cities_word(cities)} готово" if cities else ""))
 
@@ -1325,7 +1349,7 @@ def tab_run(project_id: str, config: dict) -> None:
     # ─── Кнопки ───
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1:
-        disabled = bool(busy) or not cities or not has_session
+        disabled = bool(busy) or not cities or not has_session or both
         подпись = "📸 Залить фото в 2ГИС" if gis_only else "▶ Опубликовать"
         if st.button(f"{подпись} ({cities_word(cities)})", type="primary",
                      use_container_width=True, disabled=disabled, key="btn-publish"):
@@ -1337,6 +1361,7 @@ def tab_run(project_id: str, config: dict) -> None:
                 strict_account_check=bool(settings["strictAccountCheck"]),
                 retry_unknown=bool(settings["retryUnknown"]),
                 dedup_window_hours=float(settings["dedupWindowHours"]),
+                source=source,
             )
             (st.toast if ok else st.error)(msg)
             time.sleep(0.6)
@@ -1365,20 +1390,44 @@ def tab_run(project_id: str, config: dict) -> None:
 
     # ─── Очередь задач ───
     st.divider()
-    if cities:
-        with st.expander(f"📋 Файлы задач в очереди ({files})"):
-            for fp in sorted((project_base(project_id) / "tasks").glob("*.json")):
-                try:
-                    data = json.loads(fp.read_text(encoding="utf-8"))
-                except (json.JSONDecodeError, OSError):
-                    continue
-                html(f'<div class="city-row"><span class="city-row-name">{T.esc(data.get("country", "–"))}</span>'
-                     f'<span class="city-row-url">{T.esc(fp.name)}</span>'
-                     f'<span class="badge badge-accent">{len(data.get("tasks") or [])} гор.</span></div>')
-            with st.container(key="danger-clear-tasks"):
-                if st.button("Очистить очередь", disabled=running, key="btn-clear-tasks"):
-                    clear_tasks(project_id)
-                    st.rerun()
+    if cities_post or cities_gis:
+        # Кнопки очистки – НА ВИДУ, а не внутри свёрнутого списка файлов.
+        # Заказчик: «старая очередь при остановке не сбросилась, и очистить я
+        # её не могу». Кнопка была – но лежала внутри «Файлы задач в очереди»,
+        # который по умолчанию закрыт, и найти её было нечем. А очередь после
+        # остановки и правда остаётся: недоделанные города ждут следующего
+        # запуска – это нарочно, но сказать об этом надо здесь же.
+        q1, q2 = st.columns([2, 3])
+        with q1:
+            if cities_post:
+                with st.container(key="danger-clear-tasks"):
+                    if st.button(f"🗑 Очистить очередь постов ({cities_word(cities_post)})",
+                                 disabled=running, use_container_width=True, key="btn-clear-tasks"):
+                        clear_tasks(project_id, "tasks")
+                        st.rerun()
+            if cities_gis:
+                with st.container(key="danger-clear-gis"):
+                    if st.button(f"🗑 Очистить очередь фото в 2ГИС ({cities_word(cities_gis)})",
+                                 disabled=running, use_container_width=True, key="btn-clear-gis"):
+                        clear_tasks(project_id, "gis")
+                        st.rerun()
+        with q2:
+            st.caption("После остановки недоделанные города остаются в очереди – следующий "
+                       "запуск продолжит с них, а уже опубликованное реестр повторно не отправит. "
+                       "Если продолжать не нужно – очистите очередь.")
+
+        with st.expander(f"📋 Файлы задач в очереди ({files_post + files_gis})"):
+            for source_id, подпись in (("tasks", ""), ("gis", "📸 только фото в 2ГИС · ")):
+                for fp in sorted(tasks_dir(project_id, source_id).glob("*.json")):
+                    try:
+                        data = json.loads(fp.read_text(encoding="utf-8"))
+                    except (json.JSONDecodeError, OSError):
+                        continue
+                    tasks = data.get("tasks") or []
+                    html(f'<div class="city-row">'
+                         f'<span class="city-row-name">{подпись}{T.esc(data.get("country", "–"))}</span>'
+                         f'<span class="city-row-url">{T.esc(fp.name)}</span>'
+                         f'<span class="badge badge-accent">{len(tasks)} гор.</span></div>')
     else:
         html(T.empty("📭", "Очередь пуста", "Соберите пост во вкладке «Публикация» и добавьте города в очередь."))
 
@@ -2825,70 +2874,129 @@ def tab_actualize(project_id: str, config: dict) -> None:
 #  РАЗДЕЛ: ГОРОДА
 # ════════════════════════════════════════════════════════════════════
 
-def _cities_source_block(project_id: str, config: dict) -> None:
+def _kp_sheet_settings_block(project_id: str, config: dict) -> None:
     """
-    Источник городов – Google-таблица КП. В облаке файловая система временная,
-    поэтому набитый руками список пропадает при перезапуске; таблица живёт
-    снаружи и подтягивается обратно.
+    Источник городов – ссылка на таблицу КП и явный выбор листа.
+
+    Раньше лист внутри таблицы подбирался эвристикой в двух разных местах
+    («Города» и «Сверка») по-разному, и они могли молча выбрать разные листы.
+    Теперь выбор один, здесь, и сохраняется в конфиге – «Города» и «Сверка»
+    просто читают то, что тут выбрано.
     """
+    html('<div class="card-title">📊 Источник городов – Google-таблица КП</div>')
     saved_url = (config.get("kpSheetUrl") or "").strip()
+    saved_title = (config.get("kpSheetTitle") or "").strip()
     effective = kp_sheet.sheet_url(project_id, saved_url)
     has_key = kp_sheet.service_account_info() is not None
 
-    with st.expander("📊 Источник городов – Google-таблица КП",
-                     expanded=not config["countries"]):
-        url = st.text_input("Ссылка на таблицу КП этого проекта", value=saved_url,
-                            key=f"kp-url-{project_id}",
-                            placeholder="https://docs.google.com/spreadsheets/d/…")
-        if url.strip() != saved_url:
-            config["kpSheetUrl"] = url.strip()
-            save_config(project_id)
-            st.rerun()
+    url = st.text_input("Ссылка на таблицу КП этого проекта", value=saved_url,
+                        key=f"kp-url-{project_id}",
+                        placeholder="https://docs.google.com/spreadsheets/d/…")
+    if url.strip() != saved_url:
+        config["kpSheetUrl"] = url.strip()
+        # Сменили таблицу – старый выбор листа к ней уже не относится.
+        config["kpSheetTitle"] = ""
+        save_config(project_id)
+        _audit_forget()
+        st.rerun()
 
-        if not effective:
-            st.caption("Ссылку можно задать здесь или секретом `kp_sheet_url_"
-                       f"{project_id}` в настройках приложения.")
-        elif not saved_url:
-            st.caption(f"Используется таблица проекта по умолчанию: {effective}")
-        if not has_key:
-            st.warning(
-                "Не найден ключ сервисного аккаунта Google. Добавьте в секреты приложения "
-                "`gcp_service_account_b64` – весь JSON-ключ в base64. Таблица должна быть "
-                "расшарена на этот аккаунт как Читатель.",
-                icon="🔑",
-            )
+    if not effective:
+        st.caption("Ссылку можно задать здесь или секретом `kp_sheet_url_"
+                   f"{project_id}` в настройках приложения.")
+        return
+    if not saved_url:
+        st.caption(f"Используется таблица проекта по умолчанию: {effective}")
+    if not has_key:
+        st.warning(
+            "Не найден ключ сервисного аккаунта Google. Добавьте в секреты приложения "
+            "`gcp_service_account_b64` – весь JSON-ключ в base64. Таблица должна быть "
+            "расшарена на этот аккаунт как Читатель.",
+            icon="🔑",
+        )
+        return
 
-        c1, c2 = st.columns([2, 3])
-        if c1.button("⬇️ Загрузить города из таблицы", type="primary",
-                     disabled=not (effective and has_key), key=f"kp-pull-{project_id}",
-                     use_container_width=True):
-            try:
-                with st.spinner("Читаю таблицу КП…"):
-                    ok, note = kp_pull(project_id, config)
-            except Exception as e:  # noqa: BLE001
-                ok, note = False, str(e)
-            if not ok:
-                st.error(note)
-                return
-            st.success(note)
-            time.sleep(1.2)
-            st.rerun()
+    try:
+        titles, prefer = _audit_cache(f"titles|{project_id}|{saved_url}",
+                                      lambda: kp_sheet.sheet_titles(project_id, saved_url))
+    except Exception as e:  # noqa: BLE001
+        st.error(str(e))
+        return
+    if not titles:
+        st.error("В таблице нет ни одного листа.")
+        return
 
-        synced = local_time(config.get("kpSyncedAt"))
-        c2.caption(f"Последняя загрузка: {synced}" if synced else
-                   "Города из таблицы ещё не загружались.")
-        st.caption(f"Загружается само: если с последней загрузки прошло больше "
-                   f"{KP_SYNC_TTL_HOURS} часов, Click перечитает таблицу при открытии проекта. "
-                   "Кнопка – когда нужно прямо сейчас.")
-        st.caption("Загрузка ЗАМЕНЯЕТ список стран и городов данными из таблицы. "
-                   "Карточки со статусом «Удалена» не попадают.")
+    # Приоритет подсказки: уже сохранённый выбор → лист по gid из ссылки →
+    # угадка по названию («КП», «Карта присутствия» и т.п.). Содержимое
+    # листов тут не читаем – это только подсказка, выбирает человек.
+    default = saved_title if saved_title in titles else (
+        prefer if prefer in titles else kp_sheet.guess_sheet(titles, prefer))
+
+    # bottom – чтобы кнопка встала вровень с самим полем выбора, а не с его
+    # подписью: у селектбокса сверху есть заголовок, у кнопки его нет, и без
+    # выравнивания она висела выше поля.
+    c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
+    title = c1.selectbox("Лист таблицы", titles,
+                         index=titles.index(default) if default in titles else 0,
+                         key=f"kp-title-{project_id}")
+    if title != saved_title:
+        config["kpSheetTitle"] = title
+        save_config(project_id)
+    if c2.button("↻ Обновить список листов", key=f"kp-titles-refresh-{project_id}",
+                use_container_width=True):
+        _audit_forget()
+        st.rerun()
+
+    if not saved_title:
+        st.caption("Лист подобран по названию – проверьте, что это тот самый, где ведётся "
+                   "работа, и при необходимости выберите другой.")
+    st.caption("Этот лист читают и «Города», и «Сверка» – выбор общий на весь проект.")
+
+    # Загрузка живёт здесь же, рядом с выбором таблицы и листа: раньше кнопка
+    # стояла на «Городах», и человек, сменив лист в настройках, не понимал,
+    # куда идти, чтобы список перечитался.
+    st.divider()
+    c1, c2 = st.columns([2, 3])
+    if c1.button("⬇️ Загрузить города из таблицы", type="primary",
+                 key=f"kp-pull-{project_id}", use_container_width=True):
+        try:
+            with st.spinner("Читаю таблицу КП…"):
+                ok, note = kp_pull(project_id, config)
+        except Exception as e:  # noqa: BLE001
+            ok, note = False, str(e)
+        if not ok:
+            st.error(note)
+            return
+        st.success(note)
+        time.sleep(1.2)
+        st.rerun()
+
+    synced = local_time(config.get("kpSyncedAt"))
+    total = sum(len(c.get("cities") or []) for c in config.get("countries") or [])
+    c2.caption((f"Последняя загрузка: {synced} · сейчас {cities_word(total)}" if synced
+                else "Города из таблицы ещё не загружались."))
+    st.caption(f"Загружается само: если с последней загрузки прошло больше "
+               f"{KP_SYNC_TTL_HOURS} часов, Click перечитает таблицу при открытии проекта. "
+               "Кнопка – когда нужно прямо сейчас.")
+    st.caption("Загрузка ЗАМЕНЯЕТ список стран и городов данными из таблицы. "
+               "Карточки со статусом «Удалена» не попадают.")
 
 
 def tab_cities(project_id: str, config: dict) -> None:
-    _cities_source_block(project_id, config)
     html('<div class="card-title">Страны и города проекта</div>')
-    st.caption("Ссылка города – адрес карточки Яндекс.Бизнеса. Подойдёт любой вид "
-               "(/edit/, /edit/photos/, /p/edit/posts/) – Click сам приведёт его к разделу «Посты».")
+
+    # Сколько всего городов и где обновляется список. Блок загрузки из КП
+    # переехал в «Настройки», к самой ссылке на таблицу и выбору листа:
+    # держать выбор листа в одном месте, а кнопку «загрузить» в другом было
+    # неоткуда понять.
+    total = sum(len(c.get("cities") or []) for c in config.get("countries") or [])
+    countries = len(config.get("countries") or [])
+    if total:
+        st.caption(f"Всего {cities_word(total)} в "
+                   f"{plural(countries, 'стране', 'странах', 'странах')}. "
+                   "Для обновления списка перейдите в «Настройки» → «Источник городов»")
+    else:
+        st.info("Городов пока нет. Для обновления списка перейдите в "
+                "«Настройки» → «Источник городов»")
 
     with st.expander("➕ Добавить страну"):
         c1, c2 = st.columns([3, 1])
@@ -3033,6 +3141,11 @@ _PUB_TILES = [
 _ACT_TILES = [
     {"key": "actualized", "status": "actualized", "label": "Актуализировано", "colour": "ok",   "always": True},
     {"key": "notNeeded",  "status": "not-needed", "label": "Не требовалось",  "colour": "skip", "always": True},
+    # Не сбой Click – статус в КП разошёлся с площадкой (карточки нет, а КП
+    # обещал живую, или наоборот). Отдельно от «Ошибок»: одно говорит
+    # «поправьте таблицу», другое – «Click не справился», путать нельзя.
+    {"key": "statusMismatch", "status": "status-mismatch", "label": "Статус в КП не совпал",
+     "colour": "warn", "always": False},
     {"key": "failed",     "status": "failed",     "label": "Ошибок",          "colour": "err",  "always": True},
 ]
 # Цвет, фон и рамка плашки – те же, что у не кликабельных .report-stat.
@@ -3064,6 +3177,10 @@ def _report_notes(data: dict, totals: dict) -> list[str]:
         notes.append(f'⚠️ {cities_word(totals["unknown"])} с неподтверждённой публикацией. '
                      "Клик «Создать» был сделан, но Яндекс не подтвердил. "
                      "Проверьте вручную – повторять автоматически опасно (дубль).")
+    if totals.get("statusMismatch"):
+        notes.append(f'🚦 {cities_word(totals["statusMismatch"])} со статусом в КП, который не '
+                     "совпал с площадкой (например, в таблице «Активная», а карточки там нет). "
+                     "Это не сбой Click – поправьте статус в КП или разберитесь с карточкой.")
     if totals.get("skipped"):
         notes.append(f'⏭ {cities_word(totals["skipped"])} пропущено: этот же текст уже уходил '
                      "в эти карточки недавно (защита от дублей).")
@@ -3633,6 +3750,13 @@ def tab_report(project_id: str) -> None:
         if not data:
             return _day_logs(project_id)
 
+        # Чем этот прогон занимался. Заказчик: «пусть будет заголовок – типа
+        # публикация с добавлением фото в товары и 2ГИС или публикация
+        # информационного поста». По цифрам отчёты не различить.
+        if data.get("title"):
+            html(f'<div class="hint" style="margin:-4px 0 10px">'
+                 f'<b style="color:var(--text)">{T.esc(data["title"])}</b></div>')
+
         totals = data.get("totals") or {}
         results = data.get("results") or []
         current = st.session_state.get("report-filter", "all")
@@ -3773,6 +3897,9 @@ def tab_settings(project_id: str, config: dict) -> None:
 
     st.divider()
     _ok_login_block(project_id, config)
+
+    st.divider()
+    _kp_sheet_settings_block(project_id, config)
 
     st.divider()
     _web_keys_block()
@@ -4674,10 +4801,11 @@ def _kp_card_ids(project_id: str, config: dict) -> list[str]:
     перечитывай, дубль не найдётся. Зато в КП у города записана прямая
     ссылка на карточку: по ней Click откроет её сам.
 
-    Таблицу читаем из кэша вкладки; не вышло – возвращаем пусто и просто
-    собираем как раньше.
+    Лист берём из настроек проекта (тот же, что и «Города») – не вышло
+    (не настроен, таблица недоступна) – возвращаем пусто и просто собираем
+    организации как раньше.
     """
-    title = st.session_state.get("audit-sheet")
+    title = (config.get("kpSheetTitle") or "").strip()
     if not title:
         return []
     try:
@@ -4691,23 +4819,6 @@ def _kp_card_ids(project_id: str, config: dict) -> list[str]:
         return list(dict.fromkeys(out))
     except Exception:  # noqa: BLE001 – без таблицы соберём просто список
         return []
-
-
-def _audit_pick_sheet(titles: list[str], prefer: str) -> str:
-    """Какой лист предлагать: указанный ссылкой, потом «Лист20», потом «кп»."""
-    saved = st.session_state.get("audit-sheet")
-    if saved in titles:
-        return saved
-    for want in ("лист20", "лист 20"):
-        for t in titles:
-            if kp_audit.norm_text(t).replace(" ", "") == want.replace(" ", ""):
-                return t
-    if prefer in titles:
-        return prefer
-    for t in titles:
-        if kp_audit.norm_text(t) in ("кп", "карта присутствия", "карта присутсвия"):
-            return t
-    return titles[0] if titles else ""
 
 
 def tab_audit(project_id: str, config: dict) -> None:
@@ -4757,31 +4868,20 @@ def tab_audit(project_id: str, config: dict) -> None:
             live_panel(project_id, running, "collect")
 
     # ─── Лист КП ───
+    # Источник и лист – общие с «Городами», настраиваются в «⚙️ Настройки»:
+    # раньше у «Сверки» был свой отдельный выбор листа, который жил только
+    # в сессии и мог разойтись с тем, что читают «Города» – два места видели
+    # разные версии одной и той же таблицы.
     saved_url = (config.get("kpSheetUrl") or "").strip()
-    if not kp_sheet.is_configured(project_id, saved_url):
-        st.info("Не настроена таблица КП. Ссылка и ключ доступа задаются во вкладке "
-                "«🏙 Города» → «Источник городов».")
-        return
-
-    try:
-        titles, prefer = _audit_cache(f"titles|{project_id}|{saved_url}",
-                                      lambda: kp_sheet.sheet_titles(project_id, saved_url))
-    except Exception as e:  # noqa: BLE001
-        st.error(str(e))
-        return
-    if not titles:
-        st.error("В таблице КП нет ни одного листа.")
+    title = (config.get("kpSheetTitle") or "").strip()
+    if not kp_sheet.is_configured(project_id, saved_url) or not title:
+        st.info("Не настроен источник городов. Ссылка на таблицу и лист задаются во вкладке "
+                "«⚙️ Настройки» → «Источник городов – Google-таблица КП».")
         return
 
     with st.container(border=True):
         html('<div class="card-title">📄 Лист КП</div>')
-        # Лист из прошлого раза мог пропасть (переименовали, сменили таблицу) –
-        # тогда Streamlit упал бы на значении, которого нет в списке.
-        if st.session_state.get("audit-sheet") not in titles:
-            st.session_state.pop("audit-sheet", None)
-        pick = _audit_pick_sheet(titles, prefer)
-        title = st.selectbox("Лист таблицы", titles, index=titles.index(pick) if pick in titles else 0,
-                             key="audit-sheet", label_visibility="collapsed")
+        st.caption(f"Лист «{title}» – выбран в «⚙️ Настройки».")
         if st.button("↻ Перечитать таблицу", key="audit-reread"):
             _audit_forget()
             st.rerun()
@@ -4791,15 +4891,8 @@ def tab_audit(project_id: str, config: dict) -> None:
             st.error(str(e))
             return
         if not any(any(str(c).strip() for c in r) for r in rows):
-            # «Лист20» заказчик только собирается заполнить – пока он пустой,
-            # предлагаем открыть рабочий лист в один клик, а не искать в списке.
-            st.warning(f"Лист «{title}» пустой – сверять нечего.")
-            others = [t for t in titles
-                      if t != title and kp_audit.norm_text(t) in
-                      ("кп", "карта присутствия", "карта присутсвия", "выгрузка", "целевая")]
-            for n, other in enumerate(others[:3]):
-                st.button(f"Открыть лист «{other}»", key=f"audit-goto-{n}",
-                          on_click=lambda t=other: st.session_state.__setitem__("audit-sheet", t))
+            st.warning(f"Лист «{title}» пустой – сверять нечего. Выберите другой лист "
+                       "во вкладке «⚙️ Настройки» → «Источник городов».")
             return
 
     if not companies:
@@ -4979,7 +5072,116 @@ def show_main(project_id: str) -> None:
         tab_audit(project_id, config)
 
 
+# ─── Сборка должна быть ОДНА на все модули ───────────────────────────
+#
+# Облако обновляет файлы под работающим приложением, а Streamlit выселяет
+# изменённые модули из памяти по одному – по мере того как замечает их на
+# диске. В промежутке главный скрипт УЖЕ новый, а сосед ЕЩЁ старый, и это не
+# теория: заказчик получила такое дважды за один день. На «Актуализации» –
+# «AttributeError: casual_words» (экран новый, reviews старый). На
+# «Публикации» хуже: новый экран сложил задачи «только фото в 2ГИС», а прогон
+# старым кодом про такие задачи не знал – и отправил в три города ПУСТЫЕ посты.
+#
+# Модули мы не перезагружаем: самодельная перезагрузка из пользовательского
+# потока однажды уже роняла приложение целиком (см. комментарий у импортов).
+# Мы просто НЕ РАБОТАЕМ вразнобой – пока метки не сойдутся, страница ничего не
+# рисует и ничего не запускает, а сама перерисовывается через секунду.
+# Выселение занимает мгновение: человек видит короткую плашку и работает
+# дальше уже на одной сборке.
+_REFRESH_LOCK = threading.Lock()
+
+
+def disk_build() -> str:
+    """
+    Метка сборки, прочитанная С ДИСКА, а не из памяти.
+
+    Сравнивать модули с меткой ИЗ ПАМЯТИ бессмысленно, и это стоило заказчику
+    ещё двух пустых постов. Streamlit перечитывает с диска только главный
+    скрипт; `build` он держит в памяти наравне с остальными. Значит после
+    обновления старыми оказываются И модули, И метка – всё «сходится», хотя
+    код разный, и проверка молчит. Правда только на диске.
+    """
+    try:
+        text = (Path(__file__).parent / "build.py").read_text(encoding="utf-8")
+    except OSError:
+        return UI_BUILD
+    found = re.search(r'BUILD\s*=\s*["\']([^"\']+)["\']', text)
+    return found.group(1) if found else UI_BUILD
+
+
+def stale_modules() -> list[str]:
+    """Части приложения, оставшиеся в памяти от прежней сборки."""
+    want = disk_build()
+    stale = [name for name in _OWN_MODULES
+             if getattr(sys.modules.get(name), "BUILD", want) != want]
+    if UI_BUILD != want:
+        stale.append("build")
+    return sorted(set(stale))
+
+
+def refresh_stale_modules() -> list[str]:
+    """
+    Перечитать с диска модули, оставшиеся от прежней сборки.
+
+    Зачем. Облако обновляет файлы под работающим приложением. Главный скрипт
+    Streamlit читает с диска на каждой перерисовке, а соседние модули берёт из
+    памяти – и до перезапуска приложения экран новый, а прогон старый. Это не
+    теория: заказчик получила «AttributeError: casual_words», а потом старый
+    прогон принял задания «только фото в 2ГИС» за обычные посты и опубликовал
+    пустые посты в пяти городах. Просить человека нажать «Reboot app» – не
+    решение: он этого не увидит и не должен.
+
+    Почему это безопасно теперь, хотя раньше самодельная перезагрузка роняла
+    приложение целиком. Тогда она шла на КАЖДОЙ перерисовке и из любого потока
+    без оглядки на соседей. Теперь – только когда метки и правда разошлись
+    (раз за сборку), только когда НЕ ИДЁТ ни один прогон (иначе живой прогон
+    остался бы со старым модулем) и под общим замком, чтобы два потока не
+    перезагружали разом. Плюс importlib.reload не выкидывает модуль из
+    sys.modules – читатель в соседнем потоке видит его всё время.
+    """
+    if any(runner.is_running(pid) for pid in PROJECTS):
+        return stale_modules()
+    with _REFRESH_LOCK:
+        stale = stale_modules()
+        if not stale:
+            return []
+        # Сперва метка, потом всё остальное: модули берут BUILD из неё.
+        for name in ["build"] + [n for n in _OWN_MODULES if n != "build"]:
+            module = sys.modules.get(name)
+            if module is None:
+                continue
+            for attempt in range(3):
+                try:
+                    importlib.reload(module)
+                    break
+                except KeyError:            # сосед выселил модуль – подождём
+                    time.sleep(0.2 * (attempt + 1))
+                except Exception:           # noqa: BLE001 – не вышло, скажем человеку
+                    break
+        return stale_modules()
+
+
 def main() -> None:
+    if stale_modules():
+        # Перечитываем сами. Не вышло (идёт прогон или модуль не поддался) –
+        # НИЧЕГО не рисуем и ничего не запускаем: смешанный код опаснее
+        # неудобства. Экран уже умел «только фото в 2ГИС», а прогон из памяти
+        # про них не знал – и посты ушли пустыми.
+        left = refresh_stale_modules()
+        if not left:
+            st.rerun()
+        busy = [pid for pid in PROJECTS if runner.is_running(pid)]
+        if busy:
+            st.warning("⏳ Вышла новая версия Click, но сейчас идёт прогон – обновимся, "
+                       "когда он закончится. Пока работает прежняя версия; новые прогоны "
+                       "лучше не запускать.")
+            return
+        st.error("Приложение обновилось, но часть его осталась от прежней сборки: "
+                 + ", ".join(left) + ". Перезагрузите страницу (F5), а если не поможет – "
+                 "«Reboot app» в меню Streamlit справа внизу. Запускать прогоны сейчас "
+                 "нельзя: новый экран и старый прогон понимают задачи по-разному.")
+        return
+
     project_id = st.session_state.get("current_project_id")
     if not project_id:
         project_id = _project_from_url()          # переживает F5, в отличие от session_state

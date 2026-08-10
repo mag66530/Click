@@ -128,6 +128,19 @@ def p_tasks(project_id: str) -> Path:
     return base(project_id) / "tasks"
 
 
+# Задания «только фото в 2ГИС» лежат ОТДЕЛЬНО от постов, и это не про порядок
+# в папках. Прогон прежней сборки про такие задания не знает: он видит пустой
+# текст поста и публикует пустой пост – так у заказчика и вышло, пять пустых
+# постов в живых карточках. В свою папку он не заглядывает вовсе, потому что
+# в его коде её нет: очередь для него просто пуста, и он ничего не делает.
+def p_tasks_gis(project_id: str) -> Path:
+    return base(project_id) / "tasks-gis-photos"
+
+
+def tasks_folder(project_id: str, source: str = "tasks") -> Path:
+    return p_tasks_gis(project_id) if source == "gis" else p_tasks(project_id)
+
+
 def p_tasks_actualize(project_id: str, platform: str = YANDEX) -> Path:
     return base(project_id) / PLATFORMS[platform]["tasks"]
 
@@ -734,8 +747,10 @@ def _load_task_files(folder: Path) -> list[tuple[Path, dict]]:
 
 
 def count_pending(project_id: str, folder: str = "tasks") -> tuple[int, int]:
-    """(файлов, городов) в очереди."""
-    files = _load_task_files(p_tasks(project_id) if folder == "tasks" else p_tasks_actualize(project_id))
+    """(файлов, городов) в очереди. folder: tasks | gis | actualize."""
+    where = {"tasks": p_tasks(project_id),
+             "gis": p_tasks_gis(project_id)}.get(folder) or p_tasks_actualize(project_id)
+    files = _load_task_files(where)
     return len(files), sum(len(cfg.get("tasks") or []) for _, cfg in files)
 
 
@@ -766,11 +781,14 @@ def start_publish(
     strict_account_check: bool = True,
     retry_unknown: bool = False,
     dedup_window_hours: float = DEDUP_WINDOW_HOURS,
+    source: str = "tasks",
 ) -> tuple[bool, str]:
     """
     Запускает публикацию в фоновом потоке. Возвращает (запущено?, сообщение).
     Повторный вызов при активном прогоне ничего не делает – это и есть защита
     от «нажал кнопку дважды → опубликовалось дважды».
+
+    source='gis' – очередь «только фото в 2ГИС», она лежит в своей папке.
     """
     with _lock:
         busy = busy_reason(project_id, "publish")
@@ -780,7 +798,7 @@ def start_publish(
         if thread and thread.is_alive():
             return False, "Предыдущая публикация ещё не завершилась."
 
-        files = _load_task_files(p_tasks(project_id))
+        files = _load_task_files(tasks_folder(project_id, source))
         if not files:
             return False, "Очередь задач пуста."
 
@@ -811,7 +829,7 @@ def start_publish(
         )
         _threads[(project_id, "publish")] = t
         t.start()
-        return True, f"Публикация запущена: {total} городов."
+        return True, f"{publish_title(files)}: {total} городов."
 
 
 def _gis_photos_for_city(project_id: str, browser, task: dict, local: list[str],
@@ -873,6 +891,44 @@ def _gis_photos_for_city(project_id: str, browser, task: dict, local: list[str],
     return out
 
 
+def publish_title(files) -> str:
+    """
+    Как назвать прогон публикации человеку – одной строкой.
+
+    Заказчик: «в отчёте пусть будет заголовок: типа публикация с добавлением
+    фото в товары и 2ГИС, или публикация информационного поста». По одним
+    цифрам отчёты и правда не различить – три подряд выглядят одинаково, а
+    делали они разное.
+    """
+    import projects_data as pdata
+
+    tasks = [t for _, cfg in files for t in (cfg.get("tasks") or [])]
+    if not tasks:
+        return "Публикация"
+    if all(t.get("gisOnly") for t in tasks):
+        return "Только фото в 2ГИС, без постов"
+
+    types = {cfg.get("postType") for _, cfg in files if cfg.get("postType")}
+    name = ""
+    if len(types) == 1:
+        one = next(iter(types))
+        name = next((t["title"].lower() for t in pdata.POST_TYPES if t["id"] == one), "")
+    title = f"Публикация · {name}" if name else "Публикация постов"
+
+    extras = []
+    if any(t.get("productPhotos") for t in tasks):
+        extras.append("фото в «Товары»")
+    if any(t.get("gisPhotos") for t in tasks):
+        extras.append("фото в 2ГИС")
+    return title + (" + " + " + ".join(extras) if extras else "")
+
+
+def actualize_title(platform: str, with_reviews: bool) -> str:
+    """Заголовок прогона актуализации – по тем же соображениям, что и у публикации."""
+    where = PLATFORMS.get(platform, PLATFORMS[YANDEX])["short"]
+    return f"Актуализация {where}" + (" + проверка отзывов" if with_reviews else "")
+
+
 def _gis_only_city(project_id: str, browser, task: dict, run_id: str, box: dict) -> dict:
     """
     Только фото в «Фото и видео» 2ГИС – без поста в Яндекс.
@@ -895,6 +951,12 @@ def _gis_only_city(project_id: str, browser, task: dict, run_id: str, box: dict)
         return {**base, "status": status, "reason": reason,
                 "durationMs": int((time.time() - started) * 1000),
                 **({"gisPhotos": gis} if gis else {})}
+
+    # Сюда попадают и задачи БЕЗ текста поста, которые в 2ГИС никто не звал:
+    # такое бывает у файлов, слепленных прежней сборкой. Публиковать пустой
+    # пост нельзя, поэтому честно говорим, что делать нечего.
+    if not photos:
+        return done("failed", "Пустой текст поста и нет снимков – публиковать нечего")
 
     _append_log(project_id, "INFO", f"  📸 {city}: только фото в 2ГИС, пост не публикуем")
     local, errors = yb.fetch_photos(list(photos), p_temp(project_id))
@@ -937,6 +999,14 @@ def _publish_worker(
     processed_files: list[Path] = []
     account = (files[0][1].get("credentials") or {}).get("email", "") if files else ""
 
+    # Чем этот прогон занят – одной строкой, в лог и в отчёт. По цифрам отчёты
+    # не различаются, а делают они разное.
+    title = publish_title(files)
+    # Прогон целиком про 2ГИС – в Яндекс не уйдёт ни один пост. Тогда и
+    # аккаунт Яндекса проверять незачем: сессия нужна другая, 2ГИС.
+    gis_only_run = bool(total) and all(t.get("gisOnly")
+                                       for _, cfg in files for t in (cfg.get("tasks") or []))
+
     def should_stop() -> bool:
         return p_stop(project_id).exists()
 
@@ -953,6 +1023,7 @@ def _publish_worker(
             "stoppedByUser": stopped,
             "state": state,
             "runId": run_id,
+            "title": title,
             "totals": {"total": len(results), **counters},
             "results": [{k: v for k, v in r.items() if not k.startswith("_")} for r in results],
         }
@@ -979,20 +1050,16 @@ def _publish_worker(
                "skipped-duplicate": "skipped"}.get(status, "failed")
         counters[key] += 1
 
-    # Прогон целиком про 2ГИС – в Яндекс не уйдёт ни один пост. Тогда и
-    # аккаунт Яндекса проверять незачем: сессия нужна другая, 2ГИС.
-    gis_only_run = bool(total) and all(t.get("gisOnly")
-                                       for _, cfg in files for t in (cfg.get("tasks") or []))
-
     browser = yb.YbBrowser(project_id, headless=headless)
     processed = 0
     try:
         _append_log(project_id, "INFO", "═" * 46)
         if gis_only_run:
             _append_log(project_id, "INFO",
-                        f"ЗАПУСК ФОТО В 2ГИС · {total} городов · посты не публикуются")
+                        f"{title.upper()} · {total} городов · посты не публикуются")
         else:
-            _append_log(project_id, "INFO", f"ЗАПУСК ПУБЛИКАЦИИ · {total} городов · аккаунт {expected_email or account or '–'}")
+            _append_log(project_id, "INFO",
+                        f"{title.upper()} · {total} городов · аккаунт {expected_email or account or '–'}")
         _append_log(project_id, "INFO", "═" * 46)
         save_report("in-progress")
 
@@ -1081,7 +1148,15 @@ def _publish_worker(
                 # ни публикации, ни «Товаров» Яндекса – только заливка. Стоит
                 # ДО защиты от дубля: та стережёт повтор ПОСТА, а поста тут
                 # нет вовсе. Свой сторож у снимков есть – реестр 2ГИС.
-                if task.get("gisOnly"):
+                #
+                # Пустой текст сюда же и по той же причине: публиковать нечего.
+                # Это не придирка. Прогон, доставшийся от прежней сборки, не
+                # знал про gisOnly – и отправил в Москву, Петербург и
+                # Новосибирск ПУСТЫЕ посты по задачам «только фото в 2ГИС».
+                # Пустой пост в карточке заказчика хуже любой строки в отчёте,
+                # и чинить это надо здесь, а не только там, откуда задача
+                # приехала.
+                if task.get("gisOnly") or not (task.get("postText") or "").strip():
                     res = _gis_only_city(project_id, browser, task, run_id, gis_box)
                     res["country"] = country
                     res["package"] = country
@@ -1543,7 +1618,8 @@ def start_actualize(project_id: str, headless: bool = True, delay_s: float = 2.5
             "runId": run_id, "action": kind, "status": "running",
             "ownerPid": os.getpid(), "startedAt": _now_iso(), "finishedAt": None,
             "total": total, "current": 0, "currentCity": "", "reportName": None,
-            "totals": {"total": 0, "actualized": 0, "notNeeded": 0, "failed": 0}, "error": None,
+            "totals": {"total": 0, "actualized": 0, "notNeeded": 0, "statusMismatch": 0, "failed": 0},
+            "error": None,
         })
 
         t = threading.Thread(target=_actualize_worker,
@@ -1730,6 +1806,12 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
     return out
 
 
+# Статус actualize_city → ключ в counters. Один словарь на оба места, где
+# он нужен, – иначе при добавлении нового статуса легко забыть про второе.
+_ACT_COUNTER_KEY = {"actualized": "actualized", "not-needed": "notNeeded",
+                    "status-mismatch": "statusMismatch"}
+
+
 def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay_s: float,
                       with_reviews: bool = False, platform: str = YANDEX) -> None:
     kind = PLATFORMS[platform]["kind"]
@@ -1743,7 +1825,11 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
     report_path = p_reports_actualize(project_id, platform) / report_name
 
     results: list[dict] = []
-    counters = {"actualized": 0, "notNeeded": 0, "failed": 0}
+    # statusMismatch – КП и площадка расходятся (см. actualize_city в
+    # yb_playwright/gis_playwright): не сбой прогона, а неверный статус
+    # в таблице. Врозь с failed, иначе «Проверьте таблицу» тонет среди
+    # настоящих поломок.
+    counters = {"actualized": 0, "notNeeded": 0, "statusMismatch": 0, "failed": 0}
     review_totals = {"found": 0, "drafted": 0, "needsHuman": 0, "noDraft": 0}
     collected: list[dict] = []
     # Общий на весь прогон счётчик отказов Gemini по лимиту. Упёрлись дважды
@@ -1760,6 +1846,7 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
     def save_report(state: str) -> None:
         payload = {
             "type": "actualize", "platform": platform,
+            "title": actualize_title(platform, with_reviews),
             "startedAt": started_at, "finishedAt": _now_iso(),
             "durationSec": int(time.time() - start_ts), "stoppedByUser": stopped,
             "state": state, "runId": run_id,
@@ -1906,8 +1993,7 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                     # «Данные» ещё открывалась, а отзывы уже уводят на вход.
                     if rr.get("noSession"):
                         results.append(res)
-                        counters[{"actualized": "actualized",
-                                  "not-needed": "notNeeded"}.get(res["status"], "failed")] += 1
+                        counters[_ACT_COUNTER_KEY.get(res["status"], "failed")] += 1
                         gen = PLATFORMS[platform]["gen"]
                         _append_log(project_id, "ERROR",
                                     f"❌ ОСТАНОВКА: сессия {gen} не действует – раздел отзывов "
@@ -1929,7 +2015,7 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
                         except Exception as e:  # noqa: BLE001
                             _append_log(project_id, "WARN", f"  💬 очередь не сохранилась: {e}")
                 results.append(res)
-                counters[{"actualized": "actualized", "not-needed": "notNeeded"}.get(res["status"], "failed")] += 1
+                counters[_ACT_COUNTER_KEY.get(res["status"], "failed")] += 1
                 save_report("in-progress")
                 push_state("running", task.get("cityName", ""))
                 if i < len(city_tasks) - 1:
@@ -1942,8 +2028,9 @@ def _actualize_worker(project_id: str, run_id: str, files, headless: bool, delay
         # и раньше последние строки (ИТОГИ, ОТЗЫВЫ, ОЧЕРЕДЬ) в скачанный лог
         # не попадали – заказчик открывала файл и не находила там концовки.
         _append_log(project_id, "INFO",
-                    f"ИТОГИ · ✅ {counters['actualized']} · ⊝ {counters['notNeeded']} · ❌ {counters['failed']}"
-                    f" · память {memory_mb()} МБ")
+                    f"ИТОГИ · ✅ {counters['actualized']} · ⊝ {counters['notNeeded']} · "
+                    f"🚦 {counters['statusMismatch']} · ❌ {counters['failed']} · "
+                    f"память {memory_mb()} МБ")
         if with_reviews:
             _append_log(project_id, "INFO",
                         f"ОТЗЫВЫ · без ответа {review_totals['found']} · "

@@ -64,13 +64,40 @@ def session_path(project_id: str) -> Path:
     return d / "ok-state.json"
 
 
+# Куки, по которым ОК узнаёт вошедшего. Как и у ВК, гостевой заход тоже
+# ставит куки (язык, счётчики) – без этой проверки «сессия сохранена»
+# показывалось бы и после неудачного входа.
+AUTH_COOKIES = ("AUTH_ID", "auth_id", "JSESSIONID", "AUTH_SIG", "OK_LOGIN")
+
+
 def has_saved_session(project_id: str) -> bool:
+    """Есть ли сохранённая сессия С ПРИЗНАКОМ ВХОДА (не просто куки гостя)."""
     fp = session_path(project_id)
     if not fp.exists():
         return False
     try:
         import json
-        return bool(json.loads(fp.read_text(encoding="utf-8")).get("cookies"))
+        cookies = json.loads(fp.read_text(encoding="utf-8")).get("cookies") or []
+        return any(str(c.get("name", "")) in AUTH_COOKIES and c.get("value")
+                   for c in cookies)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def is_logged_in(page) -> bool:
+    """
+    Вошли ли мы в ОК на самом деле – по содержимому, а не по адресу.
+    Гостю ОК показывает форму входа прямо на главной; вошедшему – левое
+    меню с разделами профиля.
+    """
+    try:
+        if page.locator(SEL["password"]).count():
+            return False
+        if page.locator('a:has-text("Регистрация"), #field_email').count() \
+                and not page.locator(".toolbar_nav, #hook_Block_MainMenu").count():
+            return False
+        return bool(page.locator(".toolbar_nav, #hook_Block_MainMenu, "
+                                 'a[href="/feed"]').count())
     except Exception:  # noqa: BLE001
         return False
 
@@ -174,7 +201,9 @@ class OkLoginFlow:
                 return {"step": "code"}
             if "anonym" in url or "/dk?st.cmd=" in url:
                 return {"step": "login"}
-            return {"step": "done"}
+            # «Вошли» ставим только по содержимому страницы: адрес у ОК
+            # у гостя и у вошедшего может совпадать (та же беда, что у ВК).
+            return {"step": "done"} if is_logged_in(self.page) else {"step": "login"}
         except Exception:  # noqa: BLE001
             return {"step": "unknown"}
 
@@ -233,8 +262,10 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             log(f"Открываю группу: {group_url}")
             page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
             page.wait_for_timeout(2500)
-            if "anonym" in (page.url or ""):
-                return {"ok": False, "error": "Сессия ОК слетела – войдите заново в «Настройках»"}
+            if "anonym" in (page.url or "") or not is_logged_in(page):
+                return {"ok": False,
+                        "error": "ОК открыл страницу как гостю – сессия не действует. "
+                                 "Войдите заново в «Настройках» → «Вход в ОК»."}
 
             log("Открываю форму поста")
             page.click(SEL["create_post"], timeout=15_000)

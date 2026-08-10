@@ -72,6 +72,44 @@ def session_path(project_id: str) -> Path:
     return d / "vk-state.json"
 
 
+def is_logged_in(page) -> bool:
+    """
+    Вошли ли мы на самом деле.
+
+    ПО АДРЕСУ ЭТО НЕ ОПРЕДЕЛИТЬ. ВК не перекидывает гостя на /login: он
+    открывает тот же vk.com/feed, только с кнопками «Войти» и «Регистрация»
+    вместо ленты. Проверка по адресу говорила «вошли» гостю – и Click
+    сохранял пустую сессию, а потом искал в сообществе кнопку «Создать»,
+    которой у гостя нет, и винил права аккаунта.
+
+    Смотрим на страницу двумя способами: сначала спрашиваем сам ВК, кто мы
+    (window.vk.id – ноль у гостя), потом, если объекта нет, ищем гостевые
+    кнопки входа. Достаточно любого достоверного признака.
+    """
+    try:
+        uid = page.evaluate(
+            "() => (window.vk && (window.vk.id || window.vk.userId)) || 0")
+        if isinstance(uid, (int, float)) and int(uid) > 0:
+            return True
+    except Exception:  # noqa: BLE001 – объекта нет, решаем по вёрстке
+        uid = 0
+
+    try:
+        # Гостевая шапка: «Войти» + «Регистрация» рядом. У вошедшего их нет.
+        guest = page.locator(
+            'button:has-text("Регистрация"), a:has-text("Регистрация"), '
+            '#index_login_button, [data-testid="index_login_button"]').count()
+        if guest:
+            return False
+        # Признак вошедшего: слева меню профиля / «Моя страница».
+        mine = page.locator(
+            '#l_pr, [href="/feed"], [data-testid="left_menu"], '
+            'a:has-text("Моя страница")').count()
+        return bool(mine)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _debug_shot(project_id: str, page, name: str) -> bytes | None:
     """
     Снимок страницы при неудаче. Без него «не получилось» – это тупик:
@@ -110,9 +148,11 @@ def check_session(project_id: str, group_url: str = "",
             page = context.new_page()
             page.goto(f"{BASE}/feed", wait_until="domcontentloaded", timeout=45_000)
             page.wait_for_timeout(2500)
-            url = page.url or ""
-            if "login" in url or "id.vk.com" in url:
-                return {"ok": False, "error": "Сессия слетела – ВК просит войти заново",
+            if not is_logged_in(page):
+                return {"ok": False,
+                        "error": "ВК нас не узнаёт – показывает страницу для гостя "
+                                 "с кнопками «Войти» и «Регистрация». Сессия не "
+                                 "сохранилась или истекла: войдите заново.",
                         "shot": _debug_shot(project_id, page, "check")}
             if group_url:
                 page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
@@ -133,13 +173,22 @@ def check_session(project_id: str, group_url: str = "",
             browser.close()
 
 
+# Кука, по которой ВК узнаёт вошедшего. Гостевой заход тоже ставит куки
+# (язык, счётчики), поэтому «файл сессии есть» ещё не значит «мы вошли» –
+# ровно на этом Click и говорил «Сессия сохранена» после неудачного входа.
+AUTH_COOKIES = ("remixsid", "remixsid6", "remixnsid")
+
+
 def has_saved_session(project_id: str) -> bool:
+    """Есть ли сохранённая сессия С ПРИЗНАКОМ ВХОДА (не просто куки гостя)."""
     fp = session_path(project_id)
     if not fp.exists():
         return False
     try:
         import json
-        return bool(json.loads(fp.read_text(encoding="utf-8")).get("cookies"))
+        cookies = json.loads(fp.read_text(encoding="utf-8")).get("cookies") or []
+        return any(str(c.get("name", "")).startswith(AUTH_COOKIES) and c.get("value")
+                   for c in cookies)
     except Exception:  # noqa: BLE001
         return False
 
@@ -236,10 +285,13 @@ class VkLoginFlow:
 
     # ─── что на экране ──────────────────────────────────────────────
     def page_state(self) -> dict:
+        """
+        Какой шаг входа сейчас на экране. Порядок важен: сначала ищем поля
+        формы (они говорят точно), «вошли» ставим ТОЛЬКО по настоящей
+        проверке содержимым – раньше это решалось по адресу страницы, и
+        гость на vk.com/feed засчитывался как вошедший.
+        """
         try:
-            url = self.page.url or ""
-            if "vk.com" in url and "login" not in url and "id.vk.com" not in url and "oauth" not in url:
-                return {"step": "done"}
             if self.page.locator(SEL["login_password"]).count():
                 return {"step": "password"}
             if (self.page.locator(SEL["login_code_boxes"]).count() >= 4
@@ -247,12 +299,15 @@ class VkLoginFlow:
                 return {"step": "code"}
             if self.page.locator(SEL["login_phone"]).count():
                 return {"step": "phone"}
-            # Форм нет и адрес не логинный – проверяем лентой: пустят ли.
+            if is_logged_in(self.page):
+                return {"step": "done"}
+            # Форм нет, но и не вошли – смотрим ленту: там видно наверняка.
             self.page.goto(f"{BASE}/feed", wait_until="domcontentloaded", timeout=30_000)
             self.page.wait_for_timeout(1500)
-            u = self.page.url or ""
-            if "login" not in u and "id.vk.com" not in u:
+            if is_logged_in(self.page):
                 return {"step": "done"}
+            if self.page.locator(SEL["login_phone"]).count():
+                return {"step": "phone"}
             return {"step": "unknown"}
         except Exception:  # noqa: BLE001
             return {"step": "unknown"}
@@ -421,9 +476,10 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             log(f"Открываю сообщество: {group_url}")
             page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
             page.wait_for_timeout(2500)
-            if "login" in (page.url or "") or "id.vk.com" in (page.url or ""):
+            if not is_logged_in(page):
                 return {"ok": False, "shot": _debug_shot(project_id, page, "session"),
-                        "error": "Сессия ВК слетела – войдите заново в «Настройках»"}
+                        "error": "ВК открыл страницу как гостю – сессия не действует. "
+                                 "Войдите заново в «Настройках» → «Вход в ВК»."}
 
             # «Создать» → «Пост». Меню – hover-флайаут: между кликами пауза
             # короткая, иначе меню закроется раньше, чем найдём пункт.

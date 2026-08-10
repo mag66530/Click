@@ -3559,10 +3559,10 @@ def _crosspost_form_block(project_id: str, config: dict,
         parts.append(f"ТГ/МАКС: {len(msg_todo)}")
     busy = runner.busy_reason(project_id, "publish") if (vk_todo or ok_todo) else ""
     if busy:
-        st.caption(f"Сформировать ({', '.join(parts)}): сейчас нельзя – {busy}.")
+        st.caption(f"Поставить отложенные посты ({', '.join(parts)}): сейчас нельзя – {busy}.")
         return
 
-    if st.button(f"📌 Сформировать план ({', '.join(parts)})", type="primary",
+    if st.button(f"📌 Поставить отложенные посты ({', '.join(parts)})", type="primary",
                  key=f"cp-form-all-{project_id}", use_container_width=True):
         site = ((project_endings(project_id).get("contacts") or {})
                 .get("Россия") or {}).get("site", "")
@@ -4303,10 +4303,13 @@ def _vk_login_block(project_id: str, config: dict) -> None:
             worker.call(flow.close)
         st.session_state.pop("vk_flow", None)
         st.session_state.pop("vk_state", None)
+        # has_saved_session требует настоящую куку входа, а не любые куки:
+        # гостевой заход тоже их ставит, и раньше это выглядело как успех.
         if vk_social.has_saved_session(project_id):
             st.success("Вошли в ВК. Сессия сохранена.")
         else:
-            st.warning("ВК пустил, но сессия не сохранилась – попробуйте ещё раз.")
+            st.warning("ВК показал страницу без формы входа, но признака входа нет – "
+                       "сессия не сохранена. Попробуйте войти ещё раз.")
         time.sleep(1.0)
         st.rerun()
     elif step == "phone":

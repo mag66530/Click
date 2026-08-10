@@ -96,6 +96,31 @@ def has_saved_session(project_id: str) -> bool:
         return False
 
 
+def import_session(project_id: str, raw: bytes) -> tuple[bool, str]:
+    """
+    Принять готовый файл сессии ОК (storage_state) – см. тот же приём в
+    vk_social: из облака пройти проверки ВК невозможно, поэтому даём
+    принести сессию, полученную там, где браузер видно.
+    """
+    import json
+
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except Exception as e:  # noqa: BLE001
+        return False, f"Это не файл сессии: {e}"
+    if not isinstance(data, dict) or "cookies" not in data:
+        return False, "В файле нет раздела cookies – нужен storage_state Playwright."
+    cookies = data.get("cookies") or []
+    has_auth = any(str(c.get("name", "")) in AUTH_COOKIES and c.get("value")
+                   for c in cookies)
+    if not has_auth:
+        return False, ("В файле нет куки входа ОК – похоже, он снят у гостя. "
+                       "Войдите в ОК и сохраните сессию заново.")
+    session_path(project_id).write_text(json.dumps(data, ensure_ascii=False),
+                                        encoding="utf-8")
+    return True, f"Сессия ОК принята: {len(cookies)} куки, признак входа на месте."
+
+
 def is_logged_in(page) -> bool:
     """
     Вошли ли мы в ОК на самом деле – по содержимому, а не по адресу.

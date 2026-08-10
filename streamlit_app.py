@@ -4230,6 +4230,34 @@ def _gis_login_block(project_id: str, config: dict) -> None:
         st.rerun()
 
 
+def _session_import_block(project_id: str, name: str, importer, key: str) -> None:
+    """
+    Принести готовый файл сессии вместо входа в приложении.
+
+    Зачем. В облаке окна браузера нет, а ВК защищает вход проверками
+    «вы не робот», QR и кодами в МАКС – пройти их вслепую по снимкам
+    получается не всегда. Тогда самый быстрый путь: войти там, где браузер
+    видно, и принести сюда файл сессии. Click проверит, что в нём есть
+    признак входа, и дальше будет работать как после обычного входа.
+    """
+    with st.expander(f"📥 Загрузить готовый файл сессии {name} (если вход не проходит)"):
+        st.caption(
+            f"Файл сессии – это storage_state браузера с куками {name}. Его "
+            "сохраняет тот, кто уже входил в этот аккаунт автоматизацией. "
+            "Click проверит, что внутри есть признак настоящего входа.")
+        up = st.file_uploader(f"Файл сессии {name} (.json)", type=["json"],
+                              key=f"sess-up-{key}-{project_id}")
+        if up is not None and st.button(f"Принять сессию {name}",
+                                        key=f"sess-go-{key}-{project_id}"):
+            ok, msg = importer(project_id, up.getvalue())
+            if ok:
+                st.success(msg)
+                time.sleep(1.0)
+                st.rerun()
+            else:
+                st.error(msg)
+
+
 def _vk_login_block(project_id: str, config: dict) -> None:
     """
     Вход в ВК для кросспостинга – тот же порядок, что у Яндекса и 2ГИС:
@@ -4278,6 +4306,7 @@ def _vk_login_block(project_id: str, config: dict) -> None:
         st.caption("Нужен аккаунт-администратор сообщества – тот, кем постят руками. "
                    "Click откроет форму входа ВК: телефон, пароль или код из SMS "
                    "вводятся здесь же, по снимку экрана.")
+        _session_import_block(project_id, "ВК", vk_social.import_session, "vk")
         show_window = False
         if can_show_browser():
             show_window = st.checkbox(
@@ -4445,6 +4474,7 @@ def _ok_login_block(project_id: str, config: dict) -> None:
         else:
             st.caption("Сначала лучше войти в ВК (блок выше) – тогда ОК пустит без "
                        "ввода. Можно и сразу сюда: телефон и код спросят в окне ВК.")
+        _session_import_block(project_id, "ОК", ok_browser.import_session, "ok")
         if st.button("🔑 Войти в ОК через ВК", type="primary", key="ok-go",
                      use_container_width=True):
             try:

@@ -158,15 +158,27 @@ def click_in_frames(page, texts, timeout: int = 5000) -> bool:
 
 def press_captcha_in(frame) -> bool:
     """
-    Нажать «Продолжить» в кадре с капчей. True – нашли и нажали.
+    Пройти проверку «вы не робот» в кадре. True – нашли и нажали.
 
-    ТОЛЬКО ПО ТЕКСТУ. Раньше в конце стоял запасной селектор «любая кнопка»,
-    и на капче он попадал в крестик закрытия: проверка схлопывалась, ВК
-    выбрасывал на главную страницу, и вход начинался с нуля. Лучше честно
-    ничего не нажать, чем нажать не то.
+    Проверка бывает двух видов, оба живые: кнопка «Продолжить» и ГАЛОЧКА
+    «Я не робот». Галочку пробуем первой – она встречается чаще.
+
+    Крестик закрытия не трогаем никогда: раньше в конце стоял запасной
+    селектор «любая кнопка», он попадал именно в крестик, проверка
+    схлопывалась и ВК выбрасывал на главную. Лучше не нажать ничего.
     """
+    # Галочка: сам input, метка рядом с ним или текст «Я не робот».
+    for sel in ('input[type="checkbox"]', 'label:has-text("Я не робот")',
+                'text="Я не робот"'):
+        try:
+            el = frame.locator(sel).first
+            if el.count():
+                el.click(timeout=6000)
+                return True
+        except Exception:  # noqa: BLE001
+            continue
     for sel in ('button:has-text("Продолжить")', 'text="Продолжить"',
-                'button:has-text("Начать")', 'button:has-text("Я не робот")'):
+                'button:has-text("Начать")'):
         try:
             btn = frame.locator(sel).first
             if btn.count():
@@ -283,6 +295,40 @@ def check_session(project_id: str, group_url: str = "",
 # (язык, счётчики), поэтому «файл сессии есть» ещё не значит «мы вошли» –
 # ровно на этом Click и говорил «Сессия сохранена» после неудачного входа.
 AUTH_COOKIES = ("remixsid", "remixsid6", "remixnsid")
+
+
+def import_session(project_id: str, raw: bytes) -> tuple[bool, str]:
+    """
+    Принять готовый файл сессии (storage_state Playwright) и сохранить как
+    свой. Возвращает (получилось?, сообщение словами).
+
+    Зачем это есть. Вход в ВК из облака – борьба вслепую: QR, проверка
+    «вы не робот», код в МАКС, звонок-сброс. Окна браузера в облаке нет,
+    и пройти проверку пальцем невозможно. Поэтому даём честный обходной
+    путь: войти где угодно (на своём компьютере, в готовом инструменте) и
+    принести сюда файл сессии. Дальше Click работает как обычно.
+
+    Проверяем не «похоже на JSON», а наличие настоящей куки входа: файл
+    без неё бесполезен, и узнать об этом лучше сейчас, а не в час поста.
+    """
+    import json
+
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except Exception as e:  # noqa: BLE001
+        return False, f"Это не файл сессии: {e}"
+    if not isinstance(data, dict) or "cookies" not in data:
+        return False, ("В файле нет раздела cookies. Нужен storage_state "
+                       "Playwright – файл, который сохраняет браузер вместе с сессией.")
+    cookies = data.get("cookies") or []
+    has_auth = any(str(c.get("name", "")).startswith(AUTH_COOKIES) and c.get("value")
+                   for c in cookies)
+    if not has_auth:
+        return False, ("В файле нет куки входа ВК (remixsid) – значит он снят у "
+                       "гостя, а не у вошедшего. Войдите в ВК и сохраните сессию заново.")
+    fp = session_path(project_id)
+    fp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return True, f"Сессия ВК принята: {len(cookies)} куки, признак входа на месте."
 
 
 def has_saved_session(project_id: str) -> bool:
@@ -434,6 +480,23 @@ class VkLoginFlow:
             press_captcha_in(fr)
             self.page.wait_for_timeout(4000)
         return self.state()
+
+    def _wait_screen(self, tries: int = 12) -> dict:
+        """
+        Подождать, пока экран станет понятным.
+
+        Виджет VK ID грузится не мгновенно: на снимке заказчика был виден
+        кружок загрузки, а Click в этот момент уже решал, что «не разобрал,
+        что за шаг». Фиксированной паузы мало – опрашиваем раз в секунду,
+        пока шаг не определится (до ~12 секунд).
+        """
+        st = self.page_state()
+        for _ in range(tries):
+            if st.get("step") != "unknown":
+                return st
+            self.page.wait_for_timeout(1000)
+            st = self.page_state()
+        return st
 
     def restart_login(self) -> dict:
         """
@@ -594,7 +657,7 @@ class VkLoginFlow:
             return {"step": "unknown"}
 
     def state(self) -> dict:
-        st = self.page_state()
+        st = self._wait_screen()
         st["url"] = self.page.url if self.page else ""
         try:
             st["screenshot"] = self.page.screenshot(type="png", full_page=False)

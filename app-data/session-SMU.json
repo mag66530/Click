@@ -265,7 +265,7 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817896240,
+      "expires": 1817896689,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -552,20 +552,10 @@
     },
     {
       "name": "bh",
-      "value": "YKTf5tMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "value": "YOzm5tMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1820919716.351,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "cycada",
-      "value": "w/ow1aeQv/4O7wZe09GpTifA5hjy39BWIgnQZ/gtJxs=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1787569837.924,
+      "expires": 1820920684.425,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -575,18 +565,8 @@
       "value": "1",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817896239,
+      "expires": 1817896688,
       "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_ym_visorc",
-      "value": "b",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1786362041,
-      "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
@@ -595,7 +575,27 @@
       "value": "0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817896253,
+      "expires": 1817896689,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ym_visorc",
+      "value": "b",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1786362489,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "cycada",
+      "value": "WcVQAqe7bXhl92NrI0uJ4yfA5hjy39BWIgnQZ/gtJxs=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1787570300.544,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -627,7 +627,7 @@
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "1574"
+          "value": "1576"
         },
         {
           "name": "_ym_wv2rf:85710618:0",
@@ -655,7 +655,7 @@
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "11689"
+          "value": "11704"
         },
         {
           "name": "_ym97514791:0_reqNum",
@@ -699,7 +699,7 @@
         },
         {
           "name": "_ym56213845:0_reqNum",
-          "value": "10753"
+          "value": "10767"
         },
         {
           "name": "_ym97158960:0_reqNum",
@@ -767,7 +767,7 @@
         },
         {
           "name": "_ym46231566:0_reqNum",
-          "value": "3288"
+          "value": "3291"
         },
         {
           "name": "_ym97514764:0_reqNum",

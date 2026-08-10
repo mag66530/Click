@@ -1642,6 +1642,57 @@ def test_gis_reviews_on_real_page() -> None:
             browser.close()
 
 
+def test_gis_photo_validation() -> None:
+    """Предварительная проверка размеров фото перед отправкой в 2ГИС."""
+    import gis_playwright as gis
+    import struct
+    import tempfile
+
+    print("\n▸ 2ГИС: предварительная валидация фото")
+
+    def make_png(w: int, h: int) -> bytes:
+        sig = b'\x89PNG\r\n\x1a\n'
+        ihdr_data = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)
+        import zlib
+        crc = zlib.crc32(b'IHDR' + ihdr_data) & 0xFFFFFFFF
+        ihdr = struct.pack('>I', 13) + b'IHDR' + ihdr_data + struct.pack('>I', crc)
+        iend_crc = zlib.crc32(b'IEND') & 0xFFFFFFFF
+        iend = struct.pack('>I', 0) + b'IEND' + struct.pack('>I', iend_crc)
+        return sig + ihdr + iend
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # 600×600 – минимально допустимый размер
+        p600 = str(Path(tmp) / "ok_600x600.png")
+        Path(p600).write_bytes(make_png(600, 600))
+        check("600×600 проходит", gis.check_gis_photo(p600) == "", gis.check_gis_photo(p600))
+
+        # 599×600 – меньше минимума
+        p599 = str(Path(tmp) / "small_599x600.png")
+        Path(p599).write_bytes(make_png(599, 600))
+        err = gis.check_gis_photo(p599)
+        check("599×600 не проходит", "600" in err, err)
+        check("размер указан в сообщении", "599" in err, err)
+
+        # 7001×700 – выше максимума
+        p7001 = str(Path(tmp) / "big_7001x700.png")
+        Path(p7001).write_bytes(make_png(7001, 700))
+        err = gis.check_gis_photo(p7001)
+        check("7001×700 не проходит", "7000" in err, err)
+
+        # 3000×200 – соотношение 15:1, больше 5:1
+        p_ratio = str(Path(tmp) / "wide_3000x200.png")
+        Path(p_ratio).write_bytes(make_png(3000, 200))
+        err = gis.check_gis_photo(p_ratio)
+        check("3000×200 не проходит (соотношение)", "соотношение" in err.lower(), err)
+
+        # _image_dims читает корректные размеры
+        dims = gis._image_dims(p600)   # noqa: SLF001
+        eq("PNG: размер прочитан верно", dims, (600, 600))
+
+        dims7 = gis._image_dims(p7001)  # noqa: SLF001
+        eq("PNG: большой размер", dims7, (7001, 700))
+
+
 def test_gis_media_upload() -> None:
     """
     Фото отгрузки в «Фото и видео» 2ГИС – на настоящей странице кабинета.
@@ -1746,12 +1797,19 @@ def test_gis_media_upload() -> None:
                                     ".getAttribute('href')").startswith("/"))
 
                 # Альбом не вырос вовсе – ни в браузере, ни на сервере. Честная
-                # неудача, не в чём ловить.
+                # неудача, не в чём ловить. Таймаут на время теста сжимаем: нам
+                # нужно убедиться, что молчаливый отказ детектируется, а не что
+                # мы терпеливо ждём 60 секунд.
                 box["confirmed"] = 0
                 box["confirm"] = False
                 box["html"] = page_html.replace(
                     "grid.appendChild(tile);", "void tile;")
-                quiet = gis.upload_media(page, url, shots[:1], label="Самара: ")
+                was_wait = gis.MEDIA_WAIT_MS
+                gis.MEDIA_WAIT_MS = 3_000
+                try:
+                    quiet = gis.upload_media(page, url, shots[:1], label="Самара: ")
+                finally:
+                    gis.MEDIA_WAIT_MS = was_wait
                 eq("молчаливый отказ успехом не считаем", quiet["uploaded"], 0)
                 check("и человеку сказано, что делать", "вручную" in quiet["reason"], quiet["reason"])
 
@@ -3943,6 +4001,47 @@ def test_look_and_order() -> None:
 
 
 # ════════════════════════════════════════════════════════════════════
+def test_mpe_review_shape() -> None:
+    """
+    МПЭ: модель часто сливает приветствие и тело в один абзац без пустой
+    строки, а фразу «Наш ассортимент» пишет как «Ассортимент». Живой случай:
+    заказчик прислала скрин черновика ровно с этими двумя огрехами.
+
+    fix_mpe_shape() чинит форму кодом – промпт не может гарантировать это
+    сам, модель нарушает структуру не всегда предсказуемо.
+    """
+    import reviews as rv
+    print("\n▸ МПЭ: форма ответа на отзыв")
+
+    # Живой случай: одно предложение вместо трёх абзацев, фраза без «Наш».
+    slit = ("Иван, спасибо за отзыв! Рады, что доставка бериллия точно в срок "
+            "и готовые документы сэкономили ваше время и бюджет. Ассортимент "
+            "закрывает большинство потребностей клиентов: цветной металл, "
+            "нержавейка, сортовой и листовой прокат, трубная продукция, "
+            "арматура.\n\nС уважением, команда Метпромэнерго.")
+    out = rv.clean_draft(slit, "MPE")
+    parts = out.split("\n\n")
+    eq("три абзаца", len(parts), 3)
+    eq("первый абзац – только приветствие", parts[0], "Иван, спасибо за отзыв!")
+    check("«Наш ассортимент» подставлен", "Наш ассортимент закрывает" in parts[1])
+    check("фраза оканчивается точкой", parts[1].rstrip().endswith("."))
+    eq("подпись на месте", parts[2], "С уважением, команда Метпромэнерго.")
+
+    # Уже правильная форма – не портим повторной чисткой.
+    eq("идемпотентность", rv.clean_draft(out, "MPE"), out)
+
+    # Модель написала фразу без «Наш» уже отдельным предложением – тоже чиним.
+    almost = ("Анастасия, спасибо за обратную связь!\n\n"
+              "Рады, что вы остались довольны качеством ниобия и быстрой "
+              "доставкой. Ассортимент закрывает большинство потребностей "
+              "клиентов: цветной металл, нержавейка, сортовой и листовой "
+              "прокат, трубная продукция, арматура.\n\n"
+              "С уважением, команда Метпромэнерго.")
+    out2 = rv.clean_draft(almost, "MPE")
+    check("«Наш» подставлен и во втором случае",
+          "Наш ассортимент закрывает" in out2 and "\nАссортимент закрывает" not in out2)
+
+
 def test_assortment_verbatim() -> None:
     """
     Ассортиментная фраза уходит в Яндекс ДОСЛОВНО.
@@ -4876,6 +4975,7 @@ def main() -> int:
         test_city_checkbox_survives_collapse()
         test_reviews_limit_and_stop()
         test_look_and_order()
+        test_mpe_review_shape()
         test_assortment_verbatim()
         test_report_with_reviews()
         test_queue_resets_between_runs()

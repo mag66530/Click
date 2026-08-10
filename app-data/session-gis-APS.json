@@ -11,16 +11,6 @@
       "sameSite": "None"
     },
     {
-      "name": "dg_refresh_token",
-      "value": "4993bc84a26ea3a8a262febfc2dad989eb51cbca",
-      "domain": ".2gis.com",
-      "path": "/",
-      "expires": 1788698251,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
       "name": "add_firms_popup",
       "value": "hidden",
       "domain": "account.2gis.com",
@@ -31,11 +21,61 @@
       "sameSite": "None"
     },
     {
+      "name": "dg_session_token",
+      "value": "5f61191044bb7499b57bdc81c7fa9ab497f051c3",
+      "domain": ".2gis.com",
+      "path": "/",
+      "expires": 1786546698,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_refresh_token",
+      "value": "0ecf7efbd61a4ef3de788fc83f3ac4a23e4b71cf",
+      "domain": ".2gis.com",
+      "path": "/",
+      "expires": 1788965898,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "_gat",
+      "value": "1",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1786373959,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "_gat_gtag_UA_159862647_1",
+      "value": "1",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1786373959,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
       "name": "dg_user_locale",
       "value": "ru",
       "domain": "account.2gis.com",
       "path": "/",
-      "expires": 1794063327,
+      "expires": 1794322702,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "_gid",
+      "value": "GA1.3.1634901335.1786373900",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1786460302,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
@@ -45,17 +85,77 @@
       "value": "GA1.3.957154251.1786106254",
       "domain": ".account.2gis.com",
       "path": "/",
-      "expires": 1820674527.172,
+      "expires": 1820933902.549,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
     },
     {
       "name": "_ga_DEN30CPV6D",
-      "value": "GS2.3.s1786114034$o3$g1$t1786114527$j50$l0$h0",
+      "value": "GS2.3.s1786373899$o4$g1$t1786373902$j57$l0$h0",
       "domain": ".account.2gis.com",
       "path": "/",
-      "expires": 1820674527.428,
+      "expires": 1820933902.931,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "banner_advert_version_photos_70000001069567504",
+      "value": "2.11",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786460306,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_country_code",
+      "value": "US",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786373969.73,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "__ddg8_",
+      "value": "HSeBb3Gb47NHMoTi",
+      "domain": ".2gis.com",
+      "path": "/",
+      "expires": 1786375110.059,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "__ddg10_",
+      "value": "1786373909",
+      "domain": ".2gis.com",
+      "path": "/",
+      "expires": 1786375110.059,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "__ddg9_",
+      "value": "34.83.176.217",
+      "domain": ".2gis.com",
+      "path": "/",
+      "expires": 1786375110.059,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    },
+    {
+      "name": "dg_session_id",
+      "value": "0a766290-cbc7-4ebf-abe0-95252378cb92",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786375711,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"

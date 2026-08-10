@@ -4369,13 +4369,24 @@ def _vk_login_block(project_id: str, config: dict) -> None:
         else:
             st.caption("Если проверка не проходит – её нужно пройти руками в окне "
                        "браузера, а это возможно только при локальном запуске Click.")
+    elif step == "start-over":
+        st.caption("ВК вернул нас на главную страницу – форма входа закрылась. "
+                   "Так бывает, если истекло время кода или проверка сорвалась. "
+                   "Откроем форму заново.")
+        if st.button("🔄 Открыть форму входа заново", key="vk-restart", type="primary"):
+            st.session_state["vk_state"] = worker.call(flow.restart_login)
+            st.rerun()
     else:
         st.warning("Не разобрал, что за шаг на странице, – смотрите снимок выше.")
-        # Даже когда шаг не распознан, чаще всего на экране висит окно с одной
-        # кнопкой «Продолжить» (та самая проверка «я не робот»). Даём нажать её
-        # вслепую – это безопасно и обычно решает дело.
-        if st.button("✅ Нажать «Продолжить» на экране", key="vk-blind-continue"):
+        c1, c2 = st.columns(2)
+        # Кнопка жмёт «Продолжить» ТОЛЬКО по тексту: раньше в крайнем случае
+        # нажималась любая кнопка, и на капче это был крестик – проверка
+        # закрывалась, и ВК выбрасывал на главную.
+        if c1.button("✅ Нажать «Продолжить» на экране", key="vk-blind-continue"):
             st.session_state["vk_state"] = worker.call(flow.press_captcha_continue)
+            st.rerun()
+        if c2.button("🔄 Открыть форму входа заново", key="vk-restart-unknown"):
+            st.session_state["vk_state"] = worker.call(flow.restart_login)
             st.rerun()
         if can_show_browser():
             st.caption("Не помогает – отмените вход, поставьте галочку «Показать окно "

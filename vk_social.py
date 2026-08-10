@@ -157,9 +157,16 @@ def click_in_frames(page, texts, timeout: int = 5000) -> bool:
 
 
 def press_captcha_in(frame) -> bool:
-    """Нажать «Продолжить» в кадре с капчей. True – нашли и нажали."""
+    """
+    Нажать «Продолжить» в кадре с капчей. True – нашли и нажали.
+
+    ТОЛЬКО ПО ТЕКСТУ. Раньше в конце стоял запасной селектор «любая кнопка»,
+    и на капче он попадал в крестик закрытия: проверка схлопывалась, ВК
+    выбрасывал на главную страницу, и вход начинался с нуля. Лучше честно
+    ничего не нажать, чем нажать не то.
+    """
     for sel in ('button:has-text("Продолжить")', 'text="Продолжить"',
-                'button:has-text("Начать")', "button"):
+                'button:has-text("Начать")', 'button:has-text("Я не робот")'):
         try:
             btn = frame.locator(sel).first
             if btn.count():
@@ -428,6 +435,24 @@ class VkLoginFlow:
             self.page.wait_for_timeout(4000)
         return self.state()
 
+    def restart_login(self) -> dict:
+        """
+        Вернуться к форме входа с нуля.
+
+        ВК легко выбрасывает на гостевую главную: закрыли капчу, истекло
+        время кода, нажали не туда. Раньше это был тупик – кнопок нет,
+        полей нет, «не разобрал, что за шаг». Теперь просто открываем
+        форму заново и пропускаем QR.
+        """
+        try:
+            self.page.goto(f"{BASE}/login", wait_until="domcontentloaded", timeout=40_000)
+            self.page.wait_for_timeout(4000)
+            if click_in_frames(self.page, ("Войти другим способом", "Другой способ")):
+                self.page.wait_for_timeout(3000)
+        except Exception:  # noqa: BLE001
+            pass
+        return self.state()
+
     def press_other_way(self) -> dict:
         """
         «Войти другим способом» – уйти с экрана QR на вход по телефону.
@@ -555,6 +580,15 @@ class VkLoginFlow:
                         return {"step": "phone"}
                 except Exception:  # noqa: BLE001
                     continue
+            # Гостевая главная ВК: полей входа нет, зато есть «Войти» и
+            # «Регистрация». Значит нас выкинуло с формы – не «непонятный
+            # экран», а понятная ситуация: надо открыть форму заново.
+            try:
+                if self.page.locator(
+                        'button:has-text("Регистрация"), a:has-text("Регистрация")').count():
+                    return {"step": "start-over"}
+            except Exception:  # noqa: BLE001
+                pass
             return {"step": "unknown"}
         except Exception:  # noqa: BLE001
             return {"step": "unknown"}

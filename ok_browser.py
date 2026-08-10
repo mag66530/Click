@@ -247,15 +247,11 @@ class OkViaVkLoginFlow:
 
     def press_captcha_continue(self) -> dict:
         """Нажать «Продолжить» в проверке «вы не робот» внутри окна ВК."""
-        for sel in SEL["captcha_continue"]:
-            try:
-                btn = self.popup.locator(sel).first
-                if btn.count():
-                    btn.click(timeout=5000)
-                    self.popup.wait_for_timeout(3500)
-                    break
-            except Exception:  # noqa: BLE001
-                continue
+        import vk_social as _vk
+        fr = _vk.captcha_frame(self.popup)
+        if fr is not None:
+            _vk.press_captcha_in(fr)
+            self.popup.wait_for_timeout(4000)
         return self.state()
 
     def submit_code(self, code: str) -> dict:
@@ -284,12 +280,9 @@ class OkViaVkLoginFlow:
                 pass
             return {"step": "done"} if is_logged_in(self.page) else {"step": "login"}
         try:
-            for sel in SEL["captcha_box"]:
-                try:
-                    if self.popup.locator(sel).count():
-                        return {"step": "captcha"}
-                except Exception:  # noqa: BLE001
-                    continue
+            import vk_social as _vk
+            if _vk.captcha_frame(self.popup) is not None:
+                return {"step": "captcha"}
             if self.popup.locator(SEL["popup_password"]).count():
                 return {"step": "password"}
             if (self.popup.locator(SEL["code_boxes"]).count() >= 4

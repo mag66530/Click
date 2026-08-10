@@ -4278,10 +4278,19 @@ def _vk_login_block(project_id: str, config: dict) -> None:
         st.caption("Нужен аккаунт-администратор сообщества – тот, кем постят руками. "
                    "Click откроет форму входа ВК: телефон, пароль или код из SMS "
                    "вводятся здесь же, по снимку экрана.")
+        show_window = False
+        if can_show_browser():
+            show_window = st.checkbox(
+                "Показать окно браузера – если ВК просит подтвердить «я не робот»",
+                key="vk-show-window",
+                help="Откроется настоящее окно: проверку можно пройти руками, "
+                     "а Click продолжит вход. Работает только на своём компьютере.")
         if st.button("🔑 Войти в ВК", type="primary", key="vk-login", use_container_width=True):
             try:
-                flow = vk_social.VkLoginFlow(project_id,
-                                             headless=bool(get_settings(project_id)["headless"]))
+                flow = vk_social.VkLoginFlow(
+                    project_id,
+                    headless=(False if show_window
+                              else bool(get_settings(project_id)["headless"])))
                 with st.spinner("Открываю форму входа ВК…"):
                     st.session_state["vk_state"] = worker.call(flow.start)
                 st.session_state["vk_flow"] = flow
@@ -4349,8 +4358,16 @@ def _vk_login_block(project_id: str, config: dict) -> None:
             st.caption("Если проверка не проходит – её нужно пройти руками в окне "
                        "браузера, а это возможно только при локальном запуске Click.")
     else:
-        st.warning("Не разобрал, что за шаг на странице, – смотрите снимок выше. "
-                   "Можно ввести данные на нужном шаге ещё раз или отменить вход.")
+        st.warning("Не разобрал, что за шаг на странице, – смотрите снимок выше.")
+        # Даже когда шаг не распознан, чаще всего на экране висит окно с одной
+        # кнопкой «Продолжить» (та самая проверка «я не робот»). Даём нажать её
+        # вслепую – это безопасно и обычно решает дело.
+        if st.button("✅ Нажать «Продолжить» на экране", key="vk-blind-continue"):
+            st.session_state["vk_state"] = worker.call(flow.press_captcha_continue)
+            st.rerun()
+        if can_show_browser():
+            st.caption("Не помогает – отмените вход, поставьте галочку «Показать окно "
+                       "браузера» и войдите заново: проверку пройдёте руками.")
 
     if st.button("Отменить вход", key="vk-cancel"):
         try:

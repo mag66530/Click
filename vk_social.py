@@ -87,6 +87,44 @@ def session_path(project_id: str) -> Path:
     return d / "vk-state.json"
 
 
+def captcha_frame(page):
+    """
+    Кадр, в котором сейчас висит проверка «вы не робот». None – проверки нет.
+
+    ИСКАТЬ НАДО ВО ВСЕХ КАДРАХ. Капча ВК рисуется внутри iframe, а обычный
+    поиск по странице внутрь кадров не заглядывает – из-за этого Click
+    видел серую заглушку, не находил ни полей, ни капчи и честно писал
+    «не разобрал, что за шаг». Проверяем главную страницу и каждый кадр.
+    """
+    marks = ("не робот", "Проверяем")
+    try:
+        frames = [page] + list(page.frames)
+    except Exception:  # noqa: BLE001
+        frames = [page]
+    for fr in frames:
+        try:
+            body = (fr.inner_text("body") or "")[:4000]
+        except Exception:  # noqa: BLE001 – кадр мог отвалиться, идём дальше
+            continue
+        if any(m in body for m in marks):
+            return fr
+    return None
+
+
+def press_captcha_in(frame) -> bool:
+    """Нажать «Продолжить» в кадре с капчей. True – нашли и нажали."""
+    for sel in ('button:has-text("Продолжить")', 'text="Продолжить"',
+                'button:has-text("Начать")', "button"):
+        try:
+            btn = frame.locator(sel).first
+            if btn.count():
+                btn.click(timeout=6000)
+                return True
+        except Exception:  # noqa: BLE001
+            continue
+    return False
+
+
 def is_logged_in(page) -> bool:
     """
     Вошли ли мы на самом деле.
@@ -327,13 +365,7 @@ class VkLoginFlow:
     # ─── что на экране ──────────────────────────────────────────────
     def _has_captcha(self) -> bool:
         """Висит ли поверх формы проверка «вы не робот»."""
-        for sel in SEL["captcha_box"]:
-            try:
-                if self.page.locator(sel).count():
-                    return True
-            except Exception:  # noqa: BLE001
-                continue
-        return False
+        return captcha_frame(self.page) is not None
 
     def press_captcha_continue(self) -> dict:
         """
@@ -344,15 +376,10 @@ class VkLoginFlow:
         это покажет, и решать её придётся человеку в настоящем окне
         браузера (выключить «Скрытый браузер» в «Настройках»).
         """
-        for sel in SEL["captcha_continue"]:
-            try:
-                btn = self.page.locator(sel).first
-                if btn.count():
-                    btn.click(timeout=5000)
-                    self.page.wait_for_timeout(3500)
-                    break
-            except Exception:  # noqa: BLE001
-                continue
+        fr = captcha_frame(self.page)
+        if fr is not None:
+            press_captcha_in(fr)
+            self.page.wait_for_timeout(4000)
         return self.state()
 
     def page_state(self) -> dict:

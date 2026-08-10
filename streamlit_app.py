@@ -4334,6 +4334,20 @@ def _vk_login_block(project_id: str, config: dict) -> None:
         if st.button("Подтвердить", key="vk-code-go", type="primary") and code.strip():
             st.session_state["vk_state"] = worker.call(flow.submit_code, code)
             st.rerun()
+    elif step == "captcha":
+        st.caption("ВК проверяет, что вход делает человек. Обычно хватает одного "
+                   "нажатия – жмите кнопку ниже.")
+        if st.button("✅ Продолжить (я не робот)", key="vk-captcha-go", type="primary"):
+            st.session_state["vk_state"] = worker.call(flow.press_captcha_continue)
+            st.rerun()
+        if can_show_browser():
+            st.caption("Если проверка не проходит с одного нажатия – выключите "
+                       "«Скрытый браузер» в блоке входа в Яндекс выше и войдите "
+                       "заново: тогда откроется настоящее окно, где проверку можно "
+                       "пройти руками.")
+        else:
+            st.caption("Если проверка не проходит – её нужно пройти руками в окне "
+                       "браузера, а это возможно только при локальном запуске Click.")
     else:
         st.warning("Не разобрал, что за шаг на странице, – смотрите снимок выше. "
                    "Можно ввести данные на нужном шаге ещё раз или отменить вход.")
@@ -4447,6 +4461,12 @@ def _ok_login_block(project_id: str, config: dict) -> None:
         code = st.text_input("Код", key="ok-code")
         if st.button("Подтвердить", key="ok-code-go", type="primary") and code.strip():
             st.session_state["ok_state"] = worker.call(flow.submit_code, code)
+            st.rerun()
+    elif step == "captcha":
+        st.caption("ВК проверяет, что вход делает человек – обычно хватает "
+                   "одного нажатия.")
+        if st.button("✅ Продолжить (я не робот)", key="ok-captcha-go", type="primary"):
+            st.session_state["ok_state"] = worker.call(flow.press_captcha_continue)
             st.rerun()
     elif step == "no-vk-button":
         st.caption("Кнопки «Войти через ВК» на форме нет – войдите логином и паролем ОК ниже.")

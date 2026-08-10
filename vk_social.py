@@ -39,6 +39,14 @@ BASE = "https://vk.com"
 # (apptime). Иначе на сервере с UTC отложка уехала бы на 5 часов.
 TIMEZONE_ID = "Asia/Yekaterinburg"
 
+# ВК показывает проверку «вы не робот» скрытому браузеру заметно чаще
+# обычного. Этот ключ убирает у Chromium признак «мной управляет робот»
+# (navigator.webdriver), а скрипт ниже прячет остатки следа в самой странице.
+# Только для соцсетей: прогоны Яндекса и 2ГИС стартуют как раньше.
+ANTIBOT_ARGS = ["--disable-blink-features=AutomationControlled"]
+ANTIBOT_INIT = "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+
+
 # ─── Все селекторы в одном месте ────────────────────────────────────
 SEL = {
     # форма поста (data-testid подтверждены вживую)
@@ -60,6 +68,13 @@ SEL = {
     "login_password": 'input[name="password"]',
     "login_code_single": 'input[inputmode="numeric"], input[name="code"], input[autocomplete="one-time-code"]',
     "login_code_boxes": 'input[maxlength="1"]',
+    # Проверка «вы не робот». ВК показывает её поверх формы входа, чаще –
+    # скрытому браузеру. Обычно это одна кнопка «Продолжить»; иногда за ней
+    # прячется головоломка, которую может решить только человек в окне.
+    "captcha_box": ('text="Проверяем, что вы не робот"', "#captcha", ".vkc__Captcha",
+                    'iframe[src*="captcha"]', '[data-testid="captcha"]'),
+    "captcha_continue": ('button:has-text("Продолжить")', 'button:has-text("Начать")',
+                         '[data-testid="captcha-continue"]'),
 }
 
 MONTHS_RU = ["январь", "февраль", "март", "апрель", "май", "июнь",
@@ -137,7 +152,7 @@ def check_session(project_id: str, group_url: str = "",
 
     engine = yb.resolve_engine()
     with sync_playwright() as pw:
-        browser = yb._launch(pw, engine, headless=headless)
+        browser = yb._launch(pw, engine, headless=headless, extra_args=ANTIBOT_ARGS)
         page = None
         try:
             context = browser.new_context(
@@ -145,6 +160,7 @@ def check_session(project_id: str, group_url: str = "",
                 viewport={"width": 1280, "height": 900}, user_agent=yb.UA,
                 locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS,
                 timezone_id=TIMEZONE_ID)
+            context.add_init_script(ANTIBOT_INIT)
             page = context.new_page()
             page.goto(f"{BASE}/feed", wait_until="domcontentloaded", timeout=45_000)
             page.wait_for_timeout(2500)
@@ -217,13 +233,15 @@ class VkLoginFlow:
         engine = yb.resolve_engine()
         try:
             self._pw = sync_playwright().start()
-            self.browser = yb._launch(self._pw, engine, headless=self.headless)
+            self.browser = yb._launch(self._pw, engine, headless=self.headless,
+                                      extra_args=ANTIBOT_ARGS)
             state = session_path(self.project_id)
             self.context = self.browser.new_context(
                 storage_state=str(state) if state.exists() else None,
                 viewport={"width": 1000, "height": 760}, user_agent=yb.UA,
                 locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS,
                 timezone_id=TIMEZONE_ID)
+            self.context.add_init_script(ANTIBOT_INIT)
             self.page = self.context.new_page()
             self.page.goto(f"{BASE}/login", wait_until="domcontentloaded", timeout=40_000)
             self.page.wait_for_timeout(2000)
@@ -307,14 +325,49 @@ class VkLoginFlow:
         return self.state()
 
     # ─── что на экране ──────────────────────────────────────────────
+    def _has_captcha(self) -> bool:
+        """Висит ли поверх формы проверка «вы не робот»."""
+        for sel in SEL["captcha_box"]:
+            try:
+                if self.page.locator(sel).count():
+                    return True
+            except Exception:  # noqa: BLE001
+                continue
+        return False
+
+    def press_captcha_continue(self) -> dict:
+        """
+        Нажать «Продолжить» в проверке «вы не робот».
+
+        Часто этого достаточно – ВК просто убеждается, что кто-то живой
+        нажал кнопку. Если за ней окажется головоломка, следующий снимок
+        это покажет, и решать её придётся человеку в настоящем окне
+        браузера (выключить «Скрытый браузер» в «Настройках»).
+        """
+        for sel in SEL["captcha_continue"]:
+            try:
+                btn = self.page.locator(sel).first
+                if btn.count():
+                    btn.click(timeout=5000)
+                    self.page.wait_for_timeout(3500)
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        return self.state()
+
     def page_state(self) -> dict:
         """
         Какой шаг входа сейчас на экране. Порядок важен: сначала ищем поля
         формы (они говорят точно), «вошли» ставим ТОЛЬКО по настоящей
         проверке содержимым – раньше это решалось по адресу страницы, и
         гость на vk.com/feed засчитывался как вошедший.
+
+        Проверка «вы не робот» идёт ПЕРВОЙ: она висит поверх формы, и пока
+        её не пройти, любые поля под ней недоступны.
         """
         try:
+            if self._has_captcha():
+                return {"step": "captcha"}
             if self.page.locator(SEL["login_password"]).count():
                 return {"step": "password"}
             if (self.page.locator(SEL["login_code_boxes"]).count() >= 4
@@ -487,13 +540,14 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
     engine = yb.resolve_engine()
     page = None
     with sync_playwright() as pw:
-        browser = yb._launch(pw, engine, headless=headless)
+        browser = yb._launch(pw, engine, headless=headless, extra_args=ANTIBOT_ARGS)
         try:
             context = browser.new_context(
                 storage_state=str(session_path(project_id)),
                 viewport={"width": 1280, "height": 900}, user_agent=yb.UA,
                 locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS,
                 timezone_id=TIMEZONE_ID)
+            context.add_init_script(ANTIBOT_INIT)
             page = context.new_page()
 
             log(f"Открываю сообщество: {group_url}")

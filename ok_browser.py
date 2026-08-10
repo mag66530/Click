@@ -45,6 +45,10 @@ SEL = {
     "popup_phone": 'input[name="login"]',
     "popup_password": 'input[name="password"]',
     "popup_next": 'button:has-text("Продолжить")',
+    # Проверка «вы не робот» – ВК показывает её и во всплывающем окне.
+    "captcha_box": ('text="Проверяем, что вы не робот"', "#captcha", ".vkc__Captcha",
+                    'iframe[src*="captcha"]'),
+    "captcha_continue": ('button:has-text("Продолжить")', 'button:has-text("Начать")'),
     "code_single": 'input[inputmode="numeric"], input[name="code"], input[autocomplete="one-time-code"]',
     "code_boxes": 'input[maxlength="1"]',
     # форма поста (проверено вживую, 2026-07)
@@ -158,7 +162,9 @@ class OkViaVkLoginFlow:
         engine = yb.resolve_engine()
         try:
             self._pw = sync_playwright().start()
-            self.browser = yb._launch(self._pw, engine, headless=self.headless)
+            import vk_social as _vk
+            self.browser = yb._launch(self._pw, engine, headless=self.headless,
+                                      extra_args=_vk.ANTIBOT_ARGS)
             # Подкладываем сессию ВК, если она есть: ради неё всё и затевалось.
             vk_state = vk_social.session_path(self.project_id)
             ok_state = session_path(self.project_id)
@@ -169,6 +175,7 @@ class OkViaVkLoginFlow:
                 viewport={"width": 1100, "height": 800}, user_agent=yb.UA,
                 locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS,
                 timezone_id=TIMEZONE_ID)
+            self.context.add_init_script(_vk.ANTIBOT_INIT)
             self.page = self.context.new_page()
             self.page.goto(BASE, wait_until="domcontentloaded", timeout=40_000)
             self.page.wait_for_timeout(2000)
@@ -238,6 +245,19 @@ class OkViaVkLoginFlow:
                 continue
         return self.state()
 
+    def press_captcha_continue(self) -> dict:
+        """Нажать «Продолжить» в проверке «вы не робот» внутри окна ВК."""
+        for sel in SEL["captcha_continue"]:
+            try:
+                btn = self.popup.locator(sel).first
+                if btn.count():
+                    btn.click(timeout=5000)
+                    self.popup.wait_for_timeout(3500)
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        return self.state()
+
     def submit_code(self, code: str) -> dict:
         code = code.strip()
         single = self.popup.locator(SEL["code_single"])
@@ -264,6 +284,12 @@ class OkViaVkLoginFlow:
                 pass
             return {"step": "done"} if is_logged_in(self.page) else {"step": "login"}
         try:
+            for sel in SEL["captcha_box"]:
+                try:
+                    if self.popup.locator(sel).count():
+                        return {"step": "captcha"}
+                except Exception:  # noqa: BLE001
+                    continue
             if self.popup.locator(SEL["popup_password"]).count():
                 return {"step": "password"}
             if (self.popup.locator(SEL["code_boxes"]).count() >= 4
@@ -305,13 +331,16 @@ class OkLoginFlow:
         engine = yb.resolve_engine()
         try:
             self._pw = sync_playwright().start()
-            self.browser = yb._launch(self._pw, engine, headless=self.headless)
+            import vk_social as _vk
+            self.browser = yb._launch(self._pw, engine, headless=self.headless,
+                                      extra_args=_vk.ANTIBOT_ARGS)
             state = session_path(self.project_id)
             self.context = self.browser.new_context(
                 storage_state=str(state) if state.exists() else None,
                 viewport={"width": 1000, "height": 760}, user_agent=yb.UA,
                 locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS,
                 timezone_id=TIMEZONE_ID)
+            self.context.add_init_script(_vk.ANTIBOT_INIT)
             self.page = self.context.new_page()
             self.page.goto(BASE, wait_until="domcontentloaded", timeout=40_000)
             self.page.wait_for_timeout(1800)
@@ -421,13 +450,15 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
 
     engine = yb.resolve_engine()
     with sync_playwright() as pw:
-        browser = yb._launch(pw, engine, headless=headless)
+        import vk_social as _vk
+        browser = yb._launch(pw, engine, headless=headless, extra_args=_vk.ANTIBOT_ARGS)
         try:
             context = browser.new_context(
                 storage_state=str(session_path(project_id)),
                 viewport={"width": 1280, "height": 900}, user_agent=yb.UA,
                 locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS,
                 timezone_id=TIMEZONE_ID)
+            context.add_init_script(_vk.ANTIBOT_INIT)
             page = context.new_page()
 
             log(f"Открываю группу: {group_url}")

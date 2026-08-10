@@ -269,6 +269,29 @@ class VkLoginFlow:
         self.page.wait_for_timeout(3000)
         return self.state()
 
+    def request_code_instead(self) -> dict:
+        """
+        Уйти с пароля на вход по SMS-коду.
+
+        У рабочих аккаунтов брендов пароля обычно нет вовсе – входят по
+        телефону и коду. ВК прячет этот путь за ссылкой «Забыли или не
+        установили пароль?»: в открывшемся окне выбираем «Нет, восстановить
+        пароль» и жмём «Отправить код». Порядок проверен вживую.
+        """
+        try:
+            self.page.click("text=Забыли или не установили пароль?", timeout=6000)
+            self.page.wait_for_timeout(1200)
+        except Exception:  # noqa: BLE001 – ссылки нет, возможно код уже просят
+            pass
+        for label in ("Нет, восстановить пароль", "Отправить код", "Получить код"):
+            try:
+                self.page.click(f"text={label}", timeout=4000)
+                self.page.wait_for_timeout(1500)
+            except Exception:  # noqa: BLE001 – шага может не быть, идём дальше
+                continue
+        self.page.wait_for_timeout(1500)
+        return self.state()
+
     def submit_code(self, code: str) -> dict:
         code = code.strip()
         single = self.page.locator(SEL["login_code_single"])

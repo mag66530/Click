@@ -4318,9 +4318,15 @@ def _vk_login_block(project_id: str, config: dict) -> None:
             st.session_state["vk_state"] = worker.call(flow.submit_phone, phone)
             st.rerun()
     elif step == "password":
+        st.caption("Если пароля у аккаунта нет – входите по коду из SMS, "
+                   "это обычный путь для рабочих аккаунтов брендов.")
         pwd = st.text_input("Пароль ВК", type="password", key="vk-pass")
-        if st.button("Войти", key="vk-pass-go", type="primary") and pwd:
+        c1, c2 = st.columns(2)
+        if c1.button("Войти по паролю", key="vk-pass-go", type="primary") and pwd:
             st.session_state["vk_state"] = worker.call(flow.submit_password, pwd)
+            st.rerun()
+        if c2.button("📱 Войти по коду из SMS", key="vk-pass-sms"):
+            st.session_state["vk_state"] = worker.call(flow.request_code_instead)
             st.rerun()
     elif step == "code":
         st.caption("ВК просит код подтверждения – из SMS или приложения.")
@@ -4344,25 +4350,26 @@ def _vk_login_block(project_id: str, config: dict) -> None:
 
 def _ok_login_block(project_id: str, config: dict) -> None:
     """
-    Вход в ОК для кросспостинга. API-права заказчику не дали (2026-08-10),
-    поэтому ОК – как ВК: вход с сохранением сессии, отложка через интерфейс
-    группы. Логин храним в конфиге (удобно), пароль – нет: вводится при
-    входе, дальше живёт сессия.
+    Вход в ОК для кросспостинга.
+
+    ОСНОВНОЙ ПУТЬ – «Войти через ВК»: у рабочих аккаунтов брендов своего
+    пароля ОК нет, и ВК, и ОК открываются одной учёткой ВК. Click подкладывает
+    сохранённую сессию ВК, поэтому чаще всего вход в ОК проходит вообще без
+    ввода – «вошли в ВК, ОК подтянулся». Если сессии ВК нет, телефон и код
+    вводятся в том же всплывающем окне ВК.
+
+    Запасной путь – обычный логин и пароль ОК, если они всё же есть.
     """
     import ok_browser
+    import vk_social
 
     worker = get_worker()
     html('<div class="card-title">🔐 Вход в ОК (кросспостинг)</div>')
 
-    c1, c2 = st.columns(2)
-    ok_login = c1.text_input("Логин ОК (телефон/почта админа группы)",
-                             value=config.get("okLogin", ""), key=f"ok-login-{project_id}")
-    group_url = c2.text_input("Ссылка на группу ОК бренда", value=config.get("okGroupUrl", ""),
+    group_url = st.text_input("Ссылка на группу ОК бренда", value=config.get("okGroupUrl", ""),
                               key=f"ok-group-{project_id}",
                               placeholder="https://ok.ru/group/…")
-    if ok_login.strip() != (config.get("okLogin") or "") \
-            or group_url.strip() != (config.get("okGroupUrl") or ""):
-        config["okLogin"] = ok_login.strip()
+    if group_url.strip() != (config.get("okGroupUrl") or ""):
         config["okGroupUrl"] = group_url.strip()
         save_config(project_id)
 
@@ -4378,26 +4385,32 @@ def _ok_login_block(project_id: str, config: dict) -> None:
 
     flow = st.session_state.get("ok_flow")
     if flow is None:
-        password = st.text_input("Пароль ОК", type="password", key=f"ok-pass-{project_id}")
-        if st.button("🔑 Войти в ОК", type="primary", key="ok-go",
-                     use_container_width=True, disabled=not (ok_login.strip() and password)):
+        if vk_social.has_saved_session(project_id):
+            st.caption("Сессия ВК есть – скорее всего, ОК пустит сразу, без ввода: "
+                       "это та самая связка, ВК и ОК под одной учёткой.")
+        else:
+            st.caption("Сначала лучше войти в ВК (блок выше) – тогда ОК пустит без "
+                       "ввода. Можно и сразу сюда: телефон и код спросят в окне ВК.")
+        if st.button("🔑 Войти в ОК через ВК", type="primary", key="ok-go",
+                     use_container_width=True):
             try:
-                flow = ok_browser.OkLoginFlow(project_id,
-                                              headless=bool(get_settings(project_id)["headless"]))
-                with st.spinner("Открываю ОК…"):
-                    worker.call(flow.start)
-                    st.session_state["ok_state"] = worker.call(
-                        flow.submit_credentials, ok_login.strip(), password)
+                flow = ok_browser.OkViaVkLoginFlow(
+                    project_id, headless=bool(get_settings(project_id)["headless"]))
+                with st.spinner("Открываю ОК и жму «Войти через ВК»…"):
+                    st.session_state["ok_state"] = worker.call(flow.start)
                 st.session_state["ok_flow"] = flow
                 st.rerun()
             except Exception as e:  # noqa: BLE001
                 _browser_error(e)
+        _ok_password_fallback(project_id, config, worker)
         return
 
     state = st.session_state.get("ok_state") or {}
+    if state.get("note"):
+        st.warning(state["note"])
     if state.get("screenshot"):
         st.image(state["screenshot"], use_container_width=True)
-        st.caption("Это то, что Click видит в ОК прямо сейчас.")
+        st.caption("Это то, что Click видит прямо сейчас.")
 
     step = state.get("step")
     if step == "done":
@@ -4410,18 +4423,35 @@ def _ok_login_block(project_id: str, config: dict) -> None:
         if ok_browser.has_saved_session(project_id):
             st.success("Вошли в ОК. Сессия сохранена.")
         else:
-            st.warning("ОК пустил, но сессия не сохранилась – попробуйте ещё раз.")
+            st.warning("ОК показал вход выполненным, но признака входа в куках нет – "
+                       "сессия не сохранена. Попробуйте ещё раз.")
         time.sleep(1.0)
         st.rerun()
+    elif step == "phone":
+        phone = st.text_input("Телефон аккаунта ВК", key="ok-phone", placeholder="+7…")
+        if st.button("Далее", key="ok-phone-go", type="primary") and phone.strip():
+            st.session_state["ok_state"] = worker.call(flow.submit_phone, phone)
+            st.rerun()
+    elif step == "password":
+        st.caption("Пароля у аккаунта может не быть – тогда входите по коду из SMS.")
+        pwd = st.text_input("Пароль ВК", type="password", key="ok-vkpass")
+        c1, c2 = st.columns(2)
+        if c1.button("Войти по паролю", key="ok-pass-go", type="primary") and pwd:
+            st.session_state["ok_state"] = worker.call(flow.submit_password, pwd)
+            st.rerun()
+        if c2.button("📱 Войти по коду из SMS", key="ok-pass-sms"):
+            st.session_state["ok_state"] = worker.call(flow.request_code_instead)
+            st.rerun()
     elif step == "code":
-        st.caption("ОК просит код подтверждения – из SMS или почты.")
+        st.caption("ВК просит код подтверждения – из SMS или приложения.")
         code = st.text_input("Код", key="ok-code")
         if st.button("Подтвердить", key="ok-code-go", type="primary") and code.strip():
             st.session_state["ok_state"] = worker.call(flow.submit_code, code)
             st.rerun()
+    elif step == "no-vk-button":
+        st.caption("Кнопки «Войти через ВК» на форме нет – войдите логином и паролем ОК ниже.")
     else:
-        st.warning("ОК не пустил с этой парой логин/пароль – проверьте и попробуйте "
-                   "снова. На снимке видно, что показывает ОК.")
+        st.warning("Не разобрал, что за шаг на экране – смотрите снимок выше.")
 
     if st.button("Отменить вход", key="ok-cancel"):
         try:
@@ -4431,6 +4461,33 @@ def _ok_login_block(project_id: str, config: dict) -> None:
         st.session_state.pop("ok_flow", None)
         st.session_state.pop("ok_state", None)
         st.rerun()
+
+
+def _ok_password_fallback(project_id: str, config: dict, worker) -> None:
+    """Запасной вход в ОК – своим логином и паролем, если они есть."""
+    import ok_browser
+
+    with st.expander("…или войти логином и паролем ОК"):
+        c1, c2 = st.columns(2)
+        ok_login = c1.text_input("Логин ОК (телефон/почта)", value=config.get("okLogin", ""),
+                                 key=f"ok-login-{project_id}")
+        password = c2.text_input("Пароль ОК", type="password", key=f"ok-pass-{project_id}")
+        if ok_login.strip() != (config.get("okLogin") or ""):
+            config["okLogin"] = ok_login.strip()
+            save_config(project_id)
+        if st.button("Войти логином и паролем", key="ok-plain-go",
+                     disabled=not (ok_login.strip() and password)):
+            try:
+                flow = ok_browser.OkLoginFlow(
+                    project_id, headless=bool(get_settings(project_id)["headless"]))
+                with st.spinner("Открываю ОК…"):
+                    worker.call(flow.start)
+                    st.session_state["ok_state"] = worker.call(
+                        flow.submit_credentials, ok_login.strip(), password)
+                st.session_state["ok_flow"] = flow
+                st.rerun()
+            except Exception as e:  # noqa: BLE001
+                _browser_error(e)
 
 
 def _yandex_login_block(project_id: str, config: dict) -> None:

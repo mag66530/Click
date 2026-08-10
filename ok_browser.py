@@ -37,6 +37,14 @@ SEL = {
     # вход (проверено вживую)
     "login": 'input[name="st.email"]',
     "password": 'input[name="st.password"]',
+    # «Войти через VK ID» – иконка ВК на форме входа ОК. ОСНОВНОЙ путь:
+    # у аккаунтов брендов своего пароля ОК обычно нет, вход идёт через ВК.
+    # Клик открывает всплывающее окно id.vk.com (проверено вживую 06.07.2026).
+    "vk_id_button": ("a.social-icon-button.__vk_id, a[class*='__vk_id'], "
+                     "[data-l*='vk'] .social-icon-button, a[title*='ВКонтакте']"),
+    "popup_phone": 'input[name="login"]',
+    "popup_password": 'input[name="password"]',
+    "popup_next": 'button:has-text("Продолжить")',
     "code_single": 'input[inputmode="numeric"], input[name="code"], input[autocomplete="one-time-code"]',
     "code_boxes": 'input[maxlength="1"]',
     # форма поста (проверено вживую, 2026-07)
@@ -115,7 +123,170 @@ def _debug_shot(project_id: str, page, name: str) -> str:
 
 
 # ════════════════════════════════════════════════════════════════════
-#  Вход – тот же порядок, что у ВК/2ГИС
+#  Вход в ОК ЧЕРЕЗ ВК – основной путь
+# ════════════════════════════════════════════════════════════════════
+class OkViaVkLoginFlow:
+    """
+    Вход в ОК кнопкой «Войти через VK ID» – так, как заказчик делает руками.
+
+    Почему это основной путь. У рабочих аккаунтов брендов своего пароля ОК
+    нет: и ВК, и ОК открываются одной учёткой ВК. Клик по иконке ВК на форме
+    входа ОК открывает всплывающее окно id.vk.com; после успеха окно
+    закрывается само, а вкладка ОК оказывается залогинена.
+
+    Связка сессий. В браузер подкладывается УЖЕ СОХРАНЁННАЯ СЕССИЯ ВК –
+    тогда ВК узнаёт нас во всплывающем окне и вход в ОК проходит без ввода
+    телефона и кода вовсе («вошли в ВК – ОК подтянулся»). Сессии ВК нет –
+    просто вводим телефон и код в том же окне.
+    """
+
+    def __init__(self, project_id: str, headless: bool = True):
+        self.project_id = project_id
+        self.headless = headless
+        self._pw = None
+        self.browser = None
+        self.context = None
+        self.page = None      # вкладка ОК
+        self.popup = None     # всплывающее окно ВК
+
+    # ─── жизненный цикл ─────────────────────────────────────────────
+    def start(self) -> dict:
+        from playwright.sync_api import sync_playwright
+
+        import vk_social
+
+        engine = yb.resolve_engine()
+        try:
+            self._pw = sync_playwright().start()
+            self.browser = yb._launch(self._pw, engine, headless=self.headless)
+            # Подкладываем сессию ВК, если она есть: ради неё всё и затевалось.
+            vk_state = vk_social.session_path(self.project_id)
+            ok_state = session_path(self.project_id)
+            start_state = (str(ok_state) if ok_state.exists()
+                           else str(vk_state) if vk_state.exists() else None)
+            self.context = self.browser.new_context(
+                storage_state=start_state,
+                viewport={"width": 1100, "height": 800}, user_agent=yb.UA,
+                locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS,
+                timezone_id=TIMEZONE_ID)
+            self.page = self.context.new_page()
+            self.page.goto(BASE, wait_until="domcontentloaded", timeout=40_000)
+            self.page.wait_for_timeout(2000)
+
+            if is_logged_in(self.page):          # сессия ОК уже жива
+                return self.state()
+
+            btn = self.page.locator(SEL["vk_id_button"]).first
+            if not btn.count():
+                return {**self.state(), "step": "no-vk-button",
+                        "note": "На форме входа ОК не нашли кнопку «Войти через ВК». "
+                                "Можно войти обычным логином и паролем ОК ниже."}
+            with self.page.expect_popup(timeout=20_000) as info:
+                btn.click()
+            self.popup = info.value
+            self.popup.wait_for_load_state("domcontentloaded")
+            self.popup.wait_for_timeout(2500)
+            return self.state()
+        except Exception:
+            self.close()
+            raise
+
+    def close(self) -> None:
+        try:
+            if self.browser:
+                self.browser.close()
+        except Exception:  # noqa: BLE001
+            pass
+        finally:
+            self.browser = self.context = self.page = self.popup = None
+            try:
+                if self._pw:
+                    self._pw.stop()
+            except Exception:  # noqa: BLE001
+                pass
+            self._pw = None
+
+    def save_session(self) -> None:
+        """
+        Сохраняем состояние ЦЕЛИКОМ (куки и ok.ru, и vk.com) в сессию ОК:
+        публикации нужны ok.ru-куки, а vk.com-куки внутри не мешают и
+        помогают, если ОК позже переспросит вход через ВК.
+        """
+        yb._save_storage_state(self.context, session_path(self.project_id))
+
+    # ─── шаги во всплывающем окне ───────────────────────────────────
+    def submit_phone(self, phone: str) -> dict:
+        self.popup.fill(SEL["popup_phone"], phone.strip())
+        self.popup.click(SEL["popup_next"])
+        self.popup.wait_for_timeout(3000)
+        return self.state()
+
+    def submit_password(self, password: str) -> dict:
+        self.popup.fill(SEL["popup_password"], password)
+        self.popup.click(SEL["popup_next"])
+        self.popup.wait_for_timeout(3000)
+        return self.state()
+
+    def request_code_instead(self) -> dict:
+        """Уйти с пароля на SMS-код – у аккаунтов брендов пароля обычно нет."""
+        for label in ("Забыли или не установили пароль?", "Нет, восстановить пароль",
+                      "Отправить код", "Получить код"):
+            try:
+                self.popup.click(f"text={label}", timeout=4000)
+                self.popup.wait_for_timeout(1500)
+            except Exception:  # noqa: BLE001 – шага может не быть
+                continue
+        return self.state()
+
+    def submit_code(self, code: str) -> dict:
+        code = code.strip()
+        single = self.popup.locator(SEL["code_single"])
+        if single.count() >= 1:
+            single.first.fill(code)
+        else:
+            boxes = self.popup.locator(SEL["code_boxes"])
+            if boxes.count() >= len(code):
+                for i, digit in enumerate(code):
+                    boxes.nth(i).fill(digit)
+        self.popup.keyboard.press("Enter")
+        self.popup.wait_for_timeout(3500)
+        return self.state()
+
+    # ─── что на экране ──────────────────────────────────────────────
+    def page_state(self) -> dict:
+        # Окно закрылось – ВК подтвердил вход, смотрим на саму вкладку ОК.
+        if self.popup is None or self.popup.is_closed():
+            try:
+                self.page.wait_for_timeout(1500)
+                self.page.reload(wait_until="domcontentloaded", timeout=30_000)
+                self.page.wait_for_timeout(2000)
+            except Exception:  # noqa: BLE001
+                pass
+            return {"step": "done"} if is_logged_in(self.page) else {"step": "login"}
+        try:
+            if self.popup.locator(SEL["popup_password"]).count():
+                return {"step": "password"}
+            if (self.popup.locator(SEL["code_boxes"]).count() >= 4
+                    or self.popup.locator(SEL["code_single"]).count()):
+                return {"step": "code"}
+            if self.popup.locator(SEL["popup_phone"]).count():
+                return {"step": "phone"}
+            return {"step": "unknown"}
+        except Exception:  # noqa: BLE001
+            return {"step": "unknown"}
+
+    def state(self) -> dict:
+        st = self.page_state()
+        shot_from = self.page if (self.popup is None or self.popup.is_closed()) else self.popup
+        try:
+            st["screenshot"] = shot_from.screenshot(type="png", full_page=False)
+        except Exception:  # noqa: BLE001
+            st["screenshot"] = None
+        return st
+
+
+# ════════════════════════════════════════════════════════════════════
+#  Вход по логину и паролю ОК – запасной путь
 # ════════════════════════════════════════════════════════════════════
 class OkLoginFlow:
     """Пошаговый вход в ОК: логин+пароль, при необходимости код."""

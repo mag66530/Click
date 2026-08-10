@@ -244,6 +244,61 @@ def build_prompt(prompt_template: str, item: dict, project_id: str = "") -> str:
 ASSORTMENT_NEAR = 0.75      # насколько абзац похож на эталон, чтобы счесть его тем самым
 
 
+_MPE_SIGN = "С уважением, команда Метпромэнерго."
+_MPE_SIGN_RX = re.compile(r"\s*С\s+уважением\b.*$", re.S | re.I)
+
+
+def fix_mpe_shape(text: str) -> str:
+    """
+    Привести ответ МПЭ к трёхабзацной структуре:
+      Абзац 1: приветствие (Имя, спасибо…!)
+      Абзац 2: основная часть с эталонной ассортиментной фразой
+      Абзац 3: «С уважением, команда Метпромэнерго.»
+
+    Модель нередко сливает приветствие с основным абзацем в один – тогда
+    fix_assortment() не находит похожего абзаца и ничего не меняет.
+    Здесь сначала раскалываем первый абзац по «!», затем ищем
+    ассортиментную фразу на уровне предложений и заменяем на эталон.
+    """
+    want = (pdata.REVIEW_ASSORTMENT.get("MPE") or "").strip()
+
+    # Убираем подпись – добавим сами
+    body = _MPE_SIGN_RX.sub("", text).strip()
+
+    # Разбиваем на абзацы
+    paras = [p.strip() for p in body.split("\n\n") if p.strip()]
+
+    # Если первый абзац содержит текст ПОСЛЕ первого «!» – отщепляем
+    if paras:
+        bang = paras[0].find("!")
+        if 0 < bang < len(paras[0]) - 2:
+            greeting = paras[0][:bang + 1].strip()
+            rest = paras[0][bang + 1:].strip()
+            paras = [greeting] + ([rest] if rest else []) + paras[1:]
+
+    greeting = paras[0] if paras else ""
+
+    # Всё, кроме приветствия, – тело: разбиваем на предложения
+    body_sents: list[str] = []
+    for para in paras[1:]:
+        body_sents.extend(_SENTENCE_SPLIT_RX.split(para))
+
+    # Заменяем ассортиментную фразу на эталонную (поиск по сходству)
+    replaced = False
+    if want:
+        for i, s in enumerate(body_sents):
+            if SequenceMatcher(None, s.strip().lower(), want.lower()).ratio() >= ASSORTMENT_NEAR:
+                body_sents[i] = want
+                replaced = True
+                break
+        if not replaced and body_sents:
+            # Фраза совсем не нашлась – добавляем в конец
+            body_sents.append(want)
+
+    body_text = " ".join(s for s in body_sents if s.strip())
+    return f"{greeting}\n\n{body_text}\n\n{_MPE_SIGN}"
+
+
 def fix_assortment(project_id: str, text: str) -> str:
     """
     Вернуть ассортиментной фразе эталонный вид.
@@ -464,7 +519,9 @@ def clean_draft(text: str, project_id: str = "", review: str = "") -> str:
     t = re.sub(r"(?m)^#{1,6}\s*", "", t)        # заголовки решётками
     t = re.sub(r"\n{3,}", "\n\n", t).strip()    # лишние пустые строки
     if project_id == "MPI":
-        return fix_mpi_shape(t, review)         # у МПИ вид ответа свой, см. функцию
+        return fix_mpi_shape(t, review)
+    if project_id == "MPE":
+        return fix_mpe_shape(t)
     return fix_assortment(project_id, t) if project_id else t
 
 

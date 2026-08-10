@@ -225,8 +225,67 @@ def test_bold_from_real_file() -> None:
     check("и не сломала распознавание сетей", {"vk", "ok", "max"} <= nets, str(sorted(nets)))
 
 
+def test_platform_clients() -> None:
+    print("Клиенты площадок: чистая логика")
+    from datetime import date as _d, datetime, timezone, timedelta
+
+    import ok_social, tg_social, max_social, crosspost_form  # noqa: E401
+
+    ekb = timezone(timedelta(hours=5))
+    check("ОК: 11:00 Екб → 09:00 Мск",
+          ok_social.publish_at_msk(datetime(2026, 8, 13, 11, 0, tzinfo=ekb))
+          == "2026-08-13 09:00:00")
+    check("ОК: 00:30 Екб → вчера 22:30 Мск",
+          ok_social.publish_at_msk(datetime(2026, 8, 13, 0, 30, tzinfo=ekb))
+          == "2026-08-12 22:30:00")
+    try:
+        ok_social.publish_at_msk(datetime(2026, 8, 13, 11, 0))
+        check("ОК: время без пояса не принимается", False)
+    except ValueError:
+        check("ОК: время без пояса не принимается", True)
+    check("ОК: подпись стабильна",
+          ok_social.sign({"b": "2", "a": "1"}, "s")
+          == ok_social.sign({"a": "1", "b": "2"}, "s"))
+    check("ОК: session_secret по схеме MD5",
+          ok_social.session_secret("tok", "sec") ==
+          __import__("hashlib").md5(b"toksec").hexdigest())
+    import json as _json
+    att = _json.loads(ok_social.build_attachment("текст", ["p1", "p2"]))
+    check("ОК: вложение — текст, потом фото",
+          [m["type"] for m in att["media"]] == ["text", "photo"]
+          and len(att["media"][1]["list"]) == 2)
+
+    check("ТГ: без фото — текстом", tg_social.plan_delivery(500, 0) == "text")
+    check("ТГ: 1 фото + короткий текст", tg_social.plan_delivery(1000, 1) == "photo+caption")
+    check("ТГ: альбом + подпись", tg_social.plan_delivery(1000, 3) == "album+caption")
+    check("ТГ: длинный текст — отдельно", tg_social.plan_delivery(1500, 2) == "media+text")
+    check("ТГ: граница 1024 включительно", tg_social.plan_delivery(1024, 1) == "photo+caption")
+    parts = tg_social.split_text("а" * 3000 + "\n" + "б" * 3000)
+    check("ТГ: длинный текст режется по абзацу",
+          len(parts) == 2 and parts[0] == "а" * 3000)
+
+    body = max_social.build_body("**Важно** [сайт](https://a.ru)", ["t1"])
+    check("МАКС: тело с html и вложением",
+          body["format"] == "html" and "<b>Важно</b>" in body["text"]
+          and body["attachments"][0]["payload"]["token"] == "t1")
+
+    # Оркестровка: память отфильтровывает уже сформированное
+    import crosspost_state as cps
+    post = {"brand": "SMU", "date": "2099-01-10", "when": "2099-01-10T11:00:00+05:00",
+            "format": "Пост", "text": "т", "images": [],
+            "targets": [{"network": "vk", "raw": "Вконтакте", "published_link": ""}]}
+    check("формирование: ждёт — в списке",
+          len(crosspost_form.pending_for([post], {}, "vk", today=_d(2026, 8, 10))) == 1)
+    st_done = {cps.post_key(post): {"targets": {"vk": {"state": cps.SCHEDULED}}}}
+    check("формирование: отложка стоит — не в списке",
+          crosspost_form.pending_for([post], st_done, "vk", today=_d(2026, 8, 10)) == [])
+    check("формирование: время поста с поясом Екб",
+          crosspost_form.when_local(post).utcoffset() == timedelta(hours=5))
+
+
 def main() -> int:
     print("═" * 60)
+    test_platform_clients()
     test_post_text()
     test_bold_from_real_file()
     test_state()

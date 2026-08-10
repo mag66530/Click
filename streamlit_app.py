@@ -3327,6 +3327,8 @@ def tab_crosspost(project_id: str, config: dict) -> None:
     else:
         html("".join(_crosspost_plan_row(p, state) for p in upcoming))
 
+    _crosspost_form_vk_block(project_id, config, upcoming, state)
+
     _crosspost_vk_probe(project_id, config)
 
     # Честно говорим, где мы находимся: формирование отложек – следующий этап.
@@ -3335,6 +3337,54 @@ def tab_crosspost(project_id: str, config: dict) -> None:
             "одной кнопкой, ОК, Телеграм, МАКС и Яндекс.Бизнес по времени подключаются "
             "следующими этапами – см. ПЛАН-Кросспостинг.md.",
             icon="ℹ️")
+
+
+def _crosspost_form_vk_block(project_id: str, config: dict,
+                             upcoming: list[dict], state: dict) -> None:
+    """
+    «Сформировать отложки ВК» на весь видимый план. Каждый пост — своя
+    отложка в сообществе; исходы пишутся в память сразу, так что повтор
+    кнопки доформирует только то, что не встало (Д-6, без дублей).
+    """
+    import crosspost_form
+    import vk_social
+
+    todo = crosspost_form.pending_for(upcoming, state, "vk")
+    if not todo:
+        return
+    ready = vk_social.has_saved_session(project_id) and (config.get("vkGroupUrl") or "").strip()
+    label = f"📌 Сформировать отложки ВК — {len(todo)} " + \
+            ("пост" if len(todo) == 1 else "поста" if len(todo) < 5 else "постов")
+    if not ready:
+        st.caption(f"{label}: сначала вход в ВК и ссылка на сообщество — "
+                   "«Настройки» → «Вход в ВК (кросспостинг)».")
+        return
+    busy = runner.busy_reason(project_id, "publish")
+    if busy:
+        st.caption(f"{label}: сейчас нельзя — {busy}.")
+        return
+
+    if st.button(label, type="primary", key=f"vk-form-all-{project_id}",
+                 use_container_width=True):
+        site = ((project_endings(project_id).get("contacts") or {})
+                .get("Россия") or {}).get("site", "")
+        box = st.status("Формирую отложки ВК…", expanded=True)
+        results = crosspost_form.form_vk_all(
+            project_id, config["vkGroupUrl"].strip(), upcoming, site,
+            progress=lambda m: box.write(m),
+            headless=bool(get_settings(project_id)["headless"]))
+        ok = sum(1 for r in results if r["ok"])
+        bad = [r for r in results if not r["ok"]]
+        if not bad:
+            box.update(label=f"Готово: {ok} из {len(results)} отложек стоят в ВК",
+                       state="complete")
+        else:
+            box.update(label=f"Стоят {ok} из {len(results)}; с ошибками — {len(bad)}",
+                       state="error")
+            for r in bad:
+                box.write(f"❌ {r['post']['date']}: {r['error']}")
+        time.sleep(1.0)
+        st.rerun()
 
 
 def _crosspost_vk_probe(project_id: str, config: dict) -> None:

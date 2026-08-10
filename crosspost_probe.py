@@ -17,24 +17,21 @@ wall,photos,groups,offline).
   1. Получите токен ВК (пошагово — в ПОСТАНОВКА-Кросспостинг.md, «Приложение А»):
      Standalone-приложение на vk.com/apps?act=manage → права
      wall,photos,groups,offline → токен из адресной строки браузера.
-  2. Запустите одной строкой (Windows — в том же окне, где стартует Click):
-        set VK_TOKEN=vk1.a...ваш токен...
-        python crosspost_probe.py
-     macOS/Linux:
-        VK_TOKEN="vk1.a...ваш токен..." python crosspost_probe.py
-     По умолчанию — сообщество СМУ (id 217668235), текст-заглушка, без фото,
-     время публикации через 15 минут.
+  2. Запустите, задав ДВА обязательных значения — токен и id сообщества
+     (ничего брендового в коде нет, всё передаётся снаружи):
+        Windows:      set VK_TOKEN=vk1.a...   & set VK_GROUP_ID=<id> & python crosspost_probe.py
+        macOS/Linux:  VK_TOKEN="vk1.a..." VK_GROUP_ID="<id>" python crosspost_probe.py
+     По умолчанию — текст-заглушка, без фото, время публикации через 15 минут.
   3. Откройте сообщество ВК → «Управление» → «Отложенные записи».
      Там должна появиться запись. Значит API работает — можно встраивать в Click.
 
 ПЕРЕОПРЕДЕЛИТЬ УМОЛЧАНИЯ (необязательно) — тоже через переменные окружения:
-  VK_GROUP_ID=217668235                      id сообщества (без минуса)
   VK_MINUTES=15                              через сколько минут опубликовать
   VK_TEXT="Проверка"                         текст поста
   VK_IMAGE_URL="https://i.ibb.co/....jpg"    если задано — прикрепит фото
 
-Токен читается только из окружения и уходит только на api.vk.com. Скрипт
-ничего не хранит и ничего в Click не меняет.
+Токен и id сообщества читаются только из окружения; токен уходит только на
+api.vk.com. Скрипт ничего не хранит и ничего в Click не меняет.
 """
 
 from __future__ import annotations
@@ -92,7 +89,10 @@ def main() -> None:
     if not token:
         raise SystemExit('Нет токена. Запустите:  VK_TOKEN="ваш_токен" python crosspost_probe.py')
 
-    group_id = os.environ.get("VK_GROUP_ID", "217668235").strip()   # СМУ по умолчанию
+    group_id = os.environ.get("VK_GROUP_ID", "").strip()
+    if not group_id:
+        raise SystemExit('Не задан VK_GROUP_ID (id сообщества, без минуса). '
+                         'Ничего брендового в коде нет — передайте id снаружи.')
     minutes = int(os.environ.get("VK_MINUTES", "15"))
     text = os.environ.get("VK_TEXT", "Проверка кросспостинга Click — тестовая отложенная запись.")
     image_url = os.environ.get("VK_IMAGE_URL", "").strip()

@@ -3306,7 +3306,7 @@ def tab_crosspost(project_id: str, config: dict) -> None:
                f"{content_plan.brand_default_time(project_id)} по Екатеринбургу")
     m = st.columns(4)
     m[0].metric("Ждут формирования", total[cps.WAITING])
-    m[1].metric("Отложки стоят", total[cps.SCHEDULED])
+    m[1].metric("Запланировано", total[cps.SCHEDULED])
     m[2].metric("Вышли", total[cps.SENT] + total[cps.SENT_LATE])
     m[3].metric("Ошибки", total[cps.FAILED] + total[cps.MISSED])
 
@@ -3327,63 +3327,128 @@ def tab_crosspost(project_id: str, config: dict) -> None:
     else:
         html("".join(_crosspost_plan_row(p, state) for p in upcoming))
 
-    _crosspost_form_vk_block(project_id, config, upcoming, state)
-
+    _crosspost_form_block(project_id, config, upcoming, state)
+    _crosspost_channels_block(project_id, config)
+    _crosspost_scheduler_block(project_id)
     _crosspost_vk_probe(project_id, config)
 
-    # Честно говорим, где мы находимся: формирование отложек – следующий этап.
-    # Без этой строки человек будет ждать, что план «сам поедет», и не дождётся.
-    st.info("Пока это просмотр плана и пробная отложка ВК. Формирование всего плана "
-            "одной кнопкой, ОК, Телеграм, МАКС и Яндекс.Бизнес по времени подключаются "
-            "следующими этапами – см. ПЛАН-Кросспостинг.md.",
+    # Честно про границы: что уже работает, а что подключается дальше.
+    st.info("Работает: план из реестра, отложки ВК (после входа), Телеграм и МАКС по "
+            "времени через планировщик (нужны токены ботов и работающий Click в час "
+            "выхода). Дальше по плану: ОК (ждёт одобрения API) и Яндекс.Бизнес по "
+            "времени – см. ПЛАН-Кросспостинг.md.",
             icon="ℹ️")
 
 
-def _crosspost_form_vk_block(project_id: str, config: dict,
-                             upcoming: list[dict], state: dict) -> None:
+def _crosspost_channels(config: dict) -> dict[str, str]:
+    return {"tg-client": (config.get("tgChannelClient") or "").strip(),
+            "tg-staff": (config.get("tgChannelStaff") or "").strip(),
+            "max": (config.get("maxChatId") or "").strip()}
+
+
+def _crosspost_channels_block(project_id: str, config: dict) -> None:
+    """Каналы мессенджеров бренда. Токены ботов — в «Ключах к веб-сервисам»."""
+    import tg_social
+
+    with st.expander("💬 Каналы Телеграма и МАКС"):
+        c1, c2, c3 = st.columns(3)
+        vals = {
+            "tgChannelClient": c1.text_input("ТГ клиенты", value=config.get("tgChannelClient", ""),
+                                             key=f"cp-tgc-{project_id}", placeholder="@stalmetural"),
+            "tgChannelStaff": c2.text_input("ТГ сотрудники", value=config.get("tgChannelStaff", ""),
+                                            key=f"cp-tgs-{project_id}", placeholder="@SMUdaily"),
+            "maxChatId": c3.text_input("МАКС: id канала", value=config.get("maxChatId", ""),
+                                       key=f"cp-max-{project_id}"),
+        }
+        if any(vals[k].strip() != (config.get(k) or "") for k in vals):
+            config.update({k: v.strip() for k, v in vals.items()})
+            save_config(project_id)
+        if not tg_social.is_configured() and (vals["tgChannelClient"] or vals["tgChannelStaff"]):
+            st.caption("Токен бота Телеграма не заполнен — «Настройки» → «Ключи к веб-сервисам».")
+
+
+def _crosspost_scheduler_block(project_id: str) -> None:
+    """Планировщик: жив ли, выключатель, журнал. Тревоги — ботом в личный ТГ."""
+    import scheduler
+
+    cfg = scheduler.config()
+    running = scheduler.ensure_running() if cfg["enabled"] else False
+    c1, c2 = st.columns([3, 2])
+    with c1:
+        if not cfg["enabled"]:
+            st.warning("Планировщик ВЫКЛЮЧЕН — задания Телеграма и МАКС не отправляются.")
+        elif running or scheduler.is_running_here():
+            st.caption(f"⏱ Планировщик работает: проверка заданий каждые "
+                       f"{scheduler.TICK_SECONDS} с, окно опоздания "
+                       f"{cfg['lateWindowHours']:g} ч. Работает, пока открыт Click.")
+        else:
+            st.caption("⏱ Планировщик уже работает в другой копии Click на этой машине.")
+    with c2:
+        on = st.toggle("Планировщик включён", value=cfg["enabled"], key="cp-sched-on")
+        if on != cfg["enabled"]:
+            scheduler.set_config(enabled=on)
+            st.rerun()
+    journal = scheduler.tail()
+    if journal:
+        with st.expander("Журнал планировщика"):
+            st.code(journal, language=None)
+
+
+def _crosspost_form_block(project_id: str, config: dict,
+                          upcoming: list[dict], state: dict) -> None:
     """
-    «Сформировать отложки ВК» на весь видимый план. Каждый пост — своя
-    отложка в сообществе; исходы пишутся в память сразу, так что повтор
-    кнопки доформирует только то, что не встало (Д-6, без дублей).
+    «Сформировать план»: ВК — родные отложки браузером, Телеграм и МАКС —
+    задания планировщику. Каждая площадка независима; исходы пишутся в
+    память сразу, повтор кнопки доформирует только несделанное (Д-6).
     """
     import crosspost_form
     import vk_social
 
-    todo = crosspost_form.pending_for(upcoming, state, "vk")
-    if not todo:
-        return
-    ready = vk_social.has_saved_session(project_id) and (config.get("vkGroupUrl") or "").strip()
-    label = f"📌 Сформировать отложки ВК — {len(todo)} " + \
-            ("пост" if len(todo) == 1 else "поста" if len(todo) < 5 else "постов")
-    if not ready:
-        st.caption(f"{label}: сначала вход в ВК и ссылка на сообщество — "
-                   "«Настройки» → «Вход в ВК (кросспостинг)».")
-        return
-    busy = runner.busy_reason(project_id, "publish")
-    if busy:
-        st.caption(f"{label}: сейчас нельзя — {busy}.")
+    channels = _crosspost_channels(config)
+    vk_ready = bool(vk_social.has_saved_session(project_id)
+                    and (config.get("vkGroupUrl") or "").strip())
+    vk_todo = crosspost_form.pending_for(upcoming, state, "vk") if vk_ready else []
+    msg_todo = [p for net, chat in channels.items() if chat
+                for p in crosspost_form.pending_for(upcoming, state, net)]
+    if not vk_todo and not msg_todo:
+        if not vk_ready:
+            st.caption("Формирование ВК появится после входа: «Настройки» → "
+                       "«Вход в ВК (кросспостинг)». Каналы ТГ/МАКС — в блоке ниже.")
         return
 
-    if st.button(label, type="primary", key=f"vk-form-all-{project_id}",
-                 use_container_width=True):
+    parts = []
+    if vk_todo:
+        parts.append(f"ВК: {len(vk_todo)}")
+    if msg_todo:
+        parts.append(f"ТГ/МАКС: {len(msg_todo)}")
+    busy = runner.busy_reason(project_id, "publish") if vk_todo else ""
+    if busy:
+        st.caption(f"Сформировать ({', '.join(parts)}): сейчас нельзя — {busy}.")
+        return
+
+    if st.button(f"📌 Сформировать план ({', '.join(parts)})", type="primary",
+                 key=f"cp-form-all-{project_id}", use_container_width=True):
         site = ((project_endings(project_id).get("contacts") or {})
                 .get("Россия") or {}).get("site", "")
-        box = st.status("Формирую отложки ВК…", expanded=True)
-        results = crosspost_form.form_vk_all(
-            project_id, config["vkGroupUrl"].strip(), upcoming, site,
-            progress=lambda m: box.write(m),
-            headless=bool(get_settings(project_id)["headless"]))
-        ok = sum(1 for r in results if r["ok"])
-        bad = [r for r in results if not r["ok"]]
-        if not bad:
-            box.update(label=f"Готово: {ok} из {len(results)} отложек стоят в ВК",
-                       state="complete")
-        else:
-            box.update(label=f"Стоят {ok} из {len(results)}; с ошибками — {len(bad)}",
-                       state="error")
-            for r in bad:
-                box.write(f"❌ {r['post']['date']}: {r['error']}")
-        time.sleep(1.0)
+        box = st.status("Формирую…", expanded=True)
+        ok = bad = 0
+        msg_results = crosspost_form.form_messengers(
+            project_id, upcoming, site, channels, progress=lambda m: box.write(m))
+        ok += len(msg_results)
+        if vk_todo:
+            vk_results = crosspost_form.form_vk_all(
+                project_id, config["vkGroupUrl"].strip(), upcoming, site,
+                progress=lambda m: box.write(m),
+                headless=bool(get_settings(project_id)["headless"]))
+            ok += sum(1 for r in vk_results if r["ok"])
+            for r in vk_results:
+                if not r["ok"]:
+                    bad += 1
+                    box.write(f"❌ ВК {r['post']['date']}: {r['error']}")
+        box.update(label=(f"Готово: запланировано {ok}"
+                          + (f", с ошибками {bad}" if bad else "")),
+                   state="error" if bad else "complete")
+        time.sleep(1.2)
         st.rerun()
 
 

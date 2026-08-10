@@ -283,8 +283,94 @@ def test_platform_clients() -> None:
           crosspost_form.when_local(post).utcoffset() == timedelta(hours=5))
 
 
+def test_scheduler() -> None:
+    print("Планировщик")
+    import os
+    import tempfile
+    from datetime import datetime, timedelta, timezone
+
+    ekb = timezone(timedelta(hours=5))
+    was = os.environ.get("CLICK_DATA_DIR")
+    tmp = tempfile.mkdtemp(prefix="click-sched-")
+    os.environ["CLICK_DATA_DIR"] = tmp
+    try:
+        import importlib
+        import paths, scheduler, crosspost_state as cps  # noqa: E401
+        importlib.reload(paths)
+
+        when = datetime(2026, 8, 13, 11, 0, tzinfo=ekb)
+        t = {"when": when.isoformat()}
+        check("рано → ждём", scheduler.decide(t, when - timedelta(minutes=5), 6 * 3600) == "wait")
+        check("вовремя → шлём", scheduler.decide(t, when + timedelta(seconds=30), 6 * 3600) == "send")
+        check("опоздали в окне → шлём с пометкой",
+              scheduler.decide(t, when + timedelta(hours=2), 6 * 3600) == "send-late")
+        check("окно вышло → пропущено",
+              scheduler.decide(t, when + timedelta(hours=7), 6 * 3600) == "missed")
+
+        task = {"id": "SMU|2026-08-13|abc|tg-client", "project": "SMU", "brand": "SMU",
+                "network": "tg-client", "chatId": "@x", "when": when.isoformat(),
+                "date": "2026-08-13", "markup": "привет", "sourceText": "привет",
+                "images": []}
+        scheduler.queue_task("SMU", task)
+        scheduler.queue_task("SMU", task)
+        check("задание не множится", len(scheduler.load_tasks("SMU")) == 1)
+
+        sent = []
+        senders = {"tg": lambda tk: (sent.append(tk["id"]) or {"ok": True, "link": "https://t.me/x/1"}),
+                   "max": lambda tk: {"ok": True}}
+        n = scheduler.tick(now=when + timedelta(seconds=10), senders=senders)
+        check("тик отправил задание", n == 1 and sent == [task["id"]])
+        check("задание выполнено", scheduler.load_tasks("SMU")[0]["state"] == "done")
+        st_ = cps.load("SMU")
+        post = {"brand": "SMU", "date": "2026-08-13", "when": when.isoformat(), "text": "привет"}
+        check("память: вышло", cps.status_of(st_, post, "tg-client") == cps.SENT)
+        n2 = scheduler.tick(now=when + timedelta(seconds=40), senders=senders)
+        check("повторный тик ничего не шлёт", n2 == 0 and len(sent) == 1)
+
+        # выполненное задание не переставится в очередь заново
+        scheduler.queue_task("SMU", task)
+        check("выполненное не возвращается в очередь",
+              scheduler.load_tasks("SMU")[0]["state"] == "done")
+
+        # ошибки: 3 попытки, потом «ошибка» в памяти
+        bad = {**task, "id": "SMU|2026-08-13|abc|max", "network": "max",
+               "sourceText": "другой"}
+        scheduler.queue_task("SMU", bad)
+        fail = {"tg": senders["tg"], "max": lambda tk: {"ok": False, "error": "нет сети"}}
+        for i in range(3):
+            scheduler.tick(now=when + timedelta(minutes=1 + i), senders=fail)
+        bad_state = next(t2 for t2 in scheduler.load_tasks("SMU") if t2["network"] == "max")
+        check("после 3 попыток — ошибка", bad_state["state"] == "failed"
+              and bad_state["attempts"] == 3)
+
+        # пропуск: задание в прошлом за окном
+        late = {**task, "id": "SMU|2026-08-01|old|tg-client", "date": "2026-08-01",
+                "when": (when - timedelta(days=12)).isoformat(), "sourceText": "старый"}
+        scheduler.queue_task("SMU", late)
+        scheduler.tick(now=when, senders=senders)
+        late_state = next(t2 for t2 in scheduler.load_tasks("SMU") if t2["id"] == late["id"])
+        check("старое задание — «пропущено», не отправлено",
+              late_state["state"] == "missed" and len(sent) == 1)
+
+        scheduler.set_config(enabled=False)
+        check("выключатель останавливает тик",
+              scheduler.tick(now=when + timedelta(days=1), senders=senders) == 0)
+        scheduler.set_config(enabled=True)
+    finally:
+        if was is None:
+            os.environ.pop("CLICK_DATA_DIR", None)
+        else:
+            os.environ["CLICK_DATA_DIR"] = was
+        import importlib
+        import paths
+        importlib.reload(paths)
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main() -> int:
     print("═" * 60)
+    test_scheduler()
     test_platform_clients()
     test_post_text()
     test_bold_from_real_file()

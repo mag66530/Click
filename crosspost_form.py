@@ -56,6 +56,48 @@ def when_local(post: dict) -> datetime:
 
 
 # ─── Формирование ВК на весь план ───────────────────────────────────
+def form_messengers(project_id: str, posts: list[dict], site: str,
+                    channels: dict[str, str],
+                    progress: Callable[[str], None] | None = None) -> list[dict]:
+    """
+    Поставить задания планировщику для Телеграма и МАКС.
+
+    channels: {"tg-client": "@канал", "tg-staff": "@канал", "max": "id чата"} —
+    что не заполнено, то молча пропускается (эта площадка ещё не подключена).
+    Задание идемпотентно по id (ключ поста + сеть): переформирование обновляет
+    текст, но выполненное задание вторым разом не поедет.
+    """
+    import crosspost_state as cps_
+    import scheduler
+
+    progress = progress or (lambda m: None)
+    state = cps_.load(project_id)
+    results: list[dict] = []
+    for network in ("tg-client", "tg-staff", "max"):
+        chat = (channels.get(network) or "").strip()
+        if not chat:
+            continue
+        for post in pending_for(posts, state, network):
+            task = {
+                "id": f"{cps_.post_key(post)}|{network}",
+                "project": project_id,
+                "brand": post.get("brand", project_id),
+                "network": network,
+                "chatId": chat,
+                "when": post["when"],
+                "date": post["date"],
+                "markup": social_markup(post, site),
+                "sourceText": post.get("text", ""),
+                "images": list(post.get("images") or []),
+            }
+            scheduler.queue_task(project_id, task)
+            cps_.set_status(project_id, post, network, cps_.SCHEDULED,
+                            extra={"textHash": cps_.text_fingerprint(post.get("text", ""))})
+            progress(f"{post['date']} → {cps_.network_ru(network)}: задание поставлено")
+            results.append({"post": post, "network": network, "ok": True})
+    return results
+
+
 def form_vk_all(project_id: str, group_url: str, posts: list[dict], site: str,
                 progress: Callable[[str], None] | None = None,
                 headless: bool = True) -> list[dict]:

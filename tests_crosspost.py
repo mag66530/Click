@@ -175,8 +175,60 @@ def test_state() -> None:
     check("название площадки по-русски", cps.network_ru("tg-staff") == "ТГ сотрудники")
 
 
+def test_post_text() -> None:
+    print("Форматирование (post_text)")
+    import post_text as pt
+
+    check("склейка кусков", pt.runs_to_markup([("а", False), ("б", False)]) == "аб")
+    check("жирный кусок", pt.runs_to_markup([("Важно", True)]) == "**Важно**")
+    check("смежные жирные сливаются",
+          pt.runs_to_markup([("а", True), ("б", True)]) == "**аб**")
+    check("хвостовой пробел выносится из маркеров",
+          pt.runs_to_markup([("жирный ", True), ("хвост", False)]) == "**жирный** хвост")
+    check("перенос строки не попадает в маркеры",
+          pt.runs_to_markup([("Заголовок\n\n", True), ("текст", False)]) == "**Заголовок**\n\nтекст")
+
+    m = pt.autolink("Оформить заказ можно на **нашем сайте**", "stalmetural.ru")
+    check("автоссылка на жирную фразу",
+          m == "Оформить заказ можно на **[нашем сайте](https://stalmetural.ru)**", m)
+    m2 = pt.autolink("на нашем сайте и ещё раз на нашем сайте", "stalmetural.ru")
+    check("автоссылка только на первое вхождение", m2.count("](") == 1)
+    m3 = pt.autolink("уже есть [нашем сайте](https://x.ru)", "stalmetural.ru")
+    check("внутрь готовой ссылки не лезем", m3 == "уже есть [нашем сайте](https://x.ru)")
+    check("без сайта — без изменений", pt.autolink("на нашем сайте", "") == "на нашем сайте")
+
+    check("html: жирный и ссылка",
+          pt.render("**Важно**: [сайт](https://a.ru/?a=1&b=2) <3", "html")
+          == '<b>Важно</b>: <a href="https://a.ru/?a=1&amp;b=2">сайт</a> &lt;3')
+    check("plain: жирный снят, ссылка раскрыта",
+          pt.render("**Важно**: [нашем сайте](https://a.ru)", "plain")
+          == "Важно: нашем сайте (https://a.ru)")
+    check("plain: текст-адрес не дублируется",
+          pt.render("[stalmetural.ru](https://stalmetural.ru)", "plain") == "stalmetural.ru")
+    check("strip_markup для превью", pt.strip_markup("**а** [б](https://в.ru)") == "а б (https://в.ru)")
+
+
+def test_bold_from_real_file() -> None:
+    """Жирное из настоящего реестра должно доехать до разметки."""
+    import glob
+    hits = glob.glob("/root/.claude/uploads/**/*.xlsx", recursive=True)
+    if not hits:
+        print("Реальный файл реестра не найден — пропускаю проверку жирного (это норма).")
+        return
+    print("Жирное из реального реестра")
+    posts = cp.load_from_xlsx(hits[0], "SMU")
+    bold_posts = [p for p in posts if "**" in (p.get("text") or "")]
+    check("жирные куски дошли до разметки", len(bold_posts) > 20, f"{len(bold_posts)}")
+    dates_ok = all(cp.parse_date(p["date"]) for p in posts)
+    check("жирная разметка не сломала даты", dates_ok)
+    nets = {t["network"] for p in posts for t in p["targets"]}
+    check("и не сломала распознавание сетей", {"vk", "ok", "max"} <= nets, str(sorted(nets)))
+
+
 def main() -> int:
     print("═" * 60)
+    test_post_text()
+    test_bold_from_real_file()
     test_state()
     test_network_mapping()
     test_dates_and_time()

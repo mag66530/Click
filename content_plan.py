@@ -102,7 +102,8 @@ _COL_MATCHERS: dict[str, Callable[[str], bool]] = {
 def _find_header(rows: list[list[str]]) -> tuple[int, dict[str, int]]:
     """Строка заголовков и карта «поле → индекс колонки». (-1, {}) — не нашли."""
     for i, row in enumerate(rows[:30]):        # шапка всегда наверху
-        norm = [(c or "").strip().lower() for c in row]
+        # Шапки в таблицах сплошь жирные — маркеры разметки тут только мешают.
+        norm = [(c or "").replace("**", "").strip().lower() for c in row]
         has_date = any(_COL_MATCHERS["date"](c) for c in norm)
         has_net = any(_COL_MATCHERS["net"](c) for c in norm)
         if not (has_date and has_net):
@@ -168,7 +169,11 @@ def parse_sheet(rows: list[list[str]], brand: str) -> list[dict]:
 
     def cell(row: list[str], field: str) -> str:
         j = cols.get(field, -1)
-        return (row[j].strip() if 0 <= j < len(row) else "")
+        raw = row[j].strip() if 0 <= j < len(row) else ""
+        # Разметка жирного (**…**) имеет смысл только в тексте поста. В прочих
+        # колонках это шум: жирная дата или жирное «Вконтакте» в реестре не
+        # должны ломать распознавание. Снимаем маркеры везде, кроме текста.
+        return raw if field == "text" else raw.replace("**", "").strip()
 
     time = brand_default_time(brand)
     posts: list[dict] = []
@@ -234,11 +239,51 @@ def posts_to_form(posts: list[dict], today: date | None = None) -> list[dict]:
 
 
 # ─── Живой источник: Google-таблица (тот же аккаунт, что у КП) ───────
+def _google_cell_markup(v: dict) -> str:
+    """
+    Ячейка из сетки Sheets API → строка с разметкой жирного.
+
+    Жирные куски Google отдаёт как textFormatRuns: каждый кусок начинается со
+    startIndex и тянется до начала следующего. Текст до первого куска (и
+    ячейка вовсе без кусков) живёт форматом самой ячейки —
+    effectiveFormat.textFormat.bold.
+    """
+    import post_text
+    base = ((v.get("userEnteredValue") or {}).get("stringValue"))
+    if base is None:
+        base = v.get("formattedValue") or ""
+    if not base:
+        return ""
+    cell_bold = bool(((v.get("effectiveFormat") or {}).get("textFormat") or {}).get("bold"))
+    fmt_runs = v.get("textFormatRuns")
+    if not fmt_runs:
+        return post_text.runs_to_markup([(base, cell_bold)])
+    runs: list[tuple[str, bool]] = []
+    first = fmt_runs[0].get("startIndex", 0)
+    if first > 0:
+        runs.append((base[:first], cell_bold))
+    for i, run in enumerate(fmt_runs):
+        start = run.get("startIndex", 0)
+        end = fmt_runs[i + 1].get("startIndex", len(base)) if i + 1 < len(fmt_runs) else len(base)
+        bold = (run.get("format") or {}).get("bold")
+        runs.append((base[start:end], cell_bold if bold is None else bool(bold)))
+    return post_text.runs_to_markup(runs)
+
+
 def load_from_google(sheet_url: str, brand: str) -> list[dict]:
     """
     Прочитать лист бренда из Google-таблицы реестра через сервисный аккаунт КП.
-    Требует настроенного gcp_service_account (см. kp_sheet). Бросает RuntimeError.
+
+    Отличие от чтения КП: города читаются значениями (values.get), а реестру
+    нужно ФОРМАТИРОВАНИЕ — жирное из ячеек. Поэтому нативную таблицу читаем
+    сеткой (spreadsheets.get с textFormatRuns), а залитый на Диск .xlsx качаем
+    файлом и разбираем с rich text. Требует настроенного gcp_service_account
+    (тот же, что у КП). Бросает RuntimeError с причиной словами.
     """
+    import io
+
+    import requests
+
     import kp_sheet
     sa = kp_sheet.service_account_info()
     if not sa:
@@ -246,11 +291,80 @@ def load_from_google(sheet_url: str, brand: str) -> list[dict]:
     fid = kp_sheet.sheet_id(sheet_url)
     if not fid:
         raise RuntimeError("Не разобрал ссылку на таблицу реестра.")
-    titles, read, _ = kp_sheet.open_book(fid, sa, kp_sheet.sheet_gid(sheet_url))
+    headers = kp_sheet._auth_headers(sa)
+
+    # Залитый Excel: Sheets API его не читает — качаем файл и разбираем сами.
+    if kp_sheet._file_mime(fid, headers) not in (kp_sheet.GOOGLE_SHEET_MIME, ""):
+        r = requests.get(f"https://www.googleapis.com/drive/v3/files/{fid}",
+                         params={"alt": "media", "supportsAllDrives": "true"},
+                         headers=headers, timeout=90)
+        if r.status_code != 200:
+            raise RuntimeError(f"Drive API вернул HTTP {r.status_code} "
+                               "(расшарена ли таблица на сервисный аккаунт?)")
+        return parse_workbook_bytes(io.BytesIO(r.content), brand)
+
+    base = f"https://sheets.googleapis.com/v4/spreadsheets/{fid}"
+    meta = requests.get(base, params={"fields": "sheets.properties(title)"},
+                        headers=headers, timeout=30)
+    if meta.status_code == 403:
+        raise RuntimeError("Google отказал (403). Расшарена ли таблица реестра на "
+                           f"{sa.get('client_email', 'сервисный аккаунт')} как Читатель?")
+    if meta.status_code != 200:
+        raise RuntimeError(f"Sheets API вернул HTTP {meta.status_code}: {meta.text[:160]}")
+    titles = [p.get("properties", {}).get("title", "")
+              for p in (meta.json() or {}).get("sheets", [])]
     title = _pick_brand_sheet(titles, brand)
     if not title:
         raise RuntimeError(f"В таблице нет листа для бренда {brand}. Листы: {', '.join(titles)}")
-    return parse_sheet(read(title), brand)
+
+    grid = requests.get(base, params={
+        "ranges": f"'{title}'",
+        "fields": ("sheets.data.rowData.values("
+                   "formattedValue,userEnteredValue.stringValue,"
+                   "textFormatRuns,effectiveFormat.textFormat.bold)"),
+    }, headers=headers, timeout=90)
+    if grid.status_code != 200:
+        raise RuntimeError(f"Не удалось прочитать лист «{title}»: HTTP {grid.status_code}")
+    row_data = (((grid.json() or {}).get("sheets") or [{}])[0].get("data") or [{}])[0].get("rowData") or []
+    rows = [[_google_cell_markup(v) for v in (r.get("values") or [])] for r in row_data]
+    return parse_sheet(rows, brand)
+
+
+def _xlsx_cell_markup(cell) -> str:
+    """
+    Ячейка .xlsx → строка. Жирное превращается в разметку **…** — заказчик
+    выделяет жирным прямо в реестре, и это выделение должно доехать до
+    Телеграма и МАКСа, а не потеряться. Два случая: жирные КУСКИ (rich text)
+    и жирная ЦЕЛАЯ ячейка (жирный весь шрифт ячейки — коротких постов таких
+    десятки). Служебным колонкам маркеры не мешают: parse_sheet снимает их
+    везде, кроме текста поста.
+    """
+    from openpyxl.cell.rich_text import CellRichText, TextBlock
+    import post_text
+    value = cell.value
+    if value is None:
+        return ""
+    if isinstance(value, CellRichText):
+        runs: list[tuple[str, bool]] = []
+        for block in value:
+            if isinstance(block, TextBlock):
+                runs.append((str(block.text), bool(block.font and block.font.b)))
+            else:
+                runs.append((str(block), False))
+        return post_text.runs_to_markup(runs)
+    s = str(value)
+    if s.strip() and cell.font is not None and cell.font.b:
+        return post_text.runs_to_markup([(s, True)])
+    return s
+
+
+def _parse_xlsx(wb, brand: str) -> list[dict]:
+    title = _pick_brand_sheet(wb.sheetnames, brand)
+    if not title:
+        raise RuntimeError(f"В файле нет листа для бренда {brand}. Листы: {', '.join(wb.sheetnames)}")
+    ws = wb[title]
+    rows = [[_xlsx_cell_markup(c) for c in row] for row in ws.iter_rows()]
+    return parse_sheet(rows, brand)
 
 
 def parse_workbook_bytes(stream, brand: str) -> list[dict]:
@@ -260,33 +374,26 @@ def parse_workbook_bytes(stream, brand: str) -> list[dict]:
     Нужен, чтобы посмотреть свой план сразу, не дожидаясь доступа к Google:
     заказчик выгружает реестр в .xlsx и загружает файл во вкладке. Файл нигде
     не сохраняется — живёт только в текущей сессии.
+
+    rich_text=True несовместим с read_only — читаем целиком; реестр весит
+    единицы мегабайт, это секунды.
     """
     from openpyxl import load_workbook
-    wb = load_workbook(stream, data_only=True, read_only=True)
+    wb = load_workbook(stream, data_only=True, rich_text=True)
     try:
-        title = _pick_brand_sheet(wb.sheetnames, brand)
-        if not title:
-            raise RuntimeError(f"В файле нет листа для бренда {brand}. Листы: {', '.join(wb.sheetnames)}")
-        ws = wb[title]
-        rows = [[("" if c.value is None else str(c.value)) for c in row] for row in ws.iter_rows()]
+        return _parse_xlsx(wb, brand)
     finally:
         wb.close()
-    return parse_sheet(rows, brand)
 
 
 def load_from_xlsx(path: str, brand: str) -> list[dict]:
     """Прочитать лист бренда из .xlsx на диске — для локальной проверки."""
     from openpyxl import load_workbook
-    wb = load_workbook(path, data_only=True, read_only=True)
+    wb = load_workbook(path, data_only=True, rich_text=True)
     try:
-        title = _pick_brand_sheet(wb.sheetnames, brand)
-        if not title:
-            raise RuntimeError(f"В файле нет листа для бренда {brand}. Листы: {', '.join(wb.sheetnames)}")
-        ws = wb[title]
-        rows = [[("" if c.value is None else str(c.value)) for c in row] for row in ws.iter_rows()]
+        return _parse_xlsx(wb, brand)
     finally:
         wb.close()
-    return parse_sheet(rows, brand)
 
 
 def _pick_brand_sheet(titles: list[str], brand: str) -> str:

@@ -1,19 +1,19 @@
 """
-ok_browser.py — Одноклассники: вход с сохранением сессии и отложка в группе.
+ok_browser.py – Одноклассники: вход с сохранением сессии и отложка в группе.
 
 Почему браузер, а не API. Заявку на API-права ОК заказчику отклонили
 (2026-08-10), поэтому ОК ведём тем же путём, что ВК: один раз входим,
-сессия сохраняется, отложка ставится через родной интерфейс группы —
+сессия сохраняется, отложка ставится через родной интерфейс группы –
 дальше пост держит и публикует сам ОК. API-клиент (ok_social.py) остаётся
 в репозитории на случай, если права всё же дадут.
 
-Откуда селекторы. Вход и форма поста — проверены вживую в разобранных
+Откуда селекторы. Вход и форма поста – проверены вживую в разобранных
 наработках (см. ПОСТАНОВКА-Кросспостинг.md, Приложение Б): поля
 st.email/st.password, кнопка «Войти» строго в форме пароля (на странице
 есть похожие поля поиска), кнопка «Создать пост» a.pf-head_itx_a, текст
 .js-posting-itx, фото .js-photos-btn, публикация
 button.posting_submit.js-publish-btn. НЕ проверена вживую только механика
-отложки (значок часов в форме) — селекторы-кандидаты собраны в
+отложки (значок часов в форме) – селекторы-кандидаты собраны в
 SEL["postpone_candidates"], первый живой прогон их уточнит: если ни один
 не найдётся, вернём честную ошибку и сохраним снимок формы для разбора.
 """
@@ -27,7 +27,7 @@ from typing import Callable
 import paths
 import yb_playwright as yb
 
-# Метка сборки — одна на всё приложение (см. build.py).
+# Метка сборки – одна на всё приложение (см. build.py).
 from build import BUILD  # noqa: F401
 
 BASE = "https://ok.ru"
@@ -45,7 +45,7 @@ SEL = {
     "photo_btn": ".js-photos-btn",
     "file_input": 'input[type="file"]',
     "submit": "button.posting_submit.js-publish-btn",
-    # отложка (кандидаты — уточняются на пилоте)
+    # отложка (кандидаты – уточняются на пилоте)
     "postpone_candidates": (
         '[data-l*="postpone"]',
         ".js-pp-toggler",
@@ -88,7 +88,7 @@ def _debug_shot(project_id: str, page, name: str) -> str:
 
 
 # ════════════════════════════════════════════════════════════════════
-#  Вход — тот же порядок, что у ВК/2ГИС
+#  Вход – тот же порядок, что у ВК/2ГИС
 # ════════════════════════════════════════════════════════════════════
 class OkLoginFlow:
     """Пошаговый вход в ОК: логин+пароль, при необходимости код."""
@@ -141,7 +141,7 @@ class OkLoginFlow:
         yb._save_storage_state(self.context, session_path(self.project_id))
 
     def submit_credentials(self, login: str, password: str) -> dict:
-        """Логин и пароль разом. Кнопка «Войти» — строго в форме пароля:
+        """Логин и пароль разом. Кнопка «Войти» – строго в форме пароля:
         на странице ОК есть похожие поля поиска, промах уже случался."""
         self.page.fill(SEL["login"], login.strip())
         self.page.fill(SEL["password"], password)
@@ -208,12 +208,12 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
     """
     Создать одну отложенную публикацию в группе ОК под сохранённой сессией.
     {"ok": True} либо {"ok": False, "error": "…"}. Если механика отложки
-    не нашлась (селекторы-кандидаты не совпали) — пост НЕ публикуется
+    не нашлась (селекторы-кандидаты не совпали) – пост НЕ публикуется
     сейчас, сохраняется снимок формы, ошибка объясняет, что прислать.
     """
     log = log or (lambda m: None)
     if not has_saved_session(project_id):
-        return {"ok": False, "error": "Нет сессии ОК — войдите в «Настройках» («Вход в ОК»)"}
+        return {"ok": False, "error": "Нет сессии ОК – войдите в «Настройках» («Вход в ОК»)"}
     if not group_url:
         return {"ok": False, "error": "Не указана ссылка на группу ОК"}
 
@@ -234,7 +234,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
             page.wait_for_timeout(2500)
             if "anonym" in (page.url or ""):
-                return {"ok": False, "error": "Сессия ОК слетела — войдите заново в «Настройках»"}
+                return {"ok": False, "error": "Сессия ОК слетела – войдите заново в «Настройках»"}
 
             log("Открываю форму поста")
             page.click(SEL["create_post"], timeout=15_000)
@@ -262,15 +262,15 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                 inp.first.set_input_files(image_paths)
                 page.wait_for_timeout(2500)
 
-            # Отложка. Селектор часов не подтверждён вживую — идём по кандидатам,
+            # Отложка. Селектор часов не подтверждён вживую – идём по кандидатам,
             # и если никто не нашёлся, честно останавливаемся СО СНИМКОМ, не
-            # публикуя пост сейчас (немедленный пост вместо отложки — хуже отказа).
+            # публикуя пост сейчас (немедленный пост вместо отложки – хуже отказа).
             log(f"Ищу отложку, время {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
             toggler = _first_present(page, SEL["postpone_candidates"])
             if not toggler:
                 shot = _debug_shot(project_id, page, "no-postpone")
                 return {"ok": False,
-                        "error": "Не нашли кнопку отложенной публикации в форме ОК — "
+                        "error": "Не нашли кнопку отложенной публикации в форме ОК – "
                                  "нужен один живой прогон для уточнения (пришлите снимок"
                                  + (f": {shot})" if shot else ")")}
             page.click(toggler)
@@ -282,7 +282,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                 shot = _debug_shot(project_id, page, "no-datetime")
                 return {"ok": False,
                         "error": "Окно отложки открылось, но поля даты/времени не "
-                                 "распознаны — пришлите снимок"
+                                 "распознаны – пришлите снимок"
                                  + (f": {shot}" if shot else "")}
             for sel, val in ((date_sel, when.strftime("%d.%m.%Y")),
                              (time_sel, when.strftime("%H:%M"))):
@@ -294,10 +294,10 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             page.wait_for_timeout(1500)
             if page.locator(SEL["text"]).count():
                 shot = _debug_shot(project_id, page, "form-open")
-                return {"ok": False, "error": "Форма поста не закрылась после отправки — "
+                return {"ok": False, "error": "Форма поста не закрылась после отправки – "
                                               "похоже, отложка не встала"
                                               + (f" (снимок: {shot})" if shot else "")}
-            log("Форма закрылась — отложка ОК принята")
+            log("Форма закрылась – отложка ОК принята")
             yb._save_storage_state(context, session_path(project_id))
             return {"ok": True}
         except Exception as e:  # noqa: BLE001

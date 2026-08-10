@@ -45,7 +45,7 @@ SAMPLE = [
     ["", "", "Однокласники", "", "https://ok.ru/group/70000004574376/topic/1", "Пост", "", "", "", "", ""],
     ["", "", "Вконтакте", "", "https://vk.com/wall-217668235_743", "Пост", "", "", "", "", ""],
     ["", "", "Max (клиент)", "", "https://max.ru/xxx", "Пост", "", "", "", "", ""],
-    # будущий пост — часть площадок ещё не опубликована (пустая «Ссылка»)
+    # будущий пост – часть площадок ещё не опубликована (пустая «Ссылка»)
     ["", "2099-01-10 00:00:00", "Вконтакте", "СМУ", "", "Пост", "Спецпредложение",
      "Скидка на арматуру", "https://i.ibb.co/bbb/2.jpg https://i.ibb.co/ccc/3.jpg", "", ""],
     ["", "", "Однокласники", "", "", "Пост", "", "", "", "", ""],
@@ -110,7 +110,7 @@ def test_posts_to_form() -> None:
     check("в будущем формируем vk, ok, tg-client", nets == ["ok", "tg-client", "vk"], str(nets))
     check("дзен (вне scope) не формируем", "zen" not in nets)
 
-    # если у площадки «Ссылка» уже стоит — второй раз не формируем
+    # если у площадки «Ссылка» уже стоит – второй раз не формируем
     already = cp.posts_to_form(
         [{"brand": "SMU", "date": "2099-01-10", "time": "11:00", "when": "x",
           "post_type": "", "format": "Пост", "text": "t", "images": [],
@@ -119,7 +119,7 @@ def test_posts_to_form() -> None:
         today=date(2026, 8, 7))
     check("площадка с готовой ссылкой пропускается", already == [])
 
-    # пустой текст — не формируем
+    # пустой текст – не формируем
     empty = cp.posts_to_form(
         [{"brand": "SMU", "date": "2099-01-10", "time": "11:00", "when": "x",
           "post_type": "", "format": "Пост", "text": "", "images": [],
@@ -129,13 +129,13 @@ def test_posts_to_form() -> None:
 
 
 def test_real_file_optional() -> None:
-    """Если рядом лежит выгрузка реестра СМУ — прогнать и на ней (не обязательно)."""
+    """Если рядом лежит выгрузка реестра СМУ – прогнать и на ней (не обязательно)."""
     import glob
     hits = glob.glob(str(Path(__file__).parent / "*.xlsx")) + \
         glob.glob("/root/.claude/uploads/**/*.xlsx", recursive=True)
     real = next((h for h in hits if "sheet" not in h.lower()), None)
     if not real:
-        print("Реальный файл реестра рядом не найден — пропускаю (это норма).")
+        print("Реальный файл реестра рядом не найден – пропускаю (это норма).")
         return
     print(f"Реальный файл: {Path(real).name}")
     try:
@@ -159,7 +159,7 @@ def test_state() -> None:
     check("ключ поста стабилен", cps.post_key(p) == cps.post_key(dict(p)))
     p2 = {**p, "text": "Другой текст"}
     check("правка текста меняет ключ", cps.post_key(p) != cps.post_key(p2))
-    check("по умолчанию — не сформировано", cps.status_of({}, p, "vk") == cps.WAITING)
+    check("по умолчанию – не сформировано", cps.status_of({}, p, "vk") == cps.WAITING)
     check("ссылка в реестре = вышло", cps.summarize({}, [p])[cps.SENT] == 1)
     check("вторая площадка ждёт", cps.summarize({}, [p])[cps.WAITING] == 1)
     check("is_done по умолчанию False", cps.is_done({}, p, "vk") is False)
@@ -195,7 +195,7 @@ def test_post_text() -> None:
     check("автоссылка только на первое вхождение", m2.count("](") == 1)
     m3 = pt.autolink("уже есть [нашем сайте](https://x.ru)", "stalmetural.ru")
     check("внутрь готовой ссылки не лезем", m3 == "уже есть [нашем сайте](https://x.ru)")
-    check("без сайта — без изменений", pt.autolink("на нашем сайте", "") == "на нашем сайте")
+    check("без сайта – без изменений", pt.autolink("на нашем сайте", "") == "на нашем сайте")
 
     check("html: жирный и ссылка",
           pt.render("**Важно**: [сайт](https://a.ru/?a=1&b=2) <3", "html")
@@ -213,7 +213,7 @@ def test_bold_from_real_file() -> None:
     import glob
     hits = glob.glob("/root/.claude/uploads/**/*.xlsx", recursive=True)
     if not hits:
-        print("Реальный файл реестра не найден — пропускаю проверку жирного (это норма).")
+        print("Реальный файл реестра не найден – пропускаю проверку жирного (это норма).")
         return
     print("Жирное из реального реестра")
     posts = cp.load_from_xlsx(hits[0], "SMU")
@@ -251,14 +251,14 @@ def test_platform_clients() -> None:
           __import__("hashlib").md5(b"toksec").hexdigest())
     import json as _json
     att = _json.loads(ok_social.build_attachment("текст", ["p1", "p2"]))
-    check("ОК: вложение — текст, потом фото",
+    check("ОК: вложение – текст, потом фото",
           [m["type"] for m in att["media"]] == ["text", "photo"]
           and len(att["media"][1]["list"]) == 2)
 
-    check("ТГ: без фото — текстом", tg_social.plan_delivery(500, 0) == "text")
+    check("ТГ: без фото – текстом", tg_social.plan_delivery(500, 0) == "text")
     check("ТГ: 1 фото + короткий текст", tg_social.plan_delivery(1000, 1) == "photo+caption")
     check("ТГ: альбом + подпись", tg_social.plan_delivery(1000, 3) == "album+caption")
-    check("ТГ: длинный текст — отдельно", tg_social.plan_delivery(1500, 2) == "media+text")
+    check("ТГ: длинный текст – отдельно", tg_social.plan_delivery(1500, 2) == "media+text")
     check("ТГ: граница 1024 включительно", tg_social.plan_delivery(1024, 1) == "photo+caption")
     parts = tg_social.split_text("а" * 3000 + "\n" + "б" * 3000)
     check("ТГ: длинный текст режется по абзацу",
@@ -274,10 +274,10 @@ def test_platform_clients() -> None:
     post = {"brand": "SMU", "date": "2099-01-10", "when": "2099-01-10T11:00:00+05:00",
             "format": "Пост", "text": "т", "images": [],
             "targets": [{"network": "vk", "raw": "Вконтакте", "published_link": ""}]}
-    check("формирование: ждёт — в списке",
+    check("формирование: ждёт – в списке",
           len(crosspost_form.pending_for([post], {}, "vk", today=_d(2026, 8, 10))) == 1)
     st_done = {cps.post_key(post): {"targets": {"vk": {"state": cps.SCHEDULED}}}}
-    check("формирование: отложка стоит — не в списке",
+    check("формирование: отложка стоит – не в списке",
           crosspost_form.pending_for([post], st_done, "vk", today=_d(2026, 8, 10)) == [])
     check("формирование: время поста с поясом Екб",
           crosspost_form.when_local(post).utcoffset() == timedelta(hours=5))
@@ -340,7 +340,7 @@ def test_scheduler() -> None:
         for i in range(3):
             scheduler.tick(now=when + timedelta(minutes=1 + i), senders=fail)
         bad_state = next(t2 for t2 in scheduler.load_tasks("SMU") if t2["network"] == "max")
-        check("после 3 попыток — ошибка", bad_state["state"] == "failed"
+        check("после 3 попыток – ошибка", bad_state["state"] == "failed"
               and bad_state["attempts"] == 3)
 
         # пропуск: задание в прошлом за окном
@@ -349,10 +349,10 @@ def test_scheduler() -> None:
         scheduler.queue_task("SMU", late)
         scheduler.tick(now=when, senders=senders)
         late_state = next(t2 for t2 in scheduler.load_tasks("SMU") if t2["id"] == late["id"])
-        check("старое задание — «пропущено», не отправлено",
+        check("старое задание – «пропущено», не отправлено",
               late_state["state"] == "missed" and len(sent) == 1)
 
-        # ЯБ: «занято» — ждём без сжигания попыток; лок освободился — прогон запущен
+        # ЯБ: «занято» – ждём без сжигания попыток; лок освободился – прогон запущен
         yb_task = {"id": "yb|SMU|2026-08-14T11:00", "project": "SMU", "brand": "SMU",
                    "network": "yb", "when": when.replace(day=14).isoformat(),
                    "date": "2026-08-14"}
@@ -366,7 +366,7 @@ def test_scheduler() -> None:
         scheduler.tick(now=yb_now + timedelta(minutes=5), senders=senders,
                        yb_start=lambda tk: {"ok": True})
         t_yb = next(t2 for t2 in scheduler.load_tasks("SMU") if t2["network"] == "yb")
-        # через 6 минут после планового времени это уже «с опозданием» — и это правда
+        # через 6 минут после планового времени это уже «с опозданием» – и это правда
         check("ЯБ лок свободен → прогон запущен", t_yb["state"] in ("done", "done-late"))
 
         # отмена задания человеком

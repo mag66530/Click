@@ -1,13 +1,13 @@
 """
-crosspost_form.py — формирование: посты реестра → отложки и задания.
+crosspost_form.py – формирование: посты реестра → отложки и задания.
 
 Здесь то, что не зависит от конкретной площадки: какие посты пора
 формировать, каким текстом, с какими картинками, и как записать результат
-в память (crosspost_state). Сами площадки — в своих модулях (vk_social и
+в память (crosspost_state). Сами площадки – в своих модулях (vk_social и
 далее); этот слой зовёт их по одному посту и честно записывает исход.
 
 Важное открытие по текстам (реестр СМУ, 2026-08-10): в реестре лежат
-ГОТОВЫЕ посты — с контактами, сайтом и хэштегами внутри. Никакого
+ГОТОВЫЕ посты – с контактами, сайтом и хэштегами внутри. Никакого
 «соцокончания» поверх не нужно: тело поста и есть весь пост. Добавляется
 только автоссылка «нашем сайте» → сайт бренда (post_text.autolink) и
 рендер под площадку.
@@ -23,7 +23,7 @@ import content_plan
 import crosspost_state as cps
 import post_text
 
-# Метка сборки — одна на всё приложение (см. build.py).
+# Метка сборки – одна на всё приложение (см. build.py).
 from build import BUILD  # noqa: F401
 
 
@@ -33,7 +33,7 @@ def pending_for(posts: list[dict], state: dict, network: str,
     """
     Посты, у которых цель `network` ещё не сформирована: дата впереди,
     «Ссылка» в реестре пуста И в памяти нет «отложка стоит/вышло».
-    posts_to_form уже отфильтровал реестровую часть — здесь добавляем память.
+    posts_to_form уже отфильтровал реестровую часть – здесь добавляем память.
     """
     out = []
     for p in content_plan.posts_to_form(posts, today=today):
@@ -50,7 +50,7 @@ def social_markup(post: dict, site: str) -> str:
 
 
 def when_local(post: dict) -> datetime:
-    """Время выхода поста — datetime с поясом Екатеринбурга."""
+    """Время выхода поста – datetime с поясом Екатеринбурга."""
     dt = datetime.fromisoformat(post["when"])
     return dt if dt.tzinfo else dt.replace(tzinfo=apptime.TZ)
 
@@ -61,7 +61,7 @@ def form_messengers(project_id: str, posts: list[dict], site: str,
     """
     Поставить задания планировщику для Телеграма и МАКС.
 
-    channels: {"tg-client": "@канал", "tg-staff": "@канал", "max": "id чата"} —
+    channels: {"tg-client": "@канал", "tg-staff": "@канал", "max": "id чата"} –
     что не заполнено, то молча пропускается (эта площадка ещё не подключена).
     Задание идемпотентно по id (ключ поста + сеть): переформирование обновляет
     текст, но выполненное задание вторым разом не поедет.
@@ -103,12 +103,12 @@ def _form_browser_all(project_id: str, network: str, schedule_fn,
                       headless: bool = True) -> list[dict]:
     """
     Общий цикл для площадок «вход + родная отложка» (ВК, ОК): по каждому
-    несформированному посту — отложка через schedule_fn.
+    несформированному посту – отложка через schedule_fn.
 
     Возвращает список исходов: {"post": …, "ok": bool, "error": "…"}.
-    Каждый исход СРАЗУ пишется в память (crosspost_state) — оборвали на
+    Каждый исход СРАЗУ пишется в память (crosspost_state) – оборвали на
     середине, повтор доформирует только оставшееся, без дублей.
-    Картинка не скачалась — пост помечается ошибкой и НЕ публикуется без
+    Картинка не скачалась – пост помечается ошибкой и НЕ публикуется без
     фото молча: в реестре фото стоит, значит пост без него неполный.
     """
     import yb_playwright as yb
@@ -131,7 +131,7 @@ def _form_browser_all(project_id: str, network: str, schedule_fn,
         if post.get("images"):
             local, errors = yb.fetch_photos(list(post["images"]), temp)
             if errors:
-                err = f"картинка не скачалась: {'; '.join(errors)} — прикрепите файл в разделе"
+                err = f"картинка не скачалась: {'; '.join(errors)} – прикрепите файл в разделе"
                 cps.set_status(project_id, post, network, cps.FAILED, error=err)
                 results.append({"post": post, "ok": False, "error": err})
                 continue

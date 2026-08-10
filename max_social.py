@@ -1,15 +1,15 @@
 """
-max_social.py — МАКС: публикация в каналы через Bot API.
+max_social.py – МАКС: публикация в каналы через Bot API.
 
-У бота МАКС отложки нет (родная отложка приложения ботам недоступна —
+У бота МАКС отложки нет (родная отложка приложения ботам недоступна –
 проверено по документации POST /messages), поэтому модуль шлёт «сейчас»,
 а время обеспечивает планировщик Click. Форматирование бот принимает:
-format=html — жирное и ссылки доезжают.
+format=html – жирное и ссылки доезжают.
 
 Площадка молодая, API дорабатывается: базовый адрес и форма вложений
 вынесены в константы, при расхождении с dev.max.ru чинить здесь.
-Ключи: max_bot_token — в «Настройках»; канал бренда — в projects-config.
-Бот — администратор канала.
+Ключи: max_bot_token – в «Настройках»; канал бренда – в projects-config.
+Бот – администратор канала.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from typing import Callable
 import post_text
 import secrets_local
 
-# Метка сборки — одна на всё приложение (см. build.py).
+# Метка сборки – одна на всё приложение (см. build.py).
 from build import BUILD  # noqa: F401
 
 BASE = "https://platform-api.max.ru"     # сверить с dev.max.ru при первом живом прогоне
@@ -72,7 +72,7 @@ def publish(chat_id: str, markup: str, image_paths: list[str],
             log: Callable[[str], None] | None = None) -> dict:
     """
     Опубликовать пост в канал СЕЙЧАС. {"ok": True} либо {"ok": False,
-    "error": …}. Ссылку на сообщение МАКС не отдаёт — в сводке будет
+    "error": …}. Ссылку на сообщение МАКС не отдаёт – в сводке будет
     просто «вышло».
     """
     import requests
@@ -83,7 +83,7 @@ def publish(chat_id: str, markup: str, image_paths: list[str],
     if not chat_id:
         return {"ok": False, "error": "Не указан канал МАКС для бренда"}
     if len(post_text.strip_markup(markup)) > TEXT_LIMIT:
-        return {"ok": False, "error": f"Текст длиннее {TEXT_LIMIT} знаков — "
+        return {"ok": False, "error": f"Текст длиннее {TEXT_LIMIT} знаков – "
                                       "МАКС такой не примет, сократите пост"}
     try:
         tokens = []
@@ -106,7 +106,7 @@ def publish(chat_id: str, markup: str, image_paths: list[str],
 
 
 def check_access(chat_id: str = "") -> str:
-    """Пусто — всё хорошо, иначе причина словами."""
+    """Пусто – всё хорошо, иначе причина словами."""
     import requests
 
     if not is_configured():

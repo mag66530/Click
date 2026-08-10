@@ -1,22 +1,22 @@
 """
-vk_social.py — ВКонтакте: вход с сохранением сессии и отложенная запись.
+vk_social.py – ВКонтакте: вход с сохранением сессии и отложенная запись.
 
 Почему браузер, а не API. ВК примерно с августа 2025 не регистрирует новые
 приложения с доступом к постингу (типа «Standalone» больше нет), поэтому ВК
 ведём как Яндекс/2ГИС: один раз входим, сессия сохраняется, дальше Click
-ставит РОДНУЮ отложку через «Запланировать» в форме поста — пост держит и
+ставит РОДНУЮ отложку через «Запланировать» в форме поста – пост держит и
 публикует сам ВК, Click в момент выхода может быть выключен.
 
-Откуда селекторы. Форма поста и календарь — из проверенных боем наработок
+Откуда селекторы. Форма поста и календарь – из проверенных боем наработок
 (разбор в ПОСТАНОВКА-Кросспостинг.md, Приложение Б): data-testid формы
-подтверждены вживую, включая грабли — черновик, наслаивающийся при повторе;
+подтверждены вживую, включая грабли – черновик, наслаивающийся при повторе;
 минуту, не принимающую ввод с клавиатуры; кнопку подтверждения, которая
-бывает неактивной. Классы календаря (vkui…) — React-классы и могут меняться;
+бывает неактивной. Классы календаря (vkui…) – React-классы и могут меняться;
 все селекторы собраны в SEL, чинить в одном месте.
 
-Правило модуля — «успех только доказанный»: после каждого шага проверяем,
+Правило модуля – «успех только доказанный»: после каждого шага проверяем,
 что интерфейс реально изменился, и падаем с понятной ошибкой, если нет.
-Однажды «лог писал готово, а поста не было» — сюда это не завозим.
+Однажды «лог писал готово, а поста не было» – сюда это не завозим.
 """
 
 from __future__ import annotations
@@ -29,13 +29,13 @@ from typing import Callable
 import paths
 import yb_playwright as yb
 
-# Метка сборки — одна на всё приложение (см. build.py).
+# Метка сборки – одна на всё приложение (см. build.py).
 from build import BUILD  # noqa: F401
 
 BASE = "https://vk.com"
 
 # Часовой пояс браузера. Календарь ВК показывает время по часам браузера,
-# поэтому жёстко ставим Екатеринбург — тот же пояс, в котором живёт весь Click
+# поэтому жёстко ставим Екатеринбург – тот же пояс, в котором живёт весь Click
 # (apptime). Иначе на сервере с UTC отложка уехала бы на 5 часов.
 TIMEZONE_ID = "Asia/Yekaterinburg"
 
@@ -72,6 +72,67 @@ def session_path(project_id: str) -> Path:
     return d / "vk-state.json"
 
 
+def _debug_shot(project_id: str, page, name: str) -> bytes | None:
+    """
+    Снимок страницы при неудаче. Без него «не получилось» – это тупик:
+    непонятно, слетела сессия, показалась капча или поменялась вёрстка.
+    Снимок возвращаем В ПАМЯТИ, чтобы показать его прямо в разделе.
+    """
+    try:
+        return page.screenshot(type="png", full_page=False)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def check_session(project_id: str, group_url: str = "",
+                  headless: bool = True) -> dict:
+    """
+    Жива ли сессия и виден ли нам кабинет сообщества. Отвечает на вопрос
+    «дело во входе или в чём-то другом» до того, как человек будет гадать.
+
+    {"ok": True, "who": "…"} – вошли; иначе причина словами и снимок.
+    """
+    if not has_saved_session(project_id):
+        return {"ok": False, "error": "Сессии нет – Click в ВК ещё не входил"}
+
+    from playwright.sync_api import sync_playwright
+
+    engine = yb.resolve_engine()
+    with sync_playwright() as pw:
+        browser = yb._launch(pw, engine, headless=headless)
+        page = None
+        try:
+            context = browser.new_context(
+                storage_state=str(session_path(project_id)),
+                viewport={"width": 1280, "height": 900}, user_agent=yb.UA,
+                locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS,
+                timezone_id=TIMEZONE_ID)
+            page = context.new_page()
+            page.goto(f"{BASE}/feed", wait_until="domcontentloaded", timeout=45_000)
+            page.wait_for_timeout(2500)
+            url = page.url or ""
+            if "login" in url or "id.vk.com" in url:
+                return {"ok": False, "error": "Сессия слетела – ВК просит войти заново",
+                        "shot": _debug_shot(project_id, page, "check")}
+            if group_url:
+                page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
+                page.wait_for_timeout(2000)
+                # Кнопка «Создать» есть только у того, кто может публиковать.
+                can_post = page.locator('text="Создать"').count() > 0
+                if not can_post:
+                    return {"ok": False,
+                            "error": "Вошли, но кнопки «Создать» в сообществе нет – "
+                                     "у этого аккаунта нет прав публикации, либо "
+                                     "ссылка ведёт не в то сообщество",
+                            "shot": _debug_shot(project_id, page, "no-create")}
+            return {"ok": True}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e),
+                    "shot": _debug_shot(project_id, page, "check-error") if page else None}
+        finally:
+            browser.close()
+
+
 def has_saved_session(project_id: str) -> bool:
     fp = session_path(project_id)
     if not fp.exists():
@@ -84,13 +145,13 @@ def has_saved_session(project_id: str) -> bool:
 
 
 # ════════════════════════════════════════════════════════════════════
-#  Вход — по образцу 2ГИС: скриншот вместо окна, шаги распознаются
+#  Вход – по образцу 2ГИС: скриншот вместо окна, шаги распознаются
 # ════════════════════════════════════════════════════════════════════
 class VkLoginFlow:
     """
-    Пошаговый вход в ВК: телефон → пароль (или код из SMS). Каждый метод —
+    Пошаговый вход в ВК: телефон → пароль (или код из SMS). Каждый метод –
     один шаг, между вызовами объект живёт в st.session_state. ВК ведёт вход
-    через id.vk.com — это нормально, шаг распознаётся по полям на странице.
+    через id.vk.com – это нормально, шаг распознаётся по полям на странице.
     """
 
     def __init__(self, project_id: str, headless: bool = True):
@@ -117,11 +178,11 @@ class VkLoginFlow:
             self.page = self.context.new_page()
             self.page.goto(f"{BASE}/login", wait_until="domcontentloaded", timeout=40_000)
             self.page.wait_for_timeout(2000)
-            # По умолчанию ВК может показать вход по QR — переключаемся на телефон.
+            # По умолчанию ВК может показать вход по QR – переключаемся на телефон.
             try:
                 self.page.click("text=Войти другим способом", timeout=4000)
                 self.page.wait_for_timeout(1200)
-            except Exception:  # noqa: BLE001 — кнопки нет, значит уже форма телефона
+            except Exception:  # noqa: BLE001 – кнопки нет, значит уже форма телефона
                 pass
             return self.state()
         except Exception:
@@ -186,7 +247,7 @@ class VkLoginFlow:
                 return {"step": "code"}
             if self.page.locator(SEL["login_phone"]).count():
                 return {"step": "phone"}
-            # Форм нет и адрес не логинный — проверяем лентой: пустят ли.
+            # Форм нет и адрес не логинный – проверяем лентой: пустят ли.
             self.page.goto(f"{BASE}/feed", wait_until="domcontentloaded", timeout=30_000)
             self.page.wait_for_timeout(1500)
             u = self.page.url or ""
@@ -230,7 +291,7 @@ def _type_picker_value(page, picker, value: int) -> None:
     """
     Впечатать значение в поле-комбобокс (час). Тройной клик выделяет текущее,
     Enter подтверждает. Escape НЕ нажимать: он пересобирает блок времени, и
-    ссылки на соседние поля отваливаются («Node is detached») — проверено болью.
+    ссылки на соседние поля отваливаются («Node is detached») – проверено болью.
     """
     inp = picker.locator("input").first
     inp.click(click_count=3)
@@ -295,7 +356,7 @@ def _set_schedule(page, when: datetime, log: Callable[[str], None]) -> None:
     if not day_selected:
         raise RuntimeError(f"День {when.day} кликнут, но календарь его не выбрал")
 
-    # Час — печатью; ссылку на поле минут после этого берём ЗАНОВО: ввод часа
+    # Час – печатью; ссылку на поле минут после этого берём ЗАНОВО: ввод часа
     # пересобирает DOM блока времени, старая ссылка отваливается.
     hour_picker = page.locator(SEL["time_picker"]).first
     _type_picker_value(page, hour_picker, when.hour)
@@ -305,7 +366,7 @@ def _set_schedule(page, when: datetime, log: Callable[[str], None]) -> None:
 
     page.wait_for_timeout(400)
     minute_picker = page.locator(SEL["time_picker"]).last
-    # Минуту — только выбором из списка: печать иногда откатывается к прежней.
+    # Минуту – только выбором из списка: печать иногда откатывается к прежней.
     _click_dropdown_option(page, minute_picker, f"{when.minute:02d}")
     shown_min = _read_picker_title(page, page.locator(SEL["time_picker"]).last)
     digits = "".join(ch for ch in shown_min if ch.isdigit())
@@ -318,11 +379,11 @@ def _set_schedule(page, when: datetime, log: Callable[[str], None]) -> None:
         SEL["postponed_confirm"],
         "el => el.disabled || el.getAttribute('aria-disabled') === 'true'")
     if disabled:
-        raise RuntimeError("Кнопка «Добавить в очередь» неактивна — календарь не принял дату/время")
+        raise RuntimeError("Кнопка «Добавить в очередь» неактивна – календарь не принял дату/время")
     page.click(SEL["postponed_confirm"])
     page.wait_for_timeout(800)
     if page.locator(SEL["postponed_confirm"]).count():
-        raise RuntimeError("Попап планирования не закрылся после подтверждения — похоже, не сработало")
+        raise RuntimeError("Попап планирования не закрылся после подтверждения – похоже, не сработало")
     log("Отложка подтверждена: попап закрылся")
 
 
@@ -334,18 +395,19 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
     Создать ОДНУ отложенную запись в сообществе под сохранённой сессией.
 
     Возвращает {"ok": True} либо {"ok": False, "error": "…словами…"}.
-    Браузер одноразовый: открыли, поставили, закрыли — формирование идёт
+    Браузер одноразовый: открыли, поставили, закрыли – формирование идёт
     пачкой раз в день, постоянный браузер ему не нужен.
     """
     log = log or (lambda m: None)
     if not has_saved_session(project_id):
-        return {"ok": False, "error": "Нет сессии ВК — войдите в «Настройках» («Вход в ВК»)"}
+        return {"ok": False, "error": "Нет сессии ВК – войдите в «Настройках» («Вход в ВК»)"}
     if not group_url:
         return {"ok": False, "error": "Не указана ссылка на сообщество ВК"}
 
     from playwright.sync_api import sync_playwright
 
     engine = yb.resolve_engine()
+    page = None
     with sync_playwright() as pw:
         browser = yb._launch(pw, engine, headless=headless)
         try:
@@ -360,9 +422,10 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
             page.wait_for_timeout(2500)
             if "login" in (page.url or "") or "id.vk.com" in (page.url or ""):
-                return {"ok": False, "error": "Сессия ВК слетела — войдите заново в «Настройках»"}
+                return {"ok": False, "shot": _debug_shot(project_id, page, "session"),
+                        "error": "Сессия ВК слетела – войдите заново в «Настройках»"}
 
-            # «Создать» → «Пост». Меню — hover-флайаут: между кликами пауза
+            # «Создать» → «Пост». Меню – hover-флайаут: между кликами пауза
             # короткая, иначе меню закроется раньше, чем найдём пункт.
             log("Открываю форму поста")
             page.click('text="Создать"', timeout=15_000)
@@ -373,7 +436,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             dlg = SEL["dialog"]
 
             # Чистим черновик: ВК сам восстанавливает прошлую незаконченную
-            # форму, и без чистки текст и фото наслаиваются (дубли — проверено).
+            # форму, и без чистки текст и фото наслаиваются (дубли – проверено).
             for _ in range(10):
                 btn = page.locator(f'{dlg} {SEL["photo_remove"]}')
                 if not btn.count():
@@ -400,9 +463,9 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             page.wait_for_timeout(600)
             typed = page.eval_on_selector(f'{dlg} {SEL["text"]}', "el => el.textContent || ''")
             if text.strip() and not (typed or "").strip():
-                return {"ok": False, "error": "Текст не попал в поле поста — вёрстка ВК изменилась?"}
+                return {"ok": False, "error": "Текст не попал в поле поста – вёрстка ВК изменилась?"}
 
-            # «Далее» — к экрану, где живёт «Запланировать».
+            # «Далее» – к экрану, где живёт «Запланировать».
             page.click(f'{dlg} >> text="Далее"', timeout=15_000)
             page.wait_for_timeout(1000)
 
@@ -411,7 +474,8 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
 
             yb._save_storage_state(context, session_path(project_id))
             return {"ok": True}
-        except Exception as e:  # noqa: BLE001 — наружу словами, решает вызывающий
-            return {"ok": False, "error": str(e)}
+        except Exception as e:  # noqa: BLE001 – наружу словами, решает вызывающий
+            return {"ok": False, "error": str(e),
+                    "shot": _debug_shot(project_id, page, "error") if page else None}
         finally:
             browser.close()

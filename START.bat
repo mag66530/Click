@@ -61,25 +61,37 @@ if not exist "%PY%" (
     )
 )
 
-rem ---------- Install dependencies if missing ----------
-"%PY%" -c "import streamlit, playwright" >nul 2>&1
+rem ---------- Install dependencies if missing or requirements changed ----------
+rem The old check only looked for streamlit+playwright, so a package added
+rem to requirements.txt later (google-auth) was never installed on updates.
+rem Now a hash of requirements.txt is stored next to the venv: any change
+rem to the file triggers a re-install on the next start.
+set "STAMP=%CLICK_HOME%\requirements.stamp"
+"%PY%" -c "import streamlit, playwright, google.auth" >nul 2>&1
+if errorlevel 1 goto install_deps
+"%PY%" -c "import hashlib,os,pathlib,sys; h=hashlib.sha256(pathlib.Path('requirements.txt').read_bytes()).hexdigest(); fp=pathlib.Path(os.environ['STAMP']); sys.exit(0 if fp.exists() and fp.read_text().strip()==h else 1)" >nul 2>&1
+if errorlevel 1 goto install_deps
+goto deps_ok
+
+:install_deps
+echo [INFO] Installing/updating dependencies - this takes 1-3 minutes.
+echo        Please wait, do NOT close this window.
+echo.
+"%PY%" -m pip install --upgrade pip --quiet
+"%PY%" -m pip install -r requirements.txt
 if errorlevel 1 (
-    echo [INFO] Installing dependencies - this takes 1-3 minutes.
-    echo        Please wait, do NOT close this window.
     echo.
-    "%PY%" -m pip install --upgrade pip --quiet
-    "%PY%" -m pip install -r requirements.txt
-    if errorlevel 1 (
-        echo.
-        echo [ERROR] Failed to install dependencies.
-        echo        Check your internet connection and try again.
-        pause
-        exit /b 1
-    )
-    echo.
-    echo [OK] Dependencies installed.
-    echo.
+    echo [ERROR] Failed to install dependencies.
+    echo        Check your internet connection and try again.
+    pause
+    exit /b 1
 )
+"%PY%" -c "import hashlib,os,pathlib; h=hashlib.sha256(pathlib.Path('requirements.txt').read_bytes()).hexdigest(); pathlib.Path(os.environ['STAMP']).write_text(h)" >nul 2>&1
+echo.
+echo [OK] Dependencies installed.
+echo.
+
+:deps_ok
 
 rem ---------- Install browser for Playwright if missing ----------
 set "PWCACHE=%USERPROFILE%\AppData\Local\ms-playwright"

@@ -53,6 +53,13 @@ SEL = {
     # Плашка про cookie висит поверх формы и перехватывает клики.
     "cookie_accept": ("Разрешить все", "Разрешить всё", "Принять все",
                       "Принять всё", "Принять", "Хорошо"),
+    # Куда уходит вход. Взято из самой кнопки на живой странице:
+    #   data-url="https://connect.vk.com/auth?…"
+    # ВК ID открывается ДВУМЯ способами – отдельным окном (window.open) и
+    # слоем прямо в странице. Второй случай Click раньше принимал за «клик
+    # не сработал»: ждал окна, не дожидался и сдавался.
+    "vkid_hosts": ("connect.vk.com", "connect.vk.ru", "id.vk.com", "id.vk.ru",
+                   "oauth.vk.com", "oauth.vk.ru", "login.vk.com", "login.vk.ru"),
     "popup_phone": 'input[name="login"]',
     "popup_password": 'input[name="password"]',
     "popup_next": 'button:has-text("Продолжить")',
@@ -203,6 +210,48 @@ def wait_vk_button(page, timeout_ms: int = 20_000):
     return None
 
 
+def safe_url(url: str) -> str:
+    """
+    Адрес без «хвоста» – для показа человеку и для логов.
+
+    В ссылке входа ВК едет state с одноразовым токеном. Показывать его на
+    экране и писать в журнал нельзя: это, по сути, ключ от входа.
+    """
+    return (url or "").split("?", 1)[0][:120]
+
+
+def vkid_frame(page):
+    """
+    Кадр с формой ВК ID внутри страницы ОК – если вход открылся слоем.
+    None – значит слоя нет (либо ВК открылся отдельным окном, либо клик
+    вообще ничего не сделал).
+    """
+    try:
+        for fr in page.frames:
+            if fr == page.main_frame:
+                continue
+            url = fr.url or ""
+            if any(h in url for h in SEL["vkid_hosts"]):
+                return fr
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def wait_vkid_frame(page, timeout_ms: int = 12_000):
+    """Дождаться слоя ВК ID: он подгружается не мгновенно."""
+    deadline = _time.time() + timeout_ms / 1000.0
+    while _time.time() < deadline:
+        fr = vkid_frame(page)
+        if fr is not None:
+            return fr
+        try:
+            page.wait_for_timeout(500)
+        except Exception:  # noqa: BLE001
+            break
+    return None
+
+
 def _debug_shot(project_id: str, page, name: str) -> str:
     """Снимок формы для разбора «не нашли элемент». Возвращает путь или пусто."""
     try:
@@ -279,17 +328,27 @@ class OkViaVkLoginFlow:
                         "note": "На форме входа ОК так и не появился значок ВК – "
                                 "он в ряду иконок под кнопкой «Войти по QR-коду». "
                                 "Можно войти обычным логином и паролем ОК ниже."}
+            # ВК ID открывается двумя способами. Ждём окно недолго – и, если
+            # его нет, ищем слой прямо в странице: это такой же штатный
+            # вариант, а не «клик не сработал».
             try:
-                with self.page.expect_popup(timeout=25_000) as info:
+                with self.page.expect_popup(timeout=10_000) as info:
                     btn.click()
                 self.popup = info.value
-            except Exception:  # noqa: BLE001 – окно ВК не открылось
-                return {**self.state(), "step": "no-popup",
-                        "note": "Значок ВК нажали, но окно входа ВК не открылось. "
-                                "Смотрите снимок: возможно, ОК показал своё окно "
-                                "или клик перехватила плашка сверху."}
-            self.popup.wait_for_load_state("domcontentloaded")
-            self.popup.wait_for_timeout(4000)
+                self.popup.wait_for_load_state("domcontentloaded")
+                self.popup.wait_for_timeout(4000)
+            except Exception:  # noqa: BLE001 – отдельного окна не было
+                if wait_vkid_frame(self.page) is not None:
+                    self.popup = self.page          # работаем прямо в странице
+                    self.page.wait_for_timeout(2500)
+                else:
+                    seen = [safe_url(f.url) for f in self.page.frames
+                            if f != self.page.main_frame and f.url]
+                    return {**self.state(), "step": "no-popup",
+                            "note": "Значок ВК нажали, но форма входа ВК не "
+                                    "появилась – ни отдельным окном, ни слоем в "
+                                    "странице. Кадры на странице сейчас: "
+                                    + (", ".join(seen[:6]) or "нет ни одного")}
             # Сессия ВК жива – ВК не спросит ни телефон, ни код, а покажет
             # «Войти как Имя». Это и есть та самая связка, ради которой всё
             # затевалось: подтверждаем сразу, иначе ОК так и стоит на форме.
@@ -327,12 +386,84 @@ class OkViaVkLoginFlow:
         yb._save_storage_state(self.context, session_path(self.project_id))
 
     # ─── шаги во всплывающем окне ───────────────────────────────────
+    @property
+    def inline(self) -> bool:
+        """Форма ВК открылась слоем в самой странице ОК, а не отдельным окном."""
+        return self.popup is not None and self.popup is self.page
+
     def _popup_gone(self) -> bool:
-        """Окно ВК закрылось – значит вход подтверждён, трогать его нельзя."""
+        """
+        Окна ВК больше нет – вход подтверждён, трогать его нельзя.
+
+        Для слоя в странице «закрыться» нечему: там признак завершения –
+        то, что ОК нас уже пустил. Это проверяется отдельно, в page_state.
+        """
         try:
-            return self.popup is None or self.popup.is_closed()
+            if self.popup is None:
+                return True
+            if self.inline:
+                return False
+            return self.popup.is_closed()
         except Exception:  # noqa: BLE001
             return True
+
+    # ─── ввод и нажатия по всем кадрам ──────────────────────────────
+    #
+    # Почему не self.popup.fill(). Форма ВК ID живёт ВНУТРИ кадра, а
+    # page.fill() ищет только в главном кадре страницы. Пока вход открывался
+    # отдельным окном, это сходило с рук: там форма была сверху. Со слоем в
+    # странице тот же вызов не находит ничего. Ищем по всем кадрам сразу –
+    # так работает в обоих случаях.
+    def _frames(self) -> list:
+        import vk_social as _vk
+        if self._popup_gone():
+            return []
+        return _vk.vk_frames(self.popup)
+
+    def _find(self, selector: str):
+        """Первый живой элемент по селектору среди всех кадров."""
+        for fr in self._frames():
+            try:
+                loc = fr.locator(selector)
+                if loc.count():
+                    return loc
+            except Exception:  # noqa: BLE001 – кадр мог отвалиться
+                continue
+        return None
+
+    def _count(self, selector: str) -> int:
+        loc = self._find(selector)
+        try:
+            return loc.count() if loc is not None else 0
+        except Exception:  # noqa: BLE001
+            return 0
+
+    def _fill(self, selector: str, value: str) -> bool:
+        loc = self._find(selector)
+        if loc is None:
+            return False
+        try:
+            loc.first.fill(value)
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _click_sel(self, selector: str, timeout: int = 5000) -> bool:
+        loc = self._find(selector)
+        if loc is None:
+            return False
+        try:
+            loc.first.click(timeout=timeout)
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _wait(self, ms: int) -> None:
+        try:
+            if not self._popup_gone():
+                self.popup.wait_for_timeout(ms)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _asks_confirm(self) -> bool:
         """Показывает ли окно ВК вопрос «Войти как Имя?»."""
@@ -363,61 +494,65 @@ class OkViaVkLoginFlow:
             if self._popup_gone():
                 break
             if _vk.click_in_frames(self.popup, labels, timeout=3000):
-                if not self._popup_gone():
-                    self.popup.wait_for_timeout(3000)
+                self._wait(3000)
                 break
         return self.state()
 
     def submit_phone(self, phone: str) -> dict:
-        self.popup.fill(SEL["popup_phone"], phone.strip())
-        self.popup.click(SEL["popup_next"])
-        self.popup.wait_for_timeout(3000)
+        self._fill(SEL["popup_phone"], phone.strip())
+        self._click_sel(SEL["popup_next"])
+        self._wait(3000)
         return self.state()
 
     def submit_password(self, password: str) -> dict:
-        self.popup.fill(SEL["popup_password"], password)
-        self.popup.click(SEL["popup_next"])
-        self.popup.wait_for_timeout(3000)
+        self._fill(SEL["popup_password"], password)
+        self._click_sel(SEL["popup_next"])
+        self._wait(3000)
         return self.state()
 
     def request_code_instead(self) -> dict:
         """Уйти с пароля на SMS-код – у аккаунтов брендов пароля обычно нет."""
+        import vk_social as _vk
         for label in ("Забыли или не установили пароль?", "Нет, восстановить пароль",
                       "Отправить код", "Получить код"):
-            try:
-                self.popup.click(f"text={label}", timeout=4000)
-                self.popup.wait_for_timeout(1500)
-            except Exception:  # noqa: BLE001 – шага может не быть
-                continue
+            if self._popup_gone():
+                break
+            if _vk.click_in_frames(self.popup, (label,), timeout=4000):
+                self._wait(1500)
         return self.state()
 
     def press_captcha_continue(self) -> dict:
         """Нажать «Продолжить» в проверке «вы не робот» внутри окна ВК."""
         import vk_social as _vk
+        if self._popup_gone():
+            return self.state()
         fr = _vk.captcha_frame(self.popup)
         if fr is not None:
             _vk.press_captcha_in(fr)
-            self.popup.wait_for_timeout(4000)
+            self._wait(4000)
         return self.state()
 
     def submit_code(self, code: str) -> dict:
         code = code.strip()
-        single = self.popup.locator(SEL["code_single"])
-        if single.count() >= 1:
+        single = self._find(SEL["code_single"])
+        if single is not None:
             single.first.fill(code)
         else:
-            boxes = self.popup.locator(SEL["code_boxes"])
-            if boxes.count() >= len(code):
+            boxes = self._find(SEL["code_boxes"])
+            if boxes is not None and boxes.count() >= len(code):
                 for i, digit in enumerate(code):
                     boxes.nth(i).fill(digit)
-        self.popup.keyboard.press("Enter")
-        self.popup.wait_for_timeout(3500)
+        try:
+            self.popup.keyboard.press("Enter")
+        except Exception:  # noqa: BLE001 – у кадра своей клавиатуры нет
+            self.page.keyboard.press("Enter")
+        self._wait(3500)
         return self.state()
 
     # ─── что на экране ──────────────────────────────────────────────
     def page_state(self) -> dict:
         # Окно закрылось – ВК подтвердил вход, смотрим на саму вкладку ОК.
-        if self.popup is None or self.popup.is_closed():
+        if self._popup_gone():
             try:
                 self.page.wait_for_timeout(1500)
                 self.page.reload(wait_until="domcontentloaded", timeout=30_000)
@@ -425,6 +560,9 @@ class OkViaVkLoginFlow:
             except Exception:  # noqa: BLE001
                 pass
             return {"step": "done"} if is_logged_in(self.page) else {"step": "login"}
+        # Вход слоем: закрываться нечему, признак успеха – что ОК уже пустил.
+        if self.inline and vkid_frame(self.page) is None and is_logged_in(self.page):
+            return {"step": "done"}
         try:
             import vk_social as _vk
             if _vk.captcha_frame(self.popup) is not None:
@@ -433,12 +571,12 @@ class OkViaVkLoginFlow:
             # иначе шаг определился бы как «unknown» и человек бы застрял.
             if self._asks_confirm():
                 return {"step": "consent"}
-            if self.popup.locator(SEL["popup_password"]).count():
+            if self._count(SEL["popup_password"]):
                 return {"step": "password"}
-            if (self.popup.locator(SEL["code_boxes"]).count() >= 4
-                    or self.popup.locator(SEL["code_single"]).count()):
+            if (self._count(SEL["code_boxes"]) >= 4
+                    or self._count(SEL["code_single"])):
                 return {"step": "code"}
-            if self.popup.locator(SEL["popup_phone"]).count():
+            if self._count(SEL["popup_phone"]):
                 return {"step": "phone"}
             return {"step": "unknown"}
         except Exception:  # noqa: BLE001
@@ -446,7 +584,9 @@ class OkViaVkLoginFlow:
 
     def state(self) -> dict:
         st = self.page_state()
-        shot_from = self.page if (self.popup is None or self.popup.is_closed()) else self.popup
+        # Снимок всегда со страницы, если окна ВК нет либо оно и есть страница:
+        # у кадра своего снимка не бывает.
+        shot_from = self.page if self._popup_gone() else self.popup
         try:
             st["screenshot"] = shot_from.screenshot(type="png", full_page=False)
         except Exception:  # noqa: BLE001

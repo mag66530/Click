@@ -311,6 +311,30 @@ def test_ok_via_vk() -> None:
     check("закрытое окно не считается вопросом", not flow._asks_confirm())
     check("закрытое окно видно как закрытое", flow._popup_gone())
 
+    # Вход слоем в странице. Живьём проверено на копии: окно не открывается,
+    # ВК ID подгружается кадром внутрь страницы – раньше Click считал это
+    # «клик не сработал» и упирался в тупик.
+    check("адрес входа ВК известен",
+          "connect.vk.com" in ok_browser.SEL["vkid_hosts"])
+    fake_page = FakePopup("Войти как Виктория")
+    flow.page = fake_page
+    flow.popup = fake_page
+    check("режим «слой в странице» распознан", flow.inline)
+    check("слою закрываться нечему", not flow._popup_gone())
+    check("вопрос читается и в этом режиме", flow._asks_confirm())
+
+    flow.popup = FakePopup("что-то другое")
+    check("чужое окно за слой не принимаем", not flow.inline)
+
+    # В ссылке входа ВК едет одноразовый токен – показывать его нельзя.
+    check("адрес обрезается до пути",
+          ok_browser.safe_url("https://connect.vk.com/auth?state=СЕКРЕТ&app_id=1")
+          == "https://connect.vk.com/auth")
+    check("токена в обрезанном адресе нет",
+          "СЕКРЕТ" not in ok_browser.safe_url(
+              "https://connect.vk.com/auth?state=СЕКРЕТ"))
+    check("пустой адрес не ломает", ok_browser.safe_url("") == "")
+
 
 def test_platform_clients() -> None:
     print("Клиенты площадок: чистая логика")

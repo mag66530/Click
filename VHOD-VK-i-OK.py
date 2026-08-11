@@ -41,10 +41,18 @@ VK_FILE = HERE / "vk-session.json"
 OK_FILE = HERE / "ok-session.json"
 
 VK_AUTH = ("remixsid", "remixsid6", "remixnsid")
-# JSESSIONID сюда НЕ входит, хотя Click его и принимает: ОК выдаёт эту куку
-# и гостю тоже. Файл с одним только ей – пустышка, и лучше сказать об этом
-# сейчас, чем в день публикации.
-OK_AUTH = ("AUTH_ID", "auth_id", "AUTH_SIG", "OK_LOGIN")
+
+# Вход в ОК определяем ОТ ОБРАТНОГО – по тому, чего у гостя быть не может.
+# Список «правильных» имён (AUTH_ID, AUTH_SIG, OK_LOGIN) уже подвёл: человек
+# вошёл в ОК руками, а файл не сохранился – ни одного имени из списка среди
+# его кук не оказалось, ОК зовёт их иначе. Гостевые же куки снимаются с живой
+# ok.ru за секунду (сделано 11.08.2026) и меняются куда реже.
+OK_GUEST = frozenset({
+    "bci", "_statid", "JSESSIONID", "cookieChoice", "ss_wb",
+    "TZ", "TZO", "_flashVersion", "tmr_lvid", "tmr_lvidTS",
+    "_ym_uid", "_ym_d", "_ym_isad", "_ga", "_gid",
+})
+OK_AUTH = ("AUTH_ID", "auth_id", "AUTH_SIG", "OK_LOGIN", "AUTHCODE")
 
 # Первым пробуем ваш настоящий Chrome: он уже стоит, ничего качать не надо,
 # и ВК видит обычный браузер, а не «стерильный» тестовый. Если Chrome нет –
@@ -77,10 +85,14 @@ def _has_vk(cookies: list) -> bool:
                for c in cookies)
 
 
+def _names(cookies: list) -> list[str]:
+    return sorted({str(c.get("name", "")) for c in cookies if c.get("value")})
+
+
 def _has_ok(cookies: list) -> bool:
-    """Та же проверка, что делает Click в ok_browser.import_session (точное имя)."""
-    return any(str(c.get("name", "")) in OK_AUTH and c.get("value")
-               for c in cookies)
+    """Та же проверка, что делает Click в ok_browser.looks_logged_in."""
+    names = set(_names(cookies))
+    return bool(names & set(OK_AUTH) or names - OK_GUEST)
 
 
 def _open_browser(pw):
@@ -171,8 +183,13 @@ def main() -> int:
         OK_FILE.write_text(json.dumps(ok, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"✅ Сессия ОК сохранена: {OK_FILE}")
     else:
-        print("ℹ️  Сессии ОК нет – вы в него не входили. Это нормально, "
-              "если Одноклассники пока не нужны.")
+        # Показываем, ЧТО нашли. Без этого «сессии ОК нет» – тупик: человек
+        # входил своими глазами, а файла нет, и почему – непонятно.
+        found = ", ".join(_names(ok["cookies"])[:12]) or "ни одной куки ОК"
+        print("ℹ️  Сессии ОК нет – похоже, вход не завершился.")
+        print(f"   Что нашлось: {found}")
+        print("   Если вы точно вошли и видели свою страницу ОК – пришлите эту")
+        print("   строку разработчику: значит, ОК назвал куки по-новому.")
 
     print("\nТеперь загрузите файл(ы) в Click:")
     print("  «Настройки» → «Вход в ВК (кросспостинг)» → «Загрузить готовый файл сессии»")

@@ -779,6 +779,44 @@ def test_vk_time_pickers() -> None:
           not vk_social._picker_shows(page, lambda: FakePicker([""]), 14))
 
 
+def test_ok_session_detection() -> None:
+    """
+    Вход в ОК узнаём от обратного – по тому, чего у гостя быть не может.
+
+    Список «правильных» имён подвёл дважды (11.08.2026). Заказчица вошла в
+    ОК руками, а файл сессии не сохранился: ни AUTH_ID, ни AUTH_SIG, ни
+    OK_LOGIN среди её кук не оказалось – ОК зовёт их иначе. И в обратную
+    сторону список врал: в нём был JSESSIONID, который ОК выдаёт ЛЮБОМУ,
+    даже не входя, – Click объявлял «сессия сохранена» о пустышке.
+
+    Гостевые куки сняты с живой ok.ru: bci, _statid, JSESSIONID,
+    cookieChoice, ss_wb.
+    """
+    print("\nОК: признак входа в файле сессии")
+    import json
+
+    import ok_browser as ok
+
+    def cookies(*names):
+        return [{"name": n, "value": "x"} for n in names]
+
+    guest = cookies("bci", "_statid", "JSESSIONID", "cookieChoice", "ss_wb")
+    check("гостевые куки за вход не считаем", not ok.looks_logged_in(guest))
+    check("один JSESSIONID – это гость",
+          not ok.looks_logged_in(cookies("JSESSIONID")))
+    check("известная кука входа – вошли",
+          ok.looks_logged_in(guest + cookies("AUTH_ID")))
+    check("НЕЗНАКОМАЯ кука сверх гостевых – тоже вошли",
+          ok.looks_logged_in(guest + cookies("OK_NEW_NAME_2027")))
+    check("пустой список – не вошли", not ok.looks_logged_in([]))
+    check("кука без значения не считается",
+          not ok.looks_logged_in([{"name": "AUTH_ID", "value": ""}]))
+
+    accepted, msg = ok.import_session("TEST-OK", json.dumps({"cookies": guest}).encode())
+    check("гостевой файл не принимаем", not accepted)
+    check("и показываем, что нашли", "JSESSIONID" in msg and "bci" in msg, msg)
+
+
 def test_ok_schedule_flow() -> None:
     """
     Отложка ОК: успех считаем по ответу площадки, а не по закрытию окна.
@@ -1071,6 +1109,7 @@ def test_playwright_worker() -> None:
 
 def main() -> int:
     print("═" * 60)
+    test_ok_session_detection()
     test_ok_schedule_flow()
     test_plan_horizon_and_past()
     test_vk_confirm_schedule()

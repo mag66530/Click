@@ -151,7 +151,36 @@ def session_path(project_id: str) -> Path:
 # Куки, по которым ОК узнаёт вошедшего. Как и у ВК, гостевой заход тоже
 # ставит куки (язык, счётчики) – без этой проверки «сессия сохранена»
 # показывалось бы и после неудачного входа.
-AUTH_COOKIES = ("AUTH_ID", "auth_id", "JSESSIONID", "AUTH_SIG", "OK_LOGIN")
+# Признак входа определяем ОТ ОБРАТНОГО – по тому, чего у гостя быть не может.
+#
+# Раньше здесь стоял список «правильных» имён (AUTH_ID, AUTH_SIG, OK_LOGIN), и
+# он подвёл дважды. Заказчица вошла в ОК руками, а файл сессии не сохранился:
+# ни одного имени из списка среди её куков не оказалось – ОК зовёт их иначе.
+# А в обратную сторону список врал: в нём был JSESSIONID, который ОК выдаёт
+# ЛЮБОМУ, даже не входя, – и Click объявлял «сессия сохранена» о пустышке.
+#
+# Угадывать имена бессмысленно: их меняют, не спросив нас. Зато список
+# гостевых кук снимается с живой ok.ru за секунду (сделано 11.08.2026) и
+# меняется куда реже. Есть кука сверх гостевых – значит вошли.
+GUEST_COOKIES = frozenset({
+    "bci", "_statid", "JSESSIONID", "cookieChoice", "ss_wb",
+    "TZ", "TZO", "_flashVersion", "tmr_lvid", "tmr_lvidTS",
+    "_ym_uid", "_ym_d", "_ym_isad", "_ga", "_gid",
+})
+# Имена, которые точно означают вход, – быстрый путь. Список неполный, и
+# полагаться ТОЛЬКО на него нельзя (см. выше).
+AUTH_COOKIES = ("AUTH_ID", "auth_id", "AUTH_SIG", "OK_LOGIN", "AUTHCODE")
+
+
+def cookie_names(cookies: list) -> list[str]:
+    """Имена кук со значением – для проверок и для понятных сообщений."""
+    return sorted({str(c.get("name", "")) for c in cookies or [] if c.get("value")})
+
+
+def looks_logged_in(cookies: list) -> bool:
+    """Похоже ли, что в файле сессия ВОШЕДШЕГО, а не гостя."""
+    names = set(cookie_names(cookies))
+    return bool(names & set(AUTH_COOKIES) or names - GUEST_COOKIES)
 
 
 def has_saved_session(project_id: str) -> bool:
@@ -162,8 +191,7 @@ def has_saved_session(project_id: str) -> bool:
     try:
         import json
         cookies = json.loads(fp.read_text(encoding="utf-8")).get("cookies") or []
-        return any(str(c.get("name", "")) in AUTH_COOKIES and c.get("value")
-                   for c in cookies)
+        return looks_logged_in(cookies)
     except Exception:  # noqa: BLE001
         return False
 
@@ -183,11 +211,14 @@ def import_session(project_id: str, raw: bytes) -> tuple[bool, str]:
     if not isinstance(data, dict) or "cookies" not in data:
         return False, "В файле нет раздела cookies – нужен storage_state Playwright."
     cookies = data.get("cookies") or []
-    has_auth = any(str(c.get("name", "")) in AUTH_COOKIES and c.get("value")
-                   for c in cookies)
-    if not has_auth:
-        return False, ("В файле нет куки входа ОК – похоже, он снят у гостя. "
-                       "Войдите в ОК и сохраните сессию заново.")
+    if not looks_logged_in(cookies):
+        # Имена показываем прямо в отказе: без них «нет куки входа» – тупик,
+        # в котором непонятно, что нести дальше. С именами видно сразу, гость
+        # это или ОК просто назвал куки по-новому.
+        found = ", ".join(cookie_names(cookies)[:12]) or "ни одной"
+        return False, ("В файле только гостевые куки ОК – похоже, вход не "
+                       f"завершился. Что нашли: {found}. Войдите в ОК "
+                       "(в окне из VHOD-VK-i-OK.py) и сохраните сессию заново.")
     session_path(project_id).write_text(json.dumps(data, ensure_ascii=False),
                                         encoding="utf-8")
     return True, f"Сессия ОК принята: {len(cookies)} куки, признак входа на месте."

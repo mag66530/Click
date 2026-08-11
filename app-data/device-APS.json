@@ -11,26 +11,6 @@
       "sameSite": "None"
     },
     {
-      "name": "sync_cookie_csrf",
-      "value": "1762550945fake",
-      "domain": ".mc.yandex.com",
-      "path": "/",
-      "expires": 1786445439,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "bh",
-      "value": "YKf469MGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
-      "domain": ".yandex.com",
-      "path": "/",
-      "expires": 1821004839.408,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "yandexuid",
       "value": "2902687631785841527",
       "domain": ".yandex.com",
@@ -91,11 +71,21 @@
       "sameSite": "None"
     },
     {
-      "name": "_yasc",
-      "value": "pc3IPMnOGIhMTObUAlgiHdH3WwhldZF75UeUC2sfxaLeQ5rrHZg9ETBb88yTaM2CqFaH3Sw=",
+      "name": "bh",
+      "value": "YOzh7NMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1821004840.157,
+      "expires": 1821018348,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_yasc",
+      "value": "EoVt8iq28fevDke2+FumRhA6WDW1Ib0qgeXgdTYSDd2Z/Dnd9M0Xo7aGOJJi7ltp7922DUw=",
+      "domain": ".yandex.com",
+      "path": "/",
+      "expires": 1821018349.388,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -105,7 +95,7 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817980883,
+      "expires": 1817994423,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -181,31 +171,11 @@
       "sameSite": "None"
     },
     {
-      "name": "bh",
-      "value": "YKb469MGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1821004838,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "_ym_isad",
       "value": "2",
       "domain": ".yandex.ru",
       "path": "/",
       "expires": 1786516839,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "sync_cookie_csrf",
-      "value": "1179318841fake",
-      "domain": ".mc.yandex.ru",
-      "path": "/",
-      "expires": 1786445439,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -221,31 +191,41 @@
       "sameSite": "None"
     },
     {
-      "name": "sessar",
-      "value": "1.1977778.CiD204GlJZ_cTatnY8E38A608nwQlGiZlP0keFgD-WNz-A.3IWx9YMzUdjqVXQMo1QbJS-tLXHoTC2NigR2ilRAmOM",
+      "name": "bh",
+      "value": "YOzh7NMGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1821004870.399,
+      "expires": 1821018348,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "sessar",
+      "value": "1.1977778.CiDEq7uFVqx728riFZEPFWA3ZyuiGD2GYzVyHfKWaX46xw.u5oMr2E6WF5Sjub8LN5b3sOczc_RSGCUZI3wZvvqpzY",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1821018417.515,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "sessguard",
-      "value": "1.1786444870.1786444870219:2bBTIg:8099..3.500:2105655.yetARxtl.a0wpF8qpsN-TIepQrKyJOF7LwtM",
+      "value": "1.1786458417.1786458417388:eQB_Ig:3cf5..3.500:2106035.qQ737bOp.ABu9EONjIYrXhl9A5q-jyn8VomQ",
       "domain": ".passport.yandex.ru",
       "path": "/",
-      "expires": 1821004870.399,
+      "expires": 1821018417.515,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "yp",
-      "value": "2101804870.udn.cDrQkNCy0LjQsNC/0YDQvtC80YHRgtCw0LvRjA%3D%3D",
+      "value": "2101818417.udn.cDrQkNCy0LjQsNC/0YDQvtC80YHRgtCw0LvRjA%3D%3D",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1821004870.399,
+      "expires": 1821018417.515,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -262,40 +242,40 @@
     },
     {
       "name": "L",
-      "value": "aGBHdglABUR6fVtJWAVdUFR9D2NoA1BQFRgBEz0gExg5JQ==.1786444870.2097387.363028.51cfe829522279dfd44b5610ec242eca",
+      "value": "aGBHdglABUR6fVtJWApYV1FyA2JoAFFYFRgBEz0gExg5JQ==.1786458417.2097387.359743.104ec9cabdc423f6e5df9b5400712829",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1821004870.399,
+      "expires": 1821018417.515,
       "httpOnly": false,
       "secure": false,
       "sameSite": "None"
     },
     {
       "name": "lah",
-      "value": "2:1849516870.12105591.5AWVcKx3hvAU8CLB.zMMLNm_-xYm-H_VvU-b0--SmpTA96vhaUcdEl_zEmFAFNcwk_fVr.5D4oTePrR_lzxJQvXM1diw",
+      "value": "2:1849530417.12105971.GUO6-1jY6UJpREQR.pSeMFpBgxBES6udAEaPB5iO5NBH9IbRLiBi-IBH-ovXScW7WS-Nqva5NhGT9h8AZhlvX4g.tw0vEeT8HkksG97mBC-CSg",
       "domain": ".passport.yandex.ru",
       "path": "/",
-      "expires": 1821004870.399,
+      "expires": 1821018417.515,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "mda2_beacon",
-      "value": "1786444870239",
+      "value": "1786458417407",
       "domain": ".passport.yandex.ru",
       "path": "/",
-      "expires": 1821004870.399,
+      "expires": 1821018417.515,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "_yasc",
-      "value": "g+Zd1LjeEiYjKPGNaU0l5s/8c2bZLtt8et+qgEB606iXT14HrCbnZ/SL4660HB7HjeCgVmYzVGTygQbMDEnq6jbJ3n9Izyvudftm7KBFkttp",
+      "value": "EmvOCEiHEWMUE4lMxgdPHFaXhC4jIh8ChJdQ0PNcu4dL1TlWdJw19twbg+Rrz7JSz8XfEg6usU1aNNTFKlGNmEUtwSS1E6WyitHlBR9+8PES",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1821004870.711,
+      "expires": 1821018420.099,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -305,7 +285,7 @@
       "value": "0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817980884,
+      "expires": 1817994424,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"

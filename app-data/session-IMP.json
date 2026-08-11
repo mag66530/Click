@@ -95,7 +95,7 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1817972807,
+      "expires": 1817973174,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -362,10 +362,10 @@
     },
     {
       "name": "cycada",
-      "value": "jOf3Pv393AuWmJ6jmkVakifA5hjy39BWIgnQZ/gtJxs=",
+      "value": "wBOL+FbTGbzWHaJ21x9XqyfA5hjy39BWIgnQZ/gtJxs=",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1787646405.96,
+      "expires": 1787646771.621,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -375,18 +375,8 @@
       "value": "1",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1817972807,
+      "expires": 1817973173,
       "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "gdpr",
-      "value": "0",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1817972808,
-      "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
@@ -395,7 +385,17 @@
       "value": "w",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1786438608,
+      "expires": 1786438974,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "gdpr",
+      "value": "0",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1817973185,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -411,7 +411,7 @@
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "267"
+          "value": "305"
         },
         {
           "name": "_ym_wv2rf:85710618:0",
@@ -423,7 +423,7 @@
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "2086"
+          "value": "2327"
         },
         {
           "name": "_ym39321485_lsid",
@@ -455,7 +455,7 @@
         },
         {
           "name": "_ym56213845_lastHit",
-          "value": "1786436752879"
+          "value": "1786437088192"
         },
         {
           "name": "_ym85710618_lsid",
@@ -463,15 +463,15 @@
         },
         {
           "name": "_ym46231566_lastHit",
-          "value": "1786436752888"
+          "value": "1786437088195"
         },
         {
           "name": "_ym39321485_lastHit",
-          "value": "1786436752885"
+          "value": "1786437088183"
         },
         {
           "name": "_ym85710618_lastHit",
-          "value": "1786436752894"
+          "value": "1786437088197"
         },
         {
           "name": "_ym_synced",
@@ -479,11 +479,11 @@
         },
         {
           "name": "_ym46231566:0_reqNum",
-          "value": "1004"
+          "value": "1144"
         },
         {
           "name": "_ym56213845:0_reqNum",
-          "value": "1858"
+          "value": "2090"
         }
       ]
     },

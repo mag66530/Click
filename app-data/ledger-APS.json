@@ -106,6 +106,7 @@
     "{\"key\": \"31565270:8b5191614d223fcf\", \"at\": \"2026-08-07T10:43:15.268617+00:00\", \"ts\": 1786099395.2686281, \"status\": \"ok\", \"cityName\": \"Бишкек\", \"companyUrl\": \"https://yandex.ru/sprav/31565270/edit\", \"runId\": \"run-1786097256722\"}",
     "{\"key\": \"33891281:8b5191614d223fcf\", \"at\": \"2026-08-07T10:43:43.876652+00:00\", \"ts\": 1786099423.8766644, \"status\": \"ok\", \"cityName\": \"Ош\", \"companyUrl\": \"https://yandex.ru/sprav/33891281/edit/main\", \"runId\": \"run-1786097256722\"}",
     "{\"key\": \"31565459:60a371f83b6ea30c\", \"at\": \"2026-08-07T10:44:03.786084+00:00\", \"ts\": 1786099443.7861013, \"status\": \"ok\", \"cityName\": \"Ташкент\", \"companyUrl\": \"https://yandex.ru/sprav/31565459/edit/main\", \"runId\": \"run-1786097256722\"}",
-    "{\"key\": \"gisphoto:70000001069567504:ee302b529b739fb7\", \"at\": \"2026-08-07T12:38:34.691636+00:00\", \"ts\": 1786106314.6916528, \"status\": \"gis-photos\", \"cityName\": \"Ташкент\", \"companyUrl\": \"https://yandex.ru/sprav/31565459/edit/main\", \"runId\": \"run-1786106273591\"}"
+    "{\"key\": \"gisphoto:70000001069567504:ee302b529b739fb7\", \"at\": \"2026-08-07T12:38:34.691636+00:00\", \"ts\": 1786106314.6916528, \"status\": \"gis-photos\", \"cityName\": \"Ташкент\", \"companyUrl\": \"https://yandex.ru/sprav/31565459/edit/main\", \"runId\": \"run-1786106273591\"}",
+    "{\"key\": \"21643318:f6ecd6064fc98ad6\", \"at\": \"2026-08-11T11:04:09.846823+00:00\", \"ts\": 1786446249.8468387, \"status\": \"ok\", \"cityName\": \"Москва\", \"companyUrl\": \"https://yandex.ru/sprav/21643318/edit/main\", \"runId\": \"run-1786446207628\"}"
   ]
 }

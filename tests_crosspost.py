@@ -491,6 +491,15 @@ def test_vk_time_pickers() -> None:
     vk_social._wait_picker_value(page, lambda: zero, 5, "Минута", notes.append)
     check("ведущий ноль читается верно", zero.reads == 1)
 
+    # Мгновенная проверка «стоит ли уже нужное» – по ней решаем, нужен ли
+    # запасной путь через список. Ведущий ноль тут тоже не должен мешать.
+    check("«05» – это пять минут",
+          vk_social._picker_shows(page, lambda: FakePicker(["05"]), 5))
+    check("«00» – это не четырнадцать",
+          not vk_social._picker_shows(page, lambda: FakePicker(["00"]), 14))
+    check("пустое поле – не совпадение",
+          not vk_social._picker_shows(page, lambda: FakePicker([""]), 14))
+
 
 def main() -> int:
     print("═" * 60)

@@ -779,6 +779,52 @@ def _click_dropdown_option(page, picker, option_text: str) -> None:
     page.wait_for_timeout(300)
 
 
+def _open_post_form(page, log: Callable[[str], None], tries: int = 3) -> None:
+    """
+    «Создать» → «Пост». Меню – выпадашка, и она капризна.
+
+    Было: клик по «Создать», пауза 400 мс наугад, клик по «Пост». С первого
+    раза это иногда не срабатывало – «Timeout 10000ms exceeded, waiting for
+    locator(text="Пост")». Причин две, и обе не лечатся ожиданием подольше:
+    меню могло не открыться вовсе (клик пришёлся раньше, чем страница ожила)
+    либо открыться и закрыться само. Поэтому не ждём дольше, а ПОВТОРЯЕМ:
+    открыли меню – убедились, что пункт виден – кликнули. Не вышло – ещё раз.
+
+    Пункт ищем несколькими способами: у ВК это то пункт меню, то ссылка, и
+    держаться за одну форму записи – значит ломаться на каждой их правке.
+    """
+    item_selectors = (
+        '[role="menuitem"]:has-text("Пост")',
+        '[role="menu"] >> text="Пост"',
+        'text="Пост"',
+    )
+    last = ""
+    for attempt in range(1, tries + 1):
+        try:
+            page.click('text="Создать"', timeout=15_000)
+        except Exception as e:  # noqa: BLE001
+            last = f"кнопка «Создать» не нажалась: {e}"
+            page.wait_for_timeout(800)
+            continue
+        # Ждём именно ПОЯВЛЕНИЯ пункта, а не «сколько-нибудь миллисекунд».
+        for sel in item_selectors:
+            try:
+                page.wait_for_selector(sel, state="visible", timeout=2_500)
+                page.click(sel, timeout=5_000)
+                if attempt > 1:
+                    log(f"  форма поста открылась с {attempt}-й попытки")
+                return
+            except Exception as e:  # noqa: BLE001 – пробуем следующий способ
+                last = str(e).split("\n")[0]
+        log(f"  меню «Создать» не открылось (попытка {attempt}) – пробую снова")
+        page.keyboard.press("Escape")      # закрыть возможный призрак меню
+        page.wait_for_timeout(1_200)
+    raise RuntimeError(
+        "Не удалось открыть форму поста: меню «Создать» не показало пункт «Пост». "
+        f"Последняя причина: {last}. Проверьте на снимке, что страница сообщества "
+        "открылась целиком и вы вошли под администратором")
+
+
 def _close_dropdown(page, picker) -> None:
     """
     Закрыть список, если он остался открытым после выбора.
@@ -809,6 +855,12 @@ def _picker_digits(page, get_picker) -> str:
     except Exception:  # noqa: BLE001
         return ""
     return "".join(ch for ch in shown if ch.isdigit())
+
+
+def _picker_shows(page, get_picker, expected: int) -> bool:
+    """Стоит ли в поле нужное число ПРЯМО СЕЙЧАС, без ожидания."""
+    digits = _picker_digits(page, get_picker)
+    return bool(digits) and int(digits) == expected
 
 
 def _wait_picker_value(page, get_picker, expected: int, what: str,
@@ -919,14 +971,28 @@ def _set_schedule(page, when: datetime, log: Callable[[str], None]) -> None:
     log(f"  час {when.hour} принят")
 
     page.wait_for_timeout(400)
-    minute_picker = page.locator(SEL["time_picker"]).last
-    # Минуту – только выбором из списка: печать иногда откатывается к прежней.
-    _click_dropdown_option(page, minute_picker, f"{when.minute:02d}")
-    _wait_picker_value(page, lambda: page.locator(SEL["time_picker"]).last,
-                       when.minute, "Минута", log)
+
+    # Минуты. Сначала ПЕЧАТЬЮ, как их ставит человек: вписать число и нажать
+    # Enter (подсказка заказчика – «там надо просто вписать время и нажать
+    # либо энтер, либо на пустое, и всё встаёт»). Раньше здесь стоял только
+    # выбор из списка, и он подводил дважды: то время оставалось 15:00, то
+    # список висел открытым поверх «Добавить в очередь» и перехватывал клик.
+    # Список остаётся запасным путём – если печать не принялась.
+    def minutes_field():
+        return page.locator(SEL["time_picker"]).last
+
+    try:
+        _type_picker_value(page, minutes_field(), when.minute)
+    except Exception as e:  # noqa: BLE001 – поля для ввода нет, пойдём списком
+        log(f"  минуты впечатать не вышло ({str(e).split(chr(10))[0]})")
+    if not _picker_shows(page, minutes_field, when.minute):
+        log("  минуты печатью не встали – пробую выбрать из списка")
+        _click_dropdown_option(page, minutes_field(), f"{when.minute:02d}")
+        _close_dropdown(page, minutes_field())
+    _wait_picker_value(page, minutes_field, when.minute, "Минута", log)
     log(f"  минуты {when.minute:02d} приняты")
     # Список минут любит остаться открытым поверх «Добавить в очередь».
-    _close_dropdown(page, page.locator(SEL["time_picker"]).last)
+    _close_dropdown(page, minutes_field())
 
     # Подтверждение. Неактивная кнопка = дата не принята, кликать бесполезно.
     page.wait_for_selector(SEL["postponed_confirm"], timeout=10_000)
@@ -1045,9 +1111,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             # «Создать» → «Пост». Меню – hover-флайаут: между кликами пауза
             # короткая, иначе меню закроется раньше, чем найдём пункт.
             log("Открываю форму поста")
-            page.click('text="Создать"', timeout=15_000)
-            page.wait_for_timeout(400)
-            page.click('text="Пост"', timeout=10_000)
+            _open_post_form(page, log)
             page.wait_for_selector(SEL["dialog"], timeout=10_000)
             page.wait_for_timeout(1200)
             dlg = SEL["dialog"]

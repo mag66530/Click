@@ -15,7 +15,7 @@ crosspost_form.py – формирование: посты реестра → о
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable
 
 import apptime
@@ -25,6 +25,10 @@ import post_text
 
 # Метка сборки – одна на всё приложение (см. build.py).
 from build import BUILD  # noqa: F401
+
+# За сколько минут до выхода отложку ставить ещё имеет смысл. ВК и ОК не дают
+# планировать «на сейчас», да и толку в отложке за минуту до срока никакого.
+MIN_LEAD_MINUTES = 10
 
 
 # ─── Что пора формировать ───────────────────────────────────────────
@@ -124,6 +128,24 @@ def _form_browser_all(project_id: str, network: str, schedule_fn,
 
     for n, post in enumerate(todo, 1):
         label = f"{post['date']} ({n}/{len(todo)})"
+
+        # Отложка в ПРОШЛОЕ невозможна: соцсеть такое время просто не примет.
+        # Click этого не проверял и честно пытался – ВК подставлял вместо
+        # 9:00 своё ближайшее время, и прогон падал с «ВК показывает 20:00».
+        # Ловится это в первый же день: пост стоит на сегодня на 9 утра, а
+        # формируют его вечером.
+        late_by = apptime.now() - when_local(post)
+        if late_by > timedelta(minutes=-MIN_LEAD_MINUTES):
+            hours = late_by.total_seconds() / 3600
+            err = (f"время выхода уже прошло ({post['date']} {post.get('time', '')}"
+                   + (f", {hours:.0f} ч назад" if hours >= 1 else "") +
+                   f") – {ru} отложку в прошлое не примет. Перенесите дату в "
+                   "реестре или опубликуйте вручную")
+            cps.set_status(project_id, post, network, cps.MISSED, error=err)
+            progress(f"{label}: пропускаю – {err}")
+            results.append({"post": post, "ok": False, "error": err})
+            continue
+
         progress(f"{label}: готовлю текст и фото")
         text = post_text.render(social_markup(post, site), "plain")
 

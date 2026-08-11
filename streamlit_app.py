@@ -3266,7 +3266,22 @@ _REPORT_KINDS = {"publish": "📤 Публикация", "actualize": "🔄 Ак
 # соцсетям). Раздел показывает этот план внутри Click и то, что с ним уже
 # сделано. Разбор таблицы – content_plan.py, память о сделанном – crosspost_state.py.
 
-CROSSPOST_HORIZON_DAYS = 14      # на сколько дней вперёд показываем план
+CROSSPOST_HORIZON_DAYS = 14      # минимум, сколько дней вперёд показываем план
+
+
+def _crosspost_horizon(today):
+    """
+    До какого дня показываем план: до конца ТЕКУЩЕГО месяца, но не меньше
+    двух недель вперёд.
+
+    Было ровно 14 дней – и заказчица, перенеся пост с 11-го на 30-е, перестала
+    его видеть: 30-е за горизонт уходило. А планируют помесячно, реестр так и
+    свёрстан – «Август 2026» отдельным заголовком. В конце месяца две недели
+    всё равно остаются: последние числа не должны обрывать план на послезавтра.
+    """
+    from calendar import monthrange
+    end_of_month = today.replace(day=monthrange(today.year, today.month)[1])
+    return max(end_of_month, today + timedelta(days=CROSSPOST_HORIZON_DAYS))
 
 
 def _crosspost_source_block(project_id: str, config: dict) -> bool:
@@ -3411,7 +3426,7 @@ def tab_crosspost(project_id: str, config: dict) -> None:
         return
 
     today = apptime.now().date()
-    horizon = today + timedelta(days=CROSSPOST_HORIZON_DAYS)
+    horizon = _crosspost_horizon(today)
     upcoming = [p for p in posts
                 if (d := content_plan.parse_date(p["date"])) and today <= d <= horizon]
     state = cps.load(project_id)
@@ -3419,7 +3434,7 @@ def tab_crosspost(project_id: str, config: dict) -> None:
     # ─── Сводка: цифры по целям, а не по постам ───
     total = cps.summarize(state, upcoming)
     c2.caption(f"В листе {len(posts)} постов · впереди {len(upcoming)} "
-               f"(ближайшие {CROSSPOST_HORIZON_DAYS} дней) · час выхода "
+               f"(по {horizon.strftime('%d.%m')} включительно) · час выхода "
                f"{content_plan.brand_default_time(project_id)} по Екатеринбургу")
     m = st.columns(4)
     m[0].metric("Ждут формирования", total[cps.WAITING])
@@ -3445,6 +3460,7 @@ def tab_crosspost(project_id: str, config: dict) -> None:
         html("".join(_crosspost_plan_row(p, state) for p in upcoming))
 
     _crosspost_form_block(project_id, config, upcoming, state)
+    _crosspost_forget_block(project_id, upcoming, state)
     _crosspost_channels_block(project_id, config)
     _crosspost_yb_block(project_id, config)
     _crosspost_scheduler_block(project_id)
@@ -3476,6 +3492,51 @@ def _crosspost_channels(config: dict) -> dict[str, str]:
     return {"tg-client": (config.get("tgChannelClient") or "").strip(),
             "tg-staff": (config.get("tgChannelStaff") or "").strip(),
             "max": (config.get("maxChatId") or "").strip()}
+
+
+def _crosspost_forget_block(project_id: str, upcoming: list[dict], state: dict) -> None:
+    """
+    «Сформировать заново»: забыть, что пост уже формировали.
+
+    Зачем это нужно. Click помнит сделанное, чтобы не наплодить дублей, – и
+    правильно делает. Но память живёт у него, а отложки – в соцсети, и они
+    расходятся: заказчица удалила записи в ВК, а Click по-прежнему считал их
+    поставленными и заново формировать отказывался. Выхода из этого не было
+    вовсе. Теперь есть – и он ручной нарочно: забыть пост можно только
+    осознанно, глядя на список.
+    """
+    done = []
+    for post in upcoming:
+        for t in post.get("targets", []):
+            if (t.get("published_link") or "").strip():
+                continue
+            if cps.status_of(state, post, t["network"]) in (
+                    cps.SCHEDULED, cps.SENT, cps.SENT_LATE, cps.FAILED, cps.MISSED):
+                done.append(post)
+                break
+    if not done:
+        return
+
+    with st.expander("↺ Сформировать заново – если запись удалили в соцсети"):
+        st.caption("Click помнит, что уже формировал, и второй раз не делает – так "
+                   "не появляются дубли. Если запись из соцсети удалили, скажите "
+                   "об этом здесь: пост снова станет «ждёт формирования».")
+        titles = {}
+        for post in done:
+            nets = ", ".join(
+                f'{cps.network_ru(t["network"])} – {cps.status_of(state, post, t["network"])}'
+                for t in post.get("targets", [])
+                if not (t.get("published_link") or "").strip())
+            head = (post.get("text") or "").strip().split("\n")[0][:60] or "без текста"
+            titles[f'{post["date"]} · {head} · {nets}'] = post
+        picked = st.selectbox("Какой пост забыть", list(titles),
+                              key=f"cp-forget-pick-{project_id}")
+        if st.button("↺ Забыть и сформировать заново", key=f"cp-forget-go-{project_id}"):
+            cps.forget_post(project_id, titles[picked])
+            st.success("Готово – пост снова в очереди на формирование. "
+                       "Проверьте, что в соцсети его правда нет, и нажмите "
+                       "«Сформировать план».")
+            st.rerun()
 
 
 def _crosspost_channels_block(project_id: str, config: dict) -> None:

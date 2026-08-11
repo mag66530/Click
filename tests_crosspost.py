@@ -694,6 +694,51 @@ def test_vk_time_pickers() -> None:
           not vk_social._picker_shows(page, lambda: FakePicker([""]), 14))
 
 
+def test_plan_horizon_and_past() -> None:
+    """
+    Горизонт плана – до конца месяца, и отложек в прошлое не бывает.
+
+    Две жалобы одного дня (11.08.2026). Первая: заказчица перенесла пост
+    с 11-го на 30-е и перестала его видеть – горизонт был ровно 14 дней,
+    а планируют помесячно. Вторая: Click пытался поставить отложку на
+    сегодня 9:00 вечером того же дня, ВК подставлял своё время, и прогон
+    падал с «ВК показывает 20:00».
+    """
+    print("\nПлан: горизонт и прошедшее время")
+    from datetime import timedelta
+
+    import apptime
+    import crosspost_form as cf
+    import streamlit_app as app
+
+    # Горизонт: конец месяца, но не ближе двух недель.
+    check("середина месяца – видно до конца месяца",
+          app._crosspost_horizon(date(2026, 8, 11)) == date(2026, 8, 31))
+    check("30-е число теперь в плане",
+          app._crosspost_horizon(date(2026, 8, 11)) >= date(2026, 8, 30))
+    check("конец месяца – всё равно две недели вперёд",
+          app._crosspost_horizon(date(2026, 8, 30)) == date(2026, 9, 13))
+    check("февраль считается по своей длине",
+          app._crosspost_horizon(date(2027, 2, 1)) == date(2027, 2, 28))
+
+    # Прошедшее время: формировать нечего, соцсеть такое не примет.
+    now = apptime.now()
+
+    def post_at(dt):
+        return {"date": dt.strftime("%Y-%m-%d"), "time": dt.strftime("%H:%M"),
+                "when": dt.isoformat(), "text": "текст", "images": [], "targets": []}
+
+    def skipped(dt) -> bool:
+        return (now - cf.when_local(post_at(dt))) > timedelta(minutes=-cf.MIN_LEAD_MINUTES)
+
+    check("вчерашний пост не формируем", skipped(now - timedelta(days=1)))
+    check("сегодняшний, но уже прошедший – не формируем",
+          skipped(now - timedelta(hours=2)))
+    check("до выхода пара минут – тоже поздно", skipped(now + timedelta(minutes=3)))
+    check("через полчаса – формируем", not skipped(now + timedelta(minutes=30)))
+    check("завтрашний – формируем", not skipped(now + timedelta(days=1)))
+
+
 def test_vk_confirm_schedule() -> None:
     """
     «Добавить в очередь» иногда требует двух нажатий – и ровно одного.
@@ -893,6 +938,7 @@ def test_playwright_worker() -> None:
 
 def main() -> int:
     print("═" * 60)
+    test_plan_horizon_and_past()
     test_vk_confirm_schedule()
     test_vk_captcha_on_posting()
     test_playwright_worker()

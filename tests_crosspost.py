@@ -508,19 +508,25 @@ def test_scheduler() -> None:
 
 def test_vk_time_pickers() -> None:
     """
-    Календарь ВК: значение проверяем НЕ мгновенно, а дождавшись.
+    Календарь ВК: верим подписи самого ВК, а не чтению полей.
 
-    Живой случай (11.08.2026): отложка на 15:14 не встала, в логе «Минута не
-    принялась: ждали 14, в поле 00», а на снимке отказа – час 15, минуты 14,
-    галочка на 14. То есть время стояло верное, а Click прочитал поле раньше,
-    чем ВК успел перерисовать надпись: список на React отмечает выбор сразу,
-    подпись в поле догоняет позже. Здесь закреплено, что мы ждём.
+    Две потерянные отложки подряд, обе – на пустом месте. «Минута не
+    принялась: ждали 14, в поле 00», а на снимке отказа стояло 15:14.
+    Потом «ждали 20, в поле 00» – и в логе перед этим «Час: значение
+    прочитать не вышло», при том что ВК внизу окна писал «Сегодня в 19:20».
+    Причина: поля времени у ВК – компонент, значение живёт внутри него,
+    в <select> или <input>, а снаружи текстом не читается.
+
+    Отсюда правило: спрашиваем у ВК, какое время он считает назначенным,
+    и это ответ. Поля – только запасной источник.
     """
     print("\nВК: чтение времени в календаре")
+    from datetime import datetime
+
     import vk_social
 
     class FakePicker:
-        """Поле, которое показывает нужное значение не сразу, а с задержкой."""
+        """Поле-компонент: текстом читается то, что дали (часто – ничего)."""
 
         def __init__(self, values: list[str]):
             self.values = values
@@ -531,49 +537,61 @@ def test_vk_time_pickers() -> None:
             self.reads += 1
             return v
 
+    class FakeLocator:
+        def __init__(self, hour: "FakePicker", minute: "FakePicker"):
+            self.first = hour
+            self.last = minute
+
     class FakePage:
-        def __init__(self):
+        """Страница: подпись под календарём + два поля времени."""
+
+        def __init__(self, footer: str = "", hour: str = "", minute: str = ""):
+            self.footer = footer
+            self.hour, self.minute = hour, minute
             self.waited = 0
+
+        def eval_on_selector(self, selector: str, script: str) -> str:
+            return self.footer
+
+        def locator(self, selector: str) -> "FakeLocator":
+            return FakeLocator(FakePicker([self.hour]), FakePicker([self.minute]))
 
         def wait_for_timeout(self, ms: int) -> None:
             self.waited += ms
 
+    when = datetime(2026, 8, 11, 19, 20)
     notes: list[str] = []
+
+    # Подпись ВК читается – её и слушаем, поля при этом молчат (как в жизни).
+    page = FakePage(footer="Сохранить черновик\nСегодня в 19:20\nДобавить в очередь")
+    check("подпись ВК разобрана", vk_social._scheduled_time_shown(page) == "19:20")
+    check("время признано выставленным", vk_social._time_is_set(page, when, notes.append))
+
+    # Та самая беда: поля не читаются вовсе. Раньше это валило отложку.
+    blind = FakePage(footer="Сегодня в 19:20")
+    check("нечитаемые поля отложку не рушат",
+          vk_social._time_is_set(blind, when, notes.append))
+
+    # ВК показывает ЧУЖОЕ время – вот это настоящая неудача.
+    wrong = FakePage(footer="Сегодня в 19:00")
+    check("чужое время не выдаём за своё",
+          not vk_social._time_is_set(wrong, when, notes.append, tries=2))
+
+    # Подписи нет – работает запасной источник, сами поля.
+    fields = FakePage(footer="", hour="19", minute="20")
+    check("без подписи верим полям", vk_social._time_is_set(fields, when, notes.append))
+    bad_fields = FakePage(footer="", hour="19", minute="00")
+    check("поля с чужой минутой не проходят",
+          not vk_social._time_is_set(bad_fields, when, notes.append, tries=2))
+
+    # Час без ведущего нуля, минуты с ним – ровно так ВК их и пишет.
+    check("«9:05» разбирается",
+          vk_social._scheduled_time_shown(FakePage(footer="Завтра в 9:05")) == "9:05")
+    check("текста без времени не выдумываем",
+          vk_social._scheduled_time_shown(FakePage(footer="Добавить в очередь")) == "")
+
+    # Мгновенная проверка поля – по ней решается, нужен ли запасной путь.
     page = FakePage()
-
-    # Поле «отстаёт»: два раза показывает старое «00», потом настоящее «14».
-    slow = FakePicker(["00", "00", "14"])
-    vk_social._wait_picker_value(page, lambda: slow, 14, "Минута", notes.append)
-    check("отставшее поле дожидаемся, а не падаем", slow.reads >= 3)
-
-    # Значение так и не встало – вот это честная ошибка.
-    stuck = FakePicker(["00"])
-    try:
-        vk_social._wait_picker_value(page, lambda: stuck, 14, "Минута",
-                                     notes.append, tries=3)
-        check("непринятое значение – ошибка", False, "ошибки не было")
-    except RuntimeError as e:
-        check("непринятое значение – ошибка", "ждали 14" in str(e), str(e))
-
-    # Поле не читается вовсе – это не повод ронять отложку (так было и раньше).
-    blind = FakePicker([""])
-    notes.clear()
-    vk_social._wait_picker_value(page, lambda: blind, 14, "Минута",
-                                 notes.append, tries=2)
-    check("нечитаемое поле отложку не рушит", any("на слово" in n for n in notes))
-
-    # Значение уже стоит – ждать нечего, уходим с первой попытки.
-    quick = FakePicker(["14"])
-    vk_social._wait_picker_value(page, lambda: quick, 14, "Минута", notes.append)
-    check("готовое значение не ждём", quick.reads == 1)
-
-    # Час пишется как «15», минуты как «05» – ведущий ноль не должен мешать.
-    zero = FakePicker(["05"])
-    vk_social._wait_picker_value(page, lambda: zero, 5, "Минута", notes.append)
-    check("ведущий ноль читается верно", zero.reads == 1)
-
-    # Мгновенная проверка «стоит ли уже нужное» – по ней решаем, нужен ли
-    # запасной путь через список. Ведущий ноль тут тоже не должен мешать.
     check("«05» – это пять минут",
           vk_social._picker_shows(page, lambda: FakePicker(["05"]), 5))
     check("«00» – это не четырнадцать",

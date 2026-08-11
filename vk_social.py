@@ -21,6 +21,7 @@ vk_social.py – ВКонтакте: вход с сохранением сесс
 
 from __future__ import annotations
 
+import re
 import time as _time
 from datetime import datetime
 from pathlib import Path
@@ -896,48 +897,93 @@ def _close_dropdown(page, picker) -> None:
 
 
 def _picker_digits(page, get_picker) -> str:
-    """Только цифры из видимого значения поля. Пусто – прочитать не вышло."""
+    """
+    Только цифры из значения поля. Пусто – прочитать не вышло.
+
+    Читаем ТРЕМЯ способами, и порядок тут важен. Поля времени у ВК – это
+    компонент vkui: снаружи он выглядит надписью, а значение живёт внутри,
+    в <select> или в <input>. Текст элемента (inner_text) значения полей
+    ввода НЕ содержит – отсюда и «Час: значение прочитать не вышло» в логе
+    заказчицы, хотя на экране стояло 19. Поэтому сперва спрашиваем сами
+    поля, и только потом смотрим на текст.
+    """
     try:
-        shown = _read_picker_title(page, get_picker())
+        picker = get_picker()
     except Exception:  # noqa: BLE001
         return ""
-    return "".join(ch for ch in shown if ch.isdigit())
+    try:
+        value = picker.evaluate(
+            """el => {
+                const sel = el.querySelector('select');
+                if (sel && sel.value) return String(sel.value);
+                const inp = el.querySelector('input');
+                if (inp && inp.value) return String(inp.value);
+                return (el.innerText || '').trim().split('\\n')[0];
+            }""")
+        digits = "".join(ch for ch in str(value or "") if ch.isdigit())
+        if digits:
+            return digits
+    except Exception:  # noqa: BLE001 – не Playwright (например, тест) либо не вышло
+        pass
+    try:
+        return "".join(ch for ch in _read_picker_title(page, picker) if ch.isdigit())
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _scheduled_time_shown(page) -> str:
+    """
+    Время, которое ВК САМ показывает рядом с «Добавить в очередь»
+    («Сегодня в 19:20»). Пусто – не нашли.
+
+    Это и есть правда о назначенном времени: пока Click спорил с полями,
+    ВК уже писал внизу окна верные 19:20. Смотрим только рядом с кнопкой
+    подтверждения, а не по всему окну: в тексте самого поста тоже могут
+    попасться цифры с двоеточием, и принять их за время – хуже, чем не
+    найти ничего.
+    """
+    try:
+        text = page.eval_on_selector(
+            SEL["postponed_confirm"],
+            """el => {
+                let box = el.parentElement;
+                for (let i = 0; i < 2 && box && box.parentElement; i++) {
+                    box = box.parentElement;
+                }
+                return box ? (box.innerText || '') : '';
+            }""") or ""
+    except Exception:  # noqa: BLE001
+        return ""
+    found = re.search(r"\b(\d{1,2}):(\d{2})\b", str(text))
+    return f"{int(found.group(1))}:{found.group(2)}" if found else ""
+
+
+def _time_is_set(page, when, log: Callable[[str], None], tries: int = 15) -> bool:
+    """
+    Стоит ли в календаре нужное время. Ждём до трёх секунд.
+
+    Верим двум источникам, и первому – больше. Первый: подпись самого ВК
+    под календарём («Сегодня в 19:20») – это его собственный ответ на
+    вопрос «когда выйдет», надёжнее не бывает. Второй, запасной: значения
+    в полях часа и минут, если подпись прочитать не удалось.
+    """
+    want = f"{when.hour}:{when.minute:02d}"
+    for _ in range(tries):
+        shown = _scheduled_time_shown(page)
+        if shown == want:
+            return True
+        if (_picker_shows(page, lambda: page.locator(SEL["time_picker"]).first, when.hour)
+                and _picker_shows(page, lambda: page.locator(SEL["time_picker"]).last,
+                                  when.minute)):
+            return True
+        page.wait_for_timeout(200)
+    return False
 
 
 def _picker_shows(page, get_picker, expected: int) -> bool:
     """Стоит ли в поле нужное число ПРЯМО СЕЙЧАС, без ожидания."""
     digits = _picker_digits(page, get_picker)
     return bool(digits) and int(digits) == expected
-
-
-def _wait_picker_value(page, get_picker, expected: int, what: str,
-                       log: Callable[[str], None], tries: int = 20) -> None:
-    """
-    Дождаться, пока в поле встанет нужное число, и только потом решать.
-
-    Здесь была потеряна отложка, и вот как. Значение проверялось СРАЗУ после
-    клика по пункту списка. ВК рисует на React: выбор в списке отмечается
-    мгновенно, а надпись в самом поле обновляется чуть позже. Click успевал
-    прочитать старое значение – «ждали 14, в поле 00» – и объявлял неудачу,
-    хотя время уже стояло верное (видно на снимке отказа: час 15, минуты 14,
-    галочка на 14). Теперь перечитываем поле до четырёх секунд.
-
-    Поле берём ЗАНОВО на каждой попытке: ввод пересобирает блок времени, и
-    старая ссылка отваливается с «Node is detached».
-
-    Прочитать не удалось вовсе – не валимся: так вело себя и прежнее правило
-    («if digits and …»), а ронять отложку из-за нечитаемой подписи незачем.
-    """
-    seen = ""
-    for _ in range(tries):
-        seen = _picker_digits(page, get_picker)
-        if seen and int(seen) == expected:
-            return
-        page.wait_for_timeout(200)
-    if not seen:
-        log(f"  {what}: значение прочитать не вышло – верю на слово и иду дальше")
-        return
-    raise RuntimeError(f"{what} не принялась: ждали {expected}, в поле «{seen}»")
 
 
 def _type_picker_value(page, picker, value: int) -> None:
@@ -1011,34 +1057,43 @@ def _set_schedule(page, when: datetime, log: Callable[[str], None]) -> None:
 
     # Час – печатью; ссылку на поле минут после этого берём ЗАНОВО: ввод часа
     # пересобирает DOM блока времени, старая ссылка отваливается.
-    hour_picker = page.locator(SEL["time_picker"]).first
-    _type_picker_value(page, hour_picker, when.hour)
-    _wait_picker_value(page, lambda: page.locator(SEL["time_picker"]).first,
-                       when.hour, "Час", log)
-    log(f"  час {when.hour} принят")
-
-    page.wait_for_timeout(400)
-
-    # Минуты. Сначала ПЕЧАТЬЮ, как их ставит человек: вписать число и нажать
-    # Enter (подсказка заказчика – «там надо просто вписать время и нажать
-    # либо энтер, либо на пустое, и всё встаёт»). Раньше здесь стоял только
-    # выбор из списка, и он подводил дважды: то время оставалось 15:00, то
-    # список висел открытым поверх «Добавить в очередь» и перехватывал клик.
-    # Список остаётся запасным путём – если печать не принялась.
+    # Час и минуты вписываем, как это делает человек: набрать число и нажать
+    # Enter (подсказка заказчицы – «надо просто вписать время и нажать либо
+    # энтер, либо на пустое, и всё встаёт»). Список остаётся запасным путём.
+    #
+    # А вот ПРОВЕРЯЕМ теперь иначе, и это главное. Раньше сверялись с каждым
+    # полем по отдельности – и дважды завалили отложку на ровном месте: поля
+    # у ВК читаются ненадёжно (значение живёт внутри компонента, снаружи его
+    # не видно), из-за чего «Час: значение прочитать не вышло», а следом
+    # «Минута не принялась: ждали 20, в поле 00» – при том, что сам ВК внизу
+    # окна писал верное «Сегодня в 19:20». Теперь спрашиваем у ВК: какое
+    # время ты считаешь назначенным? Его ответ и есть правда.
     def minutes_field():
         return page.locator(SEL["time_picker"]).last
 
+    _type_picker_value(page, page.locator(SEL["time_picker"]).first, when.hour)
+    page.wait_for_timeout(400)
     try:
         _type_picker_value(page, minutes_field(), when.minute)
     except Exception as e:  # noqa: BLE001 – поля для ввода нет, пойдём списком
         log(f"  минуты впечатать не вышло ({str(e).split(chr(10))[0]})")
-    if not _picker_shows(page, minutes_field, when.minute):
-        log("  минуты печатью не встали – пробую выбрать из списка")
-        _click_dropdown_option(page, minutes_field(), f"{when.minute:02d}")
+
+    if not _time_is_set(page, when, log):
+        log("  время печатью не встало – пробую минуты списком")
+        try:
+            _click_dropdown_option(page, minutes_field(), f"{when.minute:02d}")
+        except Exception as e:  # noqa: BLE001
+            log(f"  список минут не открылся ({str(e).split(chr(10))[0]})")
+        # Список минут любит остаться открытым поверх «Добавить в очередь».
         _close_dropdown(page, minutes_field())
-    _wait_picker_value(page, minutes_field, when.minute, "Минута", log)
-    log(f"  минуты {when.minute:02d} приняты")
-    # Список минут любит остаться открытым поверх «Добавить в очередь».
+        if not _time_is_set(page, when, log):
+            shown = _scheduled_time_shown(page)
+            raise RuntimeError(
+                f"Не удалось выставить время {when.hour}:{when.minute:02d}: "
+                + (f"ВК показывает «{shown}»" if shown
+                   else "и прочитать, какое время он принял, тоже не вышло")
+                + ". Смотрите снимок экрана ниже")
+    log(f"  время {when.hour}:{when.minute:02d} стоит")
     _close_dropdown(page, minutes_field())
 
     # Подтверждение. Неактивная кнопка = дата не принята, кликать бесполезно.

@@ -336,6 +336,71 @@ def test_ok_via_vk() -> None:
     check("пустой адрес не ломает", ok_browser.safe_url("") == "")
 
 
+def test_ok_profile_check() -> None:
+    """
+    Проверка ОК «Имя – это вы?»: подтверждаем, но только правильную кнопку.
+
+    Вторая кнопка на этом экране – «Это не мой профиль» – это жалоба на
+    угон, после которой аккаунт уходит на блокировку. Нажать её случайно
+    нельзя ни при каких обстоятельствах, поэтому проверяем не только «жмём
+    нужную», но и «не жмём опасную, даже если другой на экране нет».
+    """
+    print("\nОК: проверка профиля «это вы?»")
+    import ok_browser
+
+    опасные = set(ok_browser.SEL["profile_never"])
+    check("опасная кнопка не попала в список подтверждений",
+          not (set(ok_browser.SEL["profile_yes"]) & опасные))
+
+    class FakePage:
+        def __init__(self, text: str, buttons=()):
+            self._text = text
+            self._buttons = set(buttons)
+            self.clicked: list = []
+
+        def inner_text(self, _sel):
+            return self._text
+
+        def wait_for_timeout(self, _ms):
+            pass
+
+        def locator(self, selector: str):
+            label = selector.split('"')[1]
+            outer = self
+
+            class _L:
+                @property
+                def first(self):
+                    return self
+
+                def count(self):
+                    return 1 if label in outer._buttons else 0
+
+                def click(self, timeout=None):
+                    outer.clicked.append(label)
+
+            return _L()
+
+    ЭКРАН = ("Имп Инметпром - это вы? Мы заметили, что этот профиль мог "
+             "попасть к злоумышленникам. Необходимо подтвердить, что это ваш профиль")
+
+    page = FakePage(ЭКРАН, ("Да, подтвердить", "Это не мой профиль"))
+    check("экран опознан", ok_browser.asks_profile(page))
+    check("подтверждение нажато", ok_browser.confirm_profile(page))
+    check("нажали именно «Да, подтвердить»", page.clicked == ["Да, подтвердить"])
+
+    # Самое важное: подтверждения нет, опасная кнопка есть – не трогаем.
+    only_bad = FakePage(ЭКРАН, ("Это не мой профиль",))
+    check("без кнопки подтверждения ничего не нажимаем",
+          not ok_browser.confirm_profile(only_bad))
+    check("опасная кнопка осталась нетронутой", only_bad.clicked == [])
+
+    обычная = FakePage("Обычная лента", ("Да, подтвердить",))
+    check("на обычной странице экран не мерещится", not ok_browser.asks_profile(обычная))
+    check("на обычной странице ничего не нажимаем",
+          not ok_browser.confirm_profile(обычная) and обычная.clicked == [])
+
+
 def test_platform_clients() -> None:
     print("Клиенты площадок: чистая логика")
     from datetime import date as _d, datetime, timezone, timedelta
@@ -732,6 +797,7 @@ def main() -> int:
     test_vk_domain()
     test_vk_time_pickers()
     test_ok_via_vk()
+    test_ok_profile_check()
     test_platform_clients()
     test_post_text()
     test_bold_from_real_file()

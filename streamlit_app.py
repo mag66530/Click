@@ -4636,6 +4636,14 @@ def _ok_login_block(project_id: str, config: dict) -> None:
         if st.button("✅ Войти этим аккаунтом", key="ok-consent-go", type="primary"):
             st.session_state["ok_state"] = worker.call(flow.confirm_account)
             st.rerun()
+    elif step == "profile":
+        st.caption("ОК спрашивает, наш ли это профиль – так он иногда проверяет "
+                   "вход с нового места. Click пробовал подтвердить сам и не смог, "
+                   "нажмите здесь. Кнопку «Это не мой профиль» в ОК не трогайте: "
+                   "это жалоба на угон, после неё аккаунт блокируют.")
+        if st.button("✅ Да, это наш профиль", key="ok-profile-go", type="primary"):
+            st.session_state["ok_state"] = worker.call(flow.confirm_profile_step)
+            st.rerun()
     elif step == "no-vk-button":
         st.caption("Значок ВК так и не появился – он в ряду иконок под кнопкой "
                    "«Войти по QR-коду». Войдите логином и паролем ОК ниже.")
@@ -4646,7 +4654,10 @@ def _ok_login_block(project_id: str, config: dict) -> None:
         st.warning("Не разобрал, что за шаг на экране – смотрите снимок выше.")
         # Экран «Войти как…» узнаётся не всегда: подписи у ВК разные. Даём
         # нажать вслепую, вместо того чтобы человек упирался в тупик.
-        if st.button("✅ Попробовать подтвердить вход", key="ok-consent-blind"):
+        # hasattr – потому что запасной вход по паролю ОК идёт другим
+        # классом, у которого окна ВК нет и подтверждать нечего.
+        if hasattr(flow, "confirm_account") and \
+                st.button("✅ Попробовать подтвердить вход", key="ok-consent-blind"):
             st.session_state["ok_state"] = worker.call(flow.confirm_account)
             st.rerun()
 

@@ -53,6 +53,17 @@ SEL = {
     # Плашка про cookie висит поверх формы и перехватывает клики.
     "cookie_accept": ("Разрешить все", "Разрешить всё", "Принять все",
                       "Принять всё", "Принять", "Хорошо"),
+    # Проверка профиля: «Имя – это вы? Мы заметили, что этот профиль мог
+    # попасть к злоумышленникам». Показывается поверх любой страницы, в том
+    # числе поверх группы, и никуда не пускает, пока не подтвердить.
+    "profile_marks": ("это вы?", "мог попасть к злоумышленникам",
+                      "подтвердить, что это ваш профиль"),
+    "profile_yes": ("Да, подтвердить", "Да, это я", "Подтвердить"),
+    # Кнопку «Это не мой профиль» НЕ НАЖИМАЕМ НИКОГДА: это жалоба на угон,
+    # после неё аккаунт уходит на блокировку и восстановление. Держим её
+    # здесь явным списком-запретом, чтобы никто случайно не добавил её в
+    # общий перебор подписей.
+    "profile_never": ("Это не мой профиль", "Это не я"),
     # Куда уходит вход. Взято из самой кнопки на живой странице:
     #   data-url="https://connect.vk.com/auth?…"
     # ВК ID открывается ДВУМЯ способами – отдельным окном (window.open) и
@@ -208,6 +219,50 @@ def wait_vk_button(page, timeout_ms: int = 20_000):
         except Exception:  # noqa: BLE001
             break
     return None
+
+
+def asks_profile(page) -> bool:
+    """Стоит ли на экране проверка «Это вы?» – она загораживает всё остальное."""
+    try:
+        text = page.inner_text("body") or ""
+    except Exception:  # noqa: BLE001
+        return False
+    return any(m.lower() in text.lower() for m in SEL["profile_marks"])
+
+
+def confirm_profile(page, log: Callable[[str], None] | None = None) -> bool:
+    """
+    Нажать «Да, подтвердить» на проверке профиля ОК.
+
+    ОК периодически спрашивает «Имя – это вы? Мы заметили, что этот профиль
+    мог попасть к злоумышленникам». Пока не подтвердить, дальше не пускают
+    вообще: ни в ленту, ни в группу. Для нас это выглядело как «сессия не
+    действует», хотя вход целый.
+
+    ОСОБО. Вторую кнопку, «Это не мой профиль», не нажимаем никогда – это
+    жалоба на угон, после которой аккаунт уходит на блокировку. Поэтому
+    ищем строго по подписям подтверждения и ни при каких условиях не
+    берём «первую попавшуюся кнопку».
+    """
+    log = log or (lambda m: None)
+    if not asks_profile(page):
+        return False
+    for label in SEL["profile_yes"]:
+        if label in SEL["profile_never"]:        # страховка от правки списка
+            continue
+        try:
+            btn = page.locator(f'button:has-text("{label}"), '
+                               f'a:has-text("{label}"), '
+                               f'input[value="{label}"]').first
+            if btn.count():
+                log(f"ОК спрашивает, наш ли это профиль – подтверждаю ({label})")
+                btn.click(timeout=8000)
+                page.wait_for_timeout(3000)
+                return True
+        except Exception:  # noqa: BLE001 – пробуем следующую подпись
+            continue
+    log("ОК просит подтвердить профиль, но кнопку подтверждения не нашли")
+    return False
 
 
 def safe_url(url: str) -> str:
@@ -550,6 +605,29 @@ class OkViaVkLoginFlow:
         return self.state()
 
     # ─── что на экране ──────────────────────────────────────────────
+    def _settle(self) -> bool:
+        """
+        Разобрать загораживающие экраны ОК до того, как определять шаг.
+
+        Сейчас такой один: проверка «Это вы?». Подтверждаем сами – человек
+        уже вошёл, спрашивать его тут не о чем. True, если экран остался и
+        разобраться не вышло.
+        """
+        if not asks_profile(self.page):
+            return False
+        confirm_profile(self.page)
+        try:
+            self.page.reload(wait_until="domcontentloaded", timeout=30_000)
+            self.page.wait_for_timeout(2000)
+        except Exception:  # noqa: BLE001
+            pass
+        return asks_profile(self.page)
+
+    def confirm_profile_step(self) -> dict:
+        """Кнопка «Да, это наш профиль» из интерфейса – если сами не смогли."""
+        self._settle()
+        return self.state()
+
     def page_state(self) -> dict:
         # Окно закрылось – ВК подтвердил вход, смотрим на саму вкладку ОК.
         if self._popup_gone():
@@ -559,10 +637,15 @@ class OkViaVkLoginFlow:
                 self.page.wait_for_timeout(2000)
             except Exception:  # noqa: BLE001
                 pass
+            if self._settle():
+                return {"step": "profile"}
             return {"step": "done"} if is_logged_in(self.page) else {"step": "login"}
         # Вход слоем: закрываться нечему, признак успеха – что ОК уже пустил.
-        if self.inline and vkid_frame(self.page) is None and is_logged_in(self.page):
-            return {"step": "done"}
+        if self.inline and vkid_frame(self.page) is None:
+            if self._settle():
+                return {"step": "profile"}
+            if is_logged_in(self.page):
+                return {"step": "done"}
         try:
             import vk_social as _vk
             if _vk.captcha_frame(self.popup) is not None:
@@ -674,9 +757,31 @@ class OkLoginFlow:
         self.page.wait_for_timeout(3000)
         return self.state()
 
+    def confirm_profile_step(self) -> dict:
+        """Подтвердить, что профиль наш – та же кнопка, что и у входа через ВК."""
+        confirm_profile(self.page)
+        try:
+            self.page.reload(wait_until="domcontentloaded", timeout=30_000)
+            self.page.wait_for_timeout(2000)
+        except Exception:  # noqa: BLE001
+            pass
+        return self.state()
+
     def page_state(self) -> dict:
         try:
             url = self.page.url or ""
+            # Проверка «Это вы?» заслоняет всё: разбираем её первой, иначе
+            # вошедший аккаунт выглядит как невошедший.
+            if asks_profile(self.page):
+                confirm_profile(self.page)
+                try:
+                    self.page.reload(wait_until="domcontentloaded", timeout=30_000)
+                    self.page.wait_for_timeout(2000)
+                except Exception:  # noqa: BLE001
+                    pass
+                if asks_profile(self.page):
+                    return {"step": "profile"}
+                url = self.page.url or ""
             if self.page.locator(SEL["password"]).count():
                 return {"step": "login"}
             if (self.page.locator(SEL["code_boxes"]).count() >= 4
@@ -747,6 +852,18 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             log(f"Открываю группу: {group_url}")
             page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
             page.wait_for_timeout(2500)
+            # ОК умеет заслонить группу вопросом «Это вы?». Подтверждаем и
+            # возвращаемся в группу – иначе это выглядит как слетевшая сессия.
+            if confirm_profile(page, log):
+                page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
+                page.wait_for_timeout(2000)
+            if asks_profile(page):
+                shot = _debug_shot(project_id, page, "profile")
+                return {"ok": False,
+                        "error": "ОК просит подтвердить, что профиль наш, и не "
+                                 "пускает дальше. Кнопку подтверждения нажать не "
+                                 "удалось – зайдите в ОК руками и подтвердите."
+                                 + (f" (снимок: {shot})" if shot else "")}
             if "anonym" in (page.url or "") or not is_logged_in(page):
                 return {"ok": False,
                         "error": "ОК открыл страницу как гостю – сессия не действует. "

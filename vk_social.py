@@ -779,6 +779,68 @@ def _click_dropdown_option(page, picker, option_text: str) -> None:
     page.wait_for_timeout(300)
 
 
+def _close_dropdown(page, picker) -> None:
+    """
+    Закрыть список, если он остался открытым после выбора.
+
+    vkui закрывает его сам не всегда – на снимке отказа список минут висел
+    поверх «Добавить в очередь». Открытый список перехватывает клик, и
+    подтверждение уходит в пустоту: снаружи это выглядит как «попап не
+    закрылся, похоже, не сработало». Закрываем повторным щелчком по самому
+    полю: Escape тут запрещён – он пересобирает блок времени и отрывает
+    ссылки на соседние поля.
+    """
+    try:
+        if not page.locator('[role="option"]').first.is_visible(timeout=500):
+            return
+    except Exception:  # noqa: BLE001 – списка нет, и хорошо
+        return
+    try:
+        picker.click()
+        page.wait_for_timeout(300)
+    except Exception:  # noqa: BLE001 – не закрылся, дальше разберётся проверка
+        pass
+
+
+def _picker_digits(page, get_picker) -> str:
+    """Только цифры из видимого значения поля. Пусто – прочитать не вышло."""
+    try:
+        shown = _read_picker_title(page, get_picker())
+    except Exception:  # noqa: BLE001
+        return ""
+    return "".join(ch for ch in shown if ch.isdigit())
+
+
+def _wait_picker_value(page, get_picker, expected: int, what: str,
+                       log: Callable[[str], None], tries: int = 20) -> None:
+    """
+    Дождаться, пока в поле встанет нужное число, и только потом решать.
+
+    Здесь была потеряна отложка, и вот как. Значение проверялось СРАЗУ после
+    клика по пункту списка. ВК рисует на React: выбор в списке отмечается
+    мгновенно, а надпись в самом поле обновляется чуть позже. Click успевал
+    прочитать старое значение – «ждали 14, в поле 00» – и объявлял неудачу,
+    хотя время уже стояло верное (видно на снимке отказа: час 15, минуты 14,
+    галочка на 14). Теперь перечитываем поле до четырёх секунд.
+
+    Поле берём ЗАНОВО на каждой попытке: ввод пересобирает блок времени, и
+    старая ссылка отваливается с «Node is detached».
+
+    Прочитать не удалось вовсе – не валимся: так вело себя и прежнее правило
+    («if digits and …»), а ронять отложку из-за нечитаемой подписи незачем.
+    """
+    seen = ""
+    for _ in range(tries):
+        seen = _picker_digits(page, get_picker)
+        if seen and int(seen) == expected:
+            return
+        page.wait_for_timeout(200)
+    if not seen:
+        log(f"  {what}: значение прочитать не вышло – верю на слово и иду дальше")
+        return
+    raise RuntimeError(f"{what} не принялась: ждали {expected}, в поле «{seen}»")
+
+
 def _type_picker_value(page, picker, value: int) -> None:
     """
     Впечатать значение в поле-комбобокс (час). Тройной клик выделяет текущее,
@@ -852,18 +914,19 @@ def _set_schedule(page, when: datetime, log: Callable[[str], None]) -> None:
     # пересобирает DOM блока времени, старая ссылка отваливается.
     hour_picker = page.locator(SEL["time_picker"]).first
     _type_picker_value(page, hour_picker, when.hour)
-    shown_hour = _read_picker_title(page, page.locator(SEL["time_picker"]).first)
-    if shown_hour and int("0" + "".join(ch for ch in shown_hour if ch.isdigit()) or "0") != when.hour:
-        raise RuntimeError(f"Час не принялся: ждали {when.hour}, в поле «{shown_hour}»")
+    _wait_picker_value(page, lambda: page.locator(SEL["time_picker"]).first,
+                       when.hour, "Час", log)
+    log(f"  час {when.hour} принят")
 
     page.wait_for_timeout(400)
     minute_picker = page.locator(SEL["time_picker"]).last
     # Минуту – только выбором из списка: печать иногда откатывается к прежней.
     _click_dropdown_option(page, minute_picker, f"{when.minute:02d}")
-    shown_min = _read_picker_title(page, page.locator(SEL["time_picker"]).last)
-    digits = "".join(ch for ch in shown_min if ch.isdigit())
-    if digits and int(digits) != when.minute:
-        raise RuntimeError(f"Минута не принялась: ждали {when.minute:02d}, в поле «{shown_min}»")
+    _wait_picker_value(page, lambda: page.locator(SEL["time_picker"]).last,
+                       when.minute, "Минута", log)
+    log(f"  минуты {when.minute:02d} приняты")
+    # Список минут любит остаться открытым поверх «Добавить в очередь».
+    _close_dropdown(page, page.locator(SEL["time_picker"]).last)
 
     # Подтверждение. Неактивная кнопка = дата не принята, кликать бесполезно.
     page.wait_for_selector(SEL["postponed_confirm"], timeout=10_000)

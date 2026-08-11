@@ -425,10 +425,78 @@ def test_scheduler() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_vk_time_pickers() -> None:
+    """
+    Календарь ВК: значение проверяем НЕ мгновенно, а дождавшись.
+
+    Живой случай (11.08.2026): отложка на 15:14 не встала, в логе «Минута не
+    принялась: ждали 14, в поле 00», а на снимке отказа – час 15, минуты 14,
+    галочка на 14. То есть время стояло верное, а Click прочитал поле раньше,
+    чем ВК успел перерисовать надпись: список на React отмечает выбор сразу,
+    подпись в поле догоняет позже. Здесь закреплено, что мы ждём.
+    """
+    print("\nВК: чтение времени в календаре")
+    import vk_social
+
+    class FakePicker:
+        """Поле, которое показывает нужное значение не сразу, а с задержкой."""
+
+        def __init__(self, values: list[str]):
+            self.values = values
+            self.reads = 0
+
+        def inner_text(self) -> str:
+            v = self.values[min(self.reads, len(self.values) - 1)]
+            self.reads += 1
+            return v
+
+    class FakePage:
+        def __init__(self):
+            self.waited = 0
+
+        def wait_for_timeout(self, ms: int) -> None:
+            self.waited += ms
+
+    notes: list[str] = []
+    page = FakePage()
+
+    # Поле «отстаёт»: два раза показывает старое «00», потом настоящее «14».
+    slow = FakePicker(["00", "00", "14"])
+    vk_social._wait_picker_value(page, lambda: slow, 14, "Минута", notes.append)
+    check("отставшее поле дожидаемся, а не падаем", slow.reads >= 3)
+
+    # Значение так и не встало – вот это честная ошибка.
+    stuck = FakePicker(["00"])
+    try:
+        vk_social._wait_picker_value(page, lambda: stuck, 14, "Минута",
+                                     notes.append, tries=3)
+        check("непринятое значение – ошибка", False, "ошибки не было")
+    except RuntimeError as e:
+        check("непринятое значение – ошибка", "ждали 14" in str(e), str(e))
+
+    # Поле не читается вовсе – это не повод ронять отложку (так было и раньше).
+    blind = FakePicker([""])
+    notes.clear()
+    vk_social._wait_picker_value(page, lambda: blind, 14, "Минута",
+                                 notes.append, tries=2)
+    check("нечитаемое поле отложку не рушит", any("на слово" in n for n in notes))
+
+    # Значение уже стоит – ждать нечего, уходим с первой попытки.
+    quick = FakePicker(["14"])
+    vk_social._wait_picker_value(page, lambda: quick, 14, "Минута", notes.append)
+    check("готовое значение не ждём", quick.reads == 1)
+
+    # Час пишется как «15», минуты как «05» – ведущий ноль не должен мешать.
+    zero = FakePicker(["05"])
+    vk_social._wait_picker_value(page, lambda: zero, 5, "Минута", notes.append)
+    check("ведущий ноль читается верно", zero.reads == 1)
+
+
 def main() -> int:
     print("═" * 60)
     test_scheduler()
     test_vk_domain()
+    test_vk_time_pickers()
     test_platform_clients()
     test_post_text()
     test_bold_from_real_file()

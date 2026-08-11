@@ -779,6 +779,42 @@ def _click_dropdown_option(page, picker, option_text: str) -> None:
     page.wait_for_timeout(300)
 
 
+# Что делать человеку, когда проверку «вы не робот» не удалось пройти.
+# Программой её не пройти по замыслу – она ровно для этого и сделана.
+_CAPTCHA_ADVICE = (
+    "ВК показал проверку «Проверяем, что вы не робот» и не пустил дальше. "
+    "Пройти её программой нельзя – она для того и сделана. Что делать: на "
+    "своём компьютере запустите файл VHOD-VK-vojti-rukami.py (в папке Click), "
+    "войдите в ВК руками и пройдите проверку мышкой, а полученный vk-session.json "
+    "загрузите в «Настройках» → «Вход в ВК» → «Загрузить готовый файл сессии». "
+    "Такую сессию ВК проверками больше не донимает"
+)
+
+
+def _pass_captcha(page, log: Callable[[str], None], tries: int = 3) -> bool:
+    """
+    Пройти проверку «вы не робот», если она висит. True – путь свободен.
+
+    Часто это одна кнопка «Продолжить», и тогда она проходится сама. Если
+    за кнопкой прячется настоящая головоломка – честно возвращаем False:
+    решать её мы не умеем и притворяться не будем.
+    """
+    frame = captcha_frame(page)
+    if frame is None:
+        return True
+    log("  ВК показал проверку «вы не робот» – пробую пройти")
+    for attempt in range(1, tries + 1):
+        if not press_captcha_in(frame):
+            break
+        page.wait_for_timeout(2_500)
+        frame = captcha_frame(page)
+        if frame is None:
+            log(f"  проверка пройдена с {attempt}-й попытки")
+            return True
+    log("  проверку пройти не вышло")
+    return False
+
+
 def _open_post_form(page, log: Callable[[str], None], tries: int = 3) -> None:
     """
     «Создать» → «Пост». Меню – выпадашка, и она капризна.
@@ -800,6 +836,11 @@ def _open_post_form(page, log: Callable[[str], None], tries: int = 3) -> None:
     )
     last = ""
     for attempt in range(1, tries + 1):
+        # Проверка «вы не робот» умеет выскочить прямо посреди работы – в
+        # живом случае она накрыла страницу как раз после первого клика по
+        # «Создать». Дальше кликать бесполезно: экран закрыт её окном.
+        if captcha_frame(page) is not None and not _pass_captcha(page, log):
+            raise RuntimeError(_CAPTCHA_ADVICE)
         try:
             page.click('text="Создать"', timeout=15_000)
         except Exception as e:  # noqa: BLE001
@@ -819,6 +860,12 @@ def _open_post_form(page, log: Callable[[str], None], tries: int = 3) -> None:
         log(f"  меню «Создать» не открылось (попытка {attempt}) – пробую снова")
         page.keyboard.press("Escape")      # закрыть возможный призрак меню
         page.wait_for_timeout(1_200)
+    # Последнее слово – за проверкой «вы не робот»: если она всё ещё висит,
+    # виновата она, а не права аккаунта. Совет про администратора в этом
+    # случае только сбивает с толку – заказчица по нему и пошла проверять
+    # права, хотя дело было в проверке.
+    if captcha_frame(page) is not None:
+        raise RuntimeError(_CAPTCHA_ADVICE)
     raise RuntimeError(
         "Не удалось открыть форму поста: меню «Создать» не показало пункт «Пост». "
         f"Последняя причина: {last}. Проверьте на снимке, что страница сообщества "
@@ -1103,6 +1150,14 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             log(f"Открываю сообщество: {target}")
             page.goto(target, wait_until="domcontentloaded", timeout=45_000)
             page.wait_for_timeout(2500)
+
+            # Проверка «вы не робот». Она встречала не только вход, но и
+            # отложку – а отложка про неё не знала: страница сообщества под
+            # проверкой не открывается, и Click честно, но бесполезно писал
+            # «кнопка Создать не нажалась, проверьте права администратора».
+            if not _pass_captcha(page, log):
+                return {"ok": False, "shot": _debug_shot(project_id, page, "captcha"),
+                        "error": _CAPTCHA_ADVICE}
             if not is_logged_in(page):
                 return {"ok": False, "shot": _debug_shot(project_id, page, "session"),
                         "error": "ВК открыл страницу как гостю – сессия не действует. "

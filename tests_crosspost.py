@@ -582,6 +582,58 @@ def test_vk_time_pickers() -> None:
           not vk_social._picker_shows(page, lambda: FakePicker([""]), 14))
 
 
+def test_vk_captcha_on_posting() -> None:
+    """
+    Проверка «вы не робот» на пути отложки, а не только входа.
+
+    Живой случай (11.08.2026, облако): ВК накрыл страницу сообщества
+    проверкой, и Click написал «кнопка Создать не нажалась, проверьте, что
+    вы вошли под администратором» – совет мимо: права были в порядке,
+    мешала проверка. Здесь закреплено, что проверка распознаётся и что
+    человеку говорят, ЧТО делать, а не куда посмотреть.
+    """
+    print("\nВК: проверка «вы не робот» при отложке")
+    import vk_social
+
+    advice = vk_social._CAPTCHA_ADVICE
+    check("сказано, что это проверка «не робот»", "не робот" in advice)
+    check("сказано, что программой её не пройти", "программой" in advice)
+    check("назван файл ручного входа", "VHOD-VK-vojti-rukami.py" in advice)
+    check("сказано, куда деть готовую сессию",
+          "vk-session.json" in advice and "Настройка" in advice)
+    check("про права администратора здесь не поминаем",
+          "администратор" not in advice.lower())
+
+    # Проверки нет – путь свободен, ничего не нажимаем.
+    notes: list[str] = []
+
+    class NoCaptchaPage:
+        def wait_for_timeout(self, ms: int) -> None:
+            pass
+
+    was = vk_social.captcha_frame
+    try:
+        vk_social.captcha_frame = lambda page: None
+        check("без проверки идём дальше молча",
+              vk_social._pass_captcha(NoCaptchaPage(), notes.append) is True
+              and not notes)
+
+        # Проверка висит и не проходится – честное «нет», а не бесконечный цикл.
+        vk_social.captcha_frame = lambda page: object()
+        was_press = vk_social.press_captcha_in
+        try:
+            vk_social.press_captcha_in = lambda frame: False
+            notes.clear()
+            check("непроходимую проверку не выдаём за пройденную",
+                  vk_social._pass_captcha(NoCaptchaPage(), notes.append) is False)
+            check("и говорим об этом в логе",
+                  any("не робот" in n for n in notes))
+        finally:
+            vk_social.press_captcha_in = was_press
+    finally:
+        vk_social.captcha_frame = was
+
+
 def test_playwright_worker() -> None:
     """
     Отравленный поток: одна неудача не должна ломать всё до перезапуска.
@@ -656,6 +708,7 @@ def test_playwright_worker() -> None:
 
 def main() -> int:
     print("═" * 60)
+    test_vk_captcha_on_posting()
     test_playwright_worker()
     test_scheduler()
     test_vk_domain()

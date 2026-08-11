@@ -255,6 +255,63 @@ def test_vk_domain() -> None:
           vk_social.same_domain("https://notvk.com/x") == "https://notvk.com/x")
 
 
+def test_ok_via_vk() -> None:
+    """
+    Вход в ОК через значок ВК: что можно проверить без браузера.
+
+    Живьём проверено отдельно (2026-08-11) на копии страницы ОК: значок ВК
+    лежит внутри <template style="display:none">, поиск по странице внутрь не
+    заходит, и один взгляд сразу после загрузки давал ноль. Ожидание находит
+    кнопку за полторы секунды. Здесь закрепляем то, что от браузера не
+    зависит: признаки в селекторах и распознавание экрана «Войти как…».
+    """
+    print("\nОК: вход значком ВК")
+    import ok_browser
+
+    check("селектор опирается на data-module (он у ОК стабильнее классов)",
+          "registration/vkconnect" in ok_browser.SEL["vk_id_button"])
+    check("класс со страницы тоже учтён",
+          "__vk_id" in ok_browser.SEL["vk_id_button"])
+    check("подпись на плашке cookie известна",
+          "Разрешить все" in ok_browser.SEL["cookie_accept"])
+
+    class FakePopup:
+        """Окно ВК, показывающее заданный текст."""
+
+        def __init__(self, text: str):
+            self._text = text
+            self.frames: list = []
+            self.main_frame = object()
+
+        def evaluate(self, *_a, **_k):
+            return self._text
+
+        def is_closed(self):
+            return False
+
+        def locator(self, *_a, **_k):
+            class _L:
+                def count(self):
+                    return 0
+            return _L()
+
+    flow = ok_browser.OkViaVkLoginFlow("SMU")
+
+    flow.popup = FakePopup("Войти как Виктория")
+    check("экран «Войти как Имя» опознан", flow._asks_confirm())
+    check("шаг называется consent", flow.page_state().get("step") == "consent")
+
+    flow.popup = FakePopup("Продолжить как Виктория")
+    check("вариант «Продолжить как Имя» тоже опознан", flow._asks_confirm())
+
+    flow.popup = FakePopup("Введите номер телефона")
+    check("обычный экран за подтверждение не принимаем", not flow._asks_confirm())
+
+    flow.popup = None
+    check("закрытое окно не считается вопросом", not flow._asks_confirm())
+    check("закрытое окно видно как закрытое", flow._popup_gone())
+
+
 def test_platform_clients() -> None:
     print("Клиенты площадок: чистая логика")
     from datetime import date as _d, datetime, timezone, timedelta
@@ -579,6 +636,7 @@ def main() -> int:
     test_scheduler()
     test_vk_domain()
     test_vk_time_pickers()
+    test_ok_via_vk()
     test_platform_clients()
     test_post_text()
     test_bold_from_real_file()

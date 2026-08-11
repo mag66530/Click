@@ -20,6 +20,7 @@ SEL["postpone_candidates"], первый живой прогон их уточн
 
 from __future__ import annotations
 
+import time as _time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -40,8 +41,18 @@ SEL = {
     # «Войти через VK ID» – иконка ВК на форме входа ОК. ОСНОВНОЙ путь:
     # у аккаунтов брендов своего пароля ОК обычно нет, вход идёт через ВК.
     # Клик открывает всплывающее окно id.vk.com (проверено вживую 06.07.2026).
-    "vk_id_button": ("a.social-icon-button.__vk_id, a[class*='__vk_id'], "
-                     "[data-l*='vk'] .social-icon-button, a[title*='ВКонтакте']"),
+    # Разметка снята с живой страницы 2026-08-11:
+    #   <a class="h-mod __small __vk_id social-icon-button"
+    #      data-module="registration/vkconnect" …>
+    # data-module – самый надёжный признак: классы у ОК меняются, а модуль,
+    # который открывает окно ВК, называется так же не первый год.
+    "vk_id_button": ("a[data-module='registration/vkconnect'], "
+                     "a.social-icon-button.__vk_id, a[class*='__vk_id'], "
+                     ".external-oauth-login a[class*='vk'], "
+                     "a[title*='ВКонтакте'], a[aria-label*='ВКонтакте']"),
+    # Плашка про cookie висит поверх формы и перехватывает клики.
+    "cookie_accept": ("Разрешить все", "Разрешить всё", "Принять все",
+                      "Принять всё", "Принять", "Хорошо"),
     "popup_phone": 'input[name="login"]',
     "popup_password": 'input[name="password"]',
     "popup_next": 'button:has-text("Продолжить")',
@@ -139,6 +150,59 @@ def is_logged_in(page) -> bool:
         return False
 
 
+def dismiss_cookies(page) -> bool:
+    """
+    Убрать плашку «Мы используем cookie-файлы» сверху страницы.
+
+    Она висит поверх формы и перехватывает клики: Playwright в таком случае
+    жалуется «элемент перекрыт другим элементом», а человек видит только,
+    что ничего не нажалось. Нет плашки – ничего не делаем.
+    """
+    for label in SEL["cookie_accept"]:
+        try:
+            btn = page.locator(f'button:has-text("{label}")').first
+            if btn.count():
+                btn.click(timeout=3000)
+                page.wait_for_timeout(500)
+                return True
+        except Exception:  # noqa: BLE001 – плашки может не быть
+            continue
+    return False
+
+
+def wait_vk_button(page, timeout_ms: int = 20_000):
+    """
+    Дождаться значка ВК в ряду иконок под кнопкой «Войти по QR-коду».
+
+    Почему ЖДАТЬ, а не искать один раз. В исходном HTML страницы входа ОК
+    эта кнопка лежит внутри <template style="display:none"> – это заготовка,
+    которую React (vkid-form-adapter) достаёт и вставляет в страницу уже
+    после загрузки. Пока он не отработал, найти её нельзя в принципе:
+    внутрь <template> поиск по странице не заходит вообще.
+
+    Ровно на это Click и наступил: смотрел один раз через две секунды и
+    честно писал «кнопки нет», хотя на снимке экрана она уже была видна.
+    """
+    deadline = _time.time() + timeout_ms / 1000.0
+    while _time.time() < deadline:
+        try:
+            frames = [page] + [f for f in page.frames if f != page.main_frame]
+        except Exception:  # noqa: BLE001
+            frames = [page]
+        for fr in frames:
+            try:
+                btn = fr.locator(SEL["vk_id_button"]).first
+                if btn.count() and btn.is_visible():
+                    return btn
+            except Exception:  # noqa: BLE001 – кадр мог отвалиться
+                continue
+        try:
+            page.wait_for_timeout(500)
+        except Exception:  # noqa: BLE001
+            break
+    return None
+
+
 def _debug_shot(project_id: str, page, name: str) -> str:
     """Снимок формы для разбора «не нашли элемент». Возвращает путь или пусто."""
     try:
@@ -208,18 +272,31 @@ class OkViaVkLoginFlow:
             if is_logged_in(self.page):          # сессия ОК уже жива
                 return self.state()
 
-            btn = self.page.locator(SEL["vk_id_button"]).first
-            if not btn.count():
+            dismiss_cookies(self.page)
+            btn = wait_vk_button(self.page)
+            if btn is None:
                 return {**self.state(), "step": "no-vk-button",
-                        "note": "На форме входа ОК не нашли кнопку «Войти через ВК». "
+                        "note": "На форме входа ОК так и не появился значок ВК – "
+                                "он в ряду иконок под кнопкой «Войти по QR-коду». "
                                 "Можно войти обычным логином и паролем ОК ниже."}
-            with self.page.expect_popup(timeout=20_000) as info:
-                btn.click()
-            self.popup = info.value
+            try:
+                with self.page.expect_popup(timeout=25_000) as info:
+                    btn.click()
+                self.popup = info.value
+            except Exception:  # noqa: BLE001 – окно ВК не открылось
+                return {**self.state(), "step": "no-popup",
+                        "note": "Значок ВК нажали, но окно входа ВК не открылось. "
+                                "Смотрите снимок: возможно, ОК показал своё окно "
+                                "или клик перехватила плашка сверху."}
             self.popup.wait_for_load_state("domcontentloaded")
             self.popup.wait_for_timeout(4000)
-            # В окне ВК тоже сперва предлагают QR – уходим на телефон.
-            if _vk.click_in_frames(self.popup, ("Войти другим способом", "Другой способ")):
+            # Сессия ВК жива – ВК не спросит ни телефон, ни код, а покажет
+            # «Войти как Имя». Это и есть та самая связка, ради которой всё
+            # затевалось: подтверждаем сразу, иначе ОК так и стоит на форме.
+            self.confirm_account()
+            # Сессии нет – ВК сперва предлагает QR, уходим на ввод телефона.
+            if not self._popup_gone() and _vk.click_in_frames(
+                    self.popup, ("Войти другим способом", "Другой способ")):
                 self.popup.wait_for_timeout(3000)
             return self.state()
         except Exception:
@@ -250,6 +327,47 @@ class OkViaVkLoginFlow:
         yb._save_storage_state(self.context, session_path(self.project_id))
 
     # ─── шаги во всплывающем окне ───────────────────────────────────
+    def _popup_gone(self) -> bool:
+        """Окно ВК закрылось – значит вход подтверждён, трогать его нельзя."""
+        try:
+            return self.popup is None or self.popup.is_closed()
+        except Exception:  # noqa: BLE001
+            return True
+
+    def _asks_confirm(self) -> bool:
+        """Показывает ли окно ВК вопрос «Войти как Имя?»."""
+        import vk_social as _vk
+        if self._popup_gone():
+            return False
+        for fr in _vk.vk_frames(self.popup):
+            text = _vk.frame_text(fr)
+            if "Войти как" in text or "Продолжить как" in text:
+                return True
+        return False
+
+    def confirm_account(self) -> dict:
+        """
+        Нажать «Войти как Имя» в окне ВК.
+
+        Когда сессия ВК жива, ВК не спрашивает ни телефона, ни кода – он
+        сразу предлагает войти уже известным ему аккаунтом. Пока эту кнопку
+        никто не нажмёт, окно висит, а вкладка ОК остаётся на форме входа.
+        Подписи разные («Войти как…», «Продолжить как…», «Подтвердить»),
+        поэтому пробуем по очереди, от самой точной к общей.
+        """
+        import vk_social as _vk
+
+        for labels in (("Войти как", "Продолжить как"),
+                       ("Подтвердить", "Разрешить"),
+                       ("Продолжить",)):
+            if self._popup_gone():
+                break
+            if _vk.click_in_frames(self.popup, labels, timeout=3000):
+                if not self._popup_gone():
+                    self.popup.wait_for_timeout(3000)
+                break
+        return self.state()
+
     def submit_phone(self, phone: str) -> dict:
         self.popup.fill(SEL["popup_phone"], phone.strip())
         self.popup.click(SEL["popup_next"])
@@ -311,6 +429,10 @@ class OkViaVkLoginFlow:
             import vk_social as _vk
             if _vk.captcha_frame(self.popup) is not None:
                 return {"step": "captcha"}
+            # Проверяем ДО телефона и пароля: на этом экране полей ввода нет,
+            # иначе шаг определился бы как «unknown» и человек бы застрял.
+            if self._asks_confirm():
+                return {"step": "consent"}
             if self.popup.locator(SEL["popup_password"]).count():
                 return {"step": "password"}
             if (self.popup.locator(SEL["code_boxes"]).count() >= 4

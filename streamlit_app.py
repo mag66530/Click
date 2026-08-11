@@ -4630,10 +4630,25 @@ def _ok_login_block(project_id: str, config: dict) -> None:
         if st.button("✅ Продолжить (я не робот)", key="ok-captcha-go", type="primary"):
             st.session_state["ok_state"] = worker.call(flow.press_captcha_continue)
             st.rerun()
+    elif step == "consent":
+        st.caption("ВК узнал аккаунт и спрашивает, входить ли им – это последний "
+                   "шаг связки. Нажмите кнопку, и ОК откроется.")
+        if st.button("✅ Войти этим аккаунтом", key="ok-consent-go", type="primary"):
+            st.session_state["ok_state"] = worker.call(flow.confirm_account)
+            st.rerun()
     elif step == "no-vk-button":
-        st.caption("Кнопки «Войти через ВК» на форме нет – войдите логином и паролем ОК ниже.")
+        st.caption("Значок ВК так и не появился – он в ряду иконок под кнопкой "
+                   "«Войти по QR-коду». Войдите логином и паролем ОК ниже.")
+    elif step == "no-popup":
+        st.caption("Значок ВК нажали, но окно входа ВК не открылось. Попробуйте "
+                   "ещё раз – или войдите логином и паролем ОК ниже.")
     else:
         st.warning("Не разобрал, что за шаг на экране – смотрите снимок выше.")
+        # Экран «Войти как…» узнаётся не всегда: подписи у ВК разные. Даём
+        # нажать вслепую, вместо того чтобы человек упирался в тупик.
+        if st.button("✅ Попробовать подтвердить вход", key="ok-consent-blind"):
+            st.session_state["ok_state"] = worker.call(flow.confirm_account)
+            st.rerun()
 
     if st.button("Отменить вход", key="ok-cancel"):
         try:

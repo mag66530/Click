@@ -39,6 +39,8 @@ import re
 from build import BUILD  # noqa: F401
 
 BOLD_RX = re.compile(r"\*\*(.+?)\*\*", re.S)
+# Жирная ссылка целиком: «**[текст](адрес)**» – именно так её делает autolink.
+BOLD_ANCHOR_RX = re.compile(r"\*\*\[([^\]\n]+)\]\((https?://[^\s)]+)\)\*\*")
 ANCHOR_RX = re.compile(r"\[([^\]\n]+)\]\((https?://[^\s)]+)\)")
 URLISH_RX = re.compile(r"^(https?://)?[\w\-]+(\.[\w\-]+)+(/\S*)?$", re.I)
 
@@ -121,6 +123,13 @@ def _esc_html(s: str) -> str:
 def to_html(markup: str) -> str:
     """Телеграм и МАКС: <b> и <a>. Всё остальное экранируется – иначе
     случайный «<» в тексте валит отправку («can't parse entities»)."""
+    # Жирная ссылка целиком – «**[текст](адрес)**» – переписывается в
+    # «[**текст**](адрес)». Без этого пост уходил в Телеграм со звёздочками
+    # в тексте: разбор идёт по ссылкам, и парные ** оказывались в РАЗНЫХ
+    # кусках – слева от ссылки одна, справа другая, и склеить их было уже
+    # некому. А сочетание это штатное: autolink нарочно бережёт жирность
+    # фразы и делает из «**нашем сайте**» жирную ссылку.
+    markup = BOLD_ANCHOR_RX.sub(r"[**\1**](\2)", markup)
     out: list[str] = []
     pos = 0
     for m in ANCHOR_RX.finditer(markup):
@@ -142,17 +151,57 @@ def _bold_html(chunk: str) -> str:
     return "".join(parts)
 
 
+def _drop_repeat_address(text: str, bare: str) -> str:
+    """
+    Оставить только ПЕРВЫЙ показ адреса, остальные убрать вместе со скобками.
+
+    Тексты в реестре часто уже несут адрес сайта, а Click добавлял к ним свой
+    автоссылкой – и в ВК выходило «на нашем сайте (inmetprom.ru) (inmetprom.ru/)».
+    Адрес один и тот же, второй раз он не нужен никому.
+    """
+    if not bare:
+        return text
+    rx = re.compile(r"\(?\s*(?:https?://)?" + re.escape(bare) + r"/?\s*\)?", re.I)
+    shown = {"count": 0}
+
+    def keep_first(m: re.Match) -> str:
+        shown["count"] += 1
+        return m.group(0) if shown["count"] == 1 else ""
+
+    text = rx.sub(keep_first, text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    return re.sub(r"[ \t]+([.,;:!?])", r"\1", text)
+
+
 def to_plain(markup: str) -> str:
-    """ВК/ОК/ЯБ: жирный снимается, ссылка – «текст (адрес)». Если текст
-    ссылки сам адрес (stalmetural.ru) – второй раз адрес не пишем."""
+    """
+    ВК/ОК/ЯБ: жирный снимается, ссылка превращается в ГОЛЫЙ адрес.
+
+    Почему голый, а не «текст (адрес)», как было раньше. Эти площадки не
+    умеют зашивать ссылку в слова – адрес в скобках так и читается скобками,
+    как часть предложения. А если адрес стоял ещё и в самом тексте реестра,
+    выходило вовсе неловко: «на нашем сайте (inmetprom.ru) (inmetprom.ru/)».
+    Поэтому пишем адрес один раз, без скобок, протокола и хвостового слэша –
+    площадка сама сделает его кликабельным.
+
+    Телеграма и МАКС это не касается: там ссылка зашивается в слова
+    по-настоящему, и занимается этим to_html.
+    """
+    used: list[str] = []
+
     def anchor(m: re.Match) -> str:
         text, url = m.group(1), m.group(2)
         bare = re.sub(r"^https?://", "", url).rstrip("/")
+        used.append(bare)
         if URLISH_RX.match(text.strip()) or text.strip().rstrip("/") in (url, bare):
-            return text
-        return f"{text} ({url})"
+            return bare
+        return f"{text} {bare}"
+
     s = ANCHOR_RX.sub(anchor, markup)
-    return BOLD_RX.sub(r"\1", s)
+    s = BOLD_RX.sub(r"\1", s)
+    for bare in used:
+        s = _drop_repeat_address(s, bare)
+    return s
 
 
 def render(markup: str, mode: str) -> str:

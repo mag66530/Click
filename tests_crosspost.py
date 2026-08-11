@@ -200,12 +200,41 @@ def test_post_text() -> None:
     check("html: жирный и ссылка",
           pt.render("**Важно**: [сайт](https://a.ru/?a=1&b=2) <3", "html")
           == '<b>Важно</b>: <a href="https://a.ru/?a=1&amp;b=2">сайт</a> &lt;3')
-    check("plain: жирный снят, ссылка раскрыта",
+    check("plain: жирный снят, ссылка – голым адресом",
           pt.render("**Важно**: [нашем сайте](https://a.ru)", "plain")
-          == "Важно: нашем сайте (https://a.ru)")
+          == "Важно: нашем сайте a.ru")
     check("plain: текст-адрес не дублируется",
           pt.render("[stalmetural.ru](https://stalmetural.ru)", "plain") == "stalmetural.ru")
-    check("strip_markup для превью", pt.strip_markup("**а** [б](https://в.ru)") == "а б (https://в.ru)")
+    check("strip_markup для превью", pt.strip_markup("**а** [б](https://в.ru)") == "а б в.ru")
+
+    # ВК/ОК ссылку в слова не зашивают. Живой случай (11.08.2026): в реестре
+    # адрес уже стоял, Click добавлял свой автоссылкой, и в ВК выходило
+    # «на нашем сайте (inmetprom.ru) (inmetprom.ru/)» – два адреса подряд.
+    real = pt.autolink(
+        "🔹 Полный сортамент нержавеющего металлопроката – на нашем сайте (inmetprom.ru/).",
+        "inmetprom.ru")
+    check("ВК: адрес один раз, без скобок",
+          pt.render(real, "plain")
+          == "🔹 Полный сортамент нержавеющего металлопроката – на нашем сайте inmetprom.ru.",
+          pt.render(real, "plain"))
+    check("ВК: адреса нет в реестре – ставим свой",
+          pt.render(pt.autolink("Заказ – на нашем сайте.", "a.ru"), "plain")
+          == "Заказ – на нашем сайте a.ru.")
+    check("ВК: адрес в реестре голым – второй раз не пишем",
+          pt.render(pt.autolink("Заказ – на нашем сайте a.ru.", "a.ru"), "plain")
+          == "Заказ – на нашем сайте a.ru.")
+    check("ТГ: ссылка остаётся зашитой в слова",
+          "<a href=\"https://a.ru\">" in pt.render(pt.autolink("на нашем сайте.", "a.ru"), "html"))
+
+    # Жирная фраза со ссылкой внутри – штатный плод autolink. Раньше пост
+    # уходил в Телеграм со звёздочками: разбор шёл по ссылкам, и парные **
+    # оказывались в разных кусках.
+    check("ТГ: жирная ссылка – без звёздочек в тексте",
+          pt.render("на **[нашем сайте](https://a.ru)**", "html")
+          == 'на <a href="https://a.ru"><b>нашем сайте</b></a>',
+          pt.render("на **[нашем сайте](https://a.ru)**", "html"))
+    check("ВК: жирная ссылка – просто текст и адрес",
+          pt.render("на **[нашем сайте](https://a.ru)**", "plain") == "на нашем сайте a.ru")
 
 
 def test_bold_from_real_file() -> None:

@@ -779,6 +779,54 @@ def test_vk_time_pickers() -> None:
           not vk_social._picker_shows(page, lambda: FakePicker([""]), 14))
 
 
+def test_ok_schedule_flow() -> None:
+    """
+    Отложка ОК: успех считаем по ответу площадки, а не по закрытию окна.
+
+    Разобрано по живому прогону заказчицы (2026-08-11): «Создать новую тему»
+    → текст → плюсик «Контентные блоки» → «Фотографии» → «Загрузить фото» →
+    галочка «Время публикации» → дата и время → «Сохранить», и снизу
+    появляется «Тема опубликуется 13.08.2026 в 08:59».
+    """
+    print("\nОК: отложенная публикация")
+    from datetime import datetime
+
+    import ok_browser as ok
+
+    when = datetime(2026, 8, 13, 8, 59)
+
+    class FakePage:
+        def __init__(self, body: str):
+            self.body = body
+
+        def evaluate(self, script: str) -> str:
+            return self.body
+
+    said = ok._toast_scheduled(
+        FakePage("Лента\nТема опубликуется 13.08.2026 в 08:59 Посмотреть\nЕщё"), when)
+    check("ответ ОК распознан", said.startswith("Тема опубликуется"), said)
+    check("в ответе видны дата и время", "13.08.2026" in said and "08:59" in said, said)
+    check("нет ответа – не выдумываем",
+          ok._toast_scheduled(FakePage("Лента группы\nУчастники 2"), when) == "")
+    check("страница не прочиталась – тоже пусто",
+          ok._toast_scheduled(FakePage(""), when) == "")
+
+    # Подписи, на которые опираемся, должны остаться на месте: если кто-то
+    # их «почистит», отложка ОК тихо перестанет работать.
+    check("ищем «Создать новую тему»",
+          any("Создать новую тему" in s for s in ok.SEL["create_post"]))
+    check("ищем галочку «Время публикации»",
+          any("Время публикации" in s for s in ok.SEL["schedule_toggle"]))
+    check("сохраняем кнопкой «Сохранить»",
+          any("Сохранить" in s for s in ok.SEL["submit_scheduled"]))
+    check("«Поделиться» держим отдельно – она публикует сейчас",
+          any("Поделиться" in s for s in ok.SEL["submit_now"])
+          and not any("Поделиться" in s for s in ok.SEL["submit_scheduled"]))
+    check("путь к фото – через контентные блоки",
+          "Контентные блоки" in ok.SEL["menu_content_blocks"]
+          and any("Фотографии" in s for s in ok.SEL["menu_photos"]))
+
+
 def test_plan_horizon_and_past() -> None:
     """
     Горизонт плана – до конца месяца, и отложек в прошлое не бывает.
@@ -1023,6 +1071,7 @@ def test_playwright_worker() -> None:
 
 def main() -> int:
     print("═" * 60)
+    test_ok_schedule_flow()
     test_plan_horizon_and_past()
     test_vk_confirm_schedule()
     test_vk_captcha_on_posting()

@@ -7,15 +7,22 @@ ok_browser.py – Одноклассники: вход с сохранением
 дальше пост держит и публикует сам ОК. API-клиент (ok_social.py) остаётся
 в репозитории на случай, если права всё же дадут.
 
-Откуда селекторы. Вход и форма поста – проверены вживую в разобранных
-наработках (см. ПОСТАНОВКА-Кросспостинг.md, Приложение Б): поля
-st.email/st.password, кнопка «Войти» строго в форме пароля (на странице
-есть похожие поля поиска), кнопка «Создать пост» a.pf-head_itx_a, текст
-.js-posting-itx, фото .js-photos-btn, публикация
-button.posting_submit.js-publish-btn. НЕ проверена вживую только механика
-отложки (значок часов в форме) – селекторы-кандидаты собраны в
-SEL["postpone_candidates"], первый живой прогон их уточнит: если ни один
-не найдётся, вернём честную ошибку и сохраним снимок формы для разбора.
+Откуда селекторы. Вход – проверен вживую (поля st.email/st.password, кнопка
+«Войти» строго в форме пароля: на странице есть похожие поля поиска).
+Отложка разобрана по живому прогону заказчицы 2026-08-11, её же словами:
+«ищем "Создать новую тему" – нажимаем, вводим текст, ставим курсор в самый
+верх и добавляем фото (плюсик → "Контентные блоки" → "Фотографии" →
+"Загрузить фото"), потом галочку "Время публикации", правим дату и время
+и жмём "Сохранить"; снизу появляется уведомление "Тема опубликуется <дата>
+в <время>"». Это уведомление и считаем признаком успеха – урок, выученный
+на ВК: спрашивать надо площадку, а не поля её формы.
+
+Опираемся на ПОДПИСИ кнопок, а не на классы: классы у ОК меняются от
+редизайна к редизайну, слова живут годами. Классы оставлены запасными.
+
+Кнопку «Поделиться» не нажимаем никогда, когда речь об отложке: она
+публикует пост СЕЙЧАС. Нужна только «Сохранить», появляющаяся после
+галочки «Время публикации».
 """
 
 from __future__ import annotations
@@ -95,22 +102,43 @@ SEL = {
     "captcha_continue": ('button:has-text("Продолжить")', 'button:has-text("Начать")'),
     "code_single": 'input[inputmode="numeric"], input[name="code"], input[autocomplete="one-time-code"]',
     "code_boxes": 'input[maxlength="1"]',
-    # форма поста (проверено вживую, 2026-07)
-    "create_post": "a.pf-head_itx_a",
-    "text": '.js-posting-itx[contenteditable="true"]',
-    "photo_btn": ".js-photos-btn",
+    # ─── Форма поста и отложка ──────────────────────────────────────
+    # Разобрано по живому прогону заказчицы (2026-08-11), её же словами:
+    # «ищем "Создать новую тему" – нажимаем, вводим текст, ставим курсор в
+    #  самый верх и добавляем фото (плюсик → "Контентные блоки" →
+    #  "Фотографии" → "Загрузить фото"), потом галочку "Время публикации",
+    #  правим дату и время и жмём "Сохранить"; снизу появляется уведомление
+    #  "Тема опубликуется <дата> в <время>"».
+    #
+    # Опираемся на ПОДПИСИ, а не на классы: у ОК классы вида pf-head_itx_a
+    # меняются от редизайна к редизайну, а слова на кнопках живут годами.
+    # Классы оставлены запасными вариантами – они пока работают.
+    "create_post": ('text="Создать новую тему"', "a.pf-head_itx_a",
+                    'text="Напишите заметку"', 'text="Добавить запись"'),
+    "text": ('.js-posting-itx[contenteditable="true"]',
+             '[role="dialog"] [contenteditable="true"]',
+             '[contenteditable="true"]'),
+    # Плюсик слева от строки: наводишь – всплывает «Контентные блоки».
+    "block_plus": ('[role="dialog"] [class*="add-block"]',
+                   '[role="dialog"] button[title*="обав"]',
+                   '[role="dialog"] [class*="plus"]'),
+    "menu_content_blocks": 'text="Контентные блоки"',
+    "menu_photos": ('text="Фотографии"', 'text="Фото"'),
+    # Кнопка нижнего ряда – запасной путь к тому же окну выбора фото.
+    "photo_btn": ('[role="dialog"] >> text="Фото"', ".js-photos-btn"),
+    "upload_photo": ('text="Загрузить фото"', 'text="Загрузить"'),
     "file_input": 'input[type="file"]',
-    "submit": "button.posting_submit.js-publish-btn",
-    # отложка (кандидаты – уточняются на пилоте)
-    "postpone_candidates": (
-        '[data-l*="postpone"]',
-        ".js-pp-toggler",
-        ".posting_settings .ic_clock",
-        'button[title*="тлож"]',
-        'text="Отложенная публикация"',
-    ),
-    "date_candidates": ('input[name="date"]', ".js-date-input input", 'input[placeholder*="ата"]'),
-    "time_candidates": ('input[name="time"]', ".js-time-input input", 'input[placeholder*="ремя"]'),
+    # Галочка «Время публикации» превращает «Поделиться» в «Сохранить».
+    "schedule_toggle": ('text="Время публикации"', 'text="Время публикации "'),
+    "date_input": ('[role="dialog"] input[value*="."]',
+                   'input[placeholder*="ата"]', 'input[name="date"]'),
+    "time_selects": '[role="dialog"] select',
+    "submit_scheduled": ('button:has-text("Сохранить")', 'text="Сохранить"'),
+    "submit_now": ('button:has-text("Поделиться")', "button.posting_submit.js-publish-btn"),
+    # Ответ самого ОК: «Тема опубликуется 13.08.2026 в 08:59». Это и есть
+    # правда о том, встала отложка или нет – урок, выученный на ВК.
+    "toast_scheduled": ("Тема опубликуется", "Тема будет опубликована",
+                        "будет опубликован"),
 }
 
 
@@ -973,6 +1001,88 @@ class OkLoginFlow:
 # ════════════════════════════════════════════════════════════════════
 #  Отложка в группе
 # ════════════════════════════════════════════════════════════════════
+def _click_first(page, candidates, timeout: int = 8_000) -> str:
+    """Нажать первый попавшийся из кандидатов. Пусто – ни один не нашёлся."""
+    if isinstance(candidates, str):
+        candidates = (candidates,)
+    for sel in candidates:
+        try:
+            el = page.locator(sel).first
+            if el.count() and el.is_visible():
+                el.click(timeout=timeout)
+                return sel
+        except Exception:  # noqa: BLE001 – пробуем следующего кандидата
+            continue
+    return ""
+
+
+def _toast_scheduled(page, when: datetime) -> str:
+    """
+    Что ОК сам сказал про отложку: «Тема опубликуется 13.08.2026 в 08:59».
+    Возвращает найденную фразу либо пусто.
+
+    Это главный признак успеха, и взят он не с потолка: на ВК мы уже
+    обожглись, проверяя поля формы вместо ответа площадки. Площадка знает
+    лучше – она это и написала.
+    """
+    try:
+        body = page.evaluate("() => document.body ? (document.body.innerText || '') : ''") or ""
+    except Exception:  # noqa: BLE001
+        return ""
+    for mark in SEL["toast_scheduled"]:
+        pos = body.find(mark)
+        if pos >= 0:
+            return " ".join(body[pos:pos + 80].split("\n")[0].split())
+    return ""
+
+
+def _pick_photos(page, image_paths: list[str], log: Callable[[str], None]) -> str:
+    """
+    Прикрепить фото так, как это делает человек: плюсик → «Контентные
+    блоки» → «Фотографии» → «Загрузить фото». Пусто – получилось.
+
+    Курсор перед этим ставим в самое начало текста: у ОК блок встаёт туда,
+    где стоит курсор, и заказчица показала – фото должно оказаться НАД
+    текстом, иначе пост выглядит не так, как в реестре.
+    """
+    try:
+        page.keyboard.press("Control+Home")
+        page.wait_for_timeout(300)
+    except Exception:  # noqa: BLE001 – не вышло, блок просто встанет ниже
+        pass
+
+    opened = ""
+    if _click_first(page, SEL["block_plus"], timeout=4_000):
+        page.wait_for_timeout(500)
+        _click_first(page, SEL["menu_content_blocks"], timeout=4_000)
+        page.wait_for_timeout(400)
+        opened = _click_first(page, SEL["menu_photos"], timeout=4_000)
+    if not opened:
+        # Запасной путь – кнопка «Фото» в нижнем ряду окна. Она ведёт к
+        # тому же окну выбора, просто блок встанет не сверху, а по месту.
+        log("  плюсик не открылся – беру кнопку «Фото» в нижнем ряду")
+        opened = _click_first(page, SEL["photo_btn"], timeout=6_000)
+    if not opened:
+        return "не нашли, чем добавить фото в форме ОК"
+    page.wait_for_timeout(1_200)
+
+    # «Загрузить фото» открывает системное окно выбора файла. Playwright
+    # умеет его перехватить; если окна не будет – ищем поле input[type=file]
+    # прямо в разметке (у ОК оно обычно спрятано рядом).
+    try:
+        with page.expect_file_chooser(timeout=6_000) as picked:
+            if not _click_first(page, SEL["upload_photo"], timeout=5_000):
+                raise RuntimeError("нет кнопки «Загрузить фото»")
+        picked.value.set_files(image_paths)
+    except Exception:  # noqa: BLE001 – пробуем через скрытое поле
+        inp = page.locator(SEL["file_input"])
+        if not inp.count():
+            return "не нашли, куда отдать файлы фото в окне ОК"
+        inp.first.set_input_files(image_paths)
+    page.wait_for_timeout(3_000)
+    return ""
+
+
 def _first_present(page, candidates) -> str:
     for sel in candidates:
         try:
@@ -1041,68 +1151,106 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                         "error": "ОК открыл страницу как гостю – сессия не действует. "
                                  "Войдите заново в «Настройках» → «Вход в ОК»."}
 
-            log("Открываю форму поста")
-            page.click(SEL["create_post"], timeout=15_000)
-            page.wait_for_selector(SEL["text"], timeout=15_000)
+            log("Открываю форму поста («Создать новую тему»)")
+            if not _click_first(page, SEL["create_post"], timeout=15_000):
+                shot = _debug_shot(project_id, page, "no-composer")
+                return {"ok": False,
+                        "error": "Не нашли «Создать новую тему» на странице группы"
+                                 + (f" (снимок: {shot})" if shot else "")}
+            text_sel = ""
+            for candidate in SEL["text"]:
+                try:
+                    page.wait_for_selector(candidate, timeout=5_000)
+                    text_sel = candidate
+                    break
+                except Exception:  # noqa: BLE001
+                    continue
+            if not text_sel:
+                shot = _debug_shot(project_id, page, "no-editor")
+                return {"ok": False, "error": "Окно новой темы не открылось"
+                                              + (f" (снимок: {shot})" if shot else "")}
             page.wait_for_timeout(800)
 
             log(f"Ввожу текст ({len(text)} знаков)")
-            page.click(SEL["text"])
-            page.type(SEL["text"], text, delay=8)
+            page.click(text_sel)
+            page.type(text_sel, text, delay=8)
             page.wait_for_timeout(500)
-            typed = page.eval_on_selector(SEL["text"], "el => el.textContent || ''")
+            typed = page.eval_on_selector(text_sel, "el => el.textContent || ''")
             if text.strip() and not (typed or "").strip():
                 return {"ok": False, "error": "Текст не попал в поле поста ОК"}
 
             if image_paths:
                 log(f"Прикрепляю фото: {len(image_paths)}")
-                if page.locator(SEL["photo_btn"]).count():
-                    page.click(SEL["photo_btn"])
-                    page.wait_for_timeout(800)
-                inp = page.locator(SEL["file_input"])
-                if not inp.count():
-                    shot = _debug_shot(project_id, page, "no-file-input")
-                    return {"ok": False, "error": "Не нашли поле загрузки фото в ОК"
+                trouble = _pick_photos(page, image_paths, log)
+                if trouble:
+                    shot = _debug_shot(project_id, page, "no-photo")
+                    return {"ok": False, "error": trouble
                                                   + (f" (снимок: {shot})" if shot else "")}
-                inp.first.set_input_files(image_paths)
-                page.wait_for_timeout(2500)
 
-            # Отложка. Селектор часов не подтверждён вживую – идём по кандидатам,
-            # и если никто не нашёлся, честно останавливаемся СО СНИМКОМ, не
-            # публикуя пост сейчас (немедленный пост вместо отложки – хуже отказа).
-            log(f"Ищу отложку, время {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
-            toggler = _first_present(page, SEL["postpone_candidates"])
-            if not toggler:
-                shot = _debug_shot(project_id, page, "no-postpone")
+            # Отложка: галочка «Время публикации», под ней поле даты и два
+            # выпадающих списка – часы и минуты. Кнопка внизу при этом
+            # меняется с «Поделиться» на «Сохранить».
+            log(f"Ставлю время публикации {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
+            if not _click_first(page, SEL["schedule_toggle"], timeout=8_000):
+                shot = _debug_shot(project_id, page, "no-schedule")
                 return {"ok": False,
-                        "error": "Не нашли кнопку отложенной публикации в форме ОК – "
-                                 "нужен один живой прогон для уточнения (пришлите снимок"
-                                 + (f": {shot})" if shot else ")")}
-            page.click(toggler)
-            page.wait_for_timeout(800)
+                        "error": "Не нашли галочку «Время публикации» в форме ОК"
+                                 + (f" (снимок: {shot})" if shot else "")}
+            page.wait_for_timeout(1_000)
 
-            date_sel = _first_present(page, SEL["date_candidates"])
-            time_sel = _first_present(page, SEL["time_candidates"])
-            if not (date_sel and time_sel):
-                shot = _debug_shot(project_id, page, "no-datetime")
-                return {"ok": False,
-                        "error": "Окно отложки открылось, но поля даты/времени не "
-                                 "распознаны – пришлите снимок"
-                                 + (f": {shot}" if shot else "")}
-            for sel, val in ((date_sel, when.strftime("%d.%m.%Y")),
-                             (time_sel, when.strftime("%H:%M"))):
-                page.click(sel, click_count=3)
-                page.type(sel, val, delay=25)
-                page.wait_for_timeout(250)
-
-            page.click(SEL["submit"], timeout=10_000)
-            page.wait_for_timeout(1500)
-            if page.locator(SEL["text"]).count():
-                shot = _debug_shot(project_id, page, "form-open")
-                return {"ok": False, "error": "Форма поста не закрылась после отправки – "
-                                              "похоже, отложка не встала"
+            date_sel = _first_present(page, SEL["date_input"])
+            if not date_sel:
+                shot = _debug_shot(project_id, page, "no-date")
+                return {"ok": False, "error": "Поле даты в форме ОК не распознано"
                                               + (f" (снимок: {shot})" if shot else "")}
-            log("Форма закрылась – отложка ОК принята")
+            page.click(date_sel, click_count=3)
+            page.type(date_sel, when.strftime("%d.%m.%Y"), delay=25)
+            page.keyboard.press("Enter")
+            page.wait_for_timeout(600)
+
+            # Часы и минуты – обычные <select>, их выбираем значением, а не
+            # печатью: так надёжнее и не зависит от ведущих нулей.
+            times = page.locator(SEL["time_selects"])
+            if times.count() < 2:
+                shot = _debug_shot(project_id, page, "no-time")
+                return {"ok": False,
+                        "error": "Не нашли выпадающие списки часов и минут в форме ОК"
+                                 + (f" (снимок: {shot})" if shot else "")}
+            for index, value in ((times.count() - 2, f"{when.hour:02d}"),
+                                 (times.count() - 1, f"{when.minute:02d}")):
+                picker = times.nth(index)
+                try:
+                    picker.select_option(value)
+                except Exception:  # noqa: BLE001 – бывает без ведущего нуля
+                    picker.select_option(str(int(value)))
+                page.wait_for_timeout(300)
+
+            log("Сохраняю отложку")
+            if not _click_first(page, SEL["submit_scheduled"], timeout=10_000):
+                shot = _debug_shot(project_id, page, "no-save")
+                return {"ok": False,
+                        "error": "Не нашли кнопку «Сохранить» – без неё отложка не встанет. "
+                                 "Кнопку «Поделиться» намеренно не жмём: она опубликует "
+                                 "пост СЕЙЧАС вместо назначенного времени"
+                                 + (f" (снимок: {shot})" if shot else "")}
+
+            # Ответ самой площадки: «Тема опубликуется 13.08.2026 в 08:59».
+            # Ждём именно его, а не закрытия окна: окно может закрыться и
+            # тогда, когда пост ушёл не туда, куда мы просили.
+            said = ""
+            for _ in range(20):
+                said = _toast_scheduled(page, when)
+                if said:
+                    break
+                page.wait_for_timeout(400)
+            if not said:
+                shot = _debug_shot(project_id, page, "no-toast")
+                return {"ok": False,
+                        "error": "ОК не подтвердил отложку: уведомления «Тема "
+                                 "опубликуется …» не появилось. Проверьте «Отложенные» "
+                                 "в группе – если тема там есть, формировать заново не "
+                                 "нужно" + (f" (снимок: {shot})" if shot else "")}
+            log(f"ОК подтвердил: {said}")
             yb._save_storage_state(context, session_path(project_id))
             return {"ok": True}
         except Exception as e:  # noqa: BLE001

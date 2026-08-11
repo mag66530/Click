@@ -3449,6 +3449,10 @@ def tab_crosspost(project_id: str, config: dict) -> None:
     _crosspost_yb_block(project_id, config)
     _crosspost_scheduler_block(project_id)
     _crosspost_vk_probe(project_id, config)
+    # Зовём ОТСЮДА, а не из конца пробной отложки: у той три ранних выхода
+    # (нет сессии, нет сообщества, идёт прогон), и лог прошлого раза на них
+    # молча пропадал бы – ровно та беда, из-за которой падал весь раздел.
+    _vk_probe_last_log(project_id)
 
     # Прошлые посты – в самом низу, свёрнутыми: это архив, а не рабочий список.
     # Блок живёт ЗДЕСЬ, в tab_crosspost: ему нужны posts/today/state, которых
@@ -3674,6 +3678,21 @@ def _crosspost_vk_probe(project_id: str, config: dict) -> None:
                                   key=f"vk-probe-min-{project_id}",
                                   help="ВК не даёт планировать ближе чем на несколько минут – "
                                        "меньше 10 не ставим.")
+        # Смотреть, КАК он это делает. Галочка та же, что у публикации
+        # (HEADED_KEY), поэтому включённая здесь она останется включённой и
+        # в «Сформировать план» – ходить за ней в «Настройки» больше не надо.
+        if can_show_browser():
+            st.checkbox("Показывать окно браузера – видно каждый шаг в ВК",
+                        value=bool(st.session_state.get(HEADED_KEY)),
+                        key="show-browser-vk-probe",
+                        on_change=lambda: st.session_state.__setitem__(
+                            HEADED_KEY, bool(st.session_state.get("show-browser-vk-probe"))),
+                        help="Только на своём компьютере: в облаке экрана нет, "
+                             "показывать окно негде.")
+        else:
+            st.caption("Окно браузера показать негде: в облаке нет экрана. "
+                       "Ход отложки виден в логе ниже, а при отказе – на снимке экрана.")
+
         busy = runner.busy_reason(project_id, "publish")
         if busy:
             st.caption(f"Сейчас нельзя: {busy}. Дождитесь окончания прогона.")
@@ -3682,11 +3701,27 @@ def _crosspost_vk_probe(project_id: str, config: dict) -> None:
                      key=f"vk-probe-go-{project_id}", disabled=not text.strip()):
             when = apptime.now() + timedelta(minutes=int(minutes))
             worker = get_worker()
+            # Лог шагов. Копится в списке, а не пишется в виджет на лету:
+            # отложку ведёт отдельный поток воркера, а рисовать из чужого
+            # потока Streamlit не даёт. Пишем построчно и показываем целиком,
+            # когда воркер вернулся.
+            steps: list[str] = []
+
+            def note(msg: str) -> None:
+                steps.append(f"[{apptime.stamp()}] {msg}")
+
+            note(f"Пробная отложка: {group_url} на "
+                 f"{when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
             with st.spinner("Открываю ВК и ставлю отложку – обычно меньше минуты…"):
                 res = worker.call(
                     vk_social.schedule_postponed_post, project_id, group_url,
-                    text.strip(), [], when,
+                    text.strip(), [], when, log=note,
                     headless=bool(get_settings(project_id)["headless"]))
+            note("ИТОГ: отложка поставлена" if res.get("ok")
+                 else f"ИТОГ: не получилось – {res.get('error')}")
+            log_text = "\n".join(steps)
+            _vk_probe_save_log(project_id, log_text)
+
             if res.get("ok"):
                 st.success(f"Готово: отложка на {when.strftime('%H:%M')} стоит. Проверьте "
                            f"«Отложенные записи» сообщества – и удалите тестовую запись.")
@@ -3697,6 +3732,51 @@ def _crosspost_vk_probe(project_id: str, config: dict) -> None:
                 if res.get("shot"):
                     st.image(res["shot"], use_container_width=True)
                     st.caption("Что Click видел в ВК в момент отказа.")
+
+            # Лог показываем всегда, и на успехе тоже: по нему видно, где
+            # отложка запнулась, и он же нужен, чтобы прислать его на разбор.
+            st.text_area("Лог отложки – что Click делал по шагам", value=log_text,
+                         height=220, key=f"vk-probe-log-{project_id}")
+            st.download_button("⬇ Лог отложки (.txt)", data=log_text.encode("utf-8"),
+                               file_name=f"vk-otlozhka-{apptime.stamp('%Y-%m-%dT%H-%M-%S')}.txt",
+                               mime="text/plain", key=f"vk-probe-log-dl-{project_id}")
+
+
+def _vk_probe_log_path(project_id: str):
+    """Файл с логом последней пробной отложки – рядом с данными проекта."""
+    d = paths.data_root() / project_id / "crosspost"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "vk-probe-last.log"
+
+
+def _vk_probe_save_log(project_id: str, text: str) -> None:
+    try:
+        _vk_probe_log_path(project_id).write_text(text, encoding="utf-8")
+    except OSError:
+        pass                      # лог – удобство, ронять из-за него нечего
+
+
+def _vk_probe_last_log(project_id: str) -> None:
+    """
+    Лог прошлой отложки. Нужен потому, что кнопка живёт внутри expander:
+    любое следующее нажатие на странице перерисовывает её, и лог, показанный
+    сразу после прогона, исчезает вместе с ним. На диске он остаётся.
+    """
+    fp = _vk_probe_log_path(project_id)
+    if not fp.exists():
+        return
+    try:
+        text = fp.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    if not text.strip():
+        return
+    with st.expander("📄 Лог прошлой пробной отложки ВК"):
+        st.text_area("Что Click делал по шагам", value=text, height=220,
+                     key=f"vk-probe-log-prev-{project_id}")
+        st.download_button("⬇ Скачать (.txt)", data=text.encode("utf-8"),
+                           file_name="vk-otlozhka-proshlaya.txt", mime="text/plain",
+                           key=f"vk-probe-log-prev-dl-{project_id}")
 
 
 def _last_run_kind(project_id: str) -> str:
@@ -4604,7 +4684,13 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
         st.success("Сессия Яндекса сохранена – публикация пойдёт в фоне без повторного входа.")
         if st.button("Проверить сессию", key="btn-check-session"):
             with st.spinner("Открываю профиль Яндекса…"):
-                who = _check_session(project_id, config.get("email") or project["yandexEmail"])
+                # PROJECTS[project_id], а не project: эта переменная живёт в
+                # tab_settings, сюда она никогда не приходила. «Проверить
+                # сессию» падало с NameError у всех, кто не вписал почту в
+                # «Настройки» руками: при пустом поле код шёл во вторую
+                # половину «или» и утыкался в несуществующее имя.
+                who = _check_session(project_id,
+                                     config.get("email") or PROJECTS[project_id]["yandexEmail"])
             if who["state"] == "ok":
                 st.success(f"В Яндексе залогинен {who['account']} – всё верно.")
             elif who["state"] == "other":

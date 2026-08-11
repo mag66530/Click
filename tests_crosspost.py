@@ -665,6 +665,79 @@ def test_vk_time_pickers() -> None:
           not vk_social._picker_shows(page, lambda: FakePicker([""]), 14))
 
 
+def test_vk_confirm_schedule() -> None:
+    """
+    «Добавить в очередь» иногда требует двух нажатий – и ровно одного.
+
+    Живой случай (11.08.2026): время встало верно, Click нажимал кнопку –
+    заказчица видела нажатие своими глазами, – а отложенных записей в
+    сообществе не появлялось. Причина: календарь открывается ПОВЕРХ экрана
+    настроек, а кнопка живёт под ним, и первый клик уходит на закрытие
+    календаря. Второй нажимает саму кнопку.
+
+    Обратная опасность здесь же: если первое нажатие сработало, второго быть
+    не должно – иначе вместо одной записи получится две.
+    """
+    print("\nВК: подтверждение отложки")
+    import vk_social
+
+    class FakeForm:
+        """Форма ВК, которая закрывается только после N-го нажатия."""
+
+        def __init__(self, closes_after: int, disabled: bool = False):
+            self.closes_after = closes_after
+            self.disabled = disabled
+            self.clicks = 0
+
+        def wait_for_selector(self, selector, state=None, timeout=None):
+            if state == "hidden" and self.clicks < self.closes_after:
+                raise RuntimeError("ещё видно")
+            return True
+
+        def eval_on_selector(self, selector, script):
+            return self.disabled
+
+        def click(self, selector, timeout=None):
+            self.clicks += 1
+
+        def wait_for_timeout(self, ms: int) -> None:
+            pass
+
+        def evaluate(self, script):
+            return []
+
+    notes: list[str] = []
+
+    # Сработало с первого раза – второго нажатия быть не должно.
+    once = FakeForm(closes_after=1)
+    vk_social._confirm_schedule(once, notes.append)
+    check("хватило одного нажатия – жмём один раз", once.clicks == 1)
+
+    # Живой случай: первый клик убрал календарь, второй нажал кнопку.
+    twice = FakeForm(closes_after=2)
+    notes.clear()
+    vk_social._confirm_schedule(twice, notes.append)
+    check("перекрытую кнопку дожимаем со второго раза", twice.clicks == 2)
+    check("и говорим об этом в логе", any("ещё раз" in n for n in notes))
+
+    # Не закрывается вовсе – честная ошибка, и не больше трёх нажатий.
+    never = FakeForm(closes_after=99)
+    try:
+        vk_social._confirm_schedule(never, notes.append)
+        check("непринятую отложку не выдаём за принятую", False, "ошибки не было")
+    except RuntimeError as e:
+        check("непринятую отложку не выдаём за принятую", "не принял отложку" in str(e))
+    check("бесконечно не жмём", never.clicks == 3)
+
+    # Кнопка неактивна – не жмём вовсе, дата не принята.
+    dead = FakeForm(closes_after=1, disabled=True)
+    try:
+        vk_social._confirm_schedule(dead, notes.append)
+        check("неактивную кнопку не жмём", False, "ошибки не было")
+    except RuntimeError as e:
+        check("неактивную кнопку не жмём", "неактивна" in str(e) and dead.clicks == 0)
+
+
 def test_vk_captcha_on_posting() -> None:
     """
     Проверка «вы не робот» на пути отложки, а не только входа.
@@ -791,6 +864,7 @@ def test_playwright_worker() -> None:
 
 def main() -> int:
     print("═" * 60)
+    test_vk_confirm_schedule()
     test_vk_captcha_on_posting()
     test_playwright_worker()
     test_scheduler()

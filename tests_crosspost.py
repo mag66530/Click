@@ -430,6 +430,91 @@ def test_ok_profile_check() -> None:
           not ok_browser.confirm_profile(обычная) and обычная.clicked == [])
 
 
+def test_ok_verify_code() -> None:
+    """
+    Цепочка проверок ОК: «это вы?» → «получите код» → ввод кода.
+
+    Каждый экран сам по себе выглядит как «сессия не работает», хотя вход
+    целый. Проверено вживую на копии (2026-08-11): цепочка проходится
+    целиком. Здесь закрепляем распознавание шагов без браузера.
+    """
+    print("\nОК: код подтверждения")
+    import ok_browser
+
+    class FakeOkPage:
+        def __init__(self, text="", present=(), buttons=()):
+            self._text = text
+            self._present = set(present)
+            self._buttons = set(buttons)
+            self.clicked: list = []
+            self.filled = None
+
+        def inner_text(self, _sel):
+            return self._text
+
+        def wait_for_timeout(self, _ms):
+            pass
+
+        def locator(self, selector: str):
+            outer = self
+            by_text = 'has-text("' in selector or 'value="' in selector
+            label = selector.split('"')[1] if '"' in selector else selector
+            hit = label in outer._buttons if by_text else selector in outer._present
+
+            class _L:
+                @property
+                def first(self):
+                    return self
+
+                def count(self):
+                    return 1 if hit else 0
+
+                def is_visible(self):
+                    return hit
+
+                def click(self, timeout=None):
+                    outer.clicked.append(label)
+
+                def fill(self, value):
+                    outer.filled = value
+
+            return _L()
+
+    ЭКРАН = ("Получите проверочный код. С его помощью мы убедимся, что это ваш "
+             "профиль. Для этого отправим бесплатное СМС с кодом на указанный номер")
+
+    экран = FakeOkPage(ЭКРАН, buttons=("Получить код", "Подтвердить по эл. почте"))
+    check("шаг «получите код» распознан", ok_browser.page_block(экран) == "verify")
+    check("«Получить код» нажимается", ok_browser.request_verify_code(экран))
+    check("нажали именно «Получить код»", экран.clicked == ["Получить код"])
+
+    почта = FakeOkPage(ЭКРАН, buttons=("Подтвердить по эл. почте",))
+    check("запасной путь письмом есть", ok_browser.request_verify_by_mail(почта))
+
+    ввод = FakeOkPage("Введите код", present=('input[name="st.smsCode"]',),
+                      buttons=("Подтвердить",))
+    check("шаг ввода кода распознан", ok_browser.page_block(ввод) == "verify-code")
+    check("код отправляется", ok_browser.submit_verify_code(ввод, " 123456 "))
+    check("код вписан без лишних пробелов", ввод.filled == "123456")
+    check("подтверждение нажато", ввод.clicked == ["Подтвердить"])
+
+    # Гостевая форма входа: там тоже есть числовое поле телефона. Без
+    # оговорки про пароль она выглядела бы как «введите код».
+    гость = FakeOkPage("Вход", present=(ok_browser.SEL["password"],
+                                        'input[type="tel"]'))
+    check("обычная форма входа проверкой не считается",
+          ok_browser.page_block(гость) == "")
+
+    # «Это вы?» разбираем первым: он заслоняет всё остальное.
+    оба = FakeOkPage("Имп – это вы? Необходимо подтвердить, что это ваш профиль. "
+                     "Получите проверочный код",
+                     present=('input[name="st.smsCode"]',))
+    check("проверка профиля идёт первой", ok_browser.page_block(оба) == "profile")
+
+    чисто = FakeOkPage("Лента новостей")
+    check("на обычной странице помех нет", ok_browser.page_block(чисто) == "")
+
+
 def test_platform_clients() -> None:
     print("Клиенты площадок: чистая логика")
     from datetime import date as _d, datetime, timezone, timedelta
@@ -947,6 +1032,7 @@ def main() -> int:
     test_vk_time_pickers()
     test_ok_via_vk()
     test_ok_profile_check()
+    test_ok_verify_code()
     test_platform_clients()
     test_post_text()
     test_bold_from_real_file()

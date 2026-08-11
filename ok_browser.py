@@ -64,6 +64,21 @@ SEL = {
     # здесь явным списком-запретом, чтобы никто случайно не добавил её в
     # общий перебор подписей.
     "profile_never": ("Это не мой профиль", "Это не я"),
+    # Следующий экран после подтверждения профиля: «Получите проверочный
+    # код» – ОК шлёт СМС на телефон аккаунта. Кнопки ввода тут ещё нет,
+    # только «Получить код», поэтому шаг узнаём по словам.
+    "verify_marks": ("Получите проверочный код", "убедимся, что это ваш профиль",
+                     "отправим бесплатное СМС", "отправим бесплатное смс"),
+    "verify_send": ("Получить код", "Отправить код", "Выслать код", "Получить"),
+    "verify_by_mail": ("Подтвердить по эл. почте", "Подтвердить по почте"),
+    # Экран ввода кода. Имя поля у ОК разное на разных экранах – берём
+    # широкий набор, а сам факт «мы на вводе кода» определяем по наличию
+    # такого поля, а не по подписи.
+    "verify_code": ('input[name="st.smsCode"]', 'input[name="smsCode"]',
+                    'input[name="st.code"]', 'input[name="code"]',
+                    'input[autocomplete="one-time-code"]',
+                    'input[inputmode="numeric"]', 'input[type="tel"]'),
+    "verify_submit": ("Подтвердить", "Далее", "Продолжить", "Готово", "Отправить"),
     # Куда уходит вход. Взято из самой кнопки на живой странице:
     #   data-url="https://connect.vk.com/auth?…"
     # ВК ID открывается ДВУМЯ способами – отдельным окном (window.open) и
@@ -263,6 +278,117 @@ def confirm_profile(page, log: Callable[[str], None] | None = None) -> bool:
             continue
     log("ОК просит подтвердить профиль, но кнопку подтверждения не нашли")
     return False
+
+
+def _page_text(page) -> str:
+    try:
+        return page.inner_text("body") or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _click_label(page, labels, timeout: int = 8000) -> str:
+    """Нажать кнопку/ссылку с одной из подписей. Возвращает, что нажали."""
+    for label in labels:
+        try:
+            loc = page.locator(f'button:has-text("{label}"), '
+                               f'a:has-text("{label}"), '
+                               f'input[value="{label}"]').first
+            if loc.count():
+                loc.click(timeout=timeout)
+                page.wait_for_timeout(2500)
+                return label
+        except Exception:  # noqa: BLE001 – пробуем следующую подпись
+            continue
+    return ""
+
+
+def code_field(page):
+    """Поле ввода проверочного кода ОК – или None, если его на экране нет."""
+    for sel in SEL["verify_code"]:
+        try:
+            loc = page.locator(sel).first
+            if loc.count() and loc.is_visible():
+                return loc
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+def asks_verify(page) -> bool:
+    """Экран «Получите проверочный код» – ОК готов выслать СМС."""
+    text = _page_text(page).lower()
+    return any(m.lower() in text for m in SEL["verify_marks"])
+
+
+def request_verify_code(page, log: Callable[[str], None] | None = None) -> bool:
+    """Нажать «Получить код» – ОК вышлет СМС на телефон аккаунта."""
+    log = log or (lambda m: None)
+    label = _click_label(page, SEL["verify_send"])
+    if label:
+        log(f"ОК высылает проверочный код по СМС (нажали «{label}»)")
+        return True
+    log("ОК просит проверочный код, но кнопки «Получить код» не нашли")
+    return False
+
+
+def request_verify_by_mail(page, log: Callable[[str], None] | None = None) -> bool:
+    """Запасной путь – подтверждение письмом, если телефона под рукой нет."""
+    log = log or (lambda m: None)
+    label = _click_label(page, SEL["verify_by_mail"])
+    if label:
+        log("ОК высылает подтверждение на почту")
+        return True
+    return False
+
+
+def submit_verify_code(page, code: str,
+                       log: Callable[[str], None] | None = None) -> bool:
+    """Вписать код из СМС и подтвердить."""
+    log = log or (lambda m: None)
+    field = code_field(page)
+    if field is None:
+        log("Поле для кода на экране не нашли")
+        return False
+    try:
+        field.fill(code.strip())
+    except Exception:  # noqa: BLE001
+        return False
+    if not _click_label(page, SEL["verify_submit"], timeout=6000):
+        # Часть форм ОК подтверждается просто Enter.
+        try:
+            page.keyboard.press("Enter")
+            page.wait_for_timeout(2500)
+        except Exception:  # noqa: BLE001
+            return False
+    log("Код отправлен в ОК")
+    return True
+
+
+def page_block(page) -> str:
+    """
+    Что заслоняет ОК прямо сейчас. Пусто – ничего не заслоняет.
+
+    Проверки идут ЦЕПОЧКОЙ: сначала «это вы?», потом «получите код», потом
+    ввод кода. Каждый экран сам по себе выглядит как «сессия не работает»,
+    хотя вход целый – поэтому разбираем их в одном месте и одинаково и для
+    входа через ВК, и для входа паролем, и при постановке отложки.
+    """
+    if asks_profile(page):
+        return "profile"
+    # Обычная форма входа – это не проверка. Проверяем ДО поля кода: у формы
+    # входа поле телефона тоже бывает числовым, и без этой оговорки гостевая
+    # страница выглядела бы как «введите код».
+    try:
+        if page.locator(SEL["password"]).count():
+            return ""
+    except Exception:  # noqa: BLE001
+        pass
+    if code_field(page) is not None:
+        return "verify-code"
+    if asks_verify(page):
+        return "verify"
+    return ""
 
 
 def safe_url(url: str) -> str:
@@ -605,27 +731,47 @@ class OkViaVkLoginFlow:
         return self.state()
 
     # ─── что на экране ──────────────────────────────────────────────
-    def _settle(self) -> bool:
+    def _settle(self) -> str:
         """
         Разобрать загораживающие экраны ОК до того, как определять шаг.
 
-        Сейчас такой один: проверка «Это вы?». Подтверждаем сами – человек
-        уже вошёл, спрашивать его тут не о чем. True, если экран остался и
-        разобраться не вышло.
+        Что можем сами – делаем сами: «Это вы?» подтверждаем без вопросов,
+        человек тут ничего не решает. Что без человека нельзя – код из СМС –
+        возвращаем наверх как отдельный шаг. Пусто = ничего не мешает.
         """
-        if not asks_profile(self.page):
-            return False
-        confirm_profile(self.page)
-        try:
-            self.page.reload(wait_until="domcontentloaded", timeout=30_000)
-            self.page.wait_for_timeout(2000)
-        except Exception:  # noqa: BLE001
-            pass
-        return asks_profile(self.page)
+        block = page_block(self.page)
+        if block == "profile":
+            confirm_profile(self.page)
+            try:
+                self.page.reload(wait_until="domcontentloaded", timeout=30_000)
+                self.page.wait_for_timeout(2000)
+            except Exception:  # noqa: BLE001
+                pass
+            block = page_block(self.page)
+        return block
 
     def confirm_profile_step(self) -> dict:
         """Кнопка «Да, это наш профиль» из интерфейса – если сами не смогли."""
         self._settle()
+        return self.state()
+
+    def request_code_step(self) -> dict:
+        """«Получить код» – ОК вышлет СМС на телефон аккаунта."""
+        request_verify_code(self.page)
+        return self.state()
+
+    def request_mail_step(self) -> dict:
+        """Запасной путь: подтверждение письмом, если телефона нет под рукой."""
+        request_verify_by_mail(self.page)
+        return self.state()
+
+    def submit_verify_step(self, code: str) -> dict:
+        """Вписать код из СМС и подтвердить."""
+        submit_verify_code(self.page, code)
+        try:
+            self.page.wait_for_timeout(2000)
+        except Exception:  # noqa: BLE001
+            pass
         return self.state()
 
     def page_state(self) -> dict:
@@ -637,13 +783,15 @@ class OkViaVkLoginFlow:
                 self.page.wait_for_timeout(2000)
             except Exception:  # noqa: BLE001
                 pass
-            if self._settle():
-                return {"step": "profile"}
+            block = self._settle()
+            if block:
+                return {"step": block}
             return {"step": "done"} if is_logged_in(self.page) else {"step": "login"}
         # Вход слоем: закрываться нечему, признак успеха – что ОК уже пустил.
         if self.inline and vkid_frame(self.page) is None:
-            if self._settle():
-                return {"step": "profile"}
+            block = self._settle()
+            if block:
+                return {"step": block}
             if is_logged_in(self.page):
                 return {"step": "done"}
         try:
@@ -757,11 +905,35 @@ class OkLoginFlow:
         self.page.wait_for_timeout(3000)
         return self.state()
 
+    def _settle(self) -> str:
+        """Разобрать загораживающие экраны ОК – см. одноимённый метод выше."""
+        block = page_block(self.page)
+        if block == "profile":
+            confirm_profile(self.page)
+            try:
+                self.page.reload(wait_until="domcontentloaded", timeout=30_000)
+                self.page.wait_for_timeout(2000)
+            except Exception:  # noqa: BLE001
+                pass
+            block = page_block(self.page)
+        return block
+
     def confirm_profile_step(self) -> dict:
         """Подтвердить, что профиль наш – та же кнопка, что и у входа через ВК."""
-        confirm_profile(self.page)
+        self._settle()
+        return self.state()
+
+    def request_code_step(self) -> dict:
+        request_verify_code(self.page)
+        return self.state()
+
+    def request_mail_step(self) -> dict:
+        request_verify_by_mail(self.page)
+        return self.state()
+
+    def submit_verify_step(self, code: str) -> dict:
+        submit_verify_code(self.page, code)
         try:
-            self.page.reload(wait_until="domcontentloaded", timeout=30_000)
             self.page.wait_for_timeout(2000)
         except Exception:  # noqa: BLE001
             pass
@@ -769,19 +941,12 @@ class OkLoginFlow:
 
     def page_state(self) -> dict:
         try:
+            # Проверки ОК заслоняют всё: разбираем их первыми, иначе вошедший
+            # аккаунт выглядит как невошедший.
+            block = self._settle()
+            if block:
+                return {"step": block}
             url = self.page.url or ""
-            # Проверка «Это вы?» заслоняет всё: разбираем её первой, иначе
-            # вошедший аккаунт выглядит как невошедший.
-            if asks_profile(self.page):
-                confirm_profile(self.page)
-                try:
-                    self.page.reload(wait_until="domcontentloaded", timeout=30_000)
-                    self.page.wait_for_timeout(2000)
-                except Exception:  # noqa: BLE001
-                    pass
-                if asks_profile(self.page):
-                    return {"step": "profile"}
-                url = self.page.url or ""
             if self.page.locator(SEL["password"]).count():
                 return {"step": "login"}
             if (self.page.locator(SEL["code_boxes"]).count() >= 4
@@ -857,12 +1022,19 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             if confirm_profile(page, log):
                 page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
                 page.wait_for_timeout(2000)
-            if asks_profile(page):
-                shot = _debug_shot(project_id, page, "profile")
+            block = page_block(page)
+            if block:
+                shot = _debug_shot(project_id, page, block)
+                why = {
+                    "profile": "ОК просит подтвердить, что профиль наш, и не "
+                               "пускает дальше. Нажать подтверждение не удалось.",
+                    "verify": "ОК требует проверочный код из СМС – без человека "
+                              "это не пройти.",
+                    "verify-code": "ОК ждёт проверочный код из СМС.",
+                }.get(block, "ОК показывает проверку и не пускает в группу.")
                 return {"ok": False,
-                        "error": "ОК просит подтвердить, что профиль наш, и не "
-                                 "пускает дальше. Кнопку подтверждения нажать не "
-                                 "удалось – зайдите в ОК руками и подтвердите."
+                        "error": why + " Зайдите в «Настройки» → «Вход в ОК» и "
+                                       "пройдите проверку, потом повторите."
                                  + (f" (снимок: {shot})" if shot else "")}
             if "anonym" in (page.url or "") or not is_logged_in(page):
                 return {"ok": False,

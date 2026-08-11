@@ -4705,6 +4705,23 @@ def _ok_login_block(project_id: str, config: dict) -> None:
         if st.button("✅ Да, это наш профиль", key="ok-profile-go", type="primary"):
             st.session_state["ok_state"] = worker.call(flow.confirm_profile_step)
             st.rerun()
+    elif step == "verify":
+        st.caption("ОК хочет прислать код по СМС на телефон аккаунта – номер "
+                   "виден на снимке. Нажмите «Получить код», дождитесь СМС и "
+                   "введите его на следующем шаге.")
+        c1, c2 = st.columns(2)
+        if c1.button("📱 Получить код по СМС", key="ok-verify-send", type="primary"):
+            st.session_state["ok_state"] = worker.call(flow.request_code_step)
+            st.rerun()
+        if c2.button("✉️ Подтвердить по почте", key="ok-verify-mail"):
+            st.session_state["ok_state"] = worker.call(flow.request_mail_step)
+            st.rerun()
+    elif step == "verify-code":
+        st.caption("Введите код, который прислал ОК.")
+        vcode = st.text_input("Код из СМС", key="ok-verify-code")
+        if st.button("Подтвердить", key="ok-verify-go", type="primary") and vcode.strip():
+            st.session_state["ok_state"] = worker.call(flow.submit_verify_step, vcode)
+            st.rerun()
     elif step == "no-vk-button":
         st.caption("Значок ВК так и не появился – он в ряду иконок под кнопкой "
                    "«Войти по QR-коду». Войдите логином и паролем ОК ниже.")

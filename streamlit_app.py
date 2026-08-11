@@ -3700,7 +3700,6 @@ def _crosspost_vk_probe(project_id: str, config: dict) -> None:
         if st.button("Поставить пробную отложку", type="primary",
                      key=f"vk-probe-go-{project_id}", disabled=not text.strip()):
             when = apptime.now() + timedelta(minutes=int(minutes))
-            worker = get_worker()
             # Лог шагов. Копится в списке, а не пишется в виджет на лету:
             # отложку ведёт отдельный поток воркера, а рисовать из чужого
             # потока Streamlit не даёт. Пишем построчно и показываем целиком,
@@ -3712,8 +3711,15 @@ def _crosspost_vk_probe(project_id: str, config: dict) -> None:
 
             note(f"Пробная отложка: {group_url} на "
                  f"{when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
+            # Свежий поток, а НЕ постоянный воркер. Отложка сама открывает и
+            # закрывает браузер – хранить между вызовами ей нечего, а вот
+            # отравиться постоянный поток успел: после неудачной попытки в нём
+            # остаётся недоразмотанный цикл Playwright, и дальше КАЖДЫЙ вызов
+            # падает с «Sync API inside the asyncio loop» до перезапуска
+            # приложения. У нового потока свои локальные данные – отравить
+            # его прошлому нечем.
             with st.spinner("Открываю ВК и ставлю отложку – обычно меньше минуты…"):
-                res = worker.call(
+                res = playwright_worker.run_once(
                     vk_social.schedule_postponed_post, project_id, group_url,
                     text.strip(), [], when, log=note,
                     headless=bool(get_settings(project_id)["headless"]))
@@ -4365,10 +4371,13 @@ def _vk_login_block(project_id: str, config: dict) -> None:
         # Проверка до боя: «сессия сохранена» ещё не значит «ВК нас пускает».
         # Кнопка отвечает на это прямо, а не оставляет гадать после отказа.
         if st.button("🔍 Проверить сессию ВК", key="vk-check"):
+            # Тоже свежим потоком: проверка открывает и закрывает свой браузер,
+            # и незачем ей рисковать общим потоком входа (см. run_once).
             with st.spinner("Открываю ВК и смотрю, пускает ли…"):
-                res = worker.call(vk_social.check_session, project_id,
-                                  (config.get("vkGroupUrl") or "").strip(),
-                                  bool(get_settings(project_id)["headless"]))
+                res = playwright_worker.run_once(
+                    vk_social.check_session, project_id,
+                    (config.get("vkGroupUrl") or "").strip(),
+                    bool(get_settings(project_id)["headless"]))
             if res.get("ok"):
                 st.success("Сессия жива, сообщество открывается, права на публикацию есть.")
             else:

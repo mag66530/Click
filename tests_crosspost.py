@@ -501,8 +501,81 @@ def test_vk_time_pickers() -> None:
           not vk_social._picker_shows(page, lambda: FakePicker([""]), 14))
 
 
+def test_playwright_worker() -> None:
+    """
+    Отравленный поток: одна неудача не должна ломать всё до перезапуска.
+
+    Живой случай (11.08.2026): после нескольких неудачных отложек КАЖДАЯ
+    следующая падала с «Playwright Sync API inside the asyncio loop», хотя
+    чинить было нечего. Sync-версия Playwright работает на гринлетах, а те
+    делят один поток ОС: оборвалась сессия неудачно – цикл остаётся
+    «запущенным» для всего потока навсегда.
+    """
+    print("\nPlaywright: отравленный поток")
+    import playwright_worker as pw
+
+    check("узнаём отравление по тексту ошибки",
+          pw.is_poisoned_thread(RuntimeError(
+              "It looks like you are using Playwright Sync API inside the "
+              "asyncio loop. Please use the Async API instead.")))
+    check("обычная ошибка отравлением не считается",
+          not pw.is_poisoned_thread(RuntimeError("Timeout 10000ms exceeded")))
+
+    worker = pw.PlaywrightWorker()
+    check("свежий воркер живой", worker.alive())
+    try:
+        worker.call(lambda: (_ for _ in ()).throw(RuntimeError("обычная беда")))
+    except RuntimeError:
+        pass
+    check("обычная ошибка воркер не убивает", worker.alive())
+    try:
+        worker.call(lambda: (_ for _ in ()).throw(RuntimeError(
+            "Playwright Sync API inside the asyncio loop")))
+    except RuntimeError:
+        pass
+    check("после отравления воркер считается мёртвым", not worker.alive())
+    worker.stop()
+
+    # Одноразовый запуск: значение возвращается, ошибка долетает как есть,
+    # и каждый раз это НОВЫЙ поток – иначе отравить его было бы чем.
+    check("run_once возвращает значение", pw.run_once(lambda a, b: a + b, 2, 3) == 5)
+    check("run_once понимает именованные", pw.run_once(lambda a, b=0: a + b, 2, b=5) == 7)
+    try:
+        pw.run_once(lambda: (_ for _ in ()).throw(ValueError("наружу")))
+        check("run_once отдаёт ошибку наружу", False, "ошибки не было")
+    except ValueError as e:
+        check("run_once отдаёт ошибку наружу", str(e) == "наружу")
+
+    import threading
+
+    def who() -> tuple[str, int]:
+        return threading.current_thread().name, threading.get_ident()
+
+    # Номер потока сравнивать бесполезно: ОС переиспользует номера
+    # завершившихся потоков, и два подряд запуска запросто получат один и тот
+    # же. Важно другое – что это КАЖДЫЙ РАЗ отдельный поток под нашим именем,
+    # а не поток вызывающего: у нового потока свои локальные данные, и
+    # отравить его прошлой сессии нечем.
+    name, ident = pw.run_once(who)
+    check("run_once уходит в отдельный поток", ident != threading.get_ident())
+    check("поток заведён нами", name.startswith("click-pw-once-"))
+    check("имя потока называет задачу", pw.run_once(who)[0].endswith("who"))
+
+    # И главное: локальные данные потока не переезжают между запусками.
+    local = threading.local()
+
+    def stamp() -> bool:
+        was = getattr(local, "been_here", False)
+        local.been_here = True
+        return was
+
+    check("следы прошлого запуска не переносятся",
+          pw.run_once(stamp) is False and pw.run_once(stamp) is False)
+
+
 def main() -> int:
     print("═" * 60)
+    test_playwright_worker()
     test_scheduler()
     test_vk_domain()
     test_vk_time_pickers()

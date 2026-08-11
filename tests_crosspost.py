@@ -913,7 +913,7 @@ def test_vk_captcha_on_posting() -> None:
     advice = vk_social._CAPTCHA_ADVICE
     check("сказано, что это проверка «не робот»", "не робот" in advice)
     check("сказано, что программой её не пройти", "программой" in advice)
-    check("назван файл ручного входа", "VHOD-VK-vojti-rukami.py" in advice)
+    check("назван файл ручного входа", "VHOD-VK-i-OK.py" in advice)
     check("сказано, куда деть готовую сессию",
           "vk-session.json" in advice and "Настройка" in advice)
     check("про права администратора здесь не поминаем",

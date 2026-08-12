@@ -1104,6 +1104,107 @@ def _click_first(page, candidates, timeout: int = 8_000) -> str:
     return ""
 
 
+def _select_closest(page, selector: str, want: str) -> str:
+    """
+    Выбрать значение в списке; нет такого – ближайшее НЕ РАНЬШЕ него.
+    Возвращает выбранное или пусто, если не вышло.
+
+    Зачем не просто select_option. У ОК в минутах только кратные пяти, и
+    попытка выбрать «22» кончалась получасовым ожиданием: Playwright
+    честно ждал появления несуществующего пункта, повторяя «did not find
+    some options», пока не истечёт таймаут. Мы округляем время заранее, но
+    список ОК может смениться (скажем, на шаг в десять минут) – и тогда
+    лучше взять соседнее значение, чем повесить прогон.
+
+    Не раньше – потому что пост не должен выйти раньше назначенного.
+    """
+    try:
+        options = page.eval_on_selector(
+            selector,
+            "el => Array.from(el.options).map(o => o.value)") or []
+    except Exception:  # noqa: BLE001
+        options = []
+    if not options:
+        return ""
+    target = want if want in options else ""
+    if not target:
+        try:
+            later = sorted((o for o in options if o.isdigit() and int(o) >= int(want)),
+                           key=int)
+        except ValueError:
+            return ""
+        if not later:
+            # Ничего не раньше нужного нет. Молча взять меньшее нельзя:
+            # пост вышел бы РАНЬШЕ назначенного, а это хуже отказа.
+            return ""
+        target = later[0]
+    try:
+        page.select_option(selector, target, timeout=8_000)
+    except Exception:  # noqa: BLE001
+        return ""
+    return target
+
+
+def _clear_editor(page, text_sel: str) -> int:
+    """
+    Опустошить поле темы. Возвращает, сколько знаков было убрано.
+
+    ОК восстанавливает недописанный черновик прошлого раза, и наш текст
+    приписывается к нему: заказчица получила «ТестПроверка планировщика
+    Click…» – её «Тест» и наш текст слиплись в один пост.
+    """
+    try:
+        was = (page.eval_on_selector(text_sel, "el => el.textContent || ''") or "").strip()
+    except Exception:  # noqa: BLE001
+        return 0
+    if not was:
+        return 0
+    try:
+        page.click(text_sel)
+        page.keyboard.press("Control+A")
+        page.keyboard.press("Backspace")
+        page.wait_for_timeout(300)
+        # Не поддалось клавишами – чистим напрямую и сообщаем форме, иначе
+        # она не заметит и вернёт текст обратно.
+        now = (page.eval_on_selector(text_sel, "el => el.textContent || ''") or "").strip()
+        if now:
+            page.eval_on_selector(
+                text_sel,
+                """el => {
+                    el.textContent = '';
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                }""")
+            page.wait_for_timeout(200)
+    except Exception:  # noqa: BLE001
+        return len(was)
+    return len(was)
+
+
+def _close_datepicker(page) -> None:
+    """
+    Закрыть выпавший календарь: он висит поверх часов и минут.
+
+    Заказчица описала это точно: «после ввода даты надо нажать на пустое
+    место, а он завис в непонятках». Так и есть – календарь ОК остаётся
+    открытым и накрывает списки времени, а Playwright ждёт их видимости
+    до победного. Нажимаем «на пустое место» сами: по подписи «Время
+    публикации», она рядом и ничего не делает.
+    """
+    for selector in ('span.irc_l:has-text("Время публикации")',
+                     '[role="dialog"] .posting_f_ac', '[role="dialog"]'):
+        try:
+            page.locator(selector).first.click(timeout=1_500, position={"x": 5, "y": 5})
+            page.wait_for_timeout(400)
+        except Exception:  # noqa: BLE001 – пробуем следующее «пустое место»
+            continue
+        try:
+            if not page.locator("#ui-datepicker-div").first.is_visible(timeout=500):
+                return
+        except Exception:  # noqa: BLE001 – календаря нет вовсе, и хорошо
+            return
+
+
 def _round_to_five(when: datetime) -> datetime:
     """
     Округлить минуты ВВЕРХ до кратных пяти – других ОК не принимает.
@@ -1134,7 +1235,9 @@ def _turn_on_schedule(page, log: Callable[[str], None]) -> bool:
     могла «нажаться» мимо, и тогда всё дальнейшее пошло бы впустую.
     """
     def ready() -> bool:
-        return bool(_first_present(page, SEL["date_input"]))
+        # Именно ВИДНО, а не «есть в разметке»: блок времени лежит на
+        # странице всегда, но до галочки он спрятан.
+        return bool(_first_visible(page, SEL["date_input"]))
 
     if ready():
         return True
@@ -1340,9 +1443,34 @@ def _pick_photos(page, image_paths: list[str], log: Callable[[str], None]) -> st
 
 
 def _first_present(page, candidates) -> str:
+    """Первый кандидат, ЕСТЬ ли такой в разметке (даже скрытый)."""
+    if isinstance(candidates, str):
+        candidates = (candidates,)
     for sel in candidates:
         try:
             if page.locator(sel).count():
+                return sel
+        except Exception:  # noqa: BLE001
+            continue
+    return ""
+
+
+def _first_visible(page, candidates) -> str:
+    """
+    Первый кандидат, который ВИДЕН на экране. Пусто – ни одного.
+
+    Отличие от _first_present принципиальное, и оно уже стоило прогона.
+    Блок времени у ОК лежит в разметке всегда, но до галочки «Время
+    публикации» он спрятан. Проверка «элемент есть» считала спрятанное
+    за успех: Click решал, что галочка уже включена, не включал её – и
+    полминуты ждал, пока станет видимым список минут, который никто не
+    показывал.
+    """
+    if isinstance(candidates, str):
+        candidates = (candidates,)
+    for sel in candidates:
+        try:
+            if page.locator(sel).first.is_visible(timeout=800):
                 return sel
         except Exception:  # noqa: BLE001
             continue
@@ -1441,14 +1569,29 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                 return {"ok": False, "error": "Окно новой темы не открылось", "shot": shot}
             page.wait_for_timeout(800)
 
+            # ОК восстанавливает недописанный черновик прошлого раза. Без
+            # чистки наш текст приписывается к нему: заказчица получила
+            # «ТестПроверка планировщика Click…» – её «Тест» и наш текст
+            # слиплись. Чистим и УБЕЖДАЕМСЯ, что поле пустое.
+            left = _clear_editor(page, text_sel)
+            if left:
+                log(f"  убрал черновик прошлого раза ({left} знаков)")
+
             log(f"Ввожу текст ({len(text)} знаков)")
             page.click(text_sel)
             page.type(text_sel, text, delay=8)
             page.wait_for_timeout(500)
-            typed = page.eval_on_selector(text_sel, "el => el.textContent || ''")
-            if text.strip() and not (typed or "").strip():
+            typed = (page.eval_on_selector(text_sel, "el => el.textContent || ''") or "")
+            if text.strip() and not typed.strip():
                 return {"ok": False, "error": "Текст не попал в поле поста ОК",
                         "shot": _debug_shot(project_id, page, "no-text")}
+            # Лишнее спереди – верный признак, что черновик всё-таки остался.
+            if text.strip() and not typed.strip().startswith(text.strip()[:20]):
+                return {"ok": False,
+                        "error": "В поле поста осталось лишнее от прошлого черновика: "
+                                 f"«{typed.strip()[:60]}…». Откройте форму в ОК и "
+                                 "очистите её вручную, потом повторите",
+                        "shot": _debug_shot(project_id, page, "draft-left")}
 
             if image_paths:
                 log(f"Прикрепляю фото: {len(image_paths)}")
@@ -1473,7 +1616,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                         "error": "Не нашли галочку «Время публикации» в форме ОК "
                                  "(или она не включилась)", "shot": shot}
 
-            date_sel = _first_present(page, SEL["date_input"])
+            date_sel = _first_visible(page, SEL["date_input"])
             if not date_sel:
                 shot = _debug_shot(project_id, page, "no-date")
                 return {"ok": False, "error": "Поле даты в форме ОК не распознано", "shot": shot}
@@ -1481,23 +1624,28 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             page.type(date_sel, when.strftime("%d.%m.%Y"), delay=25)
             page.keyboard.press("Enter")
             page.wait_for_timeout(600)
+            # Календарь остаётся открытым и накрывает списки времени –
+            # «нажимаем на пустое место» вместо человека.
+            _close_datepicker(page)
 
             # Часы и минуты – обычные <select> с именами st.layer.hours и
             # st.layer.mins. Выбираем значением, а не печатью.
             for what, key, value in (("часы", "hours_select", f"{when.hour:02d}"),
                                      ("минуты", "mins_select", f"{when.minute:02d}")):
-                sel = _first_present(page, SEL[key])
+                sel = _first_visible(page, SEL[key])
                 if not sel:
                     shot = _debug_shot(project_id, page, "no-time")
                     return {"ok": False,
                             "error": f"Не нашли список «{what}» в форме ОК", "shot": shot}
-                try:
-                    page.select_option(sel, value)
-                except Exception as e:  # noqa: BLE001
+                picked = _select_closest(page, sel, value)
+                if not picked:
                     shot = _debug_shot(project_id, page, "bad-time")
                     return {"ok": False,
-                            "error": f"ОК не принял {what} «{value}»: {str(e).split(chr(10))[0]}",
+                            "error": f"ОК не принял {what} «{value}» – в его списке "
+                                     "такого значения нет и близкого не нашлось",
                             "shot": shot}
+                if picked != value:
+                    log(f"  {what}: ОК даёт только свои значения, взял ближайшее {picked}")
                 page.wait_for_timeout(300)
 
             log("Сохраняю отложку")

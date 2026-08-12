@@ -145,6 +145,26 @@ SEL = {
 }
 
 
+def topics_url(group_url: str) -> str:
+    """
+    Адрес вкладки «Темы» группы – именно там живёт «Создать новую тему».
+
+    Разобрано по снимкам заказчицы (12.08.2026). Click открывал группу по
+    её обычному адресу и попадал на ЛЕНТУ: там сплошные опубликованные
+    посты, а поля для новой темы нет вовсе. Отсюда «не нашли Создать новую
+    тему» – искали на странице, где её и быть не могло, и никакие повторы
+    с прокруткой помочь не могли.
+
+    Поле лежит на вкладке «Темы»: ok.ru/group/<id>/topics.
+    """
+    url = (group_url or "").strip().rstrip("/")
+    if not url:
+        return ""
+    if url.endswith("/topics"):
+        return url
+    return url + "/topics"
+
+
 def session_path(project_id: str) -> Path:
     d = paths.data_root() / project_id / "session"
     d.mkdir(parents=True, exist_ok=True)
@@ -1084,6 +1104,14 @@ def _open_composer(page, log: Callable[[str], None], tries: int = 3) -> bool:
             page.wait_for_load_state("networkidle", timeout=4_000)
         except Exception:  # noqa: BLE001 – лента ОК почти никогда не «затихает»
             pass
+        # Мы не на той вкладке? Поле живёт только в «Темах», а открыться мы
+        # могли и на ленте – например, если ОК увёл нас туда сам после
+        # проверки профиля. Заходим во вкладку по подписи.
+        if attempt == 1 and _click_first(page, ('text="Темы"', 'a[href*="/topics"]'),
+                                         timeout=3_000):
+            log("  перешёл на вкладку «Темы»")
+            page.wait_for_timeout(2_000)
+            continue
         try:
             page.mouse.wheel(0, 400 * attempt)
         except Exception:  # noqa: BLE001
@@ -1205,13 +1233,17 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             context.add_init_script(_vk.ANTIBOT_INIT)
             page = context.new_page()
 
-            log(f"Открываю группу: {group_url}")
-            page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
+            # Идём СРАЗУ на вкладку «Темы»: поле «Создать новую тему» живёт
+            # только там. По обычному адресу группы открывается лента, и
+            # искать поле на ней бесполезно – его там нет (см. topics_url).
+            open_at = topics_url(group_url)
+            log(f"Открываю темы группы: {open_at}")
+            page.goto(open_at, wait_until="domcontentloaded", timeout=45_000)
             page.wait_for_timeout(2500)
             # ОК умеет заслонить группу вопросом «Это вы?». Подтверждаем и
             # возвращаемся в группу – иначе это выглядит как слетевшая сессия.
             if confirm_profile(page, log):
-                page.goto(group_url, wait_until="domcontentloaded", timeout=45_000)
+                page.goto(open_at, wait_until="domcontentloaded", timeout=45_000)
                 page.wait_for_timeout(2000)
             block = page_block(page)
             if block:

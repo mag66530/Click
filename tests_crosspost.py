@@ -967,6 +967,28 @@ def test_ok_schedule_flow() -> None:
           "Контентные блоки" in ok.SEL["menu_content_blocks"]
           and any("Фотографии" in s for s in ok.SEL["menu_photos"]))
 
+    # Открываться надо на вкладке «Темы»: по обычному адресу группы ОК
+    # показывает ЛЕНТУ, а поля «Создать новую тему» там нет вовсе. Первый
+    # живой прогон (12.08.2026) на этом и встал: Click честно искал поле три
+    # раза с прокруткой на странице, где его не могло быть.
+    check("к адресу группы добавляется /topics",
+          ok.topics_url("https://ok.ru/group/70000005388115/")
+          == "https://ok.ru/group/70000005388115/topics")
+    check("хвостовой слэш не мешает",
+          ok.topics_url("https://ok.ru/group/70000005388115")
+          == "https://ok.ru/group/70000005388115/topics")
+    check("дважды /topics не приписываем",
+          ok.topics_url("https://ok.ru/group/1/topics") == "https://ok.ru/group/1/topics")
+    check("группа по имени тоже работает",
+          ok.topics_url("https://ok.ru/inmetprom") == "https://ok.ru/inmetprom/topics")
+    check("пустой адрес остаётся пустым", ok.topics_url("") == "")
+
+    # Ссылку на форму ОК зовёт a.pf-head_itx_a – снято инспектором со
+    # страницы заказчицы. Класс держим запасным: подписи надёжнее, но и
+    # терять подтверждённый селектор незачем.
+    check("подтверждённый класс формы на месте",
+          any("pf-head_itx_a" in s for s in ok.SEL["create_post"]))
+
 
 def test_plan_horizon_and_past() -> None:
     """

@@ -685,88 +685,118 @@ def test_scheduler() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def test_calendar_view() -> None:
+def test_plan_rows() -> None:
     """
-    Календарь: рабочая неделя из пяти дней, выходные — только с постами.
+    План строками: порядок, колонки площадок и колонка «что сделать».
 
-    Живая просьба заказчика: суббота и воскресенье занимали треть сетки и
-    всегда пустовали. Отложку на выходной ставят редко — обычно перед
-    праздниками, — и вот тогда день и должен появиться.
+    Календарь на живом реестре стоял пустым – постов два-три в неделю, – и
+    заказчица попросила вернуть строки. Проверяем ровно то, ради чего они:
+    посты идут по времени, статус каждой площадки виден отдельной колонкой,
+    а «что сделать» молчит там, где делать нечего.
     """
-    print("Календарь плана (crosspost_calendar)")
-    import crosspost_calendar as cal
+    print("План строками (crosspost_plan)")
+    import crosspost_plan as plan
     import crosspost_state as cps
 
-    monday = date(2025, 8, 18)          # понедельник
-    def post(day: str, text: str = "Текст поста", nets=("vk", "tg-client"),
-             kind: str = "Информационный", link: str = "") -> dict:
+    today = date(2025, 8, 18)
+
+    def post(day: str, text: str = "Текст поста. Продолжение мысли идёт дальше.",
+             nets=("vk", "tg-client"), kind: str = "Информационный",
+             link: str = "", row: int = 42) -> dict:
         return {"brand": "SMU", "date": day, "time": "09:00",
                 "when": f"{day}T09:00:00+05:00", "post_type": kind, "format": "Пост",
-                "text": text, "images": ["a.jpg"], "row": 42,
+                "text": text, "images": ["a.jpg"], "row": row,
                 "targets": [{"network": n, "raw": n, "published_link": link} for n in nets]}
 
-    posts = [post("2025-08-19"), post("2025-08-22")]      # вторник и пятница
-    view = cal.build(posts, {}, monday)
-    check("две недели", len(view["weeks"]) == 2)
-    check("в неделе пять будних дней", all(len(w["days"]) == 5 for w in view["weeks"]))
-    check("без постов на выходные колонки нет", view["has_weekend"] is False)
-    check("заголовок про будни", view["title"] == "18 – 29 августа", view["title"])
-    check("пост встал во вторник", len(view["weeks"][0]["days"][1]["posts"]) == 1)
-    check("сегодня отмечено", view["weeks"][0]["days"][0]["is_today"] is True)
-    check("подпись «завтра»", view["weeks"][0]["days"][1]["tag"] == "завтра")
+    p1 = post("2025-08-26", kind="Спецпредложение")
+    p2 = post("2025-08-19")
+    got = plan.rows([p1, p2], {}, today)
+    check("строки идут по времени", [r["day"].day for r in got["rows"]] == [19, 26])
+    check("заголовок по диапазону", got["title"] == "19 – 26 августа", got["title"])
+    check("подпись дня словами", got["rows"][0]["when_note"] == "завтра, вт",
+          got["rows"][0]["when_note"])
+    check("прошлые в план не попадают",
+          plan.rows([post("2025-08-01")], {}, today)["rows"] == [])
+    check("горизонт обрезает дальние",
+          plan.rows([p1, p2], {}, today, date(2025, 8, 20))["rows"] and
+          len(plan.rows([p1, p2], {}, today, date(2025, 8, 20))["rows"]) == 1)
 
-    holiday = cal.build(posts + [post("2025-08-23")], {}, monday)   # суббота
-    check("пост на выходной поднимает колонку", holiday["has_weekend"] is True)
-    check("в колонке выходных — только день с постом",
-          [c["num"] for c in holiday["weeks"][0]["weekend"]] == ["23"])
-    check("во второй неделе выходных постов нет", holiday["weeks"][1]["weekend"] == [])
-    check("заглушка знает числа", holiday["weeks"][1]["weekend_empty"] == "30 – 31")
+    # Колонки — из самого реестра: у одного бренда Дзен, у другого нет ОК.
+    mixed = plan.rows([post("2025-08-19", nets=("vk", "ok")),
+                       post("2025-08-20", nets=("tg-client", "zen"))], {}, today)
+    check("колонки собраны по реестру",
+          [c["code"] for c in mixed["columns"]] == ["tg-client", "vk", "ok", "zen"],
+          str([c["code"] for c in mixed["columns"]]))
+    check("площадки названы по-русски",
+          [c["name"] for c in mixed["columns"]][:2] == ["ТГ клиенты", "ВК"])
+    check("в шапке короткая подпись",
+          [c["short"] for c in mixed["columns"]][:2] == ["ТГ кл.", "ВК"])
 
-    # Значки площадок: у ВК и ОК отложку держит сама сеть, у ТГ и МАКС — Click.
+    # Текст разбивается на жирное начало и хвост.
+    head, tail = plan._split_text("Текст поста. Продолжение мысли идёт дальше.")
+    check("начало отделено по точке", head == "Текст поста.", head)
+    check("хвост остался", tail.startswith("Продолжение"), tail)
+    head2, tail2 = plan._split_text("Арматура: разбираемся в классах и профилях")
+    check("двоеточие тоже разрыв", head2 == "Арматура:", head2)
+    whole, none_ = plan._split_text("Просто короткая строка без разрывов")
+    check("без разрыва не режем посреди мысли",
+          whole == "Просто короткая строка без разрывов" and none_ == "", whole)
+    only_link, empty_tail = plan._split_text("https://docs.google.com/document/d/1Q97")
+    check("ссылка не рвётся", only_link.startswith("https://") and empty_tail == "")
+
+    # «Что сделать» — тихо там, где делать нечего.
+    ready = plan.rows([post("2025-08-19")], {cps.post_key(post("2025-08-19")): {
+        "targets": {"vk": {"state": cps.SCHEDULED}, "tg-client": {"state": cps.SCHEDULED}}}},
+        today)["rows"][0]
+    check("готовому — «всё готово»", ready["todo"]["text"] == "всё готово", ready["todo"]["text"])
+    check("и без крика", ready["todo"]["kind"] == "quiet")
+
+    empty = plan.rows([post("2025-08-19", text="", row=47)], {}, today)["rows"][0]
+    check("нет текста — жёлтая строка", empty["state"] == "warn")
+    check("сказано, какая строка листа", "47" in empty["todo"]["text"], empty["todo"]["text"])
+    check("и ведёт в таблицу", empty["todo"].get("sheet") is True)
+
+    broken_post = post("2025-08-19")
+    broken = plan.rows([broken_post], {cps.post_key(broken_post): {
+        "targets": {"vk": {"state": cps.FAILED, "error": "сессия слетела"}}}},
+        today)["rows"][0]
+    check("ошибка называет площадку и причину",
+          broken["todo"]["text"].startswith("ВК:") and "сессия" in broken["todo"]["text"],
+          broken["todo"]["text"])
+
+    # Знаки площадок: у ВК и ОК отложку держит сама сеть, у ТГ и МАКС — Click.
     p = post("2025-08-19", nets=("vk", "tg-client"))
     state = {cps.post_key(p): {"targets": {"vk": {"state": cps.SCHEDULED},
                                            "tg-client": {"state": cps.SCHEDULED}}}}
-    marks = {n["code"]: n for n in cal.post_view(p, state)["nets"]}
+    marks = {n["code"]: n for n in plan.post_view(p, state)["nets"]}
     check("ВК: отложка стоит в соцсети", marks["vk"]["cls"] == "set" and marks["vk"]["mark"] == "✓")
     check("ТГ: отправит Click", marks["tg-client"]["cls"] == "wait" and marks["tg-client"]["mark"] == "⏱")
     check("у знака есть подпись словами", "Click" in marks["tg-client"]["note"])
 
-    failed = {cps.post_key(p): {"targets": {"vk": {"state": cps.FAILED, "error": "сессия слетела"}}}}
-    view_err = cal.post_view(p, failed)
-    check("ошибка красит плитку", view_err["state"] == "err")
-    check("причина ошибки видна", "сессия" in view_err["nets"][0]["note"])
-
-    empty = cal.post_view(post("2025-08-19", text=""), {})
-    check("нет текста — жёлтая плитка", empty["state"] == "warn")
-    check("и сказано словами", "не выйдет" in empty["note"])
-
-    done = cal.post_view(post("2025-08-19", link="https://vk.com/wall-1_2"), {})
+    done = plan.post_view(post("2025-08-19", link="https://vk.com/wall-1_2"), {})
     check("ссылка в реестре = вышло", done["state"] == "live")
-
-    video = cal.post_view({**post("2025-08-19"), "format": "Видео"}, {})
+    video = plan.post_view({**post("2025-08-19"), "format": "Видео"}, {})
     check("видео — вручную, не тревога", video["state"] == "manual")
 
-    long_text = cal.post_view(post("2025-08-19", text="о" * 200), {})
-    check("превью подрезано", len(long_text["title"]) <= cal.TITLE_LIMIT + 1)
-
-
-    # Хвост пустых недель не рисуем: горизонт тянется до конца месяца, и в
-    # начале месяца это давало три ряда пустых клеток.
-    far = cal.build(posts, {}, monday, weeks=6)
-    check("пустые недели с конца обрезаны", len(far["weeks"]) == 2, str(len(far["weeks"])))
-    late = cal.build(posts + [post("2025-09-09")], {}, monday, weeks=6)
-    check("неделя с постом остаётся", len(late["weeks"]) == 4, str(len(late["weeks"])))
-    check("минимум две недели", len(cal.build([], {}, monday, weeks=6)["weeks"]) == 2)
-
     # Ближайший выход для строки состояния.
-    nearest = cal.next_out([p], {cps.post_key(p): {"targets": {"vk": {"state": cps.SCHEDULED}}}},
-                           "2025-08-18T10:00:00+05:00")
+    nearest = plan.next_out([p], state, "2025-08-18T10:00:00+05:00")
     check("ближайший пост найден", nearest is not None and nearest["when"].startswith("2025-08-19"))
-    check("названы только ждущие площадки",
-          nearest is not None and [n["code"] for n in nearest["pending"]] == ["vk"])
+    check("названы ждущие площадки",
+          nearest is not None and sorted(n["code"] for n in nearest["pending"]) == ["tg-client", "vk"])
     check("вышедшее в ближайшие не попадает",
-          cal.next_out([post("2025-08-19", link="https://vk.com/wall-1_2")], {},
-                       "2025-08-18T10:00:00+05:00") is None)
+          plan.next_out([post("2025-08-19", link="https://vk.com/wall-1_2")], {},
+                        "2025-08-18T10:00:00+05:00") is None)
+
+    # Разметка таблицы: колонки, значки и «что сделать» доезжают до HTML.
+    import ui_theme as T
+    markup = T.crosspost_table(mixed, sheet_url="https://sheet", group_title="Впереди — 2 поста")
+    check("шапка с площадками", ">Дзен</th>" in markup and 'title="Дзен"' in markup)
+    check("группа подписана", "Впереди — 2 поста" in markup)
+    check("значок с подсказкой", 'title="ВК —' in markup)
+    check("колонки заданы ширинами", "<colgroup>" in markup)
+    check("склонение постов",
+          [plan.plural(n, "пост", "поста", "постов") for n in (1, 4, 11, 22)]
+          == ["1 пост", "4 поста", "11 постов", "22 поста"])
 
 
 def test_vk_time_pickers() -> None:
@@ -1459,7 +1489,7 @@ def main() -> int:
     test_dates_and_time()
     test_parse_blocks()
     test_posts_to_form()
-    test_calendar_view()
+    test_plan_rows()
     test_real_file_optional()
     print("\n" + "═" * 60)
     if FAILED:

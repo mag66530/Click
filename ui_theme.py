@@ -1379,84 +1379,65 @@ def crosspost_css() -> str:
         ".cp-net-off{opacity:.45}"
         "@media(max-width:900px){.cp-type,.cp-photos{display:none}"
         ".cp-nets{flex:1 0 100%;justify-content:flex-start;margin-top:4px}}"
-        + _CROSSPOST_CALENDAR_CSS +
+        + _CROSSPOST_TABLE_CSS +
         "</style>"
     )
 
 
-# ─── Календарь кросспостинга ────────────────────────────────────────
-# План — расписание, и рисуется он сеткой недель, а не списком строк. День —
-# контейнер Streamlit с рамкой (ключ cp-cell-…), пост внутри — контейнер с
-# кнопкой (ключ cp-tile-…): кликом открывается панель поста. Плитку нельзя
-# нарисовать картинкой с невидимой кнопкой поверх – клик до кнопки не доходит
-# (та же грабля, что была у плиток городов), поэтому кликабельна сама кнопка,
-# а текст поста подставляется ей переменной --cp-title через ::after.
-_CROSSPOST_CALENDAR_CSS = (
-    # Заголовки дней недели над сеткой.
-    ".cp-dow{font-size:10.5px;font-weight:700;text-transform:uppercase;"
-    "letter-spacing:.06em;color:var(--muted);padding:0 4px 2px}"
-    ".cp-dow.we{color:var(--dim);font-size:10px}"
-    # Ячейка дня.
-    '[class*="st-key-cp-cell-"]{border-radius:var(--r-md)!important;'
-    "background:var(--bg-1);min-height:186px}"
-    '[class*="st-key-cp-cell-we-"]{background:var(--bg-3);min-height:auto}'
-    '[class*="st-key-cp-cell-past-"]{opacity:.62}'
-    '[class*="st-key-cp-cell-today-"]{border-color:var(--acc)!important;'
-    "box-shadow:0 0 0 3px var(--acc-bg)}"
-    ".cp-cell-h{display:flex;align-items:baseline;gap:7px;margin-bottom:2px}"
-    ".cp-cell-num{font-family:var(--mono);font-size:15px;font-weight:800;color:var(--text)}"
-    ".cp-cell-num.today{color:var(--acc)}"
-    ".cp-cell-tag{font-size:10.5px;color:var(--dim);margin-left:auto}"
-    ".cp-cell-tag.now{color:#fff;background:var(--acc);border-radius:20px;"
-    "padding:2px 8px;font-weight:800;text-transform:uppercase;font-size:10px;"
-    "letter-spacing:.05em}"
-    ".cp-cell-empty{display:flex;align-items:center;justify-content:center;"
-    "min-height:60px;font-size:12px;color:var(--dim);border:1px dashed var(--border-2);"
-    "border-radius:var(--r-sm);text-align:center;line-height:1.45;padding:8px 6px}"
-    # Плитка поста: контейнер держит рамку и цветную полоску состояния.
-    '[class*="st-key-cp-tile-"]{border:1px solid var(--border);border-left:3px solid '
-    "var(--cp-line,var(--acc));border-radius:var(--r-sm);background:var(--bg-2);"
-    "padding:2px 0 6px;margin-bottom:6px;overflow:hidden}"
-    '[class*="st-key-cp-tile-warn-"]{background:var(--yel-bg);--cp-line:var(--yel)}'
-    '[class*="st-key-cp-tile-err-"]{--cp-line:var(--red)}'
-    '[class*="st-key-cp-tile-set-"]{--cp-line:var(--grn)}'
-    '[class*="st-key-cp-tile-live-"]{--cp-line:var(--grn);background:var(--grn-bg)}'
-    '[class*="st-key-cp-tile-wait-"]{--cp-line:var(--acc)}'
-    '[class*="st-key-cp-tile-todo-"]{--cp-line:var(--border-2)}'
-    '[class*="st-key-cp-tile-manual-"]{--cp-line:var(--border-2);opacity:.75}'
-    # Сама кнопка внутри плитки — прозрачная, текст слева, в две строки.
-    '[class*="st-key-cp-tile-"] .stButton button{width:100%;background:transparent!important;'
-    "border:none!important;box-shadow:none!important;padding:7px 10px 2px!important;"
-    "display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left}"
-    '[class*="st-key-cp-tile-"] .stButton button:hover{transform:none;background:var(--bg-3)!important}'
-    '[class*="st-key-cp-tile-"] .stButton button p{font-family:var(--mono)!important;'
-    "font-size:11.5px!important;font-weight:700!important;color:var(--text)!important;"
-    "line-height:1.2!important}"
-    '[class*="st-key-cp-tile-"] .stButton button::after{content:var(--cp-title,"");'
-    "font-family:var(--font);font-size:12px;font-weight:500;line-height:1.4;color:var(--text-2);"
-    "text-align:left;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;"
-    "overflow:hidden;white-space:normal}"
-    '[class*="st-key-cp-tile-warn-"] .stButton button::after{color:var(--yel);font-weight:600}'
-    '[class*="st-key-cp-tile-"] .stButton,[class*="st-key-cp-tile-"] .stTooltipIcon,'
-    '[class*="st-key-cp-tile-"] .stTooltipHoverTarget{width:100%!important;display:block}'
-    '[class*="st-key-cp-tile-"]{gap:0!important;overflow:visible}'
-    '[class*="st-key-cp-cell-"] [data-testid="stElementContainer"],'
-    '[class*="st-key-cp-cell-"] [data-testid="stMarkdown"],'
-    '[class*="st-key-cp-cell-"] [data-testid="stMarkdownContainer"],'
-    '[class*="st-key-cp-tile-"] [data-testid="stElementContainer"],'
-    '[class*="st-key-cp-tile-"] [data-testid="stMarkdown"],'
-    '[class*="st-key-cp-tile-"] [data-testid="stMarkdownContainer"]'
-    '{height:auto!important;min-height:0!important;margin:0!important;overflow:visible}'
-    '[class*="st-key-cp-cell-"]{gap:6px!important;padding:11px!important}'
-    # Ряд площадок под кнопкой — часть той же плитки.
-    ".cp-marks{display:flex;gap:4px;padding:0 10px}"
-    ".cp-mark{flex:1;height:20px;border-radius:5px;display:flex;align-items:center;"
-    "justify-content:center;font-size:9.5px;font-weight:800;border:1px solid transparent}"
+# ─── Таблица плана кросспостинга ────────────────────────────────────
+# Строки, а не сетка недель: на живом реестре (два-три поста в неделю)
+# календарь стоял пустым, а текст в узких плитках рвался по слогам. Здесь
+# строка — это пост, колонки справа — площадки: статус сравнивается по
+# вертикали, а «что сделать» собрано в одну колонку, чтобы взгляд шёл по ней.
+_CROSSPOST_TABLE_CSS = (
+    ".cp-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-sm);"
+    "background:var(--bg-1);margin-bottom:10px}"
+    "table.cp-plan{border-collapse:collapse;width:100%;min-width:720px;font-size:12.5px;table-layout:fixed}"
+    "table.cp-plan th{position:sticky;top:0;z-index:2;background:var(--bg-3);text-align:left;"
+    "font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;"
+    "color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap}"
+    "table.cp-plan th.c,table.cp-plan td.c{text-align:center}"
+    "table.cp-plan td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}"
+    "table.cp-plan tr:last-child td{border-bottom:none}"
+    "table.cp-plan tbody tr:hover td{background:var(--bg-3)}"
+    "table.cp-plan tr.cp-group td{background:var(--bg-4);color:var(--muted);padding:7px 12px;"
+    "font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}"
+    "table.cp-plan tr.cp-group:hover td{background:var(--bg-4)}"
+    "table.cp-plan tr.cp-warn td{background:var(--yel-bg)}"
+    "table.cp-plan tr.cp-warn:hover td{background:var(--yel-bg)}"
+    # Левая полоска — состояние строки: она же цвет в легенде.
+    ".cp-flag{width:3px;padding:0 !important}"
+    ".cp-flag.set,.cp-flag.live{background:var(--grn)}"
+    ".cp-flag.wait{background:var(--acc)}"
+    ".cp-flag.warn{background:var(--yel)}"
+    ".cp-flag.err{background:var(--red)}"
+    ".cp-flag.todo,.cp-flag.manual{background:var(--border-2)}"
+    ".cp-when{font-family:var(--mono);font-weight:700;color:var(--text);white-space:nowrap}"
+    ".cp-when small{display:block;font-family:var(--font);font-weight:500;color:var(--dim);"
+    "font-size:10.5px;margin-top:2px}"
+    ".cp-post{min-width:0}"
+    ".cp-post b{display:block;color:var(--text);font-weight:600;font-size:12.5px;line-height:1.4;"
+    "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
+    ".cp-post span{display:block;color:var(--text-2);font-size:12px;line-height:1.45;margin-top:2px;"
+    "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
+    ".cp-post b.warn{color:var(--yel)}"
+    ".cp-kind{font-size:11px;padding:2px 9px;border-radius:20px;white-space:nowrap;"
+    "background:var(--bg-4);color:var(--muted)}"
+    ".cp-photo{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap}"
+    # Ячейка площадки — тот же значок, что и в легенде.
+    ".cp-mark{width:34px;height:26px;margin:0 auto;border-radius:6px;display:flex;"
+    "align-items:center;justify-content:center;font-size:12px;font-weight:800;"
+    "border:1px solid transparent}"
     ".cp-mark.set{background:var(--grn-bg);color:var(--grn);border-color:rgba(16,185,129,.3)}"
     ".cp-mark.wait{background:var(--acc-bg);color:var(--acc);border-color:rgba(91,124,250,.3)}"
     ".cp-mark.off{color:var(--dim);border:1px dashed var(--border-2)}"
     ".cp-mark.err{background:var(--red-bg);color:var(--red);border-color:rgba(239,68,68,.35)}"
     ".cp-mark.live{background:var(--grn);color:#fff}"
+    ".cp-todo{font-size:11.5px;color:var(--dim);line-height:1.4;display:block}"
+    ".cp-todo.fix{color:var(--yel);font-weight:600}"
+    ".cp-todo.err{color:var(--red);font-weight:600}"
+    ".cp-todo a{color:var(--acc);text-decoration:none;font-weight:600}"
+    ".cp-todo a:hover{text-decoration:underline}"
     # Строка состояния наверху раздела.
     ".cp-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap}"
     ".cp-bar-dot{width:9px;height:9px;border-radius:50%;background:var(--grn);"
@@ -1469,73 +1450,26 @@ _CROSSPOST_CALENDAR_CSS = (
     ".cp-bar-meta{display:flex;gap:6px 18px;flex-wrap:wrap;font-size:12.5px;"
     "color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}"
     ".cp-bar-meta b{color:var(--text-2);font-family:var(--mono);font-weight:700}"
-    # Легенда значков — одной строкой над сеткой.
+    # Легенда значков — одной строкой над таблицей.
     ".cp-legend{display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:12px;"
-    "color:var(--muted);padding:2px 0 6px}"
+    "color:var(--muted);padding:2px 0 8px}"
     ".cp-legend span{display:inline-flex;align-items:center;gap:7px}"
-    ".cp-legend i{width:22px;height:22px;border-radius:6px;display:inline-flex;"
-    "align-items:center;justify-content:center;font-size:11px;font-weight:800;font-style:normal;"
-    "border:1px solid transparent}"
-    # Панель выбранного поста.
-    ".cp-open{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:baseline}"
-    ".cp-open-when{font-family:var(--mono);font-size:15px;font-weight:800;color:var(--text)}"
-    ".cp-open-sub{font-size:12px;color:var(--muted)}"
-    ".cp-open-text{font-size:13px;color:var(--text-2);line-height:1.6;margin-top:10px;"
-    "white-space:pre-wrap}"
-    ".cp-open-nets{display:flex;flex-direction:column;gap:6px;margin-top:12px}"
-    ".cp-open-net{display:flex;align-items:center;gap:10px;padding:8px 12px;"
-    "border-radius:var(--r-sm);border:1px solid var(--border);background:var(--bg-2);font-size:12.5px}"
-    ".cp-open-net b{font-weight:600;color:var(--text)}"
-    ".cp-open-net .st{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--muted)}"
-    ".cp-open-net.set .st,.cp-open-net.live .st{color:var(--grn)}"
-    ".cp-open-net.wait .st{color:var(--acc)}"
-    ".cp-open-net.err .st{color:var(--red)}"
-    ".cp-open-net a{color:var(--acc);text-decoration:none;font-size:11.5px}"
-    "@media(max-width:1100px){.cp-dow{display:none}"
-    '[class*="st-key-cp-cell-"]{min-height:auto}}'
+    ".cp-legend .cp-mark{width:22px;height:22px;margin:0}"
+    "@media(max-width:900px){table.cp-plan{table-layout:auto}}"
 )
-
-
-def crosspost_marks(nets: list[dict]) -> str:
-    """Ряд значков площадок в плитке дня: ТГ ⏱ · ВК ✓ · ОК ✓ · МАКС ⏱."""
-    if not nets:
-        return ""
-    cells = "".join(
-        f'<span class="cp-mark {esc(n["cls"])}" title="{esc(n["name"])} — {esc(n["note"])}">'
-        f'{esc(n["name"] if len(n["name"]) <= 4 else n["name"][:3])}</span>'
-        for n in nets
-    )
-    return f'<div class="cp-marks">{cells}</div>'
-
-
-def crosspost_day_head(cell: dict) -> str:
-    """Шапка ячейки дня: число, день недели и подпись «сегодня»/«завтра»."""
-    tag = ""
-    if cell["is_today"]:
-        tag = '<span class="cp-cell-tag now">сегодня</span>'
-    elif cell["tag"]:
-        tag = f'<span class="cp-cell-tag">{esc(cell["tag"])}</span>'
-    elif len(cell["posts"]) > 1:
-        tag = f'<span class="cp-cell-tag">{len(cell["posts"])} поста</span>'
-    num_cls = "cp-cell-num today" if cell["is_today"] else "cp-cell-num"
-    return (f'<div class="cp-cell-h"><span class="{num_cls}">{esc(cell["num"])}</span>'
-            f'<span class="cp-cell-tag">{esc(cell["dow"])}</span>{tag}</div>')
-
-
-def crosspost_empty_day(text: str = "постов нет") -> str:
-    return f'<div class="cp-cell-empty">{esc(text)}</div>'
 
 
 def crosspost_legend() -> str:
     """
     Легенда всегда на виду: без неё галочка и часы читаются одинаково, и
-    раздел выглядит шифром. Ровно четыре состояния, словами.
+    раздел выглядит шифром. Пять состояний, словами.
     """
     items = (
         ("set", "✓", "отложка стоит в соцсети"),
         ("wait", "⏱", "отправит Click в час выхода"),
         ("off", "·", "ещё не сформировано"),
         ("err", "✕", "ошибка — пост туда не ушёл"),
+        ("live", "✓", "уже вышло"),
     )
     body = "".join(
         f'<span><i class="cp-mark {cls}">{esc(mark)}</i> {esc(text)}</span>'
@@ -1557,31 +1491,65 @@ def crosspost_bar(state_text: str, sub_html: str, meta: list[str],
             f'<span class="cp-bar-state">{esc(state_text)}</span>{next_html}</div>{meta_html}')
 
 
-def crosspost_open(view: dict, day_human: str) -> str:
-    """Панель выбранного поста: текст целиком и площадки — словами, не значками."""
-    sub = " · ".join(x for x in (
-        view["kind"] or "", f'{view["photos"]} фото' if view["photos"] else "без фото",
-        f'строка {view["row"]} листа' if view.get("row") else "") if x)
-    nets = "".join(
-        f'<div class="cp-open-net {esc(n["cls"])}"><b>{esc(n["name"])}</b>'
-        + (f'<a href="{esc(n["link"])}" target="_blank">открыть запись ↗</a>' if n["link"] else "")
-        + f'<span class="st">{esc(n["note"])}</span></div>'
-        for n in view["nets"])
-    text = esc(view["full_text"] or "Текста в реестре нет — пост не выйдет.")
-    return (
-        '<div class="cp-open">'
-        f'<span class="cp-open-when">{esc(day_human)}, {esc(view["time"])}</span>'
-        f'<span class="cp-open-sub">{esc(sub)}</span></div>'
-        f'<div class="cp-open-text">{text}</div>'
-        f'<div class="cp-open-nets">{nets}</div>'
+def _crosspost_todo_html(todo: dict, sheet_url: str = "") -> str:
+    """Колонка «что сделать»: тихая подпись или ссылка в таблицу — по делу."""
+    kind = todo.get("kind", "quiet")
+    text = esc(todo.get("text", ""))
+    if todo.get("sheet") and sheet_url:
+        text = f'<a href="{esc(sheet_url)}" target="_blank">{text} ↗</a>'
+    return f'<span class="cp-todo {esc(kind)}">{text}</span>'
+
+
+def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> str:
+    """
+    План строками: когда · тип · пост · фото · площадки · что сделать.
+
+    Колонки площадок приходят из самого реестра (crosspost_plan.columns) —
+    жёсткий набор врал бы: у одного бренда есть Дзен, у другого нет ОК.
+    """
+    cols = plan["columns"]
+    widths = ('<colgroup><col style="width:3px"><col style="width:118px">'
+              '<col style="width:132px"><col>'
+              '<col style="width:56px">'
+              + f'<col style="width:{64 if len(cols) < 5 else 56}px">' * len(cols)
+              + '<col style="width:190px"></colgroup>')
+    head = (
+        '<tr><th class="cp-flag"></th><th>Когда</th><th>Тип</th><th>Пост</th>'
+        '<th class="c">Фото</th>'
+        + "".join(f'<th class="c" title="{esc(c["name"])}">{esc(c.get("short") or c["name"])}</th>'
+                  for c in cols)
+        + '<th>Что сделать</th></tr>'
     )
-
-
-def crosspost_tile_css(rules: list[tuple[str, str]]) -> str:
-    """
-    Тексты постов — переменной на контейнер плитки: content у ::after читает
-    var(--cp-title). Строкой в разметку их не положить, кнопка Streamlit
-    принимает только свою подпись.
-    """
-    body = "".join(f'.st-key-{key}{{--cp-title:{css_text(title)}}}' for key, title in rules)
-    return f"<style>{body}</style>" if body else ""
+    body = []
+    if group_title:
+        body.append(f'<tr class="cp-group"><td colspan="{5 + len(cols) + 1}">'
+                    f'{esc(group_title)}</td></tr>')
+    for view in plan["rows"]:
+        marks = {n["code"]: n for n in view["nets"]}
+        cells = []
+        for col in cols:
+            net = marks.get(col["code"])
+            if not net:
+                # Площадка есть у других постов, а у этого её в реестре нет:
+                # пустая клетка честнее серого значка «не сформировано».
+                cells.append('<td class="c"></td>')
+                continue
+            cells.append(f'<td class="c"><span class="cp-mark {esc(net["cls"])}" '
+                         f'title="{esc(net["name"])} — {esc(net["note"])}">'
+                         f'{esc(net["mark"])}</span></td>')
+        head_cls = ' class="warn"' if view["state"] == "warn" else ""
+        text_html = (f'<b{head_cls}>{esc(view["head"] or "нет текста")}</b>'
+                     + (f'<span>{esc(view["tail"])}</span>' if view["tail"] else ""))
+        body.append(
+            f'<tr class="{"cp-warn" if view["state"] == "warn" else ""}">'
+            f'<td class="cp-flag {esc(view["state"])}"></td>'
+            f'<td class="cp-when">{esc(view["when_day"])} · {esc(view["time"])}'
+            f'<small>{esc(view["when_note"])}</small></td>'
+            f'<td><span class="cp-kind">{esc(view["kind"] or "—")}</span></td>'
+            f'<td class="cp-post">{text_html}</td>'
+            f'<td class="c cp-photo">{("🖼 " + str(view["photos"])) if view["photos"] else "—"}</td>'
+            + "".join(cells)
+            + f'<td>{_crosspost_todo_html(view["todo"], sheet_url)}</td></tr>'
+        )
+    return ('<div class="cp-wrap"><table class="cp-plan">' + widths + '<thead>' + head
+            + '</thead><tbody>' + "".join(body) + '</tbody></table></div>')

@@ -76,7 +76,7 @@ _settle_imports()
 
 import apptime  # noqa: E402
 import content_plan  # noqa: E402
-import crosspost_calendar  # noqa: E402
+import crosspost_plan  # noqa: E402
 import crosspost_state as cps  # noqa: E402
 import gis_playwright as gis  # noqa: E402
 import kp_audit  # noqa: E402
@@ -3423,11 +3423,11 @@ def _crosspost_bar(project_id: str, config: dict, posts: list[dict],
     и списка в середине – и «работает ли автопостинг» оставалось непонятным.
     """
     sched = _crosspost_scheduler_state(project_id)
-    nearest = crosspost_calendar.next_out(posts, state, apptime.now().isoformat())
+    nearest = crosspost_plan.next_out(posts, state, apptime.now().isoformat())
     if nearest:
         when = apptime.to_local(nearest["when"])
-        day = (crosspost_calendar.relative_day(when.date(), apptime.now().date())
-               or crosspost_calendar.human_day(when.date()))
+        day = (crosspost_plan.relative_day(when.date(), apptime.now().date())
+               or crosspost_plan.human_day(when.date()))
         who = ", ".join(dict.fromkeys(n["name"] for n in nearest["pending"]))
         sub = (f'Ближайший пост – <b>{T.esc(day)} в {T.esc(when.strftime("%H:%M"))}</b>, '
                f'{T.esc(who)}')
@@ -3470,123 +3470,34 @@ def _crosspost_attention(upcoming: list[dict], state: dict) -> None:
             post = tr["post"]
             who = f' · {cps.network_ru(tr["network"])}' if tr.get("network") else ""
             d = content_plan.parse_date(post.get("date", ""))
-            when = crosspost_calendar.human_day(d) if d else post.get("date", "")
+            when = crosspost_plan.human_day(d) if d else post.get("date", "")
             st.write(f'**{when}**{who} – {tr["what"]}')
         if len(troubles) > 12:
             st.caption(f"…и ещё {len(troubles) - 12}. Остальное видно в календаре "
                        "жёлтыми и красными плитками.")
 
 
-def _crosspost_day_cell(project_id: str, cell: dict, idx: int,
-                        weekend: bool = False) -> None:
-    """Ячейка дня: шапка с числом и плитки постов. Плитка – это сама кнопка."""
-    flag = ("today" if cell["is_today"]
-            else "we" if weekend
-            else "past" if cell["is_past"]
-            else "day")
-    with st.container(border=True, key=f"cp-cell-{flag}-{idx}"):
-        html(T.crosspost_day_head(cell))
-        if not cell["posts"]:
-            html(T.crosspost_empty_day())
-            return
-        for j, view in enumerate(cell["posts"]):
-            with st.container(key=f"cp-tile-{view['state']}-{idx}-{j}"):
-                label = f'{view["time"]} · {view["kind"] or "пост"}'
-                if st.button(label, key=f"cp-open-{project_id}-{idx}-{j}",
-                             use_container_width=True,
-                             help="Открыть пост: текст целиком и где он выйдет"):
-                    st.session_state[f"cp-open-{project_id}"] = view["key"]
-                    st.rerun()
-                html(T.crosspost_marks(view["nets"]))
-
-
-def _crosspost_calendar(project_id: str, posts: list[dict], state: dict,
-                        today: date, horizon: date) -> None:
+def _crosspost_plan_table(project_id: str, config: dict, posts: list[dict],
+                          state: dict, today: date, horizon: date) -> None:
     """
-    План – сетка недель: видно ритм (где пусто, где два поста подряд), а не
-    список одинаковых строк. Показываем столько недель, сколько нужно до
-    горизонта плана (он тянется до конца месяца, см. _crosspost_horizon).
+    План строками: когда · тип · пост · фото · площадки · что сделать.
 
-    Рабочая неделя – пять дней. Суббота и воскресенье уходят в узкую колонку
-    справа и показываются, только когда на выходной действительно стоит пост:
-    отложку на выходные ставят редко, обычно перед праздниками, а места
-    пустые сб и вс съедали треть ширины.
+    Был календарь недель, и на макете он читался хорошо — но на живом реестре
+    постов два-три в неделю, и сетка стояла пустой: две трети экрана «постов
+    нет», а текст в узких плитках рвался по слогам. Строки плотнее, а колонки
+    площадок дают то же, ради чего затевался календарь: статус ВК, ОК, ТГ и
+    МАКС виден сразу и сравнивается по вертикали.
     """
-    weeks = max(2, min(6, (horizon - (today - timedelta(days=today.weekday()))).days // 7 + 1))
-    cal = crosspost_calendar.build(posts, state, today, weeks=weeks)
+    plan = crosspost_plan.rows(posts, state, today, horizon)
+    if not plan["rows"]:
+        html(T.empty("📭", "Впереди постов нет",
+                     "Появятся здесь, как только в реестре будут строки с будущей датой."))
+        return
 
-    # Текст поста в плитке – CSS-переменной: подпись кнопки Streamlit это одна
-    # строка, а в плитке нужно ещё превью (см. T.crosspost_tile_css).
-    rules, idx = [], 0
-    for week in cal["weeks"]:
-        for cell in list(week["days"]) + list(week["weekend"]):
-            for j, view in enumerate(cell["posts"]):
-                rules.append((f"cp-tile-{view['state']}-{idx}-{j}", view["title"]))
-            idx += 1
-    html(T.crosspost_tile_css(rules))
-
-    html(f'<div class="card-title">🗓 План: {T.esc(cal["title"])}</div>')
+    html(f'<div class="card-title">🗓 План: {T.esc(plan["title"])}</div>')
     html(T.crosspost_legend())
-
-    widths = [1, 1, 1, 1, 1] + ([0.75] if cal["has_weekend"] else [])
-    names = ("Понедельник", "Вторник", "Среда", "Четверг", "Пятница")
-    head = st.columns(widths, gap="small")
-    for col, name in zip(head, names):
-        with col:
-            html(f'<div class="cp-dow">{name}</div>')
-    if cal["has_weekend"]:
-        with head[5]:
-            html('<div class="cp-dow we">Выходные</div>')
-
-    idx = 0
-    for week in cal["weeks"]:
-        cols = st.columns(widths, gap="small")
-        for col, cell in zip(cols, week["days"]):
-            with col:
-                _crosspost_day_cell(project_id, cell, idx)
-            idx += 1
-        if cal["has_weekend"]:
-            with cols[5]:
-                if week["weekend"]:
-                    for cell in week["weekend"]:
-                        _crosspost_day_cell(project_id, cell, idx, weekend=True)
-                        idx += 1
-                else:
-                    html(T.crosspost_empty_day(f'{week["weekend_empty"]} · постов нет'))
-
-    if not cal["has_weekend"]:
-        st.caption("Суббота и воскресенье в сетке не показываются – они появятся "
-                   "отдельной колонкой, если в реестре будет пост на выходной "
-                   "(например, перед праздниками).")
-
-
-def _crosspost_open_block(project_id: str, config: dict, posts: list[dict],
-                          state: dict) -> None:
-    """Выбранный пост: текст целиком и площадки словами, а не значками."""
-    key = st.session_state.get(f"cp-open-{project_id}")
-    if not key:
-        return
-    post = next((p for p in posts if cps.post_key(p) == key), None)
-    if post is None:
-        # План перечитали, текст поста поправили – ключ разошёлся. Молча
-        # закрываем: ругаться не на что, человек просто видит календарь.
-        st.session_state.pop(f"cp-open-{project_id}", None)
-        return
-
-    view = crosspost_calendar.post_view(post, state)
-    day = content_plan.parse_date(post.get("date", ""))
-    with st.container(border=True):
-        html(T.crosspost_open(view, crosspost_calendar.human_day(day) if day
-                              else post.get("date", "")))
-        c1, c2 = st.columns([2, 5])
-        if c1.button("Закрыть", key=f"cp-close-{project_id}", use_container_width=True):
-            st.session_state.pop(f"cp-open-{project_id}", None)
-            st.rerun()
-        url = (config.get("planSheetUrl") or "").strip()
-        if url:
-            c2.link_button(f"Открыть таблицу ↗ (строка {view['row']})", url)
-        else:
-            c2.caption("«Сформировать заново» – в группе «Журналы и весь реестр» внизу.")
+    html(T.crosspost_table(plan, sheet_url=(config.get("planSheetUrl") or "").strip(),
+                           group_title=f'Впереди — {crosspost_plan.plural(len(plan["rows"]), "пост", "поста", "постов")}'))
 
 
 def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
@@ -3660,8 +3571,7 @@ def tab_crosspost(project_id: str, config: dict) -> None:
 
     _crosspost_bar(project_id, config, posts, upcoming, state, horizon)
     _crosspost_attention(upcoming, state)
-    _crosspost_calendar(project_id, posts, state, today, horizon)
-    _crosspost_open_block(project_id, config, posts, state)
+    _crosspost_plan_table(project_id, config, posts, state, today, horizon)
     _crosspost_tools(project_id, config, posts, state, today, upcoming)
 
     # Честно про границы: что работает и при каких условиях.

@@ -10,19 +10,7 @@
         },
         {
           "name": "__oneme_auth",
-          "value": "{\"token\":\"An_Sx6HQ9HDiKh8_7rDUly5NDwdaSrLtyBwSGEN5_I4PksgoJauk-RqjDlpl5oIAHy3tJrFqaCzJQtorsko5xYR4wbd2VA_YCR6QvEZJjJomYQYM85D2DsYbtphU_nlmsbWTivlh7BQTaEhzgnR3R-T6FIYD8n8RQ-wKnLyf1LVlfiPqFGh6awJIGTJCGC7bLDxzjpWCD4PfL83Q-PpJ5drHBBOKmZv5KOcOIsTeXdg8lMb5szpeHhbTp2M4_wW6KJPFVyK80YqKabbqb_qA2MAYTZvzSamJuYKj-Aqq5KhltRs9L4QUMD3cKdmXU2Fe8H-7kso0r-44Uo3X6zXyF1vbKEXuCrhojwMlRv9DPZBrTNKzSwx5UkzyYfV88UF5CONGRZS3-Ql2JGmLNgPyHS8aOEEo4XeJLWTsxTd5l1oYNkruqt6yeLz7tfDB3rEUpFfB305jCtpKji21-n3jNWLIj73EuNyWROC-XEOKg9XaSwDfOmjQawUhUGmQxKYu6zFkMKiK4J47ZFkuoAtRvnjvKmuz-lRadptXhoaNpBORP1pM4-w3waVOoncuzDZE6bi_7j3ffE3p7or05T-IPyKetnshycKOKFdL9Ux2_m_KQ5cnjfND3AUXTfH6Gq0LTjrYDN7pUdpTxVcMnKlN5-FtnDk2gVyANmli0pdYCgGQFkL0mpq70vJ_RDCI9Uj9EXXD40Q\",\"viewerId\":158791662}"
-        },
-        {
-          "name": "__server_config_overrides__",
-          "value": "{}"
-        },
-        {
-          "name": "__oneme_theme",
-          "value": "{\"colorScheme\":\"system\",\"colorTheme\":\"space\",\"fontScale\":\"large\"}"
-        },
-        {
-          "name": "__oneme_device_id",
-          "value": "dc76d18e-2ad7-4bb9-a3e6-be6c72973f52"
+          "value": "{\"token\":\"An_Sx6HQ9HDi8SSD8GznS27k15Q7F1CbIzT8mTII12uK9zEoZh5VspOrlEwOw9m-cE5uRgCHfU7nG7Iv3Zo9XAR9DiyMF5UlmDSFxysDNDrCDGMuFupt_QMfL-qP_N2tk1qx8GsPardIBvFKflBNPxoHvwbGE_43M13YuZHJTTQPSKUAbeKf5W9Uy_pIRSVDtySgPAezqbLy451qCKwtv27zbDh4yhtExLqvQ8fZogFC-XlKtoyXOa2jWn3trbAszvVLUWgKoKao2mbvGfX0PZqRCYK8SHZdJyIVRV5_VquC39EMywbZxNS9r31tQ-qbe9iGIxt2-S6RMn0PrPcyN7c5yqXJtWz9YFfs5urMzD9IBO-lTBwTpn-Rtfqz-lWvA95qHiX6qzNwpnIaiNUnRHikCnr7BJpQap1f9DvkoMNlyO9U49SUaYqfM-TlatbZiyl7lxX_mDmrnh6ttDV92pwjjBUlLZq1AIR95BjLQUhY6I3ZZSPbPUcAxo3N7fFjlAKFMDmFhwejWUEOWAR18MBwc9kwYOJ_BUspOqCIl_t3ZOmtBq16unc3vbp9hCiE31-o5IZqRYKybnD-4XqHcmZLBadikfEC2a9AwtNItkNaW4NKnMo__VRBSAY9sQpwYTmfSK92ein072mML2NGz8AjmCRY35etZ7C9a8Eaae_W1WAHYueA5tVGm2DGZ1gar2X40w8\",\"viewerId\":158791662}"
         },
         {
           "name": "__oneme_aside_width",
@@ -33,8 +21,20 @@
           "value": "f890e38e-91e9-457a-938f-e0cc69cd309a"
         },
         {
+          "name": "__server_config_overrides__",
+          "value": "{}"
+        },
+        {
           "name": "__oneme_informer",
           "value": "{\"lastShowedBannerId\":null,\"banners\":{}}"
+        },
+        {
+          "name": "__oneme_theme",
+          "value": "{\"colorScheme\":\"system\",\"colorTheme\":\"space\",\"fontScale\":\"large\"}"
+        },
+        {
+          "name": "__oneme_device_id",
+          "value": "dc76d18e-2ad7-4bb9-a3e6-be6c72973f52"
         }
       ]
     }

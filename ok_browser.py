@@ -131,12 +131,32 @@ SEL = {
     "photo_btn": ('[role="dialog"] >> text="Фото"', ".js-photos-btn"),
     "upload_photo": ('text="Загрузить фото"', 'text="Загрузить"'),
     "file_input": 'input[type="file"]',
-    # Галочка «Время публикации» превращает «Поделиться» в «Сохранить».
-    "schedule_toggle": ('text="Время публикации"', 'text="Время публикации "'),
-    "date_input": ('[role="dialog"] input[value*="."]',
-                   'input[placeholder*="ата"]', 'input[name="date"]'),
-    "time_selects": '[role="dialog"] select',
-    "submit_scheduled": ('button:has-text("Сохранить")', 'text="Сохранить"'),
+    # Галочка «Время публикации» и поля под ней. Разметка снята заказчицей
+    # с живой формы 12.08.2026 – поэтому здесь ИМЕНА полей, а не подписи:
+    #   <input name="timer" class="irc gpf-timer-post" type="checkbox">
+    #   <span class="irc-vis __n"></span>          ← нарисованный квадратик
+    #   <span class="irc_l">Время публикации</span>
+    # Сам input невидим, его подменяет span.irc-vis: щёлкать надо по нему
+    # или по label, а не по input – по невидимому Playwright не попадёт.
+    "schedule_checkbox": 'input[name="timer"], input.gpf-timer-post',
+    "schedule_toggle": ('label:has(input[name="timer"]) span.irc-vis',
+                        'label:has(input[name="timer"])',
+                        'span.irc_l:has-text("Время публикации")',
+                        'text="Время публикации"'),
+    # Поля даты и времени: имена st.layer.* – самые устойчивые признаки.
+    "date_input": ('input[name="st.layer.date"]', "input.pform_delay_form_date",
+                   "input.js-time-editor-datepicker"),
+    "hours_select": ('select[name="st.layer.hours"]', "select.pform_delay_form_hh",
+                     "select.js-time-editor-select-hh"),
+    "mins_select": ('select[name="st.layer.mins"]', "select.pform_delay_form_mm",
+                    "select.js-time-editor-select-mm"),
+    # Одна и та же кнопка: без галочки это «Поделиться» (публикует сейчас),
+    # с галочкой её подпись меняется на «Сохранить» (ставит отложку).
+    # data-save="Сохранить" – ровно об этом, из разметки заказчицы:
+    #   <button data-l="t,button.submit" data-save="Сохранить" title="Поделиться"
+    #           class="posting_submit button-pro js-publish-btn">Сохранить</button>
+    "submit_scheduled": ("button.js-publish-btn[data-save]", "button.js-publish-btn",
+                         'button:has-text("Сохранить")'),
     "submit_now": ('button:has-text("Поделиться")', "button.posting_submit.js-publish-btn"),
     # Ответ самого ОК: «Тема опубликуется 13.08.2026 в 08:59». Это и есть
     # правда о том, встала отложка или нет – урок, выученный на ВК.
@@ -1084,6 +1104,86 @@ def _click_first(page, candidates, timeout: int = 8_000) -> str:
     return ""
 
 
+def _round_to_five(when: datetime) -> datetime:
+    """
+    Округлить минуты ВВЕРХ до кратных пяти – других ОК не принимает.
+
+    В его списке минут ровно 00, 05, 10 … 55 (разметка снята с живой формы
+    12.08.2026). Отложку на 15:08 поставить нельзя никак. Округляем вверх,
+    а не вниз: пост не должен выйти раньше, чем просили. Для настоящих
+    постов (11:00, 09:30) это ничего не меняет – они уже кратные.
+    """
+    from datetime import timedelta
+    if when.minute % 5 == 0:
+        return when.replace(second=0, microsecond=0)
+    add = 5 - when.minute % 5
+    return (when + timedelta(minutes=add)).replace(second=0, microsecond=0)
+
+
+def _turn_on_schedule(page, log: Callable[[str], None]) -> bool:
+    """
+    Включить «Время публикации». True – включилось (появилось поле даты).
+
+    Сама галочка невидима: ОК рисует вместо неё span.irc-vis, а input
+    прячет. По невидимому Playwright не кликает, поэтому щёлкаем по
+    нарисованному квадратику или по label. Если и это не вышло – ставим
+    галочку изнутри страницы и сообщаем об этом форме событием change,
+    иначе она изменения не заметит.
+
+    Успех проверяем не по клику, а по ПОЯВИВШЕМУСЯ полю даты: галочка
+    могла «нажаться» мимо, и тогда всё дальнейшее пошло бы впустую.
+    """
+    def ready() -> bool:
+        return bool(_first_present(page, SEL["date_input"]))
+
+    if ready():
+        return True
+    if _click_first(page, SEL["schedule_toggle"], timeout=6_000):
+        page.wait_for_timeout(900)
+        if ready():
+            return True
+    try:
+        page.evaluate(
+            """(sel) => {
+                const box = document.querySelector(sel);
+                if (!box) return false;
+                if (!box.checked) {
+                    box.checked = true;
+                    box.dispatchEvent(new Event('change', {bubbles: true}));
+                    box.dispatchEvent(new Event('click', {bubbles: true}));
+                }
+                return true;
+            }""", SEL["schedule_checkbox"])
+    except Exception:  # noqa: BLE001
+        return False
+    page.wait_for_timeout(900)
+    if ready():
+        log("  галочку «Время публикации» включил изнутри страницы")
+        return True
+    return False
+
+
+def who_am_i(page) -> str:
+    """
+    Под каким аккаунтом мы вошли. Пусто – определить не вышло.
+
+    Появилось после дня разбирательств: заказчица собрала куки под одним
+    брендом, а пыталась работать в группе другого – и Click упирался в
+    «не нашли форму», хотя дело было в чужом аккаунте, у которого в этой
+    группе просто нет прав. Имя видно в шапке ОК, и сказать его дешевле,
+    чем гадать.
+    """
+    try:
+        return (page.evaluate(
+            """() => {
+                const el = document.querySelector('a[data-l*="userPage"], '
+                    + '.toolbar_nav_a .tico_tx, .user-name, [id$="_navMenu"] .tico_tx');
+                return el ? (el.textContent || '').trim() : '';
+            }""") or "").strip()[:60]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _editor_open(page, timeout_ms: int = 4_000) -> str:
     """Селектор открывшегося поля ввода темы. Пусто – окно не открылось."""
     for candidate in SEL["text"]:
@@ -1315,14 +1415,24 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                         "error": "ОК открыл страницу как гостю – сессия не действует. "
                                  "Войдите заново в «Настройках» → «Вход в ОК»."}
 
+            # Под кем вошли – в лог всегда. Чужая сессия выглядит как
+            # «не нашли форму»: у аккаунта другого бренда в этой группе
+            # просто нет прав. День на это уже потрачен.
+            who = who_am_i(page)
+            if who:
+                log(f"Вошли в ОК как: {who}")
+
             log("Открываю форму поста («Создать новую тему»)")
             if not _open_composer(page, log):
                 shot = _debug_shot(project_id, page, "no-composer")
                 return {"ok": False,
-                        "error": "Не нашли «Создать новую тему» на странице группы. "
-                                 "Посмотрите снимок ниже: если поле для новой темы на "
-                                 "нём есть, значит ОК переименовал кнопку – пришлите "
-                                 "снимок, поправлю за минуту", "shot": shot}
+                        "error": "Не нашли «Создать новую тему» на странице группы"
+                                 + (f". Вошли как «{who}» – ЭТОТ ЛИ аккаунт ведёт "
+                                    "группу? Куки другого бренда открывают группу "
+                                    "как чужую, и формы в ней нет" if who else "")
+                                 + ". Если на снимке ниже поле для новой темы есть, "
+                                   "значит ОК переименовал кнопку – пришлите снимок",
+                        "shot": shot}
             # _open_composer уже дождалась поля – берём его тем же способом,
             # чтобы не разъехались два разных представления об «открылось».
             text_sel = _editor_open(page)
@@ -1350,12 +1460,18 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             # Отложка: галочка «Время публикации», под ней поле даты и два
             # выпадающих списка – часы и минуты. Кнопка внизу при этом
             # меняется с «Поделиться» на «Сохранить».
+            # ОК даёт выбирать минуты только кратные пяти: в его списке
+            # 00, 05, 10 … 55. Отложку на 15:08 он принять не может в
+            # принципе – округляем ВВЕРХ, чтобы пост не вышел раньше, чем
+            # просили. Для реальных постов (11:00, 09:30) это ничего не меняет.
+            when = _round_to_five(when)
             log(f"Ставлю время публикации {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
-            if not _click_first(page, SEL["schedule_toggle"], timeout=8_000):
+
+            if not _turn_on_schedule(page, log):
                 shot = _debug_shot(project_id, page, "no-schedule")
                 return {"ok": False,
-                        "error": "Не нашли галочку «Время публикации» в форме ОК", "shot": shot}
-            page.wait_for_timeout(1_000)
+                        "error": "Не нашли галочку «Время публикации» в форме ОК "
+                                 "(или она не включилась)", "shot": shot}
 
             date_sel = _first_present(page, SEL["date_input"])
             if not date_sel:
@@ -1366,20 +1482,22 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             page.keyboard.press("Enter")
             page.wait_for_timeout(600)
 
-            # Часы и минуты – обычные <select>, их выбираем значением, а не
-            # печатью: так надёжнее и не зависит от ведущих нулей.
-            times = page.locator(SEL["time_selects"])
-            if times.count() < 2:
-                shot = _debug_shot(project_id, page, "no-time")
-                return {"ok": False,
-                        "error": "Не нашли выпадающие списки часов и минут в форме ОК", "shot": shot}
-            for index, value in ((times.count() - 2, f"{when.hour:02d}"),
-                                 (times.count() - 1, f"{when.minute:02d}")):
-                picker = times.nth(index)
+            # Часы и минуты – обычные <select> с именами st.layer.hours и
+            # st.layer.mins. Выбираем значением, а не печатью.
+            for what, key, value in (("часы", "hours_select", f"{when.hour:02d}"),
+                                     ("минуты", "mins_select", f"{when.minute:02d}")):
+                sel = _first_present(page, SEL[key])
+                if not sel:
+                    shot = _debug_shot(project_id, page, "no-time")
+                    return {"ok": False,
+                            "error": f"Не нашли список «{what}» в форме ОК", "shot": shot}
                 try:
-                    picker.select_option(value)
-                except Exception:  # noqa: BLE001 – бывает без ведущего нуля
-                    picker.select_option(str(int(value)))
+                    page.select_option(sel, value)
+                except Exception as e:  # noqa: BLE001
+                    shot = _debug_shot(project_id, page, "bad-time")
+                    return {"ok": False,
+                            "error": f"ОК не принял {what} «{value}»: {str(e).split(chr(10))[0]}",
+                            "shot": shot}
                 page.wait_for_timeout(300)
 
             log("Сохраняю отложку")

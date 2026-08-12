@@ -989,6 +989,29 @@ def test_ok_schedule_flow() -> None:
     check("подтверждённый класс формы на месте",
           any("pf-head_itx_a" in s for s in ok.SEL["create_post"]))
 
+    # Разметка формы снята заказчицей с живой страницы 12.08.2026. Имена
+    # полей устойчивее подписей – на них и опираемся.
+    check("галочка ищется по имени input", "timer" in ok.SEL["schedule_checkbox"])
+    check("дата – по имени st.layer.date",
+          any("st.layer.date" in s for s in ok.SEL["date_input"]))
+    check("часы – по имени st.layer.hours",
+          any("st.layer.hours" in s for s in ok.SEL["hours_select"]))
+    check("минуты – по имени st.layer.mins",
+          any("st.layer.mins" in s for s in ok.SEL["mins_select"]))
+
+    # ОК принимает минуты только кратные пяти: в его списке 00, 05 … 55.
+    # Округляем ВВЕРХ – пост не должен выйти раньше, чем просили.
+    from datetime import datetime as _dt
+    check("15:08 → 15:10", ok._round_to_five(_dt(2026, 8, 12, 15, 8)) == _dt(2026, 8, 12, 15, 10))
+    check("15:00 не трогаем", ok._round_to_five(_dt(2026, 8, 12, 15, 0)) == _dt(2026, 8, 12, 15, 0))
+    check("09:30 не трогаем", ok._round_to_five(_dt(2026, 8, 12, 9, 30)) == _dt(2026, 8, 12, 9, 30))
+    check("15:57 → 16:00", ok._round_to_five(_dt(2026, 8, 12, 15, 57)) == _dt(2026, 8, 12, 16, 0))
+    check("23:58 → следующий день 00:00",
+          ok._round_to_five(_dt(2026, 8, 12, 23, 58)) == _dt(2026, 8, 13, 0, 0))
+    check("округляем только вверх, никогда вниз",
+          all(ok._round_to_five(_dt(2026, 8, 12, 10, m)) >= _dt(2026, 8, 12, 10, m)
+              for m in range(60)))
+
 
 def test_plan_horizon_and_past() -> None:
     """

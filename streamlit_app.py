@@ -3739,16 +3739,8 @@ def _crosspost_channels_block(project_id: str, config: dict) -> None:
                                        value=config.get("maxChatId", ""),
                                        key=f"cp-max-{project_id}"),
         }
-        # Ссылка на канал в веб-версии МАКС – для РОДНОЙ отложки. У бота
-        # отложки нет вовсе (проверено по документации), он шлёт «сейчас», и
-        # тогда Click обязан работать в час выхода. По этой ссылке отложку
-        # держит сам МАКС, как ВК и ОК держат свои.
-        vals["maxWebUrl"] = st.text_input(
-            "МАКС: ссылка на канал в веб-версии (для отложки)",
-            value=config.get("maxWebUrl", ""), key=f"cp-maxweb-{project_id}",
-            placeholder="https://web.max.ru/-70916890460398",
-            help="Откройте канал на web.max.ru и скопируйте адрес из строки браузера. "
-                 "По нему Click поставит отложку, которую держит сам МАКС.")
+        st.caption("Ссылка на канал МАКС для отложки – в «Настройках», блок "
+                   "«🔒 МАКС (кросспостинг)»: там же, где ссылки ВК и ОК.")
         if any(vals[k].strip() != (config.get(k) or "") for k in vals):
             config.update({k: v.strip() for k, v in vals.items()})
             save_config(project_id)
@@ -4295,6 +4287,9 @@ def tab_settings(project_id: str, config: dict) -> None:
     _ok_login_block(project_id, config)
 
     st.divider()
+    _max_login_block(project_id, config)
+
+    st.divider()
     _kp_sheet_settings_block(project_id, config)
 
     st.divider()
@@ -4661,6 +4656,42 @@ def _gis_login_block(project_id: str, config: dict) -> None:
         st.session_state.pop("gis_flow", None)
         st.session_state.pop("gis_state", None)
         st.rerun()
+
+
+def _max_login_block(project_id: str, config: dict) -> None:
+    """
+    МАКС: ссылка на канал и состояние сессии.
+
+    Живёт рядом с «Вход в ВК» и «Вход в ОК» нарочно. Сначала это поле
+    стояло во вкладке «Кросспостинг», среди каналов мессенджеров – и
+    заказчица искала его в «Настройках», где лежат ссылки двух других
+    сетей. Логично искала: одинаковые вещи должны лежать в одном месте.
+
+    Кнопки «Войти» здесь нет и быть не может: МАКС не пускает
+    автоматический браузер – он не рисует проверку «вы не робот» вовсе.
+    Вход только через файл сессий, который делает VHOD-VK-i-OK.py.
+    """
+    import max_browser
+
+    html('<div class="card-title">🔒 МАКС (кросспостинг)</div>')
+    url = st.text_input("Ссылка на канал МАКС в веб-версии",
+                        value=config.get("maxWebUrl", ""),
+                        key=f"set-maxweb-{project_id}",
+                        placeholder="https://web.max.ru/-70916890460398",
+                        help="Откройте канал на web.max.ru и скопируйте адрес из "
+                             "строки браузера. По нему Click поставит отложку, "
+                             "которую держит сам МАКС.")
+    if url.strip() != (config.get("maxWebUrl") or ""):
+        config["maxWebUrl"] = url.strip()
+        save_config(project_id)
+
+    if max_browser.has_saved_session(project_id):
+        st.success("Сессия МАКС сохранена – отложки будут ставиться без повторного входа.")
+    else:
+        st.warning("Сессии МАКС нет. Войти кнопкой отсюда нельзя: МАКС не пускает "
+                   "автоматический браузер – он не показывает ему проверку «вы не "
+                   "робот». Запустите VHOD-VK-i-OK.py на своём компьютере и "
+                   "загрузите файл сессий в блоке выше.")
 
 
 def _both_sessions_block(project_id: str) -> None:

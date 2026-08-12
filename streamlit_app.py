@@ -54,8 +54,8 @@ _OWN_MODULES = ("build", "apptime", "paths", "projects_data", "repo_store", "ui_
                 # исправленном коде, и оба раза мы гадали, дело в правке или
                 # в том, что она ещё не доехала. Список меток должен знать
                 # обо ВСЕХ модулях, которые мы правим.
-                "content_plan", "crosspost_state", "crosspost_plan", "crosspost_form",
-                "post_text",
+                "content_plan", "crosspost_plan", "crosspost_state",
+                "crosspost_form", "post_text",
                 "scheduler", "social_session", "vk_social", "ok_browser",
                 "ok_social", "tg_social", "max_social", "max_browser")
 

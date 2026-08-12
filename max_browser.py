@@ -183,48 +183,289 @@ def _set_spin(page, selector: str, value: int) -> bool:
     сверяем, что число встало.
     """
     want = f"{value:02d}"
+
+    def shown() -> int:
+        """Что в поле сейчас. Сперва спрашиваем aria-valuenow – это то,
+        что МАКС думает сам, а не то, что нарисовано."""
+        try:
+            el = page.locator(selector).first
+            for attr in ("aria-valuenow", "aria-valuetext"):
+                raw = el.get_attribute(attr)
+                if raw and raw.strip().lstrip("-").isdigit():
+                    return int(raw.strip())
+            digits = "".join(ch for ch in (el.inner_text() or "") if ch.isdigit())
+            return int(digits) if digits else -1
+        except Exception:  # noqa: BLE001
+            return -1
+
     try:
-        el = page.locator(selector).first
-        el.click()
-        page.keyboard.press("Control+A")
-        page.keyboard.type(want, delay=60)
-        page.wait_for_timeout(300)
-        shown = (el.inner_text() or "").strip()
-        digits = "".join(ch for ch in shown if ch.isdigit())
-        if digits and int(digits) == value:
+        page.locator(selector).first.click()
+        page.wait_for_timeout(150)
+        page.keyboard.type(want, delay=120)   # крутилка перебивает сама
+        page.wait_for_timeout(400)
+        if shown() == value:
             return True
-        # Не поддалось печатью – пробуем стрелками от текущего значения.
-        now = int(digits or 0)
+        # Не поддалось печатью – доводим стрелками от текущего значения.
+        now = shown()
+        if now < 0:
+            return False
         key = "ArrowUp" if value > now else "ArrowDown"
         for _ in range(abs(value - now)):
             page.keyboard.press(key)
-            page.wait_for_timeout(40)
-        shown = (el.inner_text() or "").strip()
-        digits = "".join(ch for ch in shown if ch.isdigit())
-        return bool(digits) and int(digits) == value
+            page.wait_for_timeout(50)
+        return shown() == value
     except Exception:  # noqa: BLE001
         return False
 
 
-def _pick_day(page, when: datetime) -> bool:
-    """Выбрать число в календаре окна «Запланировать пост»."""
+# ────────────────────────────── календарь ──────────────────────────────
+#
+# Первая попытка искала числа внутри [role="dialog"] – и не нашла даже то,
+# что человек видел своими глазами (лог от 12.08.2026: «не нашли число 12»,
+# а 12-е на снимке обведено кружком). Урок тот же, что и на ОК: не держаться
+# за разметку, которой у площадки может не быть. Окно МАКС нарисовано
+# обычными div-ами без единого role, поэтому календарь ищем по существу –
+# по самой сетке чисел.
+#
+# Второе, что здесь важно: в сетке числа повторяются. Хвост прошлого месяца
+# (27…31) и начало следующего (1…6) выглядят так же, как свои. Кликнуть в
+# «1», не разобравшись, – значит поставить пост не в тот месяц. Поэтому
+# берём не «первое подходящее число», а нужную клетку по порядку: свой
+# месяц начинается с первой единицы в сетке.
+
+_JS_CAL = r"""
+const _vis = (el) => {
+  const r = el.getBoundingClientRect();
+  if (r.width < 4 || r.height < 4) return false;
+  const s = getComputedStyle(el);
+  return s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0';
+};
+const _leaves = () => Array.from(document.querySelectorAll('body *')).filter(el => {
+  if (el.children.length) return false;
+  const t = (el.textContent || '').trim();
+  if (!/^\d{1,2}$/.test(t)) return false;
+  const n = parseInt(t, 10);
+  return n >= 1 && n <= 31 && _vis(el);
+});
+const _grid = (leaves) => {
+  for (const leaf of leaves) {
+    let el = leaf;
+    for (let i = 0; i < 8 && el; i++) {
+      let inside = 0;
+      for (const l of leaves) if (el.contains(l)) inside++;
+      if (inside >= 20) return el;
+      el = el.parentElement;
+    }
+  }
+  return null;
+};
+const _RX_MONTH =
+  /(январ|феврал|март|апрел|ма[йя]|июн|июл|август|сентябр|октябр|ноябр|декабр)[а-я]*\s+(\d{4})/i;
+const _header = (grid) => {
+  let el = grid;
+  for (let i = 0; i < 8 && el; i++) {
+    const m = (el.innerText || '').match(_RX_MONTH);
+    if (m) return m[0];
+    el = el.parentElement;
+  }
+  return '';
+};
+const _headerBox = () => {
+  for (const el of Array.from(document.querySelectorAll('body *'))) {
+    if (el.children.length) continue;
+    const t = (el.textContent || '').trim();
+    if (_RX_MONTH.test(t) && t.length < 40 && _vis(el)) return el;
+  }
+  return null;
+};
+"""
+
+_MONTHS = (("январ", 1), ("феврал", 2), ("март", 3), ("апрел", 4),
+           ("мая", 5), ("май", 5), ("июн", 6), ("июл", 7), ("август", 8),
+           ("сентябр", 9), ("октябр", 10), ("ноябр", 11), ("декабр", 12))
+
+
+def month_year(header: str) -> tuple[int, int]:
+    """«Август 2026» → (8, 2026). Не разобрали – (0, 0)."""
+    import re
+
+    low = (header or "").lower()
+    year = re.search(r"(20\d\d)", low)
+    for prefix, num in _MONTHS:
+        if prefix in low:
+            return num, int(year.group(1)) if year else 0
+    return 0, 0
+
+
+def day_index(nums: list[int], day: int) -> int:
+    """
+    Какая клетка сетки – нужное число СВОЕГО месяца.
+
+    Сетка идёт подряд: хвост прошлого месяца, потом свой месяц с единицы,
+    потом начало следующего. Значит первая единица – начало своего месяца,
+    а дальше просто отсчёт. -1, если такой клетки нет.
+    """
     try:
-        return bool(page.evaluate(
-            """(day) => {
-                const wanted = String(day);
-                const nodes = Array.from(document.querySelectorAll(
-                    '[role="dialog"] button, [role="dialog"] td, [role="dialog"] div'));
-                for (const el of nodes) {
-                    if (el.children.length) continue;
-                    if ((el.textContent || '').trim() !== wanted) continue;
-                    if (el.getAttribute('aria-disabled') === 'true') continue;
-                    (el.closest('button, td') || el).click();
+        start = nums.index(1)
+    except ValueError:
+        return -1
+    idx = start + day - 1
+    if 0 <= idx < len(nums) and nums[idx] == day:
+        return idx
+    return -1
+
+
+def _calendar(page) -> dict:
+    """Что сейчас в календаре: заголовок и все числа сетки по порядку."""
+    try:
+        return page.evaluate("() => {" + _JS_CAL + """
+            const leaves = _leaves();
+            const grid = _grid(leaves);
+            if (!grid) return {ok: false, header: '', nums: []};
+            const cells = leaves.filter(l => grid.contains(l));
+            return {ok: true, header: _header(grid),
+                    nums: cells.map(c => parseInt((c.textContent || '').trim(), 10))};
+        }""") or {"ok": False, "header": "", "nums": []}
+    except Exception:  # noqa: BLE001
+        return {"ok": False, "header": "", "nums": []}
+
+
+def _shift_month(page, forward: bool) -> bool:
+    """
+    Перелистнуть месяц. Стрелки у МАКС – без подписей и без role, зато
+    всегда слева и справа от «Август 2026». По этому и находим: ищем то,
+    что можно нажать, на той же высоте, что заголовок.
+    """
+    try:
+        return bool(page.evaluate("(fwd) => {" + _JS_CAL + """
+            const hdr = _headerBox();
+            if (!hdr) return false;
+            const hb = hdr.getBoundingClientRect();
+            const mid = hb.top + hb.height / 2;
+            let best = null, bestGap = 1e9;
+            const able = Array.from(document.querySelectorAll(
+                'button, [role="button"], svg, [class*="arrow"], [class*="chevron"]'));
+            for (const el of able) {
+                if (!_vis(el)) continue;
+                const r = el.getBoundingClientRect();
+                if (Math.abs(r.top + r.height / 2 - mid) > 24) continue;
+                const gap = fwd ? r.left - hb.right : hb.left - r.right;
+                if (gap < -4 || gap > 260 || gap >= bestGap) continue;
+                best = el; bestGap = gap;
+            }
+            if (!best) return false;
+            (best.closest('button, [role="button"]') || best).dispatchEvent(
+                new MouseEvent('click', {bubbles: true, cancelable: true}));
+            return true;
+        }""", forward))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _pick_day(page, when: datetime,
+              log: Callable[[str], None] | None = None) -> tuple[bool, str]:
+    """
+    Выбрать нужный день. Вернём (получилось, чем объяснить неудачу).
+    """
+    log = log or (lambda m: None)
+    seen = ""
+    for _ in range(15):
+        cal = _calendar(page)
+        if not cal.get("ok"):
+            return False, ("в окне МАКС не видно сетки календаря – похоже, "
+                           "окно «Запланировать пост» не открылось")
+        header = cal.get("header") or ""
+        nums = [int(n) for n in cal.get("nums") or []]
+        seen = f"на экране «{header or 'без заголовка'}», чисел в сетке {len(nums)}"
+        month, year = month_year(header)
+        if month and year and (year, month) != (when.year, when.month):
+            forward = (year, month) < (when.year, when.month)
+            log(f"Листаю календарь: с «{header}» на {when.month:02d}.{when.year}")
+            if not _shift_month(page, forward):
+                return False, f"не нашли стрелку перелистывания месяца ({seen})"
+            page.wait_for_timeout(500)
+            continue
+
+        idx = day_index(nums, when.day)
+        if idx < 0:
+            return False, f"в сетке нет числа {when.day} своего месяца ({seen})"
+        try:
+            page.evaluate("(i) => {" + _JS_CAL + """
+                const leaves = _leaves();
+                const grid = _grid(leaves);
+                const cells = leaves.filter(l => grid.contains(l));
+                const cell = cells[i];
+                const hit = cell.closest('button, td, [role="button"]') || cell.parentElement || cell;
+                hit.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+            }""", idx)
+        except Exception as e:  # noqa: BLE001
+            return False, f"не смогли нажать на число {when.day}: {e} ({seen})"
+        return True, ""
+    return False, f"календарь не долистался до нужного месяца ({seen})"
+
+
+def confirm_caption(page) -> str:
+    """Что написано на кнопке «Отправить …» – это ответ самой площадки."""
+    try:
+        return (page.evaluate("""() => {
+            for (const b of Array.from(document.querySelectorAll('button'))) {
+                const t = (b.innerText || '').replace(/\\s+/g, ' ').trim();
+                if (!/^Отправить\\s+\\S/.test(t)) continue;
+                const r = b.getBoundingClientRect();
+                if (r.width < 4 || r.height < 4) continue;
+                return t;
+            }
+            return '';
+        }""") or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _click_confirm(page, caption: str) -> bool:
+    """
+    Нажать ровно ту кнопку, чью надпись мы только что сверили. Иначе можно
+    попасть в другую кнопку со словом «Отправить» и отправить не то.
+    """
+    if caption:
+        try:
+            if page.evaluate("""(cap) => {
+                for (const b of Array.from(document.querySelectorAll('button'))) {
+                    if ((b.innerText || '').replace(/\\s+/g, ' ').trim() !== cap) continue;
+                    const r = b.getBoundingClientRect();
+                    if (r.width < 4 || r.height < 4) continue;
+                    b.click();
                     return true;
                 }
                 return false;
-            }""", when.day))
-    except Exception:  # noqa: BLE001
+            }""", caption):
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+    return bool(_click_first(page, SEL["confirm"], timeout=8_000))
+
+
+def caption_ok(caption: str, when: datetime, today=None) -> bool:
+    """
+    Сходится ли надпись на кнопке с тем, что мы задумали.
+
+    Это последняя проверка перед нажатием: МАКС сам пишет на кнопке, когда
+    он собрался публиковать («Отправить завтра в 13:00»). Если он понял нас
+    иначе – жать нельзя, иначе пост уйдёт не в то время.
+    """
+    import re
+
+    if not caption:
+        return True                      # нечего сверять – не мешаем
+    low = caption.lower()
+    if not re.search(rf"\b0?{when.hour}:{when.minute:02d}\b", low):
         return False
+    today = today or datetime.now().date()
+    days = (when.date() - today).days
+    if days == 0 and "сегодня" in low:
+        return True
+    if days == 1 and "завтра" in low:
+        return True
+    return re.search(rf"\b{when.day}\b(?!\s*:)", low) is not None
 
 
 def schedule_postponed_post(project_id: str, chat_url: str, text: str,
@@ -313,10 +554,12 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
             page.wait_for_timeout(1_200)
 
             log(f"Ставлю {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
-            if not _pick_day(page, when):
+            picked, why = _pick_day(page, when, log)
+            if not picked:
                 return {"ok": False,
                         "shot": _debug_shot(project_id, page, "no-day"),
-                        "error": f"В календаре МАКС не нашли число {when.day}"}
+                        "error": (f"Не смогли выбрать {when.strftime('%d.%m.%Y')} "
+                                  f"в календаре МАКС: {why}. Пост НЕ отправлен")}
             page.wait_for_timeout(600)
 
             for what, key, value in (("часы", "hours", when.hour),
@@ -331,8 +574,21 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                             "shot": _debug_shot(project_id, page, "bad-time"),
                             "error": f"МАКС не принял {what} «{value:02d}»"}
 
+            # Последняя сверка перед нажатием: МАКС сам пишет на кнопке, на
+            # какое время он собрался. Разошлись – не жмём вовсе, иначе пост
+            # уйдёт не тогда, когда нужно.
+            cap = confirm_caption(page)
+            if cap:
+                log(f"МАКС пишет на кнопке: «{cap}»")
+            if not caption_ok(cap, when):
+                return {"ok": False,
+                        "shot": _debug_shot(project_id, page, "wrong-time"),
+                        "error": (f"МАКС понял отложку иначе: на кнопке «{cap}», "
+                                  f"а нужно {when.strftime('%d.%m %H:%M')}. "
+                                  "Ничего не отправили")}
+
             log("Подтверждаю отложку")
-            if not _click_first(page, SEL["confirm"], timeout=8_000):
+            if not _click_confirm(page, cap):
                 return {"ok": False,
                         "shot": _debug_shot(project_id, page, "no-confirm"),
                         "error": "Не нашли кнопку «Отправить …» в окне отложки"}

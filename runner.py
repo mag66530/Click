@@ -359,6 +359,110 @@ def _tree_memory_mb() -> int:
     return sum(rss.get(pid, 0) for pid in mine) // 1024
 
 
+# Как зовутся процессы браузера. Не «всё, что похоже на процесс», а именно
+# браузер: остальное в нашем дереве – это сам Python и служебные процессы
+# облака, их трогать нельзя.
+BROWSER_MARKS = ("chrome", "chromium", "headless_shell", "firefox", "webkit")
+
+
+def _own_descendants() -> set[int]:
+    """PID'ы наших потомков (без нас самих)."""
+    try:
+        pids = [int(d.name) for d in Path("/proc").iterdir() if d.name.isdigit()]
+    except OSError:
+        return set()
+    parent = {}
+    for pid in pids:
+        try:
+            for line in Path(f"/proc/{pid}/status").read_text(encoding="utf-8").splitlines():
+                if line.startswith("PPid:"):
+                    parent[pid] = int(line.split()[1])
+                    break
+        except (OSError, ValueError):
+            continue
+    mine = {os.getpid()}
+    for _ in range(4):                     # дети могут перечисляться раньше родителей
+        for pid, ppid in parent.items():
+            if ppid in mine:
+                mine.add(pid)
+    return mine - {os.getpid()}
+
+
+def _cmdline(pid: int) -> str:
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return ""
+    return raw.replace(b"\x00", b" ").decode("utf-8", "replace").strip()
+
+
+def stray_browsers() -> list[tuple[int, str]]:
+    """
+    Браузеры, живущие в НАШЕМ дереве процессов: [(pid, чем запущен)].
+
+    Пока прогон идёт, это его рабочие браузеры – трогать нельзя. А когда не
+    идёт ни один, это брошенные: прогон упал или его убило облако, а браузер
+    остался и держит по 400–500 МБ. Ровно они и не дают начать новый прогон,
+    и ровно из-за них раньше приходилось перезапускать всё приложение.
+    """
+    out = []
+    for pid in sorted(_own_descendants()):
+        line = _cmdline(pid)
+        low = line.lower()
+        if any(mark in low for mark in BROWSER_MARKS):
+            out.append((pid, line[:120]))
+    return out
+
+
+def free_memory() -> tuple[bool, str]:
+    """
+    Отпустить память, не перезапуская приложение: закрыть брошенные браузеры.
+
+    Отказываемся, пока идёт хоть один прогон: его браузер выглядит точно так
+    же, и убить его – значит оборвать работу на середине. Своих процессов не
+    трогаем никогда: убить себя ради освобождения памяти – не лечение.
+    """
+    import signal
+    import time as _t
+
+    live = live_runs_everywhere()
+    if live:
+        return False, ("Сейчас идёт прогон – его браузер закрывать нельзя, работа "
+                       f"оборвётся. Работают: {busy_details_ru()}.")
+
+    before = memory_mb()
+    victims = stray_browsers()
+    if not victims:
+        return False, (f"Брошенных браузеров нет, память ({before} МБ) держит что-то "
+                       "другое – скорее всего, сам Python. Тут поможет только "
+                       "перезапуск приложения.")
+
+    killed = []
+    for pid, _line in victims:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            killed.append(pid)
+        except (OSError, ProcessLookupError):
+            continue
+    _t.sleep(2)                            # даём закрыться по-хорошему
+    for pid in killed:                     # не закрылись – закрываем жёстко
+        try:
+            os.kill(pid, 0)
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            continue
+    _t.sleep(1)
+
+    import gc
+    gc.collect()
+    after = memory_mb()
+    freed = max(0, before - after)
+    return True, (f"Закрыто брошенных браузеров: {len(killed)}. "
+                  f"Память: было {before} МБ, стало {after} МБ"
+                  + (f" – освободилось {freed} МБ." if freed else
+                     ". Цифра могла не успеть обновиться, обновите страницу."))
+
+
 def memory_mb() -> int:
     """
     Сколько памяти занято ПРЯМО СЕЙЧАС, в мегабайтах.

@@ -4089,6 +4089,9 @@ def tab_settings(project_id: str, config: dict) -> None:
     _reviews_settings_block(project_id)
 
     st.divider()
+    _free_memory_block()
+
+    st.divider()
     engine = yb.current_engine()
     c1, c2 = st.columns([1, 3])
     if c1.button("Проверить браузер", key="btn-check-browser", use_container_width=True):
@@ -4114,6 +4117,50 @@ def tab_settings(project_id: str, config: dict) -> None:
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
             st.rerun()
+
+
+def _free_memory_block() -> None:
+    """
+    «Освободить память» – вместо перезапуска всего приложения.
+
+    Что она делает на самом деле. Память после упавшего прогона держит не
+    Click, а брошенный браузер: прогон умер, а его процесс остался и занял
+    свои 400–500 МБ. Раньше это лечилось только перезапуском приложения –
+    тяжело и не всегда возможно. Кнопка закрывает именно такие браузеры.
+
+    Пока идёт прогон, кнопка отказывается работать: его браузер выглядит
+    точно так же, и закрыть его – значит оборвать работу на середине.
+    """
+    html('<div class="card-title">🧹 Память приложения</div>')
+    used = runner.memory_mb()
+    _, _, hard = runner.mem_gates()
+    strays = runner.stray_browsers()
+    busy = runner.busy_details_ru()
+
+    line = f"Занято **{used} МБ**"
+    if hard:
+        line += f" (порог остановки прогонов – {hard} МБ)"
+    st.caption(line + ".")
+    if busy:
+        st.caption(f"Сейчас работают: {busy}. Пока прогон идёт, чистить нечего – "
+                   "браузер занят делом.")
+    elif strays:
+        st.caption(f"Брошенных браузеров: **{len(strays)}** – это они и держат память. "
+                   "Прогонов при этом не идёт ни одного: значит, остались от упавшего.")
+    else:
+        st.caption("Брошенных браузеров нет. Если цифра всё равно велика, память "
+                   "держит сам Python – тут поможет только перезапуск приложения.")
+
+    said = st.session_state.pop("free-memory-said", None)
+    if said:
+        (st.success if said[0] else st.warning)(said[1])
+
+    if st.button("🧹 Освободить память", key="btn-free-memory",
+                 disabled=bool(busy) or not strays, use_container_width=True):
+        with st.spinner("Закрываю брошенные браузеры…"):
+            done, msg = runner.free_memory()
+        st.session_state["free-memory-said"] = (done, msg)
+        st.rerun()
 
 
 def _web_keys_block() -> None:

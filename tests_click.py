@@ -381,6 +381,12 @@ def test_parallel_runs(tmp: Path) -> None:
     eq("битую дату не выдумываем", runner._how_long("не дата"), "")
     eq("пустую дату тоже", runner._how_long(""), "")
 
+    # «Освободить память» не должна трогать браузер ИДУЩЕГО прогона: он
+    # выглядит точно так же, а закрыть его – значит оборвать работу.
+    done, why = runner.free_memory()
+    check("во время прогона память не чистим", not done, why)
+    check("и сказано, кто работает", pid in why, why)
+
     # Стоп-флаги раздельные: остановили сверку – актуализация идёт дальше.
     runner.request_stop(pid, "collect")
     check("сверке сказали остановиться", runner.p_stop(pid, "collect").exists())

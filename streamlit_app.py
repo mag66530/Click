@@ -3505,19 +3505,21 @@ def _crosspost_bar(project_id: str, config: dict, posts: list[dict],
     else:
         sub = "Впереди постов нет"
 
+    # Колонку под «Сформировать план» заводим, только если формировать правда
+    # есть что, – иначе она пустая и кнопки висят посреди карточки.
+    todo = _crosspost_form_todo(project_id, config, upcoming, state)
+    will_form = bool(todo["vk"] or todo["ok"] or todo["max"] or todo["msg"])
+
     with st.container(border=True):
-        # Ни счётчиков листа, ни устройства планировщика: заказчица попросила
-        # убрать – каждый день это читать не нужно. Час выхода переехал к
-        # заголовку плана, там он и к месту.
-        html(T.crosspost_bar(sched["title"], sub, [], alive=sched["enabled"]))
-        if not sched["enabled"]:
-            st.caption(sched["note"])
-        # Кнопки – справа: слева состояние, справа то, что можно нажать.
-        # Колонку под «Сформировать план» заводим, только если формировать
-        # правда есть что, – иначе она пустая и кнопки висят посреди карточки.
-        todo = _crosspost_form_todo(project_id, config, upcoming, state)
-        will_form = bool(todo["vk"] or todo["ok"] or todo["max"] or todo["msg"])
-        cols = st.columns([5, 2.2, 2.2, 2.6] if will_form else [7.4, 2.2, 2.2])
+        # Состояние и кнопки – одной строкой: слева что происходит, справа что
+        # можно нажать. Раньше состояние рисовалось отдельным блоком над
+        # кнопками, и левая половина карточки висела выше правой.
+        cols = st.columns([4.8, 2, 2, 2.4] if will_form else [6.6, 2, 2],
+                          vertical_alignment="center")
+        with cols[0]:
+            # Ни счётчиков листа, ни устройства планировщика: читать это каждый
+            # день не нужно. Час выхода переехал к заголовку плана.
+            html(T.crosspost_bar(sched["title"], sub, [], alive=sched["enabled"]))
         with cols[1]:
             _crosspost_scheduler_switch(project_id)
         if cols[2].button("🔄 Обновить план", key=f"plan-refresh-btn-{project_id}",
@@ -3529,6 +3531,8 @@ def _crosspost_bar(project_id: str, config: dict, posts: list[dict],
         if will_form:
             with cols[3]:
                 _crosspost_form_block(project_id, config, upcoming, state, hints=False)
+        if not sched["enabled"]:
+            st.caption(sched["note"])
 
 
 def _crosspost_attention(upcoming: list[dict], state: dict) -> None:

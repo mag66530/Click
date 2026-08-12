@@ -1391,18 +1391,21 @@ def crosspost_css() -> str:
 # вертикали, а «что сделать» собрано в одну колонку, чтобы взгляд шёл по ней.
 _CROSSPOST_TABLE_CSS = (
     ".cp-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-sm);"
-    "background:var(--bg-1);margin-bottom:10px}"
+    "background:var(--bg-1);margin-bottom:10px;box-shadow:none}"
+    # Карточки состояния и «требует внимания» – ровные прямоугольники без тени.
+    '[data-testid="stVerticalBlockBorderWrapper"]{box-shadow:none!important;'
+    "background:var(--bg-1);border-color:var(--border)!important}"
     "table.cp-plan{border-collapse:collapse;width:100%;min-width:720px;font-size:12.5px;table-layout:fixed}"
     "table.cp-plan th{position:sticky;top:0;z-index:2;background:var(--bg-3);text-align:left;"
-    "font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;"
-    "color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap}"
+    "font-size:12.5px;font-weight:700;color:var(--text-2);padding:10px 12px;"
+    "border-bottom:1px solid var(--border);white-space:nowrap}"
     "table.cp-plan th.c,table.cp-plan td.c{text-align:center}"
     "table.cp-plan td{padding:9px 12px;border-bottom:1px solid var(--border);"
     "vertical-align:middle;text-align:left}"
     "table.cp-plan tr:last-child td{border-bottom:none}"
     "table.cp-plan tbody tr:hover td{background:var(--bg-3)}"
-    "table.cp-plan tr.cp-group td{background:var(--bg-4);color:var(--muted);padding:7px 12px;"
-    "font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}"
+    "table.cp-plan tr.cp-group td{background:var(--bg-3);color:var(--muted);padding:7px 12px;"
+    "font-size:12px;font-weight:600}"
     "table.cp-plan tr.cp-group:hover td{background:var(--bg-4)}"
     "table.cp-plan tr.cp-warn td{background:var(--yel-bg)}"
     "table.cp-plan tr.cp-warn:hover td{background:var(--yel-bg)}"
@@ -1427,13 +1430,13 @@ _CROSSPOST_TABLE_CSS = (
     "color:var(--muted)}"
     ".cp-photo{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap}"
     # Ячейка площадки — тот же значок, что и в легенде.
-    ".cp-mark{width:30px;height:24px;border-radius:6px;display:inline-flex;"
-    "align-items:center;justify-content:center;font-size:12px;font-weight:800;"
-    "border:1px solid transparent;vertical-align:middle}"
-    ".cp-mark.set{background:var(--grn-bg);color:var(--grn);border-color:rgba(16,185,129,.3)}"
-    ".cp-mark.wait{background:var(--acc-bg);color:var(--acc);border-color:rgba(91,124,250,.3)}"
-    ".cp-mark.off{color:var(--dim);border:1px dashed var(--border-2)}"
-    ".cp-mark.err{background:var(--red-bg);color:var(--red);border-color:rgba(239,68,68,.35)}"
+    ".cp-mark{width:26px;height:22px;border-radius:5px;display:inline-flex;"
+    "align-items:center;justify-content:center;font-size:12.5px;font-weight:800;"
+    "border:none;vertical-align:middle;line-height:1}"
+    ".cp-mark.set{background:var(--grn-bg);color:var(--grn)}"
+    ".cp-mark.wait{background:var(--acc-bg);color:var(--acc)}"
+    ".cp-mark.off{color:var(--dim);background:transparent}"
+    ".cp-mark.err{background:var(--red-bg);color:var(--red)}"
     ".cp-mark.live{background:var(--grn);color:#fff}"
     ".cp-todo{font-size:11.5px;color:var(--dim);line-height:1.4;display:block}"
     ".cp-todo.fix{color:var(--yel);font-weight:600}"
@@ -1441,13 +1444,14 @@ _CROSSPOST_TABLE_CSS = (
     ".cp-todo a{color:var(--acc);text-decoration:none;font-weight:600}"
     ".cp-todo a:hover{text-decoration:underline}"
     # Строка состояния наверху раздела.
-    ".cp-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap}"
+    ".cp-bar{display:flex;align-items:center;gap:14px;min-width:0}"
     ".cp-bar-dot{width:9px;height:9px;border-radius:50%;background:var(--grn);"
     "box-shadow:0 0 0 4px var(--grn-bg);flex-shrink:0}"
     ".cp-bar-dot.off{background:var(--yel);box-shadow:0 0 0 4px var(--yel-bg)}"
-    ".cp-bar-state{font-size:14px;font-weight:700;color:var(--text)}"
+    ".cp-bar-state{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap}"
     ".cp-bar-next{font-size:13.5px;color:var(--text-2);padding-left:14px;"
-    "border-left:1px solid var(--border)}"
+    "border-left:1px solid var(--border);overflow:hidden;text-overflow:ellipsis;"
+    "white-space:nowrap;min-width:0}"
     ".cp-bar-next b{font-family:var(--mono);color:var(--text)}"
     ".cp-bar-meta{display:flex;gap:6px 18px;flex-wrap:wrap;font-size:12.5px;"
     "color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}"
@@ -1549,7 +1553,7 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
             f'<td class="cp-kind-cell"><span class="cp-kind">'
             f'{esc(view["kind"] or "—")}</span></td>'
             f'<td class="cp-post">{text_html}</td>'
-            f'<td class="c cp-photo">{("🖼 " + str(view["photos"])) if view["photos"] else "—"}</td>'
+            f'<td class="c cp-photo">{view["photos"] or "—"}</td>'
             + "".join(cells)
             + f'<td>{_crosspost_todo_html(view["todo"], sheet_url)}</td></tr>'
         )

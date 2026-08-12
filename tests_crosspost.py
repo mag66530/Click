@@ -779,6 +779,32 @@ def test_vk_time_pickers() -> None:
           not vk_social._picker_shows(page, lambda: FakePicker([""]), 14))
 
 
+def test_probe_networks() -> None:
+    """
+    Пробная отложка есть у ОБЕИХ сетей и ведёт в правильные модули.
+
+    Раньше проба была только у ВК, и отдельной функцией. Заказчица попросила
+    такую же для ОК – копировать функцию не стали: правка в одной из копий
+    рано или поздно забудется. Вместо этого таблица сетей, и вот проверка,
+    что в ней всё сходится.
+    """
+    print("\nПробная отложка: обе сети")
+    import importlib
+
+    import streamlit_app as app
+
+    check("сети описаны обе", set(app.PROBE_NETWORKS) == {"vk", "ok"},
+          str(sorted(app.PROBE_NETWORKS)))
+    for net, meta in app.PROBE_NETWORKS.items():
+        mod = importlib.import_module(meta["module"])
+        check(f"{net}: модуль умеет отложку", hasattr(mod, "schedule_postponed_post"))
+        check(f"{net}: модуль знает про сессию", hasattr(mod, "has_saved_session"))
+        check(f"{net}: подписи заполнены",
+              all(meta.get(k) for k in ("ru", "url_key", "where", "shelf")))
+    check("ключи ссылок у сетей разные",
+          app.PROBE_NETWORKS["vk"]["url_key"] != app.PROBE_NETWORKS["ok"]["url_key"])
+
+
 def test_combined_session_file() -> None:
     """
     Один файл на обе сети: вошли раз – вставили раз.
@@ -1186,6 +1212,7 @@ def test_playwright_worker() -> None:
 
 def main() -> int:
     print("═" * 60)
+    test_probe_networks()
     test_combined_session_file()
     test_ok_session_detection()
     test_ok_schedule_flow()

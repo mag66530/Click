@@ -3464,11 +3464,13 @@ def tab_crosspost(project_id: str, config: dict) -> None:
     _crosspost_channels_block(project_id, config)
     _crosspost_yb_block(project_id, config)
     _crosspost_scheduler_block(project_id)
-    _crosspost_vk_probe(project_id, config)
-    # Зовём ОТСЮДА, а не из конца пробной отложки: у той три ранних выхода
-    # (нет сессии, нет сообщества, идёт прогон), и лог прошлого раза на них
-    # молча пропадал бы – ровно та беда, из-за которой падал весь раздел.
-    _vk_probe_last_log(project_id)
+    # Обе сети – своей пробной отложкой. Логи зовём ОТСЮДА, а не из конца
+    # самой пробы: у той три ранних выхода (нет сессии, нет сообщества, идёт
+    # прогон), и лог прошлого раза на них молча пропадал бы – ровно та беда,
+    # из-за которой когда-то падал весь раздел.
+    for network in PROBE_NETWORKS:
+        _crosspost_probe(project_id, config, network)
+        _probe_last_log(project_id, network)
 
     # Прошлые посты – в самом низу, свёрнутыми: это архив, а не рабочий список.
     # Блок живёт ЗДЕСЬ, в tab_crosspost: ему нужны posts/today/state, которых
@@ -3712,42 +3714,59 @@ def _crosspost_yb_block(project_id: str, config: dict) -> None:
                 st.rerun()
 
 
-def _crosspost_vk_probe(project_id: str, config: dict) -> None:
-    """
-    Пробная отложка ВК: один тестовый пост в сообщество бренда на +N минут.
-    Это боевой пилот механики (форма поста → календарь → «Добавить в очередь»)
-    под сохранённой сессией. Ничего не публикуется сразу: запись видна в
-    «Отложенных записях» сообщества, там же её можно удалить.
-    """
-    import vk_social
+# Пробная отложка одинакова для ВК и ОК: сессия, ссылка на сообщество,
+# текст, время, окно браузера, лог. Отличаются только подписи и модуль,
+# который умеет ставить отложку. Держим это таблицей, а не двумя почти
+# одинаковыми функциями: правка в одной из копий рано или поздно забудется.
+PROBE_NETWORKS = {
+    "vk": {"ru": "ВК", "module": "vk_social", "url_key": "vkGroupUrl",
+           "where": "«Настройки» → «Вход в ВК (кросспостинг)»",
+           "shelf": "«Отложенные записи» сообщества"},
+    "ok": {"ru": "ОК", "module": "ok_browser", "url_key": "okGroupUrl",
+           "where": "«Настройки» → «Вход в ОК (кросспостинг)»",
+           "shelf": "«Отложенные» в группе"},
+}
 
-    with st.expander("🧪 Пробная отложка ВК – проверить механику одним постом"):
-        if not vk_social.has_saved_session(project_id):
-            st.caption("Сначала войдите в ВК: «Настройки» → «Вход в ВК (кросспостинг)».")
+
+def _crosspost_probe(project_id: str, config: dict, network: str) -> None:
+    """
+    Пробная отложка: один тестовый пост в сообщество бренда на +N минут.
+    Боевой пилот всей механики под сохранённой сессией. Ничего не
+    публикуется сразу: запись встаёт в отложенные, оттуда её можно удалить.
+    """
+    import importlib
+    meta = PROBE_NETWORKS[network]
+    ru = meta["ru"]
+    social = importlib.import_module(meta["module"])
+
+    with st.expander(f"🧪 Пробная отложка {ru} – проверить механику одним постом"):
+        if not social.has_saved_session(project_id):
+            st.caption(f"Сначала войдите в {ru}: {meta['where']}.")
             return
-        group_url = (config.get("vkGroupUrl") or "").strip()
+        group_url = (config.get(meta["url_key"]) or "").strip()
         if not group_url:
-            st.caption("Укажите ссылку на сообщество бренда: «Настройки» → «Вход в ВК (кросспостинг)».")
+            st.caption(f"Укажите ссылку на сообщество бренда: {meta['where']}.")
             return
 
-        st.caption(f"Сообщество: {group_url}. Запись встанет в «Отложенные записи» – "
+        st.caption(f"Сообщество: {group_url}. Запись встанет в {meta['shelf']} – "
                    "оттуда её можно удалить.")
-        text = st.text_area("Текст пробного поста", key=f"vk-probe-text-{project_id}",
+        text = st.text_area("Текст пробного поста", key=f"{network}-probe-text-{project_id}",
                             value="Проверка планировщика Click – тестовая отложенная запись, "
                                   "можно удалить.")
         minutes = st.number_input("Опубликовать через, минут", 10, 24 * 60, 40, step=5,
-                                  key=f"vk-probe-min-{project_id}",
-                                  help="ВК не даёт планировать ближе чем на несколько минут – "
-                                       "меньше 10 не ставим.")
+                                  key=f"{network}-probe-min-{project_id}",
+                                  help=f"{ru} не даёт планировать ближе чем на несколько "
+                                       "минут – меньше 10 не ставим.")
         # Смотреть, КАК он это делает. Галочка та же, что у публикации
         # (HEADED_KEY), поэтому включённая здесь она останется включённой и
         # в «Сформировать план» – ходить за ней в «Настройки» больше не надо.
         if can_show_browser():
-            st.checkbox("Показывать окно браузера – видно каждый шаг в ВК",
+            st.checkbox(f"Показывать окно браузера – видно каждый шаг в {ru}",
                         value=bool(st.session_state.get(HEADED_KEY)),
-                        key="show-browser-vk-probe",
+                        key=f"show-browser-{network}-probe",
                         on_change=lambda: st.session_state.__setitem__(
-                            HEADED_KEY, bool(st.session_state.get("show-browser-vk-probe"))),
+                            HEADED_KEY,
+                            bool(st.session_state.get(f"show-browser-{network}-probe"))),
                         help="Только на своём компьютере: в облаке экрана нет, "
                              "показывать окно негде.")
         else:
@@ -3759,7 +3778,7 @@ def _crosspost_vk_probe(project_id: str, config: dict) -> None:
             st.caption(f"Сейчас нельзя: {busy}. Дождитесь окончания прогона.")
             return
         if st.button("Поставить пробную отложку", type="primary",
-                     key=f"vk-probe-go-{project_id}", disabled=not text.strip()):
+                     key=f"{network}-probe-go-{project_id}", disabled=not text.strip()):
             when = apptime.now() + timedelta(minutes=int(minutes))
             # Лог шагов. Копится в списке, а не пишется в виджет на лету:
             # отложку ведёт отдельный поток воркера, а рисовать из чужого
@@ -3779,57 +3798,58 @@ def _crosspost_vk_probe(project_id: str, config: dict) -> None:
             # падает с «Sync API inside the asyncio loop» до перезапуска
             # приложения. У нового потока свои локальные данные – отравить
             # его прошлому нечем.
-            with st.spinner("Открываю ВК и ставлю отложку – обычно меньше минуты…"):
+            with st.spinner(f"Открываю {ru} и ставлю отложку – обычно меньше минуты…"):
                 res = playwright_worker.run_once(
-                    vk_social.schedule_postponed_post, project_id, group_url,
+                    social.schedule_postponed_post, project_id, group_url,
                     text.strip(), [], when, log=note,
                     headless=bool(get_settings(project_id)["headless"]))
             note("ИТОГ: отложка поставлена" if res.get("ok")
                  else f"ИТОГ: не получилось – {res.get('error')}")
             log_text = "\n".join(steps)
-            _vk_probe_save_log(project_id, log_text)
+            _probe_save_log(project_id, network, log_text)
 
             if res.get("ok"):
                 st.success(f"Готово: отложка на {when.strftime('%H:%M')} стоит. Проверьте "
-                           f"«Отложенные записи» сообщества – и удалите тестовую запись.")
+                           f"{meta['shelf']} – и удалите тестовую запись.")
             else:
                 st.error(f"Не получилось: {res.get('error')}")
                 # Снимок экрана ВК в момент отказа: по нему сразу видно, что
                 # случилось – капча, форма входа или изменившаяся вёрстка.
                 if res.get("shot"):
                     st.image(res["shot"], use_container_width=True)
-                    st.caption("Что Click видел в ВК в момент отказа.")
+                    st.caption(f"Что Click видел в {ru} в момент отказа.")
 
             # Лог показываем всегда, и на успехе тоже: по нему видно, где
             # отложка запнулась, и он же нужен, чтобы прислать его на разбор.
             st.text_area("Лог отложки – что Click делал по шагам", value=log_text,
-                         height=220, key=f"vk-probe-log-{project_id}")
-            st.download_button("⬇ Лог отложки (.txt)", data=log_text.encode("utf-8"),
-                               file_name=f"vk-otlozhka-{apptime.stamp('%Y-%m-%dT%H-%M-%S')}.txt",
-                               mime="text/plain", key=f"vk-probe-log-dl-{project_id}")
+                         height=220, key=f"{network}-probe-log-{project_id}")
+            st.download_button(
+                "⬇ Лог отложки (.txt)", data=log_text.encode("utf-8"),
+                file_name=f"{network}-otlozhka-{apptime.stamp('%Y-%m-%dT%H-%M-%S')}.txt",
+                mime="text/plain", key=f"{network}-probe-log-dl-{project_id}")
 
 
-def _vk_probe_log_path(project_id: str):
+def _probe_log_path(project_id: str, network: str):
     """Файл с логом последней пробной отложки – рядом с данными проекта."""
     d = paths.data_root() / project_id / "crosspost"
     d.mkdir(parents=True, exist_ok=True)
-    return d / "vk-probe-last.log"
+    return d / f"{network}-probe-last.log"
 
 
-def _vk_probe_save_log(project_id: str, text: str) -> None:
+def _probe_save_log(project_id: str, network: str, text: str) -> None:
     try:
-        _vk_probe_log_path(project_id).write_text(text, encoding="utf-8")
+        _probe_log_path(project_id, network).write_text(text, encoding="utf-8")
     except OSError:
         pass                      # лог – удобство, ронять из-за него нечего
 
 
-def _vk_probe_last_log(project_id: str) -> None:
+def _probe_last_log(project_id: str, network: str) -> None:
     """
     Лог прошлой отложки. Нужен потому, что кнопка живёт внутри expander:
     любое следующее нажатие на странице перерисовывает её, и лог, показанный
     сразу после прогона, исчезает вместе с ним. На диске он остаётся.
     """
-    fp = _vk_probe_log_path(project_id)
+    fp = _probe_log_path(project_id, network)
     if not fp.exists():
         return
     try:
@@ -3838,12 +3858,13 @@ def _vk_probe_last_log(project_id: str) -> None:
         return
     if not text.strip():
         return
-    with st.expander("📄 Лог прошлой пробной отложки ВК"):
+    with st.expander(f"📄 Лог прошлой пробной отложки {PROBE_NETWORKS[network]['ru']}"):
         st.text_area("Что Click делал по шагам", value=text, height=220,
-                     key=f"vk-probe-log-prev-{project_id}")
+                     key=f"{network}-probe-log-prev-{project_id}")
         st.download_button("⬇ Скачать (.txt)", data=text.encode("utf-8"),
-                           file_name="vk-otlozhka-proshlaya.txt", mime="text/plain",
-                           key=f"vk-probe-log-prev-dl-{project_id}")
+                           file_name=f"{network}-otlozhka-proshlaya.txt",
+                           mime="text/plain",
+                           key=f"{network}-probe-log-prev-dl-{project_id}")
 
 
 def _last_run_kind(project_id: str) -> str:
@@ -4402,14 +4423,22 @@ def _both_sessions_block(project_id: str) -> None:
         f"ОК – {'вход есть' if есть_ок else 'входа нет'}. "
         "Файл делает VHOD-VK-i-OK.py на вашем компьютере: вошли в обе сети – "
         "получился один файл. Загрузите его сюда, и обе сети возьмутся сразу.")
+    # Итог прошлой загрузки. Держим в session_state, а не показываем сразу:
+    # после успеха страница перерисовывается (чтобы обновились «вход есть»),
+    # и сообщение, написанное до перерисовки, стиралось вместе с ней. Со
+    # стороны выглядело так, будто не произошло ничего.
+    said_before = st.session_state.pop(f"sess-both-said-{project_id}", None)
+    if said_before:
+        (st.success if said_before[0] else st.error)(said_before[1])
+
     up = st.file_uploader("Файл сессий (VK-i-OK-sessii.json)", type=["json"],
                           key=f"sess-both-up-{project_id}")
     if up is not None and st.button("Загрузить обе сессии", type="primary",
                                     key=f"sess-both-go-{project_id}"):
         took, said = social_session.import_combined(project_id, up.getvalue())
-        (st.success if took else st.error)(said)
-        if took:
-            st.rerun()
+        st.session_state[f"sess-both-said-{project_id}"] = (
+            took, ("✅ Готово. " + said) if took else said)
+        st.rerun()
 
 
 def _session_import_block(project_id: str, name: str, importer, key: str) -> None:

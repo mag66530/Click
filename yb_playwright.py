@@ -1112,6 +1112,36 @@ def read_feed_state(page: Page, post_text: str) -> dict:
 _FRESH_MARKER_RU = {"moderation": "плашка «Публикация на модерации»",
                     "fresh-time": "метка «только что»"}
 
+# Умеет ли поиск по тексту находить посты в ЭТОЙ вёрстке.
+#
+# «Поста в ленте нет» разрешает повтор – а значит промах поиска стоит дубля.
+# Вёрстку Яндекса мы не контролируем: он может переименовать классы или начать
+# рисовать текст поста иначе, и тогда не найдётся ни один пост, включая только
+# что созданный. Поэтому отсутствие считается доказанным только после того, как
+# поиск хотя бы раз НАШЁЛ пост по тексту: разметка у всех карточек одна, и
+# первый же подтверждённый город доказывает, что читать её мы умеем.
+#
+# Обратный случай тоже запоминаем: пост подтверждён плашкой модерации, а по
+# тексту не нашёлся – это прямая улика, что поиску верить нельзя.
+_FEED_MATCH = {"proven": False, "missed": False}
+
+
+def feed_match_reliable() -> bool:
+    """Можно ли считать «текста в ленте нет» доказательством отсутствия поста."""
+    return _FEED_MATCH["proven"] and not _FEED_MATCH["missed"]
+
+
+def _note_feed_match(before: dict, now: dict) -> None:
+    """Пост подтверждён – заодно смотрим, каким признаком, и что это говорит о поиске."""
+    if int((now or {}).get("matches") or 0) > int((before or {}).get("matches") or 0):
+        _FEED_MATCH["proven"] = True
+    else:
+        # Нашли по маркеру свежести, а по тексту – нет. Поиск промахивается.
+        if not _FEED_MATCH["missed"]:
+            warn("  ⚠️ Пост найден по плашке, но не по тексту – "
+                 "поиску по ленте больше не доверяем, повторы отключены")
+        _FEED_MATCH["missed"] = True
+
 
 def _feed_says_published(before: dict, now: dict) -> str:
     """
@@ -1176,6 +1206,7 @@ def verify_post_in_feed(page: Page, posts_url: str, post_text: str, before: dict
 
         why = _feed_says_published(before, last)
         if why:
+            _note_feed_match(before, last)
             return {"verdict": "published", "hasImage": last["hasImage"], "state": last,
                     "detail": why}
 

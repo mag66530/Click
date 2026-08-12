@@ -1397,7 +1397,14 @@ def _publish_one_city(
 
     # Клик был, но лента перечитана и поста в ней НЕТ – отсутствие подтверждено.
     # Дублировать нечего, повторяем как обычную неудачу.
-    safe_absent = bool(res.get("retrySafe"))
+    #
+    # Но верим этому только если поиск по ленте уже находил посты в этом
+    # прогоне. Пока не находил, «поста нет» может означать «не умеем читать
+    # эту вёрстку» – и повтор создаст дубль вместо починки.
+    safe_absent = bool(res.get("retrySafe")) and yb.feed_match_reliable()
+    if res.get("retrySafe") and not safe_absent:
+        yb.warn(f"  ⚠️ [{task.get('cityName')}] поста в ленте нет, но поиск по ленте "
+                f"себя ещё не показал – повтор отложен до второго прохода")
     if _click_happened(res) and not safe_absent:
         yb.warn(f"  ⚠️ [{task.get('cityName')}] клик «Создать» уже был – ретрай ЗАПРЕЩЁН")
         res["status"] = "unknown"
@@ -1513,7 +1520,9 @@ def _second_pass(
                     f"повтор НЕ делаю (риск дубля). Проверьте вручную.")
             continue
 
-        if _click_happened(failed) and not failed.get("retrySafe"):
+        # Ко второму проходу поиск по ленте обычно уже доказал, что работает –
+        # на городах, которые опубликовались. Тогда «поста нет» можно верить.
+        if _click_happened(failed) and not (failed.get("retrySafe") and yb.feed_match_reliable()):
             yb.warn(f"  ⚠️ {city}: клик уже был – повтор запрещён")
             continue
 

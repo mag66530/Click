@@ -2454,6 +2454,28 @@ def test_feed_verdict() -> None:
     check("подтверждённое отсутствие помечено как безопасное для повтора",
           'result["retrySafe"] = True' in body)
 
+    # «Поста нет» разрешает повтор, поэтому промах поиска стоит дубля. Верим
+    # отсутствию только после того, как поиск хоть раз нашёл пост по тексту.
+    state = yb._FEED_MATCH          # noqa: SLF001
+    was = dict(state)
+    try:
+        state.update({"proven": False, "missed": False})
+        check("поиск себя не показал – отсутствию не верим", not yb.feed_match_reliable())
+        yb._note_feed_match({"matches": 0}, {"matches": 1})      # noqa: SLF001
+        check("нашли пост по тексту – теперь верим", yb.feed_match_reliable())
+        yb._note_feed_match({"matches": 5}, {"matches": 5, "fresh": "moderation"})  # noqa: SLF001
+        check("поиск промахнулся мимо реального поста – доверие снято",
+              not yb.feed_match_reliable())
+        yb._note_feed_match({"matches": 0}, {"matches": 1})      # noqa: SLF001
+        check("и обратно уже не включается", not yb.feed_match_reliable())
+    finally:
+        state.update(was)
+
+    rsrc = Path("runner.py").read_text(encoding="utf-8")
+    check("runner повторяет только при рабочем поиске по ленте",
+          "yb.feed_match_reliable()" in rsrc
+          and 'bool(res.get("retrySafe")) and yb.feed_match_reliable()' in rsrc)
+
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:

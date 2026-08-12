@@ -81,11 +81,18 @@ LANG_HEADERS = {"Accept-Language": "ru-RU,ru;q=0.9,en;q=0.5"}
 # Таймауты – 1:1 из DEFAULTS в publish.js
 NAVIGATION_TIMEOUT = 45_000
 ACTION_TIMEOUT = 15_000
-API_WAIT_TIMEOUT = 8.0      # сколько ждём POST-ответ Яндекса после клика «Создать»
+# Ответ создания поста прилетал позже, чем мы успевали его ждать: окно было
+# 8 секунд на весь цикл, и в шести городах прогона 12.08 в него попадал только
+# ответ загрузчика картинки. 20 секунд – с запасом; ждать столько приходится
+# редко, выход из цикла происходит сразу по точному ответу.
+API_WAIT_TIMEOUT = 20.0     # сколько ждём POST-ответ Яндекса после клика «Создать»
 API_GRACE_AFTER_HIT = 1.2   # …и сколько ещё, если ответ пришёл неточный
 UI_READY_TIMEOUT = 15_000   # сколько ждём, пока React отрисует интерфейс
 IMAGE_PREVIEW_TIMEOUT = 8_000
 TEXT_CONFIRM_TIMEOUT = 10_000
+FORM_CLOSE_TIMEOUT = 6.0    # сколько ждём закрытия формы, прежде чем перечитать ленту
+FEED_RELOAD_TRIES = 3       # сколько раз перечитываем ленту, прежде чем сказать «поста нет»
+FEED_RELOAD_PAUSE = 2_500   # пауза между перечитываниями, мс
 
 # Логгер ставится ДЛЯ СВОЕГО ПОТОКА, а не на весь модуль. Прогоны идут
 # параллельно, каждый в своём потоке, и общий логгер сваливал бы строки одного
@@ -917,10 +924,14 @@ _CHECK_EXISTS_JS = r"""
   // Просто совпадение текста – это может быть ПРОШЛАЯ публикация, не считаем свежей.
   const FRESH_TIME = /^(\s*(только что|меньше минуты|минут[уы]?\s+назад|\d+\s+минут[уы]?\s+назад|несколько\s+минут\s+назад)\s*)$/i;
   const MODERATION = /Публикация\s+на\s+модерации/i;
+  // Пробелы приводим к одному виду: лента переносит строки и подставляет
+  // &nbsp; – точное сравнение промахивалось мимо своего же поста.
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const want = norm(needle);
   const posts = document.querySelectorAll('[class*="Post"], [class*="post-card"], [class*="PostsList"] [class*="card"]');
   for (const el of posts) {
     const text = el.textContent || '';
-    if (!text.includes(needle)) continue;
+    if (!norm(text).includes(want)) continue;
     const r = el.getBoundingClientRect();
     if (r.width < 100 || r.height < 50) continue;
     let moderation = false, freshTime = false;
@@ -963,15 +974,263 @@ def _looks_like_no_access(page: Page) -> bool:
         return False
 
 
+def _feed_needle(post_text: str) -> str:
+    """
+    Кусок текста, по которому ищем пост в ленте.
+
+    Берём ОДНУ строку, а не первые 80 символов подряд. Перевод строки лента
+    отрисовывает отдельным блоком, и в textContent карточки соседние строки
+    склеиваются без пробела – подстрока с «\\n» не находится там НИКОГДА.
+    Для проверки публикации такой промах означал бы «поста нет» → повтор →
+    дубль, поэтому строку берём целиком и только одну.
+
+    Строка нужна из тела поста: концовки (контакты, хэштеги) у всех городов
+    проекта одинаковые, и по ним нашёлся бы любой чужой пост.
+    """
+    for line in (post_text or "").splitlines():
+        line = re.sub(r"\s+", " ", line).strip()
+        if len(line) >= 25:
+            return line[:80]
+    flat = re.sub(r"\s+", " ", post_text or "").strip()
+    return flat[:80]
+
+
 def check_post_already_exists(page: Page, post_text: str) -> dict:
     full = (post_text or "").strip()
     if len(full) < 20:
         return {"found": False, "fresh": False, "reason": ""}
-    needle = full[: min(80, len(full))]
     try:
-        return page.evaluate(_CHECK_EXISTS_JS, needle)
+        return page.evaluate(_CHECK_EXISTS_JS, _feed_needle(full))
     except Exception:
         return {"found": False, "fresh": False, "reason": ""}
+
+
+# ════════════════════════════════════════════════════════════════════
+#  Снимок ленты: единственный источник истины о публикации
+# ════════════════════════════════════════════════════════════════════
+
+# Считаем не «похоже ли на успех», а сколько раз наш текст лежит в ленте.
+# Снимок делается ДО клика и ПОСЛЕ него: пост появился, если совпадений стало
+# больше. Так работает даже там, где тексты повторяются (у МетПромИнтекс в
+# ленте висит прошлая публикация с тем же началом) – и не требуется сверять
+# часы браузера с часами карточки.
+_FEED_SNAPSHOT_JS = r"""
+(needle) => {
+  const out = { matches: 0, cards: 0, fresh: '', hasImage: false, sample: '' };
+  const FRESH_TIME = /^(\s*(только что|меньше минуты|минут[уы]?\s+назад|\d+\s+минут[уы]?\s+назад|несколько\s+минут\s+назад|сегодня(\s+в\s+\d{1,2}[:.]\d{2})?)\s*)$/i;
+  const MODERATION = /(публикация|пост)\s+на\s+модерации|на\s+модерации/i;
+
+  for (const el of document.querySelectorAll('[class*="Post"], [class*="post-card"]')) {
+    const r = el.getBoundingClientRect();
+    if (r.width >= 100 && r.height >= 50) out.cards++;
+  }
+
+  if (!needle || needle.length < 10) return out;
+
+  // Пробелы приводим к одному виду с обеих сторон: лента переносит строки и
+  // подставляет &nbsp;, из-за чего точное сравнение промахивалось.
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const want = norm(needle);
+  const has = (el) => norm(el.textContent).includes(want);
+
+  // Совпадения текста – по САМЫМ ВНУТРЕННИМ узлам, содержащим иглу: на один
+  // пост приходится ровно одно совпадение, сколько бы обёрток вокруг ни было.
+  const hits = [];
+  for (const el of document.querySelectorAll('body *')) {
+    const tag = el.tagName;
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA') continue;
+    if (!has(el)) continue;
+    // Открытая форма – это не лента: текст в редакторе за публикацию не считаем.
+    if (el.closest('[contenteditable="true"], [class*="PostAddForm"], [class*="PostForm"], [role="dialog"]')) continue;
+    let inChild = false;
+    for (const ch of el.children)
+      if (has(ch)) { inChild = true; break; }
+    if (inChild) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 50 || r.height < 10) continue;   // скрытое не считаем
+    hits.push(el);
+  }
+  out.matches = hits.length;
+  if (!hits.length) return out;
+
+  hits.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+
+  // Карточка верхнего совпадения. Если подходящего предка нет – берём три
+  // уровня вверх, но никогда не body: иначе «картинка поста» найдётся где
+  // угодно на странице.
+  let card = null, cur = hits[0];
+  for (let i = 0; i < 8 && cur.parentElement; i++) {
+    cur = cur.parentElement;
+    const r = cur.getBoundingClientRect();
+    if (r.height >= 120 && r.width >= 200 && /post|card/i.test(String(cur.className || ''))) {
+      card = cur;
+      break;
+    }
+  }
+  if (!card) {
+    card = hits[0];
+    for (let i = 0; i < 3 && card.parentElement; i++) card = card.parentElement;
+  }
+  if (card === document.body || card === document.documentElement) card = hits[0];
+
+  if (MODERATION.test(card.textContent || '')) out.fresh = 'moderation';
+  if (!out.fresh)
+    for (const e of card.querySelectorAll('*')) {
+      if (e.children.length !== 0) continue;
+      if (FRESH_TIME.test((e.textContent || '').trim())) { out.fresh = 'fresh-time'; break; }
+    }
+
+  // Картинка поста. Логотип компании в шапке карточки – тоже <img>, поэтому
+  // засчитываем либо CDN постов, либо заведомо крупную картинку.
+  for (const img of card.querySelectorAll('img')) {
+    const src = img.getAttribute('src') || '';
+    const r = img.getBoundingClientRect();
+    if (/get-sprav-posts/.test(src) || (r.width > 200 && r.height > 100)) { out.hasImage = true; break; }
+  }
+  if (!out.hasImage)
+    for (const el of card.querySelectorAll('*')) {
+      if (/get-sprav-posts/.test(window.getComputedStyle(el).backgroundImage || '')) {
+        out.hasImage = true;
+        break;
+      }
+    }
+
+  out.sample = (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  return out;
+}
+"""
+
+_EMPTY_FEED = {"matches": 0, "cards": 0, "fresh": "", "hasImage": False, "sample": ""}
+
+
+def read_feed_state(page: Page, post_text: str) -> dict:
+    """Снимок ленты по началу текста поста. Не бросает – при ошибке пустой снимок."""
+    full = (post_text or "").strip()
+    if len(full) < 20:
+        return dict(_EMPTY_FEED)
+    try:
+        got = page.evaluate(_FEED_SNAPSHOT_JS, _feed_needle(full))
+        return {**_EMPTY_FEED, **(got or {})}
+    except Exception:  # noqa: BLE001
+        return dict(_EMPTY_FEED)
+
+
+_FRESH_MARKER_RU = {"moderation": "плашка «Публикация на модерации»",
+                    "fresh-time": "метка «только что»"}
+
+# Умеет ли поиск по тексту находить посты в ЭТОЙ вёрстке.
+#
+# «Поста в ленте нет» разрешает повтор – а значит промах поиска стоит дубля.
+# Вёрстку Яндекса мы не контролируем: он может переименовать классы или начать
+# рисовать текст поста иначе, и тогда не найдётся ни один пост, включая только
+# что созданный. Поэтому отсутствие считается доказанным только после того, как
+# поиск хотя бы раз НАШЁЛ пост по тексту: разметка у всех карточек одна, и
+# первый же подтверждённый город доказывает, что читать её мы умеем.
+#
+# Обратный случай тоже запоминаем: пост подтверждён плашкой модерации, а по
+# тексту не нашёлся – это прямая улика, что поиску верить нельзя.
+_FEED_MATCH = {"proven": False, "missed": False}
+
+
+def feed_match_reliable() -> bool:
+    """Можно ли считать «текста в ленте нет» доказательством отсутствия поста."""
+    return _FEED_MATCH["proven"] and not _FEED_MATCH["missed"]
+
+
+def _note_feed_match(before: dict, now: dict) -> None:
+    """Пост подтверждён – заодно смотрим, каким признаком, и что это говорит о поиске."""
+    if int((now or {}).get("matches") or 0) > int((before or {}).get("matches") or 0):
+        _FEED_MATCH["proven"] = True
+    else:
+        # Нашли по маркеру свежести, а по тексту – нет. Поиск промахивается.
+        if not _FEED_MATCH["missed"]:
+            warn("  ⚠️ Пост найден по плашке, но не по тексту – "
+                 "поиску по ленте больше не доверяем, повторы отключены")
+        _FEED_MATCH["missed"] = True
+
+
+def _feed_says_published(before: dict, now: dict) -> str:
+    """
+    Появился ли НАШ пост. Возвращает объяснение или пустую строку.
+
+    Два независимых признака: совпадений текста стало больше, чем было до
+    клика, либо у верхнего совпадения появился маркер свежести. Первого
+    достаточно и там, где тексты в ленте повторяются.
+    """
+    was = int((before or {}).get("matches") or 0)
+    became = int((now or {}).get("matches") or 0)
+    if became > was:
+        return f"совпадений в ленте {was} → {became}"
+    fresh = (now or {}).get("fresh") or ""
+    if fresh and not (before or {}).get("fresh"):
+        return _FRESH_MARKER_RU.get(fresh, fresh)
+    return ""
+
+
+def _feed_absence_reason(before: dict, now: dict) -> str:
+    """Чем именно доказано отсутствие поста – это идёт в отчёт заказчику."""
+    was = int((before or {}).get("matches") or 0)
+    if was and int((now or {}).get("matches") or 0) == was:
+        return "в ленте только прошлый пост с таким же текстом"
+    return f"текста поста в ленте нет (карточек в ленте: {(now or {}).get('cards', 0)})"
+
+
+def verify_post_in_feed(page: Page, posts_url: str, post_text: str, before: dict) -> dict:
+    """
+    Есть ли пост в ленте. ЕДИНСТВЕННЫЙ источник истины о публикации.
+
+    Пост считаем появившимся, если совпадений нашего текста стало больше, чем
+    было до клика, либо у верхнего совпадения появился маркер свежести
+    («на модерации» / «только что»). Совпало столько же и маркера нет – значит
+    в ленте висит ПРОШЛЫЙ пост, а новый не создался.
+
+    Возвращает verdict: 'published' | 'absent' | 'unknown'.
+    'unknown' – это «лента не прочиталась», а не «поста нет»: повторять по нему
+    публикацию нельзя, иначе получим дубль.
+    """
+    seen_feed = False
+    last = dict(_EMPTY_FEED)
+
+    for attempt in range(1, FEED_RELOAD_TRIES + 1):
+        try:
+            page.goto(posts_url, wait_until="domcontentloaded", timeout=25_000)
+            wait_ui_ready(page, 12_000)
+            page.wait_for_timeout(1200)
+        except Exception as e:  # noqa: BLE001
+            warn(f"  ⚠️ Лента не открылась ({_short_error(e)}) – попытка {attempt}")
+            continue
+
+        # Страница постов действительно отрисовалась? Кнопка «Добавить пост» –
+        # доказательство того, что мы смотрим на ленту, а не на пустой каркас.
+        try:
+            feed_ready = page.evaluate_handle(_FIND_ADD_POST_JS).as_element() is not None
+        except Exception:  # noqa: BLE001
+            feed_ready = False
+
+        last = read_feed_state(page, post_text)
+        seen_feed = seen_feed or feed_ready or last["cards"] > 0 or last["matches"] > 0
+
+        why = _feed_says_published(before, last)
+        if why:
+            _note_feed_match(before, last)
+            return {"verdict": "published", "hasImage": last["hasImage"], "state": last,
+                    "detail": why}
+
+        if attempt < FEED_RELOAD_TRIES:
+            # Лента могла отстать на секунду. Перечитываем, прежде чем сказать
+            # «поста нет»: ошибка в эту сторону стоит дубля при следующей попытке.
+            page.wait_for_timeout(FEED_RELOAD_PAUSE)
+
+    if not seen_feed:
+        return {"verdict": "unknown", "hasImage": False, "state": last,
+                "detail": "лента не прочиталась"}
+    if int(last["cards"]) > int((before or {}).get("cards") or 0):
+        # Карточек стало больше, а текст не совпал. Скорее всего пост всё-таки
+        # создан, просто лента отрисовала текст иначе. Повторять нельзя.
+        return {"verdict": "unknown", "hasImage": last["hasImage"], "state": last,
+                "detail": "в ленте появилась новая карточка, но текст поста в ней не найден"}
+    return {"verdict": "absent", "hasImage": False, "state": last,
+            "detail": _feed_absence_reason(before, last)}
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -1166,7 +1425,18 @@ def _is_publish_api_response(url: str, method: str) -> bool:
         return False
     if re.search(r"/(watch|metric|counter|track|stat|analytics|csp-report|ping|heartbeat|clck|informer)\b", path):
         return False
-    return bool(re.search(r"sprav|/api/|/posts?\b", path))
+    # ЗАГРУЗКА КАРТИНКИ – НЕ подтверждение поста. Хранилище фотографий отвечает
+    # на avatars.mds.yandex.net/…/get-sprav-posts/… и photo.upload.maps.yandex.ru:
+    # хост яндексовый, в пути есть «sprav» – прежнее правило засчитывало это за
+    # публикацию. В прогоне 12.08 шесть городов получили «API подтвердил» именно
+    # по ответу загрузчика, и в Самаре поста при этом не появилось.
+    if re.match(r"^(avatars?|photo|upload|storage|images?)\b", host) or ".mds." in host:
+        return False
+    if re.search(r"/(get|put|upload)-|/upload\b", path):
+        return False
+    # Путь должен быть похож на создание поста, а не просто содержать «sprav»:
+    # мимо проходили любые POST кабинета, от сохранения черновика до телеметрии.
+    return _publish_response_score(url) > 0
 
 
 # Насколько ответ похож на «пост создан». Нужно, когда после клика прилетело
@@ -1199,11 +1469,18 @@ def publish_to_city(
     """
     Полный порт publishToCity из publish.js.
 
+    Опубликован пост или нет – решает ЛЕНТА карточки, а не HTTP-ответы:
+    после клика страница перечитывается и в ней ищется наш текст.
+
     Возвращает dict:
-      status: 'ok' | 'no-image' | 'unknown' | 'failed'
+      status: 'ok' | 'no-image' | 'unknown' | 'failed' | 'skipped-duplicate' | 'no-session'
+              ok        – пост найден в ленте (и картинка на месте, если была)
+              no-image  – пост в ленте есть, картинки в нём нет
+              failed    – поста в ленте НЕТ (при retrySafe=True повтор безопасен)
+              unknown   – ленту прочитать не удалось; повторять нельзя, будет дубль
       reason: человеческое объяснение
       steps:  {navigate, postsSection, addButton, text, image, publish}
-      durationMs, cityName, companyUrl, imageError
+      durationMs, cityName, companyUrl, imageError, feedDetail, retrySafe
     """
     label = f"[{task_index + 1}/{total_tasks}] {task.get('cityName', '?')}"
     started = time.time()
@@ -1305,6 +1582,13 @@ def publish_to_city(
         already = check_post_already_exists(page, task.get("postText", ""))
     except Exception:  # noqa: BLE001
         already = {"found": False, "fresh": False, "reason": ""}
+
+    # Снимок ленты ДО публикации. По нему потом узнаем, появился ли пост:
+    # сравнение «было/стало» работает и когда тексты в ленте повторяются.
+    before_feed = read_feed_state(page, task.get("postText", ""))
+    if before_feed["matches"]:
+        info(f"  📋 В ленте уже есть {before_feed['matches']} совпадени(й) по началу текста – учту при проверке")
+
     if already.get("found") and already.get("fresh"):
         result["steps"]["publish"] = "already-published"
         reason = ("Такой пост уже есть в ленте города"
@@ -1502,11 +1786,11 @@ def publish_to_city(
         return finish("failed", "Кнопка «Создать»/«Опубликовать» не найдена")
     info(f"  🎯 Кнопка публикации: «{pub['text']}» {pub['w']}×{pub['h']} на y={pub['y']}")
 
-    # ─── 6. ВЕРИФИКАЦИЯ ЧЕРЕЗ ПЕРЕХВАТ API-ОТВЕТА ───
-    # Слушателя ставим ДО клика. Ответ 2xx на POST к API постов = пост точно создан.
-    # Собираем ВСЕ подходящие ответы, а не первый попавшийся: решение примем
-    # по самому точному из них, а среди равных – по последнему (он и есть
-    # окончательный ответ Яндекса).
+    # ─── 6. ПЕРЕХВАТ API-ОТВЕТА – ДЛЯ ДИАГНОСТИКИ, НЕ ДЛЯ ВЕРДИКТА ───
+    # Слушателя ставим ДО клика. Ответ нужен ради причины отказа в его теле:
+    # решает, опубликован пост или нет, шаг 7 по ленте. Собираем ВСЕ подходящие
+    # ответы, а не первый попавшийся: возьмём самый точный, среди равных –
+    # последний (он и есть окончательный ответ Яндекса).
     api_hits: list[dict] = []
     api_result: dict[str, Any] = {}
 
@@ -1516,7 +1800,8 @@ def publish_to_city(
                 return
             api_hits.append({"url": response.url, "status": response.status,
                              "method": response.request.method,
-                             "score": _publish_response_score(response.url)})
+                             "score": _publish_response_score(response.url),
+                             "resp": response})
         except Exception:
             pass
 
@@ -1574,74 +1859,93 @@ def publish_to_city(
         api_result = dict(api_hits[best])
         if len(api_hits) > 1:
             info(f"  📡 Подходящих ответов: {len(api_hits)} – взят самый точный")
+        # Тело ответа раньше выбрасывалось – а причина отказа лежит именно в нём.
+        # Читаем ДО перезагрузки страницы: после неё тело уже не достать.
+        try:
+            body = api_result["resp"].json()
+        except Exception:  # noqa: BLE001
+            body = None
+        if isinstance(body, dict):
+            api_result["postId"] = str(body.get("id") or body.get("postId") or "") or None
+            err = body.get("error") or body.get("errors") or body.get("message")
+            if err:
+                api_result["error"] = json.dumps(err, ensure_ascii=False)[:200]
 
     _cleanup(temp_files)
 
-    # ─── 7. Разбор результата ───
+    # ─── 7. ВЕРДИКТ ВЫНОСИТ ЛЕНТА, И ТОЛЬКО ОНА ───
+    # Сетевые сигналы оказались ненадёжны в обе стороны. Ответ загрузчика
+    # картинки выдавался за подтверждение публикации – так Самара 12.08 попала
+    # в отчёт как «ok» без поста. Отсутствие ответа тоже ничего не значило:
+    # Уфа и Оренбург опубликовались, не показав его в окне ожидания. Поэтому
+    # HTTP-ответ теперь идёт только в текст причины, а решение принимает лента.
+    api_note = ""
     if api_result:
-        info(f"  📡 API Яндекса: {api_result['method']} {api_result['url'][:100]} → HTTP {api_result['status']}")
-        if 200 <= api_result["status"] < 300:
-            result["steps"]["publish"] = "api-confirmed"
-            status = "no-image" if result["steps"]["image"] == "failed" else "ok"
-            reason = ("Пост опубликован (API подтвердил)" if status == "ok"
-                      else "Пост опубликован без картинки (API подтвердил)")
-            page.wait_for_timeout(800)
-            out = finish(status, reason)
-            info(f"  ✅ {label} – {reason} ({out['durationMs'] / 1000:.1f} сек)")
-            return out
-        if api_result["status"] >= 400:
-            result["steps"]["publish"] = "api-rejected"
-            error(f"  ❌ Яндекс отклонил публикацию: HTTP {api_result['status']}")
-            return finish("failed", f"Яндекс отклонил публикацию: HTTP {api_result['status']}")
-
-    if click_error and not api_result:
-        # Клик упал и API-ответа нет – чаще всего это УСПЕШНАЯ публикация с навигацией.
-        # Ретрай запрещён: лучше «проверьте вручную», чем дубль.
-        result["steps"]["publish"] = "click-error-no-api"
-        warn("  ⚠️ Клик дал ошибку, API-ответа не было – возможно опубликовано")
-        return finish(
-            "unknown",
-            f"Клик дал ошибку ({click_error[:100]}), но API-ответа не было. "
-            "Возможно опубликовано – проверьте вручную.",
-        )
-
+        info(f"  📡 API Яндекса: {api_result['method']} {api_result['url'][:100]} → HTTP {api_result['status']}"
+             + (f", id={api_result['postId']}" if api_result.get("postId") else ""))
+        if api_result.get("error"):
+            warn(f"  📡 Ошибка в теле ответа: {api_result['error']}")
+            api_note = f"ответ Яндекса: {api_result['error']}"
+        elif api_result["status"] >= 400:
+            api_note = f"company-post вернул HTTP {api_result['status']}"
     if click_error:
-        result["steps"]["publish"] = "click-failed"
-        error(f"  ❌ Ошибка клика «Создать»: {click_error}")
-        return finish("failed", f"Ошибка клика «Создать»: {click_error}")
+        warn(f"  ⚠️ Клик дал ошибку ({click_error[:100]}) – смотрю ленту")
 
-    # API-ответа не поймали – смотрим DOM: форма закрылась и пост появился в ленте?
-    page.wait_for_timeout(2000)
-    try:
-        fb = page.evaluate(_DOM_FALLBACK_JS, text.strip())
-    except Exception:
-        fb = {"formOpen": False, "postFound": False}
-
-    # Лента могла не перерисоваться сама. Перечитываем страницу и смотрим ещё
-    # раз: это чтение, дубль создать не может, а «неизвестно» превращает в
-    # честный ответ. Раньше на этом месте прогон сдавался.
-    if not fb.get("postFound"):
+    # Не перечитываем страницу, пока форма ещё открыта: навигация в момент
+    # отправки оборвала бы запрос – мы бы своими руками сделали тот самый
+    # провал, который ищем.
+    deadline_form = time.time() + FORM_CLOSE_TIMEOUT
+    while time.time() < deadline_form:
         try:
-            page.goto(posts_url, wait_until="domcontentloaded", timeout=20_000)
-            wait_ui_ready(page, 10_000)
-            page.wait_for_timeout(1200)
-            fb = page.evaluate(_DOM_FALLBACK_JS, text.strip())
-            if fb.get("postFound"):
-                info("  🔎 Пост найден в ленте после перечитывания страницы")
+            # Пустая игла: здесь нас интересует только форма, пост ищет шаг 7.
+            if not page.evaluate(_DOM_FALLBACK_JS, "").get("formOpen"):
+                break
         except Exception:  # noqa: BLE001
-            pass
+            break
+        page.wait_for_timeout(300)
 
-    if fb.get("postFound") and not fb.get("formOpen"):
-        result["steps"]["publish"] = "dom-confirmed"
-        status = "no-image" if result["steps"]["image"] == "failed" else "ok"
-        reason = "Пост опубликован (по DOM)" if status == "ok" else "Пост опубликован без картинки (по DOM)"
-        out = finish(status, reason)
+    info("  🔍 Проверяю ленту...")
+    verdict = verify_post_in_feed(page, posts_url, text, before_feed)
+
+    if verdict["verdict"] == "published":
+        result["steps"]["publish"] = "feed-confirmed"
+        result["feedDetail"] = verdict["detail"]
+        if has_image_src and not verdict["hasImage"]:
+            # Пост есть, картинки нет. Повтор тут запрещён: он даст второй пост.
+            # Так выглядела Тюмень 12.08 – по логу отличить её было нечем.
+            result["steps"]["image"] = "missing-in-feed"
+            # Причину подставит отчёт из imageError – здесь не дублируем.
+            result.setdefault("imageError", "")
+            if not result["imageError"]:
+                result["imageError"] = "картинка не дошла до ленты"
+            reason = "Пост опубликован, но БЕЗ картинки (проверено в ленте)"
+            out = finish("no-image", reason)
+            warn(f"  ⚠️ {label} – {reason} ({out['durationMs'] / 1000:.1f} сек)")
+            return out
+        reason = f"Пост опубликован (проверен в ленте: {verdict['detail']})"
+        out = finish("ok", reason)
         info(f"  ✅ {label} – {reason} ({out['durationMs'] / 1000:.1f} сек)")
         return out
 
-    result["steps"]["publish"] = "unknown"
-    warn("  ⚠️ Публикация не подтверждена ни API, ни DOM")
-    return finish("unknown", "Публикация не подтверждена ни API, ни DOM. Проверьте вручную.")
+    if verdict["verdict"] == "absent":
+        # Отсутствие ПОДТВЕРЖДЕНО – значит повтор безопасен и дубля не даст.
+        result["steps"]["publish"] = "feed-absent"
+        result["retrySafe"] = True
+        result["feedDetail"] = verdict["detail"]
+        reason = f"Пост не найден в ленте после публикации ({verdict['detail']})"
+        if api_note:
+            reason += f"; {api_note}"
+        error(f"  ❌ {label} – {reason}")
+        return finish("failed", reason)
+
+    # Ни подтвердить, ни опровергнуть. Повтор запрещён: как раз здесь он и
+    # рождает дубли – пост мог быть создан, просто мы его не увидели.
+    result["steps"]["publish"] = "feed-unknown"
+    result["feedDetail"] = verdict["detail"]
+    warn(f"  ⚠️ Лента не дала ответа: {verdict['detail']}")
+    return finish("unknown", f"Публикация не подтверждена по ленте ({verdict['detail']})"
+                             + (f"; {api_note}" if api_note else "")
+                             + ". Проверьте Яндекс.Бизнес вручную.")
 
 
 def _cleanup(paths: Iterable[str]) -> None:

@@ -3645,20 +3645,17 @@ def _crosspost_channels_block(project_id: str, config: dict) -> None:
                                              key=f"cp-tgc-{project_id}", placeholder="@stalmetural"),
             "tgChannelStaff": c2.text_input("ТГ сотрудники", value=config.get("tgChannelStaff", ""),
                                             key=f"cp-tgs-{project_id}", placeholder="@SMUdaily"),
-            "maxChatId": c3.text_input("МАКС: id канала (для бота)",
+            "maxChatId": c3.text_input("МАКС: id канала для бота (не обязательно)",
                                        value=config.get("maxChatId", ""),
                                        key=f"cp-max-{project_id}"),
         }
-        # Ссылка на канал в веб-версии МАКС – для РОДНОЙ отложки. У бота
-        # отложки нет вовсе (проверено по документации), он шлёт «сейчас», и
-        # тогда Click обязан работать в час выхода. По этой ссылке отложку
-        # держит сам МАКС, как ВК и ОК держат свои.
-        vals["maxWebUrl"] = st.text_input(
-            "МАКС: ссылка на канал в веб-версии (для отложки)",
-            value=config.get("maxWebUrl", ""), key=f"cp-maxweb-{project_id}",
-            placeholder="https://web.max.ru/-70916890460398",
-            help="Откройте канал на web.max.ru и скопируйте адрес из строки браузера. "
-                 "По нему Click поставит отложку, которую держит сам МАКС.")
+        st.caption("МАКС можно вести двумя путями, и id канала нужен только "
+                   "первому. **Бот** шлёт «сейчас», а время держит планировщик – "
+                   "значит Click должен работать в час выхода; для него и нужен id. "
+                   "**Отложка** – родная, её держит сам МАКС, Click при этом может "
+                   "быть выключен; для неё нужен не id, а ссылка на канал в "
+                   "веб-версии, и она в «Настройках», блок «🔒 МАКС (кросспостинг)». "
+                   "Обычно достаточно второго пути – поле id можно оставить пустым.")
         if any(vals[k].strip() != (config.get(k) or "") for k in vals):
             config.update({k: v.strip() for k, v in vals.items()})
             save_config(project_id)
@@ -4205,6 +4202,9 @@ def tab_settings(project_id: str, config: dict) -> None:
     _ok_login_block(project_id, config)
 
     st.divider()
+    _max_login_block(project_id, config)
+
+    st.divider()
     _kp_sheet_settings_block(project_id, config)
 
     st.divider()
@@ -4573,28 +4573,78 @@ def _gis_login_block(project_id: str, config: dict) -> None:
         st.rerun()
 
 
+def _max_login_block(project_id: str, config: dict) -> None:
+    """
+    МАКС: ссылка на канал и состояние сессии.
+
+    Живёт рядом с «Вход в ВК» и «Вход в ОК» нарочно. Сначала это поле
+    стояло во вкладке «Кросспостинг», среди каналов мессенджеров – и
+    заказчица искала его в «Настройках», где лежат ссылки двух других
+    сетей. Логично искала: одинаковые вещи должны лежать в одном месте.
+
+    Кнопки «Войти» здесь нет и быть не может: МАКС не пускает
+    автоматический браузер – он не рисует проверку «вы не робот» вовсе.
+    Вход только через файл сессий, который делает VHOD-VK-i-OK.py.
+    """
+    import max_browser
+
+    html('<div class="card-title">🔒 МАКС (кросспостинг)</div>')
+    url = st.text_input("Ссылка на канал МАКС в веб-версии",
+                        value=config.get("maxWebUrl", ""),
+                        key=f"set-maxweb-{project_id}",
+                        placeholder="https://web.max.ru/-70916890460398",
+                        help="Откройте web.max.ru, зайдите в канал и скопируйте адрес "
+                             "из строки браузера – он выглядит как web.max.ru/-70916… "
+                             "Ссылка-приглашение вида max.ru/join/… НЕ подойдёт: это "
+                             "приглашение вступить, а не адрес канала.")
+    if url.strip() and "/join/" in url:
+        st.warning("Это ссылка-приглашение (max.ru/join/…) – по ней в канал "
+                   "вступают, а не публикуют. Откройте канал на web.max.ru и "
+                   "скопируйте адрес из строки браузера: web.max.ru/-70916…")
+    if url.strip() != (config.get("maxWebUrl") or ""):
+        config["maxWebUrl"] = url.strip()
+        save_config(project_id)
+
+    if max_browser.has_saved_session(project_id):
+        st.success("Сессия МАКС сохранена – отложки будут ставиться без повторного входа.")
+    else:
+        st.warning("Сессии МАКС нет. Войти кнопкой отсюда нельзя: МАКС не пускает "
+                   "автоматический браузер – он не показывает ему проверку «вы не "
+                   "робот». Запустите VHOD-VK-i-OK.py на своём компьютере и "
+                   "загрузите файл сессий в блоке выше.")
+
+
 def _both_sessions_block(project_id: str) -> None:
     """
-    Один файл сессий на обе сети – ВК и ОК сразу.
+    Один файл сессий на ВСЕ сети сразу – ВК, ОК и МАКС.
 
     Мысль заказчицы, и правильная: «может, одним входом оба куки собирать,
     в один файлик, и один раз вставлять». Куки-то снимаются ОДНИМ браузером
-    за ОДИН заход – ОК и пускает-то через ВК. Делить их на два файла и
-    заставлять человека вставлять дважды было работой на ровном месте.
-    Click раскладывает по сетям сам и говорит, что нашёл.
+    за ОДИН заход – ОК и пускает-то через ВК. Делить их на файлы и
+    заставлять человека вставлять по нескольку раз было работой на ровном
+    месте. Click раскладывает по сетям сам и говорит, что нашёл.
+
+    Заголовок и подпись перечисляют сети ПОИМЁННО. Когда добавился МАКС,
+    приём файла я сделал, а тут оставил «ВК и ОК» – и заказчица искала,
+    куда грузить МАКС, глядя прямо на нужное поле. Подпись должна называть
+    всё, что блок умеет, иначе она вводит в заблуждение.
     """
+    import max_browser
     import ok_browser
     import social_session
     import vk_social
 
-    html('<div class="card-title">🔑 Файл сессий ВК и ОК</div>')
-    есть_вк = vk_social.has_saved_session(project_id)
-    есть_ок = ok_browser.has_saved_session(project_id)
+    html('<div class="card-title">🔑 Файл сессий: ВК, ОК и МАКС</div>')
+    сети = ((" ВК", vk_social.has_saved_session(project_id)),
+            ("ОК", ok_browser.has_saved_session(project_id)),
+            ("МАКС", max_browser.has_saved_session(project_id)))
     st.caption(
-        f"Сейчас: ВК – {'вход есть' if есть_вк else 'входа нет'} · "
-        f"ОК – {'вход есть' if есть_ок else 'входа нет'}. "
-        "Файл делает VHOD-VK-i-OK.py на вашем компьютере: вошли в обе сети – "
-        "получился один файл. Загрузите его сюда, и обе сети возьмутся сразу.")
+        "Сейчас: "
+        + " · ".join(f"{имя.strip()} – {'вход есть' if есть else 'входа нет'}"
+                     for имя, есть in сети)
+        + ". Файл делает VHOD-VK-i-OK.py на вашем компьютере: вошли в сети – "
+          "получился ОДИН файл. Загрузите его сюда (кнопка «Выбрать файлы» "
+          "ниже), и все три сети возьмутся сразу.")
     # Итог прошлой загрузки. Держим в session_state, а не показываем сразу:
     # после успеха страница перерисовывается (чтобы обновились «вход есть»),
     # и сообщение, написанное до перерисовки, стиралось вместе с ней. Со
@@ -4603,9 +4653,9 @@ def _both_sessions_block(project_id: str) -> None:
     if said_before:
         (st.success if said_before[0] else st.error)(said_before[1])
 
-    up = st.file_uploader("Файл сессий (VK-i-OK-sessii.json)", type=["json"],
-                          key=f"sess-both-up-{project_id}")
-    if up is not None and st.button("Загрузить обе сессии", type="primary",
+    up = st.file_uploader("Файл сессий VK-i-OK-sessii.json – ВК, ОК и МАКС в одном",
+                          type=["json"], key=f"sess-both-up-{project_id}")
+    if up is not None and st.button("Загрузить сессии всех сетей", type="primary",
                                     key=f"sess-both-go-{project_id}"):
         took, said = social_session.import_combined(project_id, up.getvalue())
         st.session_state[f"sess-both-said-{project_id}"] = (

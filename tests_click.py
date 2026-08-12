@@ -116,6 +116,18 @@ def test_publish_api_filter() -> None:
     check("ключевые слова только в параметрах, путь чужой – не считается",
           not f("https://yandex.ru/collections/save?from=%2Fsprav%2Fposts%2F", "POST"))
 
+    # Прогон 12.08: шесть городов получили «ok» по ответу ЗАГРУЗЧИКА КАРТИНКИ.
+    # Хост яндексовый, в пути есть «sprav» – прежнее правило засчитывало это за
+    # публикацию, и Самара уехала в отчёт как опубликованная, не будучи такой.
+    check("хранилище картинок avatars.mds НЕ считается публикацией",
+          not f("https://avatars.mds.yandex.net/get-sprav-posts/1234/abc/orig", "POST"))
+    check("загрузчик фото photo.upload.maps НЕ считается публикацией",
+          not f("https://photo.upload.maps.yandex.ru/upload/sprav?sign=x", "POST"))
+    check("сохранение настроек карточки НЕ считается публикацией",
+          not f("https://yandex.ru/sprav/api/1/company/edit", "POST"))
+    check("создание поста по-прежнему считается",
+          f("https://yandex.ru/sprav/api/71186454150/company-post", "POST"))
+
     # Из нескольких подходящих ответов берём САМЫЙ ТОЧНЫЙ, а не первый.
     score = yb._publish_response_score  # noqa: SLF001
     eq("создание поста – высший приоритет",
@@ -196,6 +208,18 @@ def test_retry_rules() -> None:
     check("подтверждено API → повтор запрещён", click({"steps": {"publish": "api-confirmed"}}))
     check("Яндекс отклонил → повтор запрещён", click({"steps": {"publish": "api-rejected"}}))
     check("неопределённо → повтор запрещён", click({"steps": {"publish": "unknown"}}))
+    check("лента прочитана, пост есть → повтор запрещён",
+          click({"steps": {"publish": "feed-confirmed"}}))
+    check("ленту прочитать не удалось → повтор запрещён",
+          click({"steps": {"publish": "feed-unknown"}}))
+    # А вот подтверждённое отсутствие поста повторить МОЖНО: дублировать нечего.
+    src = Path("runner.py").read_text(encoding="utf-8")
+    one = src[src.index("def _publish_one_city("):src.index("def _second_pass(")]
+    check("подтверждённое отсутствие поста разрешено повторить",
+          'safe_absent = bool(res.get("retrySafe"))' in one
+          and "_click_happened(res) and not safe_absent" in one)
+    check("повтор при retrySafe не режется списком причин",
+          "not safe_absent and not any(" in one)
     check("кнопка публикации не найдена → повтор разрешён", not click({"steps": {"publish": "missing"}}))
     check("упали на поле текста → повтор разрешён", not click({"steps": {"text": "missing"}}))
     check("упали на кнопке «Добавить пост» → повтор разрешён", not click({"steps": {"addButton": "missing"}}))
@@ -2604,6 +2628,152 @@ def test_preflight_duplicate_guard() -> None:
                              + "</body></html>")
             got = yb.check_post_already_exists(page, text)
             check("чужой пост за свой не считаем", not got.get("found"), str(got))
+        finally:
+            browser.close()
+
+
+def test_feed_verdict() -> None:
+    """
+    Вердикт о публикации выносит ЛЕНТА, а не сетевые ответы.
+
+    Прогон 12.08: 60 городов отчитались «Пост опубликован (API подтвердил)»,
+    а в Самаре поста не было вовсе, в Тюмени – без картинки. «Подтверждением»
+    оказывался ответ загрузчика картинки. Здесь проверяем правила, по которым
+    теперь принимается решение.
+    """
+    import yb_playwright as yb
+    print("\n▸ Вердикт по ленте")
+
+    said = yb._feed_says_published   # noqa: SLF001
+    check("совпадений стало больше – пост опубликован",
+          bool(said({"matches": 0, "cards": 3}, {"matches": 1, "cards": 4})))
+    check("повторяющийся текст: было одно, стало два – опубликован",
+          bool(said({"matches": 1, "cards": 3}, {"matches": 2, "cards": 4})))
+    check("было одно, осталось одно – НЕ опубликован (в ленте прошлый пост)",
+          not said({"matches": 1, "cards": 3}, {"matches": 1, "cards": 3}))
+    check("совпадений нет вовсе – НЕ опубликован",
+          not said({"matches": 0, "cards": 3}, {"matches": 0, "cards": 3}))
+    check("появилась плашка модерации – опубликован",
+          bool(said({"matches": 1, "fresh": ""}, {"matches": 1, "fresh": "moderation"})))
+    check("плашка была и до клика – это не доказательство",
+          not said({"matches": 1, "fresh": "moderation"}, {"matches": 1, "fresh": "moderation"}))
+
+    why = yb._feed_absence_reason    # noqa: SLF001
+    check("причину отказа объясняем человеку, а не кодом",
+          "прошлый пост" in why({"matches": 1}, {"matches": 1, "cards": 4}))
+    check("пусто в ленте – так и говорим",
+          "нет" in why({"matches": 0}, {"matches": 0, "cards": 4}))
+
+    # Игла для поиска: перевод строки лента склеивает, и подстрока с «\n»
+    # не находится НИКОГДА. Ложное «поста нет» стоит дубля при повторе.
+    needle = yb._feed_needle         # noqa: SLF001
+    text = ("Отгрузили партию сотового поликарбоната на склад заказчика\n\n"
+            "📞 Телефон: +7 (499) 130-36-69\n#Отгрузка_МПИ")
+    got = needle(text)
+    check("игла берётся одной строкой, без переносов", "\n" not in got, repr(got))
+    check("игла – из тела поста, а не из контактов", got.startswith("Отгрузили партию"), got)
+    check("игла не длиннее 80 символов", len(got) <= 80, str(len(got)))
+    check("короткие строки пропускаем – по ним нашёлся бы любой пост",
+          needle("Привет\nОтгрузили партию поликарбоната на склад заказчика в городе")
+          .startswith("Отгрузили"))
+
+    src = Path("yb_playwright.py").read_text(encoding="utf-8")
+    body = src[src.index("def publish_to_city("):src.index("def _cleanup(")]
+    check("статус «ok» выдаётся только после проверки ленты",
+          "verify_post_in_feed" in body and "api-confirmed" not in body)
+    check("подтверждённое отсутствие помечено как безопасное для повтора",
+          'result["retrySafe"] = True' in body)
+
+    # «Поста нет» разрешает повтор, поэтому промах поиска стоит дубля. Верим
+    # отсутствию только после того, как поиск хоть раз нашёл пост по тексту.
+    state = yb._FEED_MATCH          # noqa: SLF001
+    was = dict(state)
+    try:
+        state.update({"proven": False, "missed": False})
+        check("поиск себя не показал – отсутствию не верим", not yb.feed_match_reliable())
+        yb._note_feed_match({"matches": 0}, {"matches": 1})      # noqa: SLF001
+        check("нашли пост по тексту – теперь верим", yb.feed_match_reliable())
+        yb._note_feed_match({"matches": 5}, {"matches": 5, "fresh": "moderation"})  # noqa: SLF001
+        check("поиск промахнулся мимо реального поста – доверие снято",
+              not yb.feed_match_reliable())
+        yb._note_feed_match({"matches": 0}, {"matches": 1})      # noqa: SLF001
+        check("и обратно уже не включается", not yb.feed_match_reliable())
+    finally:
+        state.update(was)
+
+    rsrc = Path("runner.py").read_text(encoding="utf-8")
+    check("runner повторяет только при рабочем поиске по ленте",
+          "yb.feed_match_reliable()" in rsrc
+          and 'bool(res.get("retrySafe")) and yb.feed_match_reliable()' in rsrc)
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    post = "Отгрузили партию сотового поликарбоната на склад заказчика в этом городе"
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 1200, "height": 900}).new_page()
+
+            def card(text: str, extra: str = "") -> str:
+                return (f'<div class="PostCard" style="width:600px;height:300px">'
+                        f'<img src="https://avatars.mds.yandex.net/get-sprav-companies/1/logo" '
+                        f'style="width:40px;height:40px">'
+                        f'{extra}<p>{text}</p></div>')
+
+            # Одна карточка – одно совпадение, сколько бы обёрток ни было.
+            page.set_content("<html><body><div class=\"PostsList\"><div class=\"wrap\">"
+                             + card(post) + "</div></div></body></html>")
+            state = yb.read_feed_state(page, post)
+            eq("одна карточка – одно совпадение", state["matches"], 1)
+            check("логотип компании за картинку поста не считаем",
+                  not state["hasImage"], str(state))
+
+            page.set_content("<html><body>" + card(post) + card(post) + "</body></html>")
+            eq("две одинаковые карточки – два совпадения",
+               yb.read_feed_state(page, post)["matches"], 2)
+
+            page.set_content("<html><body>" + card("совсем другой текст поста для города")
+                             + "</body></html>")
+            eq("чужой пост за свой не считаем", yb.read_feed_state(page, post)["matches"], 0)
+
+            # Картинка поста: CDN постов либо заведомо крупная.
+            big = ('<img src="https://avatars.mds.yandex.net/get-sprav-posts/9/x/orig" '
+                   'style="width:400px;height:220px">')
+            page.set_content("<html><body>" + card(post, big) + "</body></html>")
+            check("картинка поста найдена", yb.read_feed_state(page, post)["hasImage"])
+
+            # Свежесть: плашка модерации.
+            page.set_content("<html><body>"
+                             + card(post, "<span>Публикация на модерации</span>")
+                             + "</body></html>")
+            eq("плашка модерации распознана", yb.read_feed_state(page, post)["fresh"], "moderation")
+            page.set_content("<html><body>" + card(post, "<span>3 дня назад</span>")
+                             + "</body></html>")
+            eq("старый пост свежим не считаем", yb.read_feed_state(page, post)["fresh"], "")
+
+            # Текст, разложенный лентой по абзацам: перенос строки не должен
+            # ронять поиск – иначе «поста нет» и повтор создаёт дубль.
+            multi = "Отгрузили партию поликарбоната на склад заказчика\nв городе Тюмень"
+            page.set_content("<html><body>"
+                             + '<div class="PostCard" style="width:600px;height:300px">'
+                             + f"<p>{multi.splitlines()[0]}</p><p>{multi.splitlines()[1]}</p></div>"
+                             + "</body></html>")
+            eq("пост с переносом строки в ленте находится",
+               yb.read_feed_state(page, multi)["matches"], 1)
+
+            # Открытая форма – ещё не публикация.
+            page.set_content('<html><body><div class="PostAddForm" style="width:600px;height:300px">'
+                             f'<div contenteditable="true">{post}</div></div></body></html>')
+            eq("текст в открытой форме за пост не считаем",
+               yb.read_feed_state(page, post)["matches"], 0)
         finally:
             browser.close()
 
@@ -5052,6 +5222,7 @@ def main() -> int:
         test_add_post_click_on_real_page()
         test_toast_and_access_on_real_page()
         test_preflight_duplicate_guard()
+        test_feed_verdict()
         test_bulk_city_duplicates()
         test_actualize_click_on_real_page()
         test_run_logs(tmp)

@@ -160,6 +160,82 @@ def _first_visible(page, candidates) -> str:
     return ""
 
 
+EDITOR_WAIT_S = 75          # столько ждём, пока МАКС дорисует чат
+
+
+def _wait_for_editor(page, log: Callable[[str], None] | None = None,
+                     timeout_s: int = EDITOR_WAIT_S) -> str:
+    """
+    Дождаться поля «Пост», а не заглянуть один раз и уйти.
+
+    Живой отказ в облаке (12.08.2026): «Не нашли поле Пост» через восемь
+    секунд после открытия, а на снимке того же мгновения – пустой экран с
+    крутящимся логотипом МАКС. Приложение просто ещё грузилось.
+
+    МАКС – одностраничное приложение: сначала приходит пустая страница, и
+    только потом скрипты рисуют чат. На своём компьютере это доли секунды,
+    в облаке контейнер холодный и канал чужой – там четырёх секунд не
+    хватало никогда. Ждём долго и говорим об этом словами, чтобы ожидание
+    не выглядело зависанием.
+    """
+    log = log or (lambda m: None)
+    said = 0
+    for waited in range(timeout_s):
+        sel = _first_visible(page, SEL["text"])
+        if sel:
+            if waited:
+                log(f"МАКС дорисовал чат за {waited} с")
+            return sel
+        if waited and waited - said >= 15:
+            said = waited
+            log(f"Жду, пока МАКС загрузится… ({waited} с)")
+        page.wait_for_timeout(1_000)
+    return ""
+
+
+# Что бывает на экране вместо чата. Слова – с живых страниц МАКС.
+LOGIN_MARKS = ("Войти по номеру телефона", "Введите номер телефона",
+               "Войдите в аккаунт", "QR-код", "Войти в MAX", "Войти в МАКС")
+APP_MARKS = ("Открыть в приложении", "Скачать MAX", "Установите приложение")
+
+
+def _why_no_editor(page) -> str:
+    """
+    Почему поля «Пост» так и не появилось – ответ по тому, ЧТО на экране.
+
+    Три разные беды выглядели одинаково («не нашли поле»), а лечатся
+    по-разному: заново собрать сессию, поменять ссылку или формировать не
+    из облака. Поэтому спрашиваем саму страницу.
+    """
+    try:
+        body = page.evaluate(
+            "() => document.body ? (document.body.innerText || '') : ''") or ""
+    except Exception:  # noqa: BLE001
+        body = ""
+    try:
+        url = page.url or ""
+    except Exception:  # noqa: BLE001
+        url = ""
+    seen = " ".join(body.split())
+
+    if any(m in body for m in LOGIN_MARKS):
+        return ("МАКС показывает экран входа – сессия не действует. Соберите "
+                "файл сессий заново (VHOD-VK-i-OK.py) и загрузите его в "
+                "«Настройках». Пост НЕ отправлен")
+    if any(m in body for m in APP_MARKS):
+        return ("МАКС предлагает открыть приложение вместо чата – похоже, "
+                "ссылка ведёт не в канал веб-версии. Нужен адрес вида "
+                f"web.max.ru/-70916…, а открылось: {url or 'неизвестно'}")
+    if len(seen) < 40:
+        return (f"МАКС так и не загрузился за {EDITOR_WAIT_S} с – на снимке "
+                "пустой экран с логотипом. Из облака это обычное дело: МАКС "
+                "не пускает автоматический браузер с чужого адреса. "
+                "Сформируйте МАКС на своём компьютере – там же, где делали "
+                "файл сессий")
+    return ("Не нашли поле «Пост». На экране МАКС было: "
+            f"«{seen[:160]}». Пост НЕ отправлен")
+
+
 def _click_first(page, candidates, timeout: int = 8_000) -> str:
     if isinstance(candidates, str):
         candidates = (candidates,)
@@ -499,15 +575,13 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
             page = context.new_page()
 
             log(f"Открываю канал: {chat_url}")
-            page.goto(chat_url, wait_until="domcontentloaded", timeout=45_000)
-            page.wait_for_timeout(4_000)          # SPA рисуется не мгновенно
+            page.goto(chat_url, wait_until="domcontentloaded", timeout=60_000)
 
-            text_sel = _first_visible(page, SEL["text"])
+            text_sel = _wait_for_editor(page, log)
             if not text_sel:
                 return {"ok": False,
                         "shot": _debug_shot(project_id, page, "no-editor"),
-                        "error": "Не нашли поле «Пост» – либо сессия МАКС не "
-                                 "действует, либо ссылка ведёт не в канал"}
+                        "error": _why_no_editor(page)}
 
             log(f"Ввожу текст ({len(text)} знаков)")
             page.click(text_sel)
@@ -544,9 +618,17 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                 return {"ok": False,
                         "shot": _debug_shot(project_id, page, "no-send"),
                         "error": "Не нашли кнопку отправки в МАКС"}
-            page.locator(send_sel).first.click(button="right")
-            page.wait_for_timeout(900)
-            if not _click_first(page, SEL["schedule_item"], timeout=6_000):
+            # Меню тоже может опоздать – в облаке всё медленнее. Пробуем
+            # правую кнопку трижды, между попытками ждём.
+            opened = ""
+            for _ in range(3):
+                page.locator(send_sel).first.click(button="right")
+                page.wait_for_timeout(1_500)
+                opened = _click_first(page, SEL["schedule_item"], timeout=6_000)
+                if opened:
+                    break
+                page.wait_for_timeout(1_500)
+            if not opened:
                 return {"ok": False,
                         "shot": _debug_shot(project_id, page, "no-schedule-item"),
                         "error": "Меню «Запланировать пост» не появилось. Пост НЕ "

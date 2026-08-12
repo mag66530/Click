@@ -1464,6 +1464,123 @@ def test_max_calendar() -> None:
           mx.caption_ok("", when, today))
 
 
+def test_max_slow_load() -> None:
+    """
+    МАКС в облаке грузится медленно – и это не повод объявлять отказ.
+
+    Живой прогон 12.08.2026 в облаке: «Не нашли поле Пост» через восемь
+    секунд, а на снимке того же мгновения – пустой экран с логотипом МАКС.
+    Приложение ещё грузилось. Ждали 4 секунды: на своём компьютере хватает,
+    в облаке – никогда.
+
+    И вторая половина: три разные беды выглядели одинаково, а лечатся
+    по-разному. Поэтому причину спрашиваем у самой страницы.
+    """
+    print("\nМАКС: медленная загрузка и разбор экрана")
+    import max_browser as mx
+
+    check("ждём не секунды, а больше минуты", mx.EDITOR_WAIT_S >= 60,
+          str(mx.EDITOR_WAIT_S))
+
+    class FakePage:
+        def __init__(self, body="", url="https://web.max.ru/-709", tries=0):
+            self.body, self.url, self.tries, self.asked = body, url, tries, 0
+            self.slept = 0
+
+        def evaluate(self, script, *a):
+            return self.body
+
+        def wait_for_timeout(self, ms):
+            self.slept += ms
+
+        def locator(self, sel):
+            page = self
+
+            class L:
+                first = None
+
+                def __init__(self):
+                    self.first = self
+
+                def is_visible(self, timeout=0):
+                    page.asked += 1
+                    return page.asked > page.tries
+            return L()
+
+    # Поле появилось не сразу – дождались и сказали об этом.
+    said = []
+    slow = FakePage(tries=5)
+    got = mx._wait_for_editor(slow, said.append, timeout_s=30)
+    check("дождались поля, появившегося не сразу", bool(got), got)
+    check("ожидание не молчаливое", any("МАКС" in m for m in said), str(said))
+
+    never = FakePage(tries=10_000)
+    check("не появилось вовсе – честно пусто",
+          mx._wait_for_editor(never, None, timeout_s=3) == "")
+
+    # Причина отказа – по тому, что на экране.
+    why = mx._why_no_editor(FakePage("Войти по номеру телефона\nПродолжить"))
+    check("экран входа распознан", "сессия не действует" in why, why)
+    check("и сказано, что делать", "VHOD-VK-i-OK.py" in why, why)
+
+    why = mx._why_no_editor(FakePage("Открыть в приложении\nСкачать MAX"))
+    check("предложение приложения распознано", "ссылка ведёт не в канал" in why, why)
+
+    why = mx._why_no_editor(FakePage(""))
+    check("пустой экран – это «не загрузился»", "не загрузился" in why, why)
+    check("и сразу подсказка про облако",
+          "на своём компьютере" in why, why)
+
+    why = mx._why_no_editor(FakePage("Какой-то незнакомый экран " * 5))
+    check("незнакомое показываем словами", "На экране МАКС было" in why, why)
+    check("и не отправляем пост", "НЕ отправлен" in why, why)
+
+
+def test_tg_access_advice() -> None:
+    """
+    Отказ Телеграма переводим в действие, а не показываем как есть.
+
+    Публикация идёт ботом, и мало токена: бот обязан быть администратором
+    канала с правом отправки сообщений. Телеграм отвечает коротко и
+    по-английски («chat not found»), а сделать по этому нужно вполне
+    определённое – иначе это выясняется в час выхода поста.
+    """
+    print("\nТелеграм: отказ доступа – словами и по делу")
+    import tg_social as tg
+
+    def advice(said: str) -> str:
+        was_check, was_conf = tg.check_access, tg.is_configured
+        tg.check_access = lambda chat_id="": said
+        tg.is_configured = lambda: True
+        try:
+            return tg.access_advice("@channel")
+        finally:
+            tg.check_access, tg.is_configured = was_check, was_conf
+
+    check("всё хорошо – молчим", advice("") == "")
+    check("канала нет – проверяем имя",
+          "@" in advice("Телеграм отказал в getChat: chat not found"))
+    check("бот не в канале – зовём в админы",
+          "администратор" in advice("Bad Request: bot is not a member of the channel chat"))
+    check("нет прав – называем нужное право",
+          "Post Messages" in advice("Bad Request: not enough rights to send text messages"))
+    check("бота выгнали – видно, что именно",
+          "удалили" in advice("Forbidden: bot was kicked from the channel chat"))
+    check("токен не тот – к BotFather",
+          "BotFather" in advice("Unauthorized"))
+    check("незнакомый отказ показываем как есть",
+          advice("Совсем новая беда") == "Совсем новая беда")
+
+    # Без токена проверять нечего – и это отдельная, понятная причина.
+    was = tg.bot_token
+    tg.bot_token = lambda: ""
+    try:
+        check("нет токена – так и говорим",
+              "tg_bot_token" in tg.access_advice("@channel"))
+    finally:
+        tg.bot_token = was
+
+
 def test_social_defaults() -> None:
     """
     Ссылки брендов зашиты и подставляются только в ПУСТОЕ поле.
@@ -1594,6 +1711,8 @@ def main() -> int:
     test_probe_networks()
     test_combined_session_file()
     test_max_calendar()
+    test_max_slow_load()
+    test_tg_access_advice()
     test_social_defaults()
     test_max_native_scheduling()
     test_sessions_in_store()

@@ -113,8 +113,11 @@ SEL = {
     # Опираемся на ПОДПИСИ, а не на классы: у ОК классы вида pf-head_itx_a
     # меняются от редизайна к редизайну, а слова на кнопках живут годами.
     # Классы оставлены запасными вариантами – они пока работают.
-    "create_post": ('text="Создать новую тему"', "a.pf-head_itx_a",
-                    'text="Напишите заметку"', 'text="Добавить запись"'),
+    "create_post": ('text="Создать новую тему"', 'text="Создать тему"',
+                    'text="Добавить тему"', "a.pf-head_itx_a",
+                    '[data-l*="createTopic"]', '[data-l*="postingForm"]',
+                    'text="Напишите заметку"', 'text="Добавить запись"',
+                    '.posting-form, .js-posting-form'),
     "text": ('.js-posting-itx[contenteditable="true"]',
              '[role="dialog"] [contenteditable="true"]',
              '[contenteditable="true"]'),
@@ -492,16 +495,30 @@ def wait_vkid_frame(page, timeout_ms: int = 12_000):
     return None
 
 
-def _debug_shot(project_id: str, page, name: str) -> str:
-    """Снимок формы для разбора «не нашли элемент». Возвращает путь или пусто."""
+def _debug_shot(project_id: str, page, name: str) -> bytes | None:
+    """
+    Снимок экрана в момент неудачи. Возвращает КАРТИНКУ, а не путь к ней.
+
+    Путь возвращать было бессмысленно: в облаке файловая система своя, и
+    строка вида /home/appuser/.local/share/click/… человеку недоступна
+    никак. Заказчица получила такой путь вместо картинки и справедливо
+    попросила «пусть показывает экран, где запинается». Картинку раздел
+    показывает прямо на странице.
+
+    На диск тоже кладём – на своём компьютере это удобно, и снимок
+    переживёт закрытие вкладки.
+    """
+    try:
+        blob = page.screenshot(type="png", full_page=False)
+    except Exception:  # noqa: BLE001
+        return None
     try:
         d = paths.data_root() / project_id / "crosspost"
         d.mkdir(parents=True, exist_ok=True)
-        fp = d / f"ok-debug-{name}.png"
-        page.screenshot(path=str(fp))
-        return str(fp)
-    except Exception:  # noqa: BLE001
-        return ""
+        (d / f"ok-debug-{name}.png").write_bytes(blob)
+    except OSError:
+        pass                               # не записалось – картинка всё равно есть
+    return blob
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -1047,6 +1064,35 @@ def _click_first(page, candidates, timeout: int = 8_000) -> str:
     return ""
 
 
+def _open_composer(page, log: Callable[[str], None], tries: int = 3) -> bool:
+    """
+    Открыть форму новой темы. True – открылась.
+
+    Почему не один клик. Лента группы у ОК дорисовывается на ходу: поле
+    «Создать новую тему» появляется не в первый миг и не всегда в верхней
+    части экрана. Первый живой прогон (12.08.2026) на этом и споткнулся –
+    «не нашли» через секунду после открытия страницы. Поэтому: подождать,
+    поискать, прокрутить и поискать снова.
+    """
+    for attempt in range(1, tries + 1):
+        if _click_first(page, SEL["create_post"], timeout=6_000):
+            if attempt > 1:
+                log(f"  форма открылась с {attempt}-й попытки")
+            return True
+        # Не нашли – возможно, ещё грузится или уехало за край экрана.
+        try:
+            page.wait_for_load_state("networkidle", timeout=4_000)
+        except Exception:  # noqa: BLE001 – лента ОК почти никогда не «затихает»
+            pass
+        try:
+            page.mouse.wheel(0, 400 * attempt)
+        except Exception:  # noqa: BLE001
+            pass
+        page.wait_for_timeout(1_200)
+        log(f"  поля новой темы пока не видно (попытка {attempt}) – ищу дальше")
+    return False
+
+
 def _toast_scheduled(page, when: datetime) -> str:
     """
     Что ОК сам сказал про отложку: «Тема опубликуется 13.08.2026 в 08:59».
@@ -1146,6 +1192,10 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
     with sync_playwright() as pw:
         import vk_social as _vk
         browser = yb._launch(pw, engine, headless=headless, extra_args=_vk.ANTIBOT_ARGS)
+        # Заводим ЗАРАНЕЕ: обработчик ошибок ниже снимает по ней экран, а
+        # упасть можно и раньше, чем вкладка откроется. Тогда там был бы
+        # NameError вместо настоящей причины – ошибка поверх ошибки.
+        page = None
         try:
             context = browser.new_context(
                 storage_state=str(session_path(project_id)),
@@ -1175,19 +1225,21 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                 }.get(block, "ОК показывает проверку и не пускает в группу.")
                 return {"ok": False,
                         "error": why + " Зайдите в «Настройки» → «Вход в ОК» и "
-                                       "пройдите проверку, потом повторите."
-                                 + (f" (снимок: {shot})" if shot else "")}
+                                       "пройдите проверку, потом повторите.", "shot": shot}
             if "anonym" in (page.url or "") or not is_logged_in(page):
                 return {"ok": False,
+                        "shot": _debug_shot(project_id, page, "guest"),
                         "error": "ОК открыл страницу как гостю – сессия не действует. "
                                  "Войдите заново в «Настройках» → «Вход в ОК»."}
 
             log("Открываю форму поста («Создать новую тему»)")
-            if not _click_first(page, SEL["create_post"], timeout=15_000):
+            if not _open_composer(page, log):
                 shot = _debug_shot(project_id, page, "no-composer")
                 return {"ok": False,
-                        "error": "Не нашли «Создать новую тему» на странице группы"
-                                 + (f" (снимок: {shot})" if shot else "")}
+                        "error": "Не нашли «Создать новую тему» на странице группы. "
+                                 "Посмотрите снимок ниже: если поле для новой темы на "
+                                 "нём есть, значит ОК переименовал кнопку – пришлите "
+                                 "снимок, поправлю за минуту", "shot": shot}
             text_sel = ""
             for candidate in SEL["text"]:
                 try:
@@ -1198,8 +1250,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                     continue
             if not text_sel:
                 shot = _debug_shot(project_id, page, "no-editor")
-                return {"ok": False, "error": "Окно новой темы не открылось"
-                                              + (f" (снимок: {shot})" if shot else "")}
+                return {"ok": False, "error": "Окно новой темы не открылось", "shot": shot}
             page.wait_for_timeout(800)
 
             log(f"Ввожу текст ({len(text)} знаков)")
@@ -1208,15 +1259,15 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             page.wait_for_timeout(500)
             typed = page.eval_on_selector(text_sel, "el => el.textContent || ''")
             if text.strip() and not (typed or "").strip():
-                return {"ok": False, "error": "Текст не попал в поле поста ОК"}
+                return {"ok": False, "error": "Текст не попал в поле поста ОК",
+                        "shot": _debug_shot(project_id, page, "no-text")}
 
             if image_paths:
                 log(f"Прикрепляю фото: {len(image_paths)}")
                 trouble = _pick_photos(page, image_paths, log)
                 if trouble:
                     shot = _debug_shot(project_id, page, "no-photo")
-                    return {"ok": False, "error": trouble
-                                                  + (f" (снимок: {shot})" if shot else "")}
+                    return {"ok": False, "error": trouble, "shot": shot}
 
             # Отложка: галочка «Время публикации», под ней поле даты и два
             # выпадающих списка – часы и минуты. Кнопка внизу при этом
@@ -1225,15 +1276,13 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             if not _click_first(page, SEL["schedule_toggle"], timeout=8_000):
                 shot = _debug_shot(project_id, page, "no-schedule")
                 return {"ok": False,
-                        "error": "Не нашли галочку «Время публикации» в форме ОК"
-                                 + (f" (снимок: {shot})" if shot else "")}
+                        "error": "Не нашли галочку «Время публикации» в форме ОК", "shot": shot}
             page.wait_for_timeout(1_000)
 
             date_sel = _first_present(page, SEL["date_input"])
             if not date_sel:
                 shot = _debug_shot(project_id, page, "no-date")
-                return {"ok": False, "error": "Поле даты в форме ОК не распознано"
-                                              + (f" (снимок: {shot})" if shot else "")}
+                return {"ok": False, "error": "Поле даты в форме ОК не распознано", "shot": shot}
             page.click(date_sel, click_count=3)
             page.type(date_sel, when.strftime("%d.%m.%Y"), delay=25)
             page.keyboard.press("Enter")
@@ -1245,8 +1294,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             if times.count() < 2:
                 shot = _debug_shot(project_id, page, "no-time")
                 return {"ok": False,
-                        "error": "Не нашли выпадающие списки часов и минут в форме ОК"
-                                 + (f" (снимок: {shot})" if shot else "")}
+                        "error": "Не нашли выпадающие списки часов и минут в форме ОК", "shot": shot}
             for index, value in ((times.count() - 2, f"{when.hour:02d}"),
                                  (times.count() - 1, f"{when.minute:02d}")):
                 picker = times.nth(index)
@@ -1262,8 +1310,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                 return {"ok": False,
                         "error": "Не нашли кнопку «Сохранить» – без неё отложка не встанет. "
                                  "Кнопку «Поделиться» намеренно не жмём: она опубликует "
-                                 "пост СЕЙЧАС вместо назначенного времени"
-                                 + (f" (снимок: {shot})" if shot else "")}
+                                 "пост СЕЙЧАС вместо назначенного времени", "shot": shot}
 
             # Ответ самой площадки: «Тема опубликуется 13.08.2026 в 08:59».
             # Ждём именно его, а не закрытия окна: окно может закрыться и
@@ -1280,11 +1327,14 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                         "error": "ОК не подтвердил отложку: уведомления «Тема "
                                  "опубликуется …» не появилось. Проверьте «Отложенные» "
                                  "в группе – если тема там есть, формировать заново не "
-                                 "нужно" + (f" (снимок: {shot})" if shot else "")}
+                                 "нужно", "shot": shot}
             log(f"ОК подтвердил: {said}")
             yb._save_storage_state(context, session_path(project_id))
             return {"ok": True}
         except Exception as e:  # noqa: BLE001
-            return {"ok": False, "error": str(e)}
+            # Снимок и здесь: неожиданный сбой без картинки – это тупик,
+            # разбирать его по одной строке исключения нечем.
+            return {"ok": False, "error": str(e),
+                    "shot": _debug_shot(project_id, page, "error") if page else None}
         finally:
             browser.close()

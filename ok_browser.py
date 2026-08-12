@@ -1084,40 +1084,91 @@ def _click_first(page, candidates, timeout: int = 8_000) -> str:
     return ""
 
 
+def _editor_open(page, timeout_ms: int = 4_000) -> str:
+    """Селектор открывшегося поля ввода темы. Пусто – окно не открылось."""
+    for candidate in SEL["text"]:
+        try:
+            page.wait_for_selector(candidate, state="visible", timeout=timeout_ms)
+            return candidate
+        except Exception:  # noqa: BLE001
+            timeout_ms = 700          # первый уже подождал, остальным хватит взгляда
+    return ""
+
+
+def _click_composer_in_page(page) -> str:
+    """
+    Нажать «Создать новую тему» руками самой страницы. Что нашли, или пусто.
+
+    Зачем в обход обычного клика. Поле на странице ЕСТЬ – заказчица нашла
+    его обычным Ctrl+F, – а Click до него не дотягивался. Обычный клик
+    Playwright требует, чтобы элемент был не перекрыт: у ОК же поверх ленты
+    висят всплывашки («Оксана прислала вам открытку», «Подписаться»), и
+    любая из них перехватывает нажатие. Клик изнутри страницы этой проверки
+    не делает – он попадает точно в элемент.
+
+    Сперва подтверждённая инспектором ссылка a.pf-head_itx_a, затем поиск
+    по точной подписи.
+    """
+    try:
+        return page.evaluate(
+            """() => {
+                const go = (el, how) => {
+                    el.scrollIntoView({block: 'center'});
+                    (el.closest('a, button') || el).click();
+                    return how;
+                };
+                const known = document.querySelector('a.pf-head_itx_a');
+                if (known) return go(known, 'ссылка формы');
+                const marks = ['Создать новую тему', 'Создать тему', 'Добавить тему'];
+                for (const el of document.querySelectorAll('a, button, div, span')) {
+                    const text = (el.textContent || '').trim();
+                    if (marks.includes(text)) return go(el, 'подпись «' + text + '»');
+                }
+                return '';
+            }""") or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _open_composer(page, log: Callable[[str], None], tries: int = 3) -> bool:
     """
     Открыть форму новой темы. True – открылась.
 
-    Почему не один клик. Лента группы у ОК дорисовывается на ходу: поле
-    «Создать новую тему» появляется не в первый миг и не всегда в верхней
-    части экрана. Первый живой прогон (12.08.2026) на этом и споткнулся –
-    «не нашли» через секунду после открытия страницы. Поэтому: подождать,
-    поискать, прокрутить и поискать снова.
+    Успехом считаем не «клик прошёл», а ПОЯВИВШЕЕСЯ поле ввода: клик может
+    угодить во всплывашку и формально удаться, ничего не открыв.
+
+    Прокручиваем НАВЕРХ. Здесь была моя ошибка: на каждой неудаче страница
+    уезжала вниз, всё дальше от поля – а оно живёт в самом верху ленты.
+    Заказчица это и заметила по снимку отказа: «он как будто в середине
+    ленты, а надо в самый верх».
     """
     for attempt in range(1, tries + 1):
-        if _click_first(page, SEL["create_post"], timeout=6_000):
-            if attempt > 1:
-                log(f"  форма открылась с {attempt}-й попытки")
-            return True
-        # Не нашли – возможно, ещё грузится или уехало за край экрана.
+        # Наверх и без всплывашек: и то и другое мешает добраться до поля.
         try:
-            page.wait_for_load_state("networkidle", timeout=4_000)
-        except Exception:  # noqa: BLE001 – лента ОК почти никогда не «затихает»
-            pass
-        # Мы не на той вкладке? Поле живёт только в «Темах», а открыться мы
-        # могли и на ленте – например, если ОК увёл нас туда сам после
-        # проверки профиля. Заходим во вкладку по подписи.
-        if attempt == 1 and _click_first(page, ('text="Темы"', 'a[href*="/topics"]'),
-                                         timeout=3_000):
-            log("  перешёл на вкладку «Темы»")
-            page.wait_for_timeout(2_000)
-            continue
-        try:
-            page.mouse.wheel(0, 400 * attempt)
+            page.evaluate("() => window.scrollTo(0, 0)")
         except Exception:  # noqa: BLE001
             pass
-        page.wait_for_timeout(1_200)
-        log(f"  поля новой темы пока не видно (попытка {attempt}) – ищу дальше")
+        dismiss_cookies(page)
+        page.wait_for_timeout(400)
+
+        if _click_first(page, SEL["create_post"], timeout=4_000):
+            if _editor_open(page):
+                log(f"  форма открылась{'' if attempt == 1 else f' с {attempt}-й попытки'}")
+                return True
+        # Обычный клик не дошёл – жмём изнутри страницы, мимо всплывашек.
+        how = _click_composer_in_page(page)
+        if how:
+            if _editor_open(page):
+                log(f"  форма открылась через {how}")
+                return True
+            log(f"  нажал {how}, но окно не открылось – пробую снова")
+        else:
+            log(f"  поля новой темы на странице не видно (попытка {attempt})")
+        try:
+            page.wait_for_load_state("networkidle", timeout=3_000)
+        except Exception:  # noqa: BLE001 – лента ОК почти никогда не «затихает»
+            pass
+        page.wait_for_timeout(1_000)
     return False
 
 
@@ -1272,14 +1323,9 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                                  "Посмотрите снимок ниже: если поле для новой темы на "
                                  "нём есть, значит ОК переименовал кнопку – пришлите "
                                  "снимок, поправлю за минуту", "shot": shot}
-            text_sel = ""
-            for candidate in SEL["text"]:
-                try:
-                    page.wait_for_selector(candidate, timeout=5_000)
-                    text_sel = candidate
-                    break
-                except Exception:  # noqa: BLE001
-                    continue
+            # _open_composer уже дождалась поля – берём его тем же способом,
+            # чтобы не разъехались два разных представления об «открылось».
+            text_sel = _editor_open(page)
             if not text_sel:
                 shot = _debug_shot(project_id, page, "no-editor")
                 return {"ok": False, "error": "Окно новой темы не открылось", "shot": shot}

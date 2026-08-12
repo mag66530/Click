@@ -76,7 +76,7 @@ _settle_imports()
 
 import apptime  # noqa: E402
 import content_plan  # noqa: E402
-import crosspost_calendar  # noqa: E402
+import crosspost_plan  # noqa: E402
 import crosspost_state as cps  # noqa: E402
 import gis_playwright as gis  # noqa: E402
 import kp_audit  # noqa: E402
@@ -3423,11 +3423,11 @@ def _crosspost_bar(project_id: str, config: dict, posts: list[dict],
     и списка в середине – и «работает ли автопостинг» оставалось непонятным.
     """
     sched = _crosspost_scheduler_state(project_id)
-    nearest = crosspost_calendar.next_out(posts, state, apptime.now().isoformat())
+    nearest = crosspost_plan.next_out(posts, state, apptime.now().isoformat())
     if nearest:
         when = apptime.to_local(nearest["when"])
-        day = (crosspost_calendar.relative_day(when.date(), apptime.now().date())
-               or crosspost_calendar.human_day(when.date()))
+        day = (crosspost_plan.relative_day(when.date(), apptime.now().date())
+               or crosspost_plan.human_day(when.date()))
         who = ", ".join(dict.fromkeys(n["name"] for n in nearest["pending"]))
         sub = (f'Ближайший пост – <b>{T.esc(day)} в {T.esc(when.strftime("%H:%M"))}</b>, '
                f'{T.esc(who)}')
@@ -3470,123 +3470,34 @@ def _crosspost_attention(upcoming: list[dict], state: dict) -> None:
             post = tr["post"]
             who = f' · {cps.network_ru(tr["network"])}' if tr.get("network") else ""
             d = content_plan.parse_date(post.get("date", ""))
-            when = crosspost_calendar.human_day(d) if d else post.get("date", "")
+            when = crosspost_plan.human_day(d) if d else post.get("date", "")
             st.write(f'**{when}**{who} – {tr["what"]}')
         if len(troubles) > 12:
             st.caption(f"…и ещё {len(troubles) - 12}. Остальное видно в календаре "
                        "жёлтыми и красными плитками.")
 
 
-def _crosspost_day_cell(project_id: str, cell: dict, idx: int,
-                        weekend: bool = False) -> None:
-    """Ячейка дня: шапка с числом и плитки постов. Плитка – это сама кнопка."""
-    flag = ("today" if cell["is_today"]
-            else "we" if weekend
-            else "past" if cell["is_past"]
-            else "day")
-    with st.container(border=True, key=f"cp-cell-{flag}-{idx}"):
-        html(T.crosspost_day_head(cell))
-        if not cell["posts"]:
-            html(T.crosspost_empty_day())
-            return
-        for j, view in enumerate(cell["posts"]):
-            with st.container(key=f"cp-tile-{view['state']}-{idx}-{j}"):
-                label = f'{view["time"]} · {view["kind"] or "пост"}'
-                if st.button(label, key=f"cp-open-{project_id}-{idx}-{j}",
-                             use_container_width=True,
-                             help="Открыть пост: текст целиком и где он выйдет"):
-                    st.session_state[f"cp-open-{project_id}"] = view["key"]
-                    st.rerun()
-                html(T.crosspost_marks(view["nets"]))
-
-
-def _crosspost_calendar(project_id: str, posts: list[dict], state: dict,
-                        today: date, horizon: date) -> None:
+def _crosspost_plan_table(project_id: str, config: dict, posts: list[dict],
+                          state: dict, today: date, horizon: date) -> None:
     """
-    План – сетка недель: видно ритм (где пусто, где два поста подряд), а не
-    список одинаковых строк. Показываем столько недель, сколько нужно до
-    горизонта плана (он тянется до конца месяца, см. _crosspost_horizon).
+    План строками: когда · тип · пост · фото · площадки · что сделать.
 
-    Рабочая неделя – пять дней. Суббота и воскресенье уходят в узкую колонку
-    справа и показываются, только когда на выходной действительно стоит пост:
-    отложку на выходные ставят редко, обычно перед праздниками, а места
-    пустые сб и вс съедали треть ширины.
+    Был календарь недель, и на макете он читался хорошо — но на живом реестре
+    постов два-три в неделю, и сетка стояла пустой: две трети экрана «постов
+    нет», а текст в узких плитках рвался по слогам. Строки плотнее, а колонки
+    площадок дают то же, ради чего затевался календарь: статус ВК, ОК, ТГ и
+    МАКС виден сразу и сравнивается по вертикали.
     """
-    weeks = max(2, min(6, (horizon - (today - timedelta(days=today.weekday()))).days // 7 + 1))
-    cal = crosspost_calendar.build(posts, state, today, weeks=weeks)
+    plan = crosspost_plan.rows(posts, state, today, horizon)
+    if not plan["rows"]:
+        html(T.empty("📭", "Впереди постов нет",
+                     "Появятся здесь, как только в реестре будут строки с будущей датой."))
+        return
 
-    # Текст поста в плитке – CSS-переменной: подпись кнопки Streamlit это одна
-    # строка, а в плитке нужно ещё превью (см. T.crosspost_tile_css).
-    rules, idx = [], 0
-    for week in cal["weeks"]:
-        for cell in list(week["days"]) + list(week["weekend"]):
-            for j, view in enumerate(cell["posts"]):
-                rules.append((f"cp-tile-{view['state']}-{idx}-{j}", view["title"]))
-            idx += 1
-    html(T.crosspost_tile_css(rules))
-
-    html(f'<div class="card-title">🗓 План: {T.esc(cal["title"])}</div>')
+    html(f'<div class="card-title">🗓 План: {T.esc(plan["title"])}</div>')
     html(T.crosspost_legend())
-
-    widths = [1, 1, 1, 1, 1] + ([0.75] if cal["has_weekend"] else [])
-    names = ("Понедельник", "Вторник", "Среда", "Четверг", "Пятница")
-    head = st.columns(widths, gap="small")
-    for col, name in zip(head, names):
-        with col:
-            html(f'<div class="cp-dow">{name}</div>')
-    if cal["has_weekend"]:
-        with head[5]:
-            html('<div class="cp-dow we">Выходные</div>')
-
-    idx = 0
-    for week in cal["weeks"]:
-        cols = st.columns(widths, gap="small")
-        for col, cell in zip(cols, week["days"]):
-            with col:
-                _crosspost_day_cell(project_id, cell, idx)
-            idx += 1
-        if cal["has_weekend"]:
-            with cols[5]:
-                if week["weekend"]:
-                    for cell in week["weekend"]:
-                        _crosspost_day_cell(project_id, cell, idx, weekend=True)
-                        idx += 1
-                else:
-                    html(T.crosspost_empty_day(f'{week["weekend_empty"]} · постов нет'))
-
-    if not cal["has_weekend"]:
-        st.caption("Суббота и воскресенье в сетке не показываются – они появятся "
-                   "отдельной колонкой, если в реестре будет пост на выходной "
-                   "(например, перед праздниками).")
-
-
-def _crosspost_open_block(project_id: str, config: dict, posts: list[dict],
-                          state: dict) -> None:
-    """Выбранный пост: текст целиком и площадки словами, а не значками."""
-    key = st.session_state.get(f"cp-open-{project_id}")
-    if not key:
-        return
-    post = next((p for p in posts if cps.post_key(p) == key), None)
-    if post is None:
-        # План перечитали, текст поста поправили – ключ разошёлся. Молча
-        # закрываем: ругаться не на что, человек просто видит календарь.
-        st.session_state.pop(f"cp-open-{project_id}", None)
-        return
-
-    view = crosspost_calendar.post_view(post, state)
-    day = content_plan.parse_date(post.get("date", ""))
-    with st.container(border=True):
-        html(T.crosspost_open(view, crosspost_calendar.human_day(day) if day
-                              else post.get("date", "")))
-        c1, c2 = st.columns([2, 5])
-        if c1.button("Закрыть", key=f"cp-close-{project_id}", use_container_width=True):
-            st.session_state.pop(f"cp-open-{project_id}", None)
-            st.rerun()
-        url = (config.get("planSheetUrl") or "").strip()
-        if url:
-            c2.link_button(f"Открыть таблицу ↗ (строка {view['row']})", url)
-        else:
-            c2.caption("«Сформировать заново» – в группе «Журналы и весь реестр» внизу.")
+    html(T.crosspost_table(plan, sheet_url=(config.get("planSheetUrl") or "").strip(),
+                           group_title=f'Впереди — {crosspost_plan.plural(len(plan["rows"]), "пост", "поста", "постов")}'))
 
 
 def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
@@ -3660,8 +3571,7 @@ def tab_crosspost(project_id: str, config: dict) -> None:
 
     _crosspost_bar(project_id, config, posts, upcoming, state, horizon)
     _crosspost_attention(upcoming, state)
-    _crosspost_calendar(project_id, posts, state, today, horizon)
-    _crosspost_open_block(project_id, config, posts, state)
+    _crosspost_plan_table(project_id, config, posts, state, today, horizon)
     _crosspost_tools(project_id, config, posts, state, today, upcoming)
 
     # Честно про границы: что работает и при каких условиях.
@@ -3735,20 +3645,17 @@ def _crosspost_channels_block(project_id: str, config: dict) -> None:
                                              key=f"cp-tgc-{project_id}", placeholder="@stalmetural"),
             "tgChannelStaff": c2.text_input("ТГ сотрудники", value=config.get("tgChannelStaff", ""),
                                             key=f"cp-tgs-{project_id}", placeholder="@SMUdaily"),
-            "maxChatId": c3.text_input("МАКС: id канала (для бота)",
+            "maxChatId": c3.text_input("МАКС: id канала для бота (не обязательно)",
                                        value=config.get("maxChatId", ""),
                                        key=f"cp-max-{project_id}"),
         }
-        # Ссылка на канал в веб-версии МАКС – для РОДНОЙ отложки. У бота
-        # отложки нет вовсе (проверено по документации), он шлёт «сейчас», и
-        # тогда Click обязан работать в час выхода. По этой ссылке отложку
-        # держит сам МАКС, как ВК и ОК держат свои.
-        vals["maxWebUrl"] = st.text_input(
-            "МАКС: ссылка на канал в веб-версии (для отложки)",
-            value=config.get("maxWebUrl", ""), key=f"cp-maxweb-{project_id}",
-            placeholder="https://web.max.ru/-70916890460398",
-            help="Откройте канал на web.max.ru и скопируйте адрес из строки браузера. "
-                 "По нему Click поставит отложку, которую держит сам МАКС.")
+        st.caption("МАКС можно вести двумя путями, и id канала нужен только "
+                   "первому. **Бот** шлёт «сейчас», а время держит планировщик – "
+                   "значит Click должен работать в час выхода; для него и нужен id. "
+                   "**Отложка** – родная, её держит сам МАКС, Click при этом может "
+                   "быть выключен; для неё нужен не id, а ссылка на канал в "
+                   "веб-версии, и она в «Настройках», блок «🔒 МАКС (кросспостинг)». "
+                   "Обычно достаточно второго пути – поле id можно оставить пустым.")
         if any(vals[k].strip() != (config.get(k) or "") for k in vals):
             config.update({k: v.strip() for k, v in vals.items()})
             save_config(project_id)
@@ -4295,6 +4202,9 @@ def tab_settings(project_id: str, config: dict) -> None:
     _ok_login_block(project_id, config)
 
     st.divider()
+    _max_login_block(project_id, config)
+
+    st.divider()
     _kp_sheet_settings_block(project_id, config)
 
     st.divider()
@@ -4663,28 +4573,78 @@ def _gis_login_block(project_id: str, config: dict) -> None:
         st.rerun()
 
 
+def _max_login_block(project_id: str, config: dict) -> None:
+    """
+    МАКС: ссылка на канал и состояние сессии.
+
+    Живёт рядом с «Вход в ВК» и «Вход в ОК» нарочно. Сначала это поле
+    стояло во вкладке «Кросспостинг», среди каналов мессенджеров – и
+    заказчица искала его в «Настройках», где лежат ссылки двух других
+    сетей. Логично искала: одинаковые вещи должны лежать в одном месте.
+
+    Кнопки «Войти» здесь нет и быть не может: МАКС не пускает
+    автоматический браузер – он не рисует проверку «вы не робот» вовсе.
+    Вход только через файл сессий, который делает VHOD-VK-i-OK.py.
+    """
+    import max_browser
+
+    html('<div class="card-title">🔒 МАКС (кросспостинг)</div>')
+    url = st.text_input("Ссылка на канал МАКС в веб-версии",
+                        value=config.get("maxWebUrl", ""),
+                        key=f"set-maxweb-{project_id}",
+                        placeholder="https://web.max.ru/-70916890460398",
+                        help="Откройте web.max.ru, зайдите в канал и скопируйте адрес "
+                             "из строки браузера – он выглядит как web.max.ru/-70916… "
+                             "Ссылка-приглашение вида max.ru/join/… НЕ подойдёт: это "
+                             "приглашение вступить, а не адрес канала.")
+    if url.strip() and "/join/" in url:
+        st.warning("Это ссылка-приглашение (max.ru/join/…) – по ней в канал "
+                   "вступают, а не публикуют. Откройте канал на web.max.ru и "
+                   "скопируйте адрес из строки браузера: web.max.ru/-70916…")
+    if url.strip() != (config.get("maxWebUrl") or ""):
+        config["maxWebUrl"] = url.strip()
+        save_config(project_id)
+
+    if max_browser.has_saved_session(project_id):
+        st.success("Сессия МАКС сохранена – отложки будут ставиться без повторного входа.")
+    else:
+        st.warning("Сессии МАКС нет. Войти кнопкой отсюда нельзя: МАКС не пускает "
+                   "автоматический браузер – он не показывает ему проверку «вы не "
+                   "робот». Запустите VHOD-VK-i-OK.py на своём компьютере и "
+                   "загрузите файл сессий в блоке выше.")
+
+
 def _both_sessions_block(project_id: str) -> None:
     """
-    Один файл сессий на обе сети – ВК и ОК сразу.
+    Один файл сессий на ВСЕ сети сразу – ВК, ОК и МАКС.
 
     Мысль заказчицы, и правильная: «может, одним входом оба куки собирать,
     в один файлик, и один раз вставлять». Куки-то снимаются ОДНИМ браузером
-    за ОДИН заход – ОК и пускает-то через ВК. Делить их на два файла и
-    заставлять человека вставлять дважды было работой на ровном месте.
-    Click раскладывает по сетям сам и говорит, что нашёл.
+    за ОДИН заход – ОК и пускает-то через ВК. Делить их на файлы и
+    заставлять человека вставлять по нескольку раз было работой на ровном
+    месте. Click раскладывает по сетям сам и говорит, что нашёл.
+
+    Заголовок и подпись перечисляют сети ПОИМЁННО. Когда добавился МАКС,
+    приём файла я сделал, а тут оставил «ВК и ОК» – и заказчица искала,
+    куда грузить МАКС, глядя прямо на нужное поле. Подпись должна называть
+    всё, что блок умеет, иначе она вводит в заблуждение.
     """
+    import max_browser
     import ok_browser
     import social_session
     import vk_social
 
-    html('<div class="card-title">🔑 Файл сессий ВК и ОК</div>')
-    есть_вк = vk_social.has_saved_session(project_id)
-    есть_ок = ok_browser.has_saved_session(project_id)
+    html('<div class="card-title">🔑 Файл сессий: ВК, ОК и МАКС</div>')
+    сети = ((" ВК", vk_social.has_saved_session(project_id)),
+            ("ОК", ok_browser.has_saved_session(project_id)),
+            ("МАКС", max_browser.has_saved_session(project_id)))
     st.caption(
-        f"Сейчас: ВК – {'вход есть' if есть_вк else 'входа нет'} · "
-        f"ОК – {'вход есть' if есть_ок else 'входа нет'}. "
-        "Файл делает VHOD-VK-i-OK.py на вашем компьютере: вошли в обе сети – "
-        "получился один файл. Загрузите его сюда, и обе сети возьмутся сразу.")
+        "Сейчас: "
+        + " · ".join(f"{имя.strip()} – {'вход есть' if есть else 'входа нет'}"
+                     for имя, есть in сети)
+        + ". Файл делает VHOD-VK-i-OK.py на вашем компьютере: вошли в сети – "
+          "получился ОДИН файл. Загрузите его сюда (кнопка «Выбрать файлы» "
+          "ниже), и все три сети возьмутся сразу.")
     # Итог прошлой загрузки. Держим в session_state, а не показываем сразу:
     # после успеха страница перерисовывается (чтобы обновились «вход есть»),
     # и сообщение, написанное до перерисовки, стиралось вместе с ней. Со
@@ -4693,9 +4653,9 @@ def _both_sessions_block(project_id: str) -> None:
     if said_before:
         (st.success if said_before[0] else st.error)(said_before[1])
 
-    up = st.file_uploader("Файл сессий (VK-i-OK-sessii.json)", type=["json"],
-                          key=f"sess-both-up-{project_id}")
-    if up is not None and st.button("Загрузить обе сессии", type="primary",
+    up = st.file_uploader("Файл сессий VK-i-OK-sessii.json – ВК, ОК и МАКС в одном",
+                          type=["json"], key=f"sess-both-up-{project_id}")
+    if up is not None and st.button("Загрузить сессии всех сетей", type="primary",
                                     key=f"sess-both-go-{project_id}"):
         took, said = social_session.import_combined(project_id, up.getvalue())
         st.session_state[f"sess-both-said-{project_id}"] = (

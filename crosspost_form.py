@@ -162,8 +162,13 @@ def _form_browser_all(project_id: str, network: str, schedule_fn,
         res = schedule_fn(project_id, group_url, text, local, when_local(post),
                           log=progress, headless=headless)
         if res.get("ok"):
+            # native – отложку держит сама площадка, Click в час выхода не
+            # нужен. У МАКС это зависит от того, как формировали (родная
+            # отложка или задание боту), поэтому помечаем сам исход, а не
+            # площадку списком.
             cps.set_status(project_id, post, network, cps.SCHEDULED,
-                           extra={"textHash": cps.text_fingerprint(post.get("text", ""))})
+                           extra={"textHash": cps.text_fingerprint(post.get("text", "")),
+                                  "native": True})
             results.append({"post": post, "ok": True})
         else:
             cps.set_status(project_id, post, network, cps.FAILED, error=res.get("error", ""))
@@ -185,3 +190,19 @@ def form_ok_all(project_id: str, group_url: str, posts: list[dict], site: str,
     import ok_browser
     return _form_browser_all(project_id, "ok", ok_browser.schedule_postponed_post,
                              group_url, posts, site, progress, headless)
+
+
+def form_max_all(project_id: str, chat_url: str, posts: list[dict], site: str,
+                 progress: Callable[[str], None] | None = None,
+                 headless: bool = True) -> list[dict]:
+    """
+    МАКС – теперь тоже родной отложкой, как ВК и ОК.
+
+    До этого МАКС шёл заданием планировщику: бот МАКС отложки не умеет
+    вовсе, и время держал Click – значит Click обязан был работать в час
+    выхода. Через веб-версию пост держит сам МАКС, и Click в это время может
+    быть выключен. Ради этого всё и затевалось.
+    """
+    import max_browser
+    return _form_browser_all(project_id, "max", max_browser.schedule_postponed_post,
+                             chat_url, posts, site, progress, headless)

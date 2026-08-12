@@ -2901,3 +2901,77 @@ REVIEW_ASSORTMENT = {
     "MPE": "Наш ассортимент закрывает большинство потребностей клиентов: цветной металл, "
            "нержавейка, сортовой и листовой прокат, трубная продукция, арматура.",
 }
+
+
+# ════════════════════════════════════════════════════════════════════
+#  Ссылки на площадки брендов
+# ════════════════════════════════════════════════════════════════════
+#
+# Зачем это здесь. Ссылки на сообщества жили только в конфиге проекта, а
+# конфиг в облаке лежит на временной файловой системе: после каждого
+# перезапуска все пять полей приходилось вбивать заново, по пяти брендам –
+# два десятка ссылок руками. Заказчица прислала их списком со словами
+# «зашить, чтобы каждый раз ничего не вводить» (12.08.2026) – вот они.
+#
+# Это ЗАГОТОВКА, а не истина: подставляется только в пустое поле. Всё, что
+# вписано в «Настройках», всегда главнее – его писал человек, а не код.
+#
+# max – адрес канала в ВЕБ-версии (web.max.ru/-70916…), а не приглашение
+# max.ru/join/…: по приглашению в канал вступают, публиковать по нему
+# нельзя. Заказчица прислала сначала приглашения, потом веб-адреса.
+#
+# zen пока никуда не публикуется: Дзен в кросспостинге не подключён.
+# Ссылка хранится, чтобы она была под рукой и не терялась.
+SOCIAL = {
+    "SMU": {
+        "vkGroupUrl": "https://vk.ru/stalmetural",
+        "okGroupUrl": "https://ok.ru/group/70000004574376",
+        "tgChannelClient": "@stalmetural",
+        "tgChannelStaff": "@SMUdaily",
+        "maxWebUrl": "https://web.max.ru/-70916890460398",
+        "zenUrl": "https://dzen.ru/stalmetural",
+    },
+    "IMP": {
+        "vkGroupUrl": "https://vk.ru/inmetprom",
+        "okGroupUrl": "https://ok.ru/group/70000005388115",
+        "tgChannelClient": "@inmetprom",
+        "maxWebUrl": "https://web.max.ru/-70917002032627",
+        "zenUrl": "https://dzen.ru/inmetprom",
+    },
+    "MPE": {
+        "vkGroupUrl": "https://vk.ru/metpromenergo",
+        "okGroupUrl": "https://ok.ru/group/70000042911963",
+        "tgChannelClient": "@metpromenergo",
+        "maxWebUrl": "https://web.max.ru/-71839887647351",
+        "zenUrl": "https://dzen.ru/mepen.ru",
+    },
+    "MPI": {
+        "vkGroupUrl": "https://vk.ru/metpromintexcompany",
+        "okGroupUrl": "https://ok.ru/group/70000052513823",
+        "tgChannelClient": "@metpromintex",
+        # Прислано как «СПИ» – других брендов на эту букву нет, а остальные
+        # четыре адреса разошлись по своим. Если адрес не тот, он меняется
+        # в «Настройках» и с этого мгновения главнее кода.
+        "maxWebUrl": "https://web.max.ru/-77527437957292",
+        "zenUrl": "https://dzen.ru/id/6a38bf029e66ad07566ded20",
+    },
+    "APS": {
+        "vkGroupUrl": "https://vk.ru/public214715361",
+        "okGroupUrl": "https://ok.ru/group/70000048012012",
+        "tgChannelClient": "@aviapromstal_ekb",
+        "maxWebUrl": "https://web.max.ru/-77624664889942",
+        "zenUrl": "https://dzen.ru/aviapromstal",
+    },
+}
+
+# Реестр контент-плана – одна таблица на все бренды, лист на бренд.
+PLAN_SHEET_URL = ("https://docs.google.com/spreadsheets/d/"
+                  "1GIeO3P43eR9N4xYv5H6vNos7068nwoVLwWwfKKAkvaE/edit")
+
+
+def social_defaults(project_id: str) -> dict:
+    """Заготовка ссылок бренда. Нет такого бренда – пустой словарь."""
+    out = dict(SOCIAL.get(project_id) or {})
+    if out:
+        out["planSheetUrl"] = PLAN_SHEET_URL
+    return out

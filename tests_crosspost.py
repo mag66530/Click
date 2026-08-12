@@ -779,6 +779,83 @@ def test_vk_time_pickers() -> None:
           not vk_social._picker_shows(page, lambda: FakePicker([""]), 14))
 
 
+def test_combined_session_file() -> None:
+    """
+    Один файл на обе сети: вошли раз – вставили раз.
+
+    Мысль заказчицы: «может, одним входом оба куки собирать, в один файлик,
+    и один раз вставлять». Куки и правда снимаются одним браузером за один
+    заход – ОК пускает через ВК. Здесь закреплено, что Click раскладывает
+    их по сетям сам и не путает чужое со своим.
+    """
+    print("\nСессии: один файл на ВК и ОК")
+    import json
+    import os
+    import tempfile
+
+    import social_session as ss
+
+    state = {"cookies": [
+        {"name": "remixsid", "value": "v", "domain": ".vk.ru"},
+        {"name": "AUTH_ID", "value": "o", "domain": ".ok.ru"},
+        {"name": "vkid_token", "value": "s", "domain": "id.vk.com"},
+        {"name": "_ga", "value": "junk", "domain": ".google-analytics.com"},
+    ], "origins": [{"origin": "https://ok.ru"}, {"origin": "https://vk.ru"}]}
+
+    vk, ok = ss.split_state(state)
+    vk_names = {c["name"] for c in vk["cookies"]}
+    ok_names = {c["name"] for c in ok["cookies"]}
+    check("кука ВК ушла в ВК", "remixsid" in vk_names and "remixsid" not in ok_names)
+    check("кука ОК ушла в ОК", "AUTH_ID" in ok_names and "AUTH_ID" not in vk_names)
+    check("общий вход VK ID – в обе сети",
+          "vkid_token" in vk_names and "vkid_token" in ok_names)
+    check("посторонние куки отброшены",
+          "_ga" not in vk_names and "_ga" not in ok_names)
+    check("origins разложены по сетям",
+          len(ok["origins"]) == 1 and len(vk["origins"]) == 1)
+
+    # Приём файла целиком – в отдельной папке данных, чтобы не задеть рабочие.
+    tmp = tempfile.mkdtemp()
+    was = os.environ.get("CLICK_DATA_DIR")
+    os.environ["CLICK_DATA_DIR"] = tmp
+    try:
+        import importlib
+
+        import ok_browser
+        import paths
+        import vk_social
+        importlib.reload(paths)
+        importlib.reload(vk_social)
+        importlib.reload(ok_browser)
+        importlib.reload(ss)
+
+        took, said = ss.import_combined("TEST-BOTH", json.dumps(state).encode())
+        check("файл принят", took, said)
+        check("обе сети названы принятыми",
+              said.count("принят") == 2, said)
+        check("сессия ВК на месте", vk_social.has_saved_session("TEST-BOTH"))
+        check("сессия ОК на месте", ok_browser.has_saved_session("TEST-BOTH"))
+
+        # Половинчатый файл – это не повод отказать целиком.
+        only_vk = {"cookies": [{"name": "remixsid", "value": "v", "domain": ".vk.ru"}]}
+        took2, said2 = ss.import_combined("TEST-HALF", json.dumps(only_vk).encode())
+        check("файл только с ВК тоже берём", took2, said2)
+        check("и честно говорим, что ОК в нём нет", "не найдены" in said2, said2)
+
+        bad, why = ss.import_combined("TEST-BAD", "это не json".encode("utf-8"))
+        check("не-json отклоняем", not bad and "не файл сессии" in why.lower(), why)
+    finally:
+        if was is None:
+            os.environ.pop("CLICK_DATA_DIR", None)
+        else:
+            os.environ["CLICK_DATA_DIR"] = was
+        import importlib
+        import paths
+        importlib.reload(paths)
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_ok_session_detection() -> None:
     """
     Вход в ОК узнаём от обратного – по тому, чего у гостя быть не может.
@@ -1109,6 +1186,7 @@ def test_playwright_worker() -> None:
 
 def main() -> int:
     print("═" * 60)
+    test_combined_session_file()
     test_ok_session_detection()
     test_ok_schedule_flow()
     test_plan_horizon_and_past()

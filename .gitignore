@@ -22,6 +22,7 @@ users-data/
 vk-session.json
 ok-session.json
 *-session.json
+VK-i-OK-sessii.json
 
 # Секреты Streamlit
 .streamlit/secrets.toml

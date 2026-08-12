@@ -4050,6 +4050,9 @@ def tab_settings(project_id: str, config: dict) -> None:
     _gis_login_block(project_id, config)
 
     st.divider()
+    _both_sessions_block(project_id)
+
+    st.divider()
     _vk_login_block(project_id, config)
 
     st.divider()
@@ -4375,6 +4378,38 @@ def _gis_login_block(project_id: str, config: dict) -> None:
         st.session_state.pop("gis_flow", None)
         st.session_state.pop("gis_state", None)
         st.rerun()
+
+
+def _both_sessions_block(project_id: str) -> None:
+    """
+    Один файл сессий на обе сети – ВК и ОК сразу.
+
+    Мысль заказчицы, и правильная: «может, одним входом оба куки собирать,
+    в один файлик, и один раз вставлять». Куки-то снимаются ОДНИМ браузером
+    за ОДИН заход – ОК и пускает-то через ВК. Делить их на два файла и
+    заставлять человека вставлять дважды было работой на ровном месте.
+    Click раскладывает по сетям сам и говорит, что нашёл.
+    """
+    import ok_browser
+    import social_session
+    import vk_social
+
+    html('<div class="card-title">🔑 Файл сессий ВК и ОК</div>')
+    есть_вк = vk_social.has_saved_session(project_id)
+    есть_ок = ok_browser.has_saved_session(project_id)
+    st.caption(
+        f"Сейчас: ВК – {'вход есть' if есть_вк else 'входа нет'} · "
+        f"ОК – {'вход есть' if есть_ок else 'входа нет'}. "
+        "Файл делает VHOD-VK-i-OK.py на вашем компьютере: вошли в обе сети – "
+        "получился один файл. Загрузите его сюда, и обе сети возьмутся сразу.")
+    up = st.file_uploader("Файл сессий (VK-i-OK-sessii.json)", type=["json"],
+                          key=f"sess-both-up-{project_id}")
+    if up is not None and st.button("Загрузить обе сессии", type="primary",
+                                    key=f"sess-both-go-{project_id}"):
+        took, said = social_session.import_combined(project_id, up.getvalue())
+        (st.success if took else st.error)(said)
+        if took:
+            st.rerun()
 
 
 def _session_import_block(project_id: str, name: str, importer, key: str) -> None:

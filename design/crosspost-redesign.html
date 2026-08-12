@@ -1,0 +1,1586 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Кросспостинг: три раскладки — Click</title>
+</head>
+<body>
+<style>
+/* ──────────────────────────────────────────────────────────────────────────
+   Токены — 1:1 из ui_theme.py (DARK / LIGHT). Ничего нового не придумано:
+   тот же акцент, те же радиусы, тот же шрифтовой стек без Google Fonts.
+   ────────────────────────────────────────────────────────────────────────── */
+:root{
+  --font:'Inter','Segoe UI',-apple-system,Roboto,system-ui,sans-serif;
+  --mono:ui-monospace,'Cascadia Mono','Segoe UI Mono',Consolas,monospace;
+  --r-xs:4px; --r-sm:8px; --r-md:12px; --r-lg:16px;
+  --ease:cubic-bezier(.16,1,.3,1);
+  --acc:#5b7cfa; --acc-2:#8b5cf6; --grn:#10b981; --red:#ef4444; --yel:#f59e0b;
+  --bg:#f7f8fb; --bg-1:#ffffff; --bg-2:#ffffff; --bg-3:#f1f3f8; --bg-4:#e6e9f2;
+  --border:#e3e6ef; --border-2:#d1d6e3; --border-hi:#aeb4c7;
+  --text:#141824; --text-2:#353d55; --muted:#6b7189; --dim:#9aa0b5;
+  --acc-bg:rgba(91,124,250,.10); --acc-bg-2:rgba(91,124,250,.18);
+  --grn-bg:rgba(16,185,129,.10); --red-bg:rgba(239,68,68,.10); --yel-bg:rgba(245,158,11,.12);
+  --shadow-sm:0 1px 3px rgba(20,24,36,.08); --shadow-md:0 6px 20px rgba(20,24,36,.08);
+  --shadow-lg:0 12px 40px rgba(20,24,36,.14);
+  --gradient:linear-gradient(135deg,#5b7cfa 0%,#8b5cf6 100%);
+  --gradient-subtle:linear-gradient(135deg,rgba(91,124,250,.08),rgba(139,92,246,.08));
+  --doc-bg:#eef0f6;                 /* фон документа — чуть холоднее фона приложения */
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0a0c14; --bg-1:#10131d; --bg-2:#171b28; --bg-3:#1e2333; --bg-4:#272d40;
+    --border:#252b3c; --border-2:#323a52; --border-hi:#4a5578;
+    --text:#e8eaf3; --text-2:#b4bacf; --muted:#7078a0; --dim:#4a5070;
+    --acc-bg:rgba(91,124,250,.12); --acc-bg-2:rgba(91,124,250,.2);
+    --grn-bg:rgba(16,185,129,.12); --red-bg:rgba(239,68,68,.12); --yel-bg:rgba(245,158,11,.12);
+    --shadow-sm:0 2px 8px rgba(0,0,0,.25); --shadow-md:0 8px 24px rgba(0,0,0,.35);
+    --shadow-lg:0 16px 48px rgba(0,0,0,.5);
+    --doc-bg:#06080e;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0a0c14; --bg-1:#10131d; --bg-2:#171b28; --bg-3:#1e2333; --bg-4:#272d40;
+  --border:#252b3c; --border-2:#323a52; --border-hi:#4a5578;
+  --text:#e8eaf3; --text-2:#b4bacf; --muted:#7078a0; --dim:#4a5070;
+  --acc-bg:rgba(91,124,250,.12); --acc-bg-2:rgba(91,124,250,.2);
+  --grn-bg:rgba(16,185,129,.12); --red-bg:rgba(239,68,68,.12); --yel-bg:rgba(245,158,11,.12);
+  --shadow-sm:0 2px 8px rgba(0,0,0,.25); --shadow-md:0 8px 24px rgba(0,0,0,.35);
+  --shadow-lg:0 16px 48px rgba(0,0,0,.5);
+  --doc-bg:#06080e;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--doc-bg); color:var(--text);
+  font-family:var(--font); font-size:14px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:var(--font); letter-spacing:-.02em; margin:0; text-wrap:balance}
+p{margin:0}
+a{color:var(--acc)}
+:focus-visible{outline:2px solid var(--acc); outline-offset:2px; border-radius:var(--r-xs)}
+
+/* ─── Каркас документа ─────────────────────────────────────────────────── */
+.doc{max-width:1320px; margin:0 auto; padding:0 20px 80px}
+.doc-head{padding:52px 0 26px; max-width:760px}
+.doc-eyebrow{
+  font-family:var(--mono); font-size:11.5px; font-weight:700; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--acc); margin-bottom:14px;
+}
+.doc-head h1{font-size:38px; font-weight:800; line-height:1.1}
+.doc-lead{margin-top:14px; font-size:16px; color:var(--text-2); line-height:1.6}
+.doc-note{
+  margin-top:18px; padding:12px 14px; border-left:3px solid var(--acc);
+  background:var(--acc-bg); border-radius:0 var(--r-sm) var(--r-sm) 0;
+  font-size:12.5px; color:var(--text-2);
+}
+
+.doc-nav{
+  position:sticky; top:0; z-index:60; display:flex; align-items:center; gap:4px;
+  flex-wrap:wrap; padding:9px 0; margin-bottom:34px;
+  background:color-mix(in srgb, var(--doc-bg) 88%, transparent);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--border);
+}
+.doc-nav a{
+  padding:7px 13px; border-radius:999px; font-size:12.5px; font-weight:600;
+  color:var(--muted); text-decoration:none; transition:all .15s var(--ease);
+  border:1px solid transparent;
+}
+.doc-nav a:hover{color:var(--text); background:var(--bg-3)}
+.doc-nav a.on{color:var(--acc); background:var(--acc-bg); border-color:var(--acc-bg-2)}
+.doc-nav .spacer{flex:1}
+.theme-btn{
+  width:36px; height:36px; border-radius:10px; border:1px solid var(--border);
+  background:var(--bg-1); color:var(--text); font-size:15px; cursor:pointer;
+  transition:all .15s var(--ease);
+}
+.theme-btn:hover{border-color:var(--border-hi); background:var(--bg-3)}
+
+.doc-sec{margin-bottom:60px; scroll-margin-top:70px}
+.doc-sec-head{max-width:820px; margin-bottom:22px}
+.doc-sec-head h2{font-size:26px; font-weight:800}
+.doc-sec-head .kicker{
+  font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--muted); margin-bottom:8px; display:block;
+}
+.doc-sec-head p{margin-top:10px; color:var(--text-2); font-size:14.5px}
+
+/* Пары «болит → лечим» */
+.fix-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px}
+.fix{
+  background:var(--bg-1); border:1px solid var(--border); border-radius:var(--r-md);
+  padding:16px 18px; box-shadow:var(--shadow-sm);
+}
+.fix-n{
+  font-family:var(--mono); font-size:11px; font-weight:700; color:var(--dim);
+  letter-spacing:.08em;
+}
+.fix-bad{margin-top:6px; font-size:13.5px; font-weight:700; color:var(--text)}
+.fix-bad::before{content:"Сейчас: "; color:var(--red); font-weight:700}
+.fix-good{margin-top:8px; font-size:13px; color:var(--text-2)}
+.fix-good::before{content:"Стало: "; color:var(--grn); font-weight:700}
+
+/* Рамка «это экран приложения» */
+.frame-cap{
+  display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+  margin:0 0 10px; font-size:12px; color:var(--muted);
+}
+.frame-cap b{font-size:12.5px; color:var(--text)}
+.frame{
+  border:1px solid var(--border-2); border-radius:var(--r-lg); overflow:hidden;
+  box-shadow:var(--shadow-lg); background:var(--bg);
+}
+.frame-bar{
+  display:flex; align-items:center; gap:7px; padding:9px 14px;
+  background:var(--bg-3); border-bottom:1px solid var(--border);
+}
+.frame-dot{width:10px; height:10px; border-radius:50%; background:var(--border-2)}
+.frame-url{
+  margin-left:8px; font-family:var(--mono); font-size:11px; color:var(--dim);
+}
+
+/* ─── Шапка и вкладки приложения (как в Click) ─────────────────────────── */
+.click-topbar{
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  padding:9px 18px; background:var(--bg-1); border-bottom:1px solid var(--border);
+}
+.click-logo{display:flex; align-items:center; gap:11px}
+.click-logo-icon{
+  width:34px; height:34px; border-radius:10px; background:var(--gradient);
+  display:flex; align-items:center; justify-content:center; color:#fff; font-size:16px;
+  box-shadow:0 4px 14px rgba(91,124,250,.35);
+}
+.click-logo-title{font-size:14px; font-weight:700; letter-spacing:-.02em}
+.click-logo-sub{font-size:10.5px; color:var(--muted); font-weight:500}
+.pills{display:flex; gap:6px; flex-wrap:wrap}
+.pill{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:5px 11px; border-radius:20px; font-size:11px; font-weight:600;
+}
+.pill::before{content:""; width:6px; height:6px; border-radius:50%; background:currentColor}
+.pill-ok{background:var(--grn-bg); color:var(--grn)}
+.pill-warn{background:var(--yel-bg); color:var(--yel)}
+.pill-info{background:var(--acc-bg); color:var(--acc)}
+.pill-err{background:var(--red-bg); color:var(--red)}
+.topbar-spacer{flex:1}
+.projbadge{
+  display:inline-flex; align-items:center; gap:9px; padding:6px 13px; border-radius:999px;
+  background:var(--bg-2); border:1px solid var(--border); font-size:12.5px; font-weight:600;
+}
+.projbadge-dot{width:10px; height:10px; border-radius:50%; background:#e0642c}
+.projbadge-sub{color:var(--muted); font-weight:500; font-size:11.5px}
+
+.tabs{
+  display:flex; gap:2px; flex-wrap:wrap; padding:0 14px;
+  background:var(--bg-1); border-bottom:1px solid var(--border);
+}
+.tabs span{
+  padding:10px 14px; font-size:12.5px; font-weight:600; color:var(--muted);
+  border:1px solid transparent; border-bottom:none; border-radius:var(--r-sm) var(--r-sm) 0 0;
+  margin-bottom:-1px;
+}
+.tabs span.on{
+  background:var(--bg); border-color:var(--border); color:var(--text);
+}
+.screen{background:var(--bg); padding:20px 18px 26px}
+
+/* ─── Общие кирпичи (имена классов как в ui_theme.py) ──────────────────── */
+.card{
+  background:var(--bg-1); border:1px solid var(--border); border-radius:var(--r-md);
+  padding:18px; margin-bottom:14px; box-shadow:var(--shadow-sm);
+}
+.card-title{
+  display:flex; align-items:center; gap:9px; font-size:13.5px; font-weight:700;
+  color:var(--text); margin-bottom:12px; letter-spacing:-.01em;
+}
+.card-title .tail{margin-left:auto; font-size:11.5px; font-weight:500; color:var(--dim)}
+.hint{font-size:11.5px; color:var(--dim)}
+.label{
+  font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+  color:var(--muted);
+}
+.badge{
+  display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:20px;
+  font-size:11px; font-weight:600; white-space:nowrap;
+}
+.badge-muted{background:var(--bg-4); color:var(--muted)}
+.badge-accent{background:var(--acc-bg); color:var(--acc)}
+.badge-success{background:var(--grn-bg); color:var(--grn)}
+.badge-warn{background:var(--yel-bg); color:var(--yel)}
+.badge-danger{background:var(--red-bg); color:var(--red)}
+
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:7px;
+  font-family:var(--font); font-size:13px; font-weight:600; padding:9px 16px;
+  border-radius:var(--r-sm); background:var(--bg-3); color:var(--text);
+  border:1px solid var(--border); cursor:pointer; transition:all .15s var(--ease);
+  white-space:nowrap;
+}
+.btn:hover{background:var(--bg-4); border-color:var(--border-hi); transform:translateY(-1px)}
+.btn-primary{
+  background:var(--gradient); color:#fff; border-color:transparent;
+  box-shadow:0 4px 14px rgba(91,124,250,.30);
+}
+.btn-primary:hover{box-shadow:0 6px 20px rgba(91,124,250,.45)}
+.btn-lg{padding:12px 20px; font-size:14px}
+.btn-sm{padding:6px 11px; font-size:12px}
+.btn-ghost{background:transparent; border-color:var(--border)}
+.btn-danger{background:var(--red-bg); color:var(--red); border-color:transparent}
+.btn-danger:hover{background:var(--red); color:#fff}
+.btn-row{display:flex; gap:8px; flex-wrap:wrap}
+
+/* ─── Полоса состояния (новое: «что сейчас происходит») ────────────────── */
+.now{
+  display:grid; grid-template-columns:1.35fr 1fr; gap:12px; margin-bottom:14px;
+}
+.now-main{
+  background:var(--gradient-subtle); border:1px solid var(--acc-bg-2);
+  border-radius:var(--r-md); padding:16px 18px; display:flex; flex-direction:column; gap:14px;
+}
+.now-line{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+.now-line-text{flex:1; min-width:240px}
+.now-ico{
+  width:38px; height:38px; border-radius:50%; background:var(--gradient); color:#fff;
+  display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0;
+  box-shadow:0 4px 14px rgba(91,124,250,.3);
+}
+.now-ico.calm{background:var(--bg-4); color:var(--muted); box-shadow:none}
+.now-title{font-size:15px; font-weight:700; color:var(--text)}
+.now-sub{font-size:12.5px; color:var(--muted); margin-top:2px}
+.now-when{
+  margin-left:auto; font-family:var(--mono); font-size:12px; font-weight:700;
+  color:var(--acc); background:var(--acc-bg); padding:5px 11px; border-radius:20px;
+}
+.now-div{height:1px; background:var(--border); margin:0 -18px}
+.now-next{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+.now-next-text{flex:1; min-width:220px}
+.now-next-title{font-size:13.5px; font-weight:600; color:var(--text)}
+.now-next-sub{font-size:12px; color:var(--muted); margin-top:3px}
+
+.now-side{
+  background:var(--bg-1); border:1px solid var(--border); border-radius:var(--r-md);
+  padding:16px 18px; display:flex; flex-direction:column; gap:10px;
+}
+.src-line{display:flex; align-items:center; gap:9px; font-size:13px; font-weight:600}
+.src-meta{font-size:11.5px; color:var(--muted); line-height:1.6}
+.src-meta b{color:var(--text-2); font-family:var(--mono); font-weight:700}
+
+/* Тумблер */
+.switch{
+  display:inline-flex; align-items:center; gap:10px; cursor:pointer; user-select:none;
+  background:var(--bg-1); border:1px solid var(--border); border-radius:999px;
+  padding:6px 14px 6px 8px;
+}
+.switch input{position:absolute; opacity:0; width:0; height:0}
+.switch-track{
+  width:38px; height:22px; border-radius:999px; background:var(--bg-4); position:relative;
+  transition:background .18s var(--ease); flex-shrink:0;
+}
+.switch-track::after{
+  content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%;
+  background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .18s var(--ease);
+}
+.switch input:checked + .switch-track{background:var(--grn)}
+.switch input:checked + .switch-track::after{transform:translateX(16px)}
+.switch input:focus-visible + .switch-track{box-shadow:0 0 0 3px var(--acc-bg)}
+.switch-text{font-size:12.5px; font-weight:600; color:var(--text)}
+
+/* ─── Требует внимания ─────────────────────────────────────────────────── */
+.todo{
+  background:var(--bg-1); border:1px solid var(--border); border-left:3px solid var(--yel);
+  border-radius:var(--r-md); padding:16px 18px; margin-bottom:14px; box-shadow:var(--shadow-sm);
+}
+.todo-row{
+  display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:var(--r-sm);
+  background:var(--bg-3); border:1px solid var(--border); margin-bottom:8px; flex-wrap:wrap;
+}
+.todo-row:last-child{margin-bottom:0}
+.todo-ico{font-size:15px}
+.todo-text{flex:1; min-width:220px; font-size:13px; color:var(--text)}
+.todo-text small{display:block; color:var(--muted); font-size:11.5px; margin-top:2px}
+
+/* ─── Плашки-фильтры ───────────────────────────────────────────────────── */
+.filters{display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); gap:10px; margin-bottom:12px}
+.f-tile{
+  text-align:left; padding:12px 14px; border-radius:var(--r-sm); cursor:pointer;
+  border:1px solid var(--border); background:var(--bg-2); font-family:var(--font);
+  transition:all .15s var(--ease);
+}
+.f-tile:hover{border-color:var(--border-hi); transform:translateY(-1px)}
+.f-tile-val{
+  font-family:var(--mono); font-size:25px; font-weight:800; line-height:1.05; color:var(--text);
+}
+.f-tile-lab{
+  font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+  color:var(--muted); margin-top:5px;
+}
+.f-tile-sub{font-size:11px; color:var(--dim); margin-top:4px}
+.f-tile.on{box-shadow:inset 0 0 0 2px var(--acc); border-color:var(--acc)}
+.f-tile.t-warn{background:var(--yel-bg); border-color:rgba(245,158,11,.25)}
+.f-tile.t-warn .f-tile-val,.f-tile.t-warn .f-tile-lab{color:var(--yel)}
+.f-tile.t-acc{background:var(--acc-bg); border-color:rgba(91,124,250,.25)}
+.f-tile.t-acc .f-tile-val,.f-tile.t-acc .f-tile-lab{color:var(--acc)}
+.f-tile.t-ok{background:var(--grn-bg); border-color:rgba(16,185,129,.25)}
+.f-tile.t-ok .f-tile-val,.f-tile.t-ok .f-tile-lab{color:var(--grn)}
+.f-tile.t-err{background:var(--red-bg); border-color:rgba(239,68,68,.25)}
+.f-tile.t-err .f-tile-val,.f-tile.t-err .f-tile-lab{color:var(--red)}
+
+/* ─── Легенда статусов ─────────────────────────────────────────────────── */
+.legend{
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  padding:9px 14px; border-radius:var(--r-sm); background:var(--bg-3);
+  border:1px solid var(--border); margin-bottom:12px; font-size:12px; color:var(--text-2);
+}
+.legend b{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted)}
+.legend span{display:inline-flex; align-items:center; gap:7px}
+.chip{
+  width:22px; height:22px; border-radius:6px; display:inline-flex; align-items:center;
+  justify-content:center; font-size:11px; font-weight:800; border:1px solid transparent;
+  flex-shrink:0;
+}
+.chip.set{background:var(--grn-bg); color:var(--grn); border-color:rgba(16,185,129,.3)}
+.chip.wait{background:var(--acc-bg); color:var(--acc); border-color:rgba(91,124,250,.3)}
+.chip.off{background:transparent; color:var(--dim); border:1px dashed var(--border-2)}
+.chip.err{background:var(--red-bg); color:var(--red); border-color:rgba(239,68,68,.35)}
+.chip.live{background:var(--grn); color:#fff}
+
+/* ─── Лента плана ──────────────────────────────────────────────────────── */
+.feed-head,.feed-row{
+  display:grid;
+  grid-template-columns:88px 132px minmax(0,1fr) 46px repeat(4,46px) 34px;
+  gap:10px; align-items:center;
+}
+.feed-head{
+  padding:0 12px 8px; border-bottom:1px solid var(--border); margin-bottom:8px;
+  font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+  color:var(--muted);
+}
+.feed-head .pf-h{text-align:center}
+.day{
+  display:flex; align-items:center; gap:10px; margin:16px 0 8px; flex-wrap:wrap;
+}
+.day:first-of-type{margin-top:4px}
+.day-name{font-size:12.5px; font-weight:700; color:var(--text)}
+.day-line{flex:1; height:1px; background:var(--border)}
+.day-tag{font-size:11px; color:var(--dim); font-family:var(--mono)}
+.day.today .day-name{color:var(--acc)}
+
+.feed-row{
+  padding:10px 12px; border-radius:var(--r-sm); background:var(--bg-2);
+  border:1px solid var(--border); border-left:3px solid var(--border-2); margin-bottom:6px;
+  transition:all .15s var(--ease);
+}
+.feed-row:hover{background:var(--bg-3); border-color:var(--border-hi)}
+.feed-row.ok{border-left-color:var(--grn)}
+.feed-row.wait{border-left-color:var(--acc)}
+.feed-row.warn{border-left-color:var(--yel); background:var(--yel-bg)}
+.feed-row.err{border-left-color:var(--red)}
+.feed-row.past{opacity:.72}
+.fr-when{font-family:var(--mono); font-size:12.5px; font-weight:700; color:var(--text)}
+.fr-when small{display:block; font-size:10.5px; font-weight:500; color:var(--dim)}
+.fr-text{
+  font-size:12.5px; color:var(--text-2); overflow:hidden; text-overflow:ellipsis;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.45;
+}
+.fr-text.empty{color:var(--yel); font-weight:600}
+.fr-photo{
+  font-family:var(--mono); font-size:11.5px; color:var(--muted); text-align:center;
+}
+.fr-more{
+  width:28px; height:28px; border-radius:var(--r-sm); border:1px solid transparent;
+  background:transparent; color:var(--dim); cursor:pointer; font-size:15px; line-height:1;
+}
+.fr-more:hover{background:var(--bg-4); color:var(--text)}
+.pf{
+  height:28px; border-radius:7px; display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:800; border:1px solid transparent;
+}
+.pf.set{background:var(--grn-bg); color:var(--grn); border-color:rgba(16,185,129,.3)}
+.pf.wait{background:var(--acc-bg); color:var(--acc); border-color:rgba(91,124,250,.3)}
+.pf.off{background:transparent; color:var(--dim); border:1px dashed var(--border-2)}
+.pf.err{background:var(--red-bg); color:var(--red); border-color:rgba(239,68,68,.35)}
+.pf.live{background:var(--grn); color:#fff}
+
+/* Раскрытая строка-подсказка (что будет с этим постом) */
+.fr-note{
+  grid-column:1 / -1; display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+  margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);
+  font-size:12px; color:var(--text-2);
+}
+
+/* ─── Свёрнутые блоки ──────────────────────────────────────────────────── */
+details.exp{
+  border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-1);
+  margin-bottom:8px; overflow:hidden;
+}
+details.exp > summary{
+  list-style:none; cursor:pointer; padding:11px 14px; background:var(--bg-2);
+  font-size:13px; font-weight:700; color:var(--text);
+  display:flex; align-items:center; gap:9px;
+}
+details.exp > summary::-webkit-details-marker{display:none}
+details.exp > summary::before{
+  content:"▸"; color:var(--dim); font-size:11px; transition:transform .15s var(--ease);
+}
+details.exp[open] > summary::before{transform:rotate(90deg)}
+details.exp > summary:hover{background:var(--bg-3)}
+details.exp .exp-body{padding:14px; border-top:1px solid var(--border)}
+details.exp summary .tail{
+  margin-left:auto; font-size:11.5px; font-weight:500; color:var(--dim);
+}
+
+/* Группа инструментов */
+.tools-head{
+  display:flex; align-items:center; gap:10px; margin:22px 0 10px; flex-wrap:wrap;
+}
+.tools-head h4{font-size:13px; font-weight:700}
+.tools-head .hint{margin-left:auto}
+.tool-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px}
+.tool{
+  display:flex; gap:12px; align-items:flex-start; padding:14px; border-radius:var(--r-sm);
+  background:var(--bg-2); border:1px solid var(--border);
+}
+.tool-ico{
+  width:32px; height:32px; border-radius:9px; background:var(--bg-4); color:var(--text-2);
+  display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0;
+}
+.tool-t{font-size:13px; font-weight:700; color:var(--text)}
+.tool-s{font-size:11.5px; color:var(--muted); margin-top:3px; line-height:1.5}
+
+/* «Как это работает» */
+.how{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:10px}
+.how-c{
+  padding:14px; border-radius:var(--r-sm); background:var(--bg-2); border:1px solid var(--border);
+  border-top:3px solid var(--acc);
+}
+.how-c.g{border-top-color:var(--grn)}
+.how-c.y{border-top-color:var(--yel)}
+.how-t{font-size:12.5px; font-weight:700; display:flex; align-items:center; gap:7px}
+.how-s{font-size:11.5px; color:var(--muted); margin-top:6px; line-height:1.55}
+
+/* ─── Вариант B: таблица ───────────────────────────────────────────────── */
+.seg{
+  display:flex; gap:2px; padding:3px; background:var(--bg-3); border:1px solid var(--border);
+  border-radius:10px; flex-wrap:wrap;
+}
+.seg button{
+  border:none; background:transparent; font-family:var(--font); font-size:12.5px;
+  font-weight:600; color:var(--muted); padding:7px 13px; border-radius:7px; cursor:pointer;
+  display:inline-flex; align-items:center; gap:7px;
+}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:var(--bg-1); color:var(--text); box-shadow:var(--shadow-sm)}
+.seg .cnt{
+  font-family:var(--mono); font-size:11px; font-weight:700; padding:1px 6px; border-radius:20px;
+  background:var(--bg-4); color:var(--muted);
+}
+.seg button.on .cnt{background:var(--acc-bg); color:var(--acc)}
+.seg .cnt.err{background:var(--red-bg); color:var(--red)}
+
+.tbl-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:var(--r-sm)}
+table.plan{border-collapse:collapse; width:100%; min-width:880px; font-size:12.5px}
+table.plan th{
+  position:sticky; top:0; z-index:2; background:var(--bg-3); text-align:left;
+  font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+  color:var(--muted); padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap;
+}
+table.plan th.c,table.plan td.c{text-align:center}
+table.plan td{padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle}
+table.plan tr:last-child td{border-bottom:none}
+table.plan tbody tr:hover td{background:var(--bg-3)}
+table.plan tr.grp td{
+  background:var(--bg-4); font-size:11px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted); padding:7px 12px;
+}
+table.plan tr.grp:hover td{background:var(--bg-4)}
+.td-when{font-family:var(--mono); font-weight:700; color:var(--text); white-space:nowrap}
+.td-when small{display:block; font-weight:500; color:var(--dim); font-size:10.5px}
+.td-text{color:var(--text-2); max-width:420px}
+.td-text b{display:block; color:var(--text); font-weight:600; font-size:12.5px}
+.plan td .pf{width:34px; margin:0 auto}
+.row-flag{width:3px; padding:0 !important}
+.row-flag.ok{background:var(--grn)} .row-flag.wait{background:var(--acc)}
+.row-flag.warn{background:var(--yel)} .row-flag.err{background:var(--red)}
+.row-flag.past{background:var(--border-2)}
+
+/* ─── Вариант C: шаги ──────────────────────────────────────────────────── */
+.step{
+  display:flex; gap:16px; padding:16px 18px; margin-bottom:10px; background:var(--bg-1);
+  border:1px solid var(--border); border-radius:var(--r-md); align-items:flex-start;
+}
+.step.done{border-color:rgba(16,185,129,.3); background:linear-gradient(135deg,var(--grn-bg),transparent)}
+.step.active{border-color:var(--acc); box-shadow:0 0 0 3px var(--acc-bg)}
+.step-num{
+  flex-shrink:0; width:38px; height:38px; border-radius:50%; display:flex; align-items:center;
+  justify-content:center; font-weight:800; font-size:15px; background:var(--bg-3);
+  color:var(--muted); border:2px solid var(--border);
+}
+.step.done .step-num{background:var(--grn); color:#fff; border-color:var(--grn)}
+.step.active .step-num{background:var(--gradient); color:#fff; border-color:transparent;
+  box-shadow:0 4px 14px rgba(91,124,250,.4)}
+.step-body{flex:1; min-width:0}
+.step-title{font-size:14.5px; font-weight:700; color:var(--text); margin-bottom:3px}
+.step-sub{font-size:12.5px; color:var(--muted); line-height:1.55}
+.step-act{margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.step-mark{
+  display:inline-flex; align-items:center; gap:6px; margin-top:8px; padding:4px 11px;
+  border-radius:20px; background:var(--grn-bg); color:var(--grn); font-size:12px; font-weight:600;
+}
+
+.cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(268px,1fr)); gap:10px}
+.pcard{
+  background:var(--bg-2); border:1px solid var(--border); border-radius:var(--r-md);
+  border-top:3px solid var(--acc); padding:14px 16px; display:flex; flex-direction:column; gap:9px;
+}
+.pcard.warn{border-top-color:var(--yel)}
+.pcard.ok{border-top-color:var(--grn)}
+.pcard-when{
+  display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; font-family:var(--mono);
+  font-size:13px; font-weight:800; color:var(--text);
+}
+.pcard-when > span{white-space:nowrap}
+.pcard-when em{
+  font-style:normal; font-family:var(--font); font-size:11.5px; font-weight:600;
+  color:var(--muted); margin-left:auto; white-space:nowrap;
+}
+.pcard-title{font-size:12.5px; color:var(--text-2); line-height:1.5;
+  display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden}
+.pcard-foot{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:auto}
+.pf-named{
+  display:inline-flex; align-items:center; gap:5px; padding:4px 9px; border-radius:20px;
+  font-size:11px; font-weight:700; border:1px solid transparent;
+}
+.pf-named.set{background:var(--grn-bg); color:var(--grn); border-color:rgba(16,185,129,.3)}
+.pf-named.wait{background:var(--acc-bg); color:var(--acc); border-color:rgba(91,124,250,.3)}
+.pf-named.off{color:var(--dim); border:1px dashed var(--border-2)}
+.pf-named.err{background:var(--red-bg); color:var(--red); border-color:rgba(239,68,68,.35)}
+
+.big-actions{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px}
+.big-act{
+  display:flex; gap:12px; align-items:center; padding:15px 16px; border-radius:var(--r-md);
+  background:var(--bg-2); border:1px solid var(--border); cursor:pointer; text-align:left;
+  font-family:var(--font); transition:all .15s var(--ease); color:var(--text);
+}
+.big-act:hover{border-color:var(--acc); background:var(--acc-bg); transform:translateY(-1px)}
+.big-act-ico{
+  width:38px; height:38px; border-radius:11px; background:var(--bg-4); flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; font-size:17px;
+}
+.big-act-t{display:block; font-size:13px; font-weight:700}
+.big-act-s{display:block; font-size:11.5px; color:var(--muted); margin-top:3px; line-height:1.45}
+
+/* ─── Итоговый блок ────────────────────────────────────────────────────── */
+.final{
+  background:var(--bg-1); border:1px solid var(--border); border-radius:var(--r-lg);
+  padding:26px 28px; box-shadow:var(--shadow-sm);
+}
+.final ol{margin:14px 0 0; padding-left:20px; color:var(--text-2); font-size:14px; line-height:1.75}
+.final li{margin-bottom:8px}
+.final li b{color:var(--text)}
+.src-list{margin:16px 0 0; padding:0; list-style:none; font-size:13px; color:var(--text-2)}
+.src-list li{padding:7px 0; border-top:1px solid var(--border)}
+.src-list li b{color:var(--text)}
+
+@media (max-width:1080px){
+  .now{grid-template-columns:1fr}
+}
+@media (max-width:900px){
+  .feed-head{display:none}
+  .feed-row{grid-template-columns:78px minmax(0,1fr) repeat(4,40px); grid-auto-rows:auto}
+  .feed-row .fr-type{grid-column:2 / -1}
+  .feed-row .fr-text{grid-column:1 / -1}
+  .feed-row .fr-photo,.feed-row .fr-more{display:none}
+  .doc-head h1{font-size:30px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none !important; transition:none !important}
+}
+</style>
+
+<div class="doc">
+
+  <header class="doc-head">
+    <div class="doc-eyebrow">Click · вкладка «Кросспостинг»</div>
+    <h1>Кросспостинг: три раскладки</h1>
+    <p class="doc-lead">
+      Одни и те же данные и те же кнопки — переставлены так, чтобы человек, впервые
+      открывший вкладку, за пять секунд понял: работает ли всё, что выйдет ближайшим,
+      и куда нажимать, если что-то не так.
+    </p>
+    <div class="doc-note">
+      Стиль не менялся: цвета, радиусы, тени и шрифтовой стек взяты из <b>ui_theme.py</b>
+      (тот же акцент #5b7cfa → #8b5cf6, те же карточки, пилюли, плашки отчёта).
+      Имена классов совпадают с существующими — <code>.card</code>, <code>.pill</code>,
+      <code>.badge</code>, <code>.step</code>, — чтобы перенос в Streamlit был механическим.
+      Данные на макетах — с вашего скриншота (ИМП, 91 пост, час выхода 09:00).
+    </div>
+  </header>
+
+  <nav class="doc-nav" id="nav">
+    <a href="#why" class="on">Что чиним</a>
+    <a href="#va">A · Лента дней</a>
+    <a href="#vb">B · Таблица</a>
+    <a href="#vc">C · Три шага</a>
+    <a href="#final">Что брать</a>
+    <span class="spacer"></span>
+    <button class="theme-btn" id="theme" type="button" aria-label="Сменить тему">◐</button>
+  </nav>
+
+  <!-- ═══════════════════════════ ПРИНЦИПЫ ═══════════════════════════ -->
+  <section class="doc-sec" id="why">
+    <div class="doc-sec-head">
+      <span class="kicker">Разбор</span>
+      <h2>Восемь мест, где страница сейчас молчит</h2>
+      <p>
+        Вкладка показывает всё честно, но одинаково: план, настройки, отладка и справка
+        лежат в одном столбике одинаковых серых полосок. Глазу не за что зацепиться —
+        отсюда ощущение «вроде работает, но что тут главное?».
+      </p>
+    </div>
+    <div class="fix-grid">
+      <div class="fix">
+        <div class="fix-n">01 — Главный вопрос</div>
+        <div class="fix-bad">непонятно, работает ли автопостинг прямо сейчас</div>
+        <div class="fix-good">первая строка экрана отвечает: планировщик включён, ближайший пост через 21 ч, куда именно он уйдёт.</div>
+      </div>
+      <div class="fix">
+        <div class="fix-n">02 — Главная кнопка</div>
+        <div class="fix-bad">«Обновить план» — серая кнопка среди серого текста</div>
+        <div class="fix-good">одна синяя кнопка на экран, рядом подпись «нажимайте, когда поправили таблицу». Остальные кнопки — тихие.</div>
+      </div>
+      <div class="fix">
+        <div class="fix-n">03 — Значки площадок</div>
+        <div class="fix-bad">«Телеграм –», «ВК ⏱» без объяснений; галочка и часы читаются одинаково</div>
+        <div class="fix-good">четыре состояния и легенда прямо над списком: ✓ стоит в соцсети, ⏱ выйдет через Click, · не выбрано, ✕ ошибка.</div>
+      </div>
+      <div class="fix">
+        <div class="fix-n">04 — Порядок постов</div>
+        <div class="fix-bad">26.08, 18.08, 20.08, 25.08 — вперемешку, без «сегодня»</div>
+        <div class="fix-good">строго по времени, с заголовками дней и якорем «завтра / через 3 дня». Прошедшие — отдельно и свёрнуты.</div>
+      </div>
+      <div class="fix">
+        <div class="fix-n">05 — Проблемы</div>
+        <div class="fix-bad">«нет текста» лежит строкой в общем списке, ошибок 0 — и ничего не нажать</div>
+        <div class="fix-good">блок «Требует внимания» вверху: что не так, для какого поста и кнопка, которая это чинит.</div>
+      </div>
+      <div class="fix">
+        <div class="fix-n">06 — Счётчики</div>
+        <div class="fix-bad">четыре цифры, которые ничего не делают</div>
+        <div class="fix-good">те же четыре плашки — фильтры списка, как в «Отчёте». Клик по «Ошибки» показывает только их.</div>
+      </div>
+      <div class="fix">
+        <div class="fix-n">07 — Девять раскрывашек</div>
+        <div class="fix-bad">источник, каналы, ЯБ, журнал, две пробные отложки, лог, весь реестр — одним столбиком</div>
+        <div class="fix-good">три группы с понятными именами: «Подключения», «Проверка», «Журналы». Отладка — под общим заголовком «Обычно сюда не нужно».</div>
+      </div>
+      <div class="fix">
+        <div class="fix-n">08 — Абзац внизу</div>
+        <div class="fix-bad">пять строк про ВК, ОК, ТГ, МАКС и ЯБ сплошным текстом</div>
+        <div class="fix-good">четыре карточки «кто как выходит» — читается за один взгляд, а не за один абзац.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════ ВАРИАНТ A ═══════════════════════════ -->
+  <section class="doc-sec" id="va">
+    <div class="doc-sec-head">
+      <span class="kicker">Вариант A — рекомендую как основу</span>
+      <h2>Лента дней</h2>
+      <p>
+        Экран читается сверху вниз как ответ на три вопроса: <b>всё ли работает</b> →
+        <b>что мне сделать</b> → <b>что и куда выйдет</b>. Настройки уезжают вниз, под
+        честную подпись «обычно сюда не нужно».
+      </p>
+    </div>
+
+    <div class="frame-cap">
+      <b>Макет A</b> <span>1240 px, светлая тема · переключатель темы в шапке документа работает</span>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar">
+        <span class="frame-dot"></span><span class="frame-dot"></span><span class="frame-dot"></span>
+        <span class="frame-url">click · кросспостинг</span>
+      </div>
+
+      <div class="click-topbar">
+        <div class="click-logo">
+          <div class="click-logo-icon">➤</div>
+          <div>
+            <div class="click-logo-title">Click</div>
+            <div class="click-logo-sub">публикация постов</div>
+          </div>
+        </div>
+        <div class="pills">
+          <span class="pill pill-ok">Программа установлена</span>
+          <span class="pill pill-ok">Авторизован</span>
+          <span class="pill pill-warn">Очередь пуста</span>
+        </div>
+        <div class="topbar-spacer"></div>
+        <span class="projbadge">
+          <span class="projbadge-dot"></span>ИМП –
+          <span class="projbadge-sub">Инметпром</span>
+        </span>
+      </div>
+
+      <div class="tabs">
+        <span>🚀 Запуск</span><span>📤 Публикация</span><span class="on">🔁 Кросспостинг</span>
+        <span>🔄 Актуализация</span><span>🏙 Города</span><span>📊 Отчёт</span>
+        <span>⚙️ Настройки</span><span>🔎 Сверка</span>
+      </div>
+
+      <div class="screen">
+
+        <!-- 1. Что происходит прямо сейчас -->
+        <div class="now">
+          <div class="now-main">
+            <div class="now-line">
+              <div class="now-ico">✓</div>
+              <div class="now-line-text">
+                <div class="now-title">Автопостинг работает</div>
+                <div class="now-sub">Click открыт, задания проверяются каждые 30 секунд. Окно можно свернуть — закрывать нельзя.</div>
+              </div>
+              <label class="switch" style="margin-left:auto">
+                <input type="checkbox" checked>
+                <span class="switch-track"></span>
+                <span class="switch-text">Включён</span>
+              </label>
+            </div>
+            <div class="now-div" role="presentation"></div>
+            <div class="now-next">
+              <div class="now-ico calm">⏱</div>
+              <div class="now-next-text">
+                <div class="now-next-title">Ближайший пост — завтра в 09:00</div>
+                <div class="now-next-sub">«СЕКРЕТНЫЙ МЕТАЛЛ, ИЗ-ЗА КОТОРОГО РУХНУЛ МОСТ ТЭЙ…» → Телеграм и МАКС отправит Click, во ВК и ОК уже стоит отложка.</div>
+              </div>
+              <span class="now-when">через 21 ч</span>
+            </div>
+          </div>
+
+          <div class="now-side">
+            <div class="src-line">📋 Контент-план — Google-таблица</div>
+            <div class="src-meta">
+              В листе <b>91</b> пост · впереди <b>5</b> (по 31.08) · час выхода <b>09:00</b> по Екатеринбургу<br>
+              План прочитан <b>5 минут назад</b>
+            </div>
+            <div class="btn-row" style="margin-top:auto">
+              <button class="btn btn-primary btn-lg" type="button">🔄 Обновить план</button>
+              <button class="btn" type="button">Открыть таблицу ↗</button>
+            </div>
+            <div class="hint">Нажмите после правок в таблице — Click перечитает лист и переназначит отложки.</div>
+          </div>
+        </div>
+
+        <!-- 2. Что требует внимания -->
+        <div class="todo">
+          <div class="card-title">
+            ⚠️ Требует внимания
+            <span class="badge badge-warn">2</span>
+            <span class="tail">Пока не поправить — эти посты не выйдут</span>
+          </div>
+          <div class="todo-row">
+            <span class="todo-ico">📝</span>
+            <div class="todo-text">
+              В таблице нет текста для поста 25.08, «Развлекательный»
+              <small>Строка 47 листа — колонка «Текст» пустая. Click такой пост пропустит.</small>
+            </div>
+            <button class="btn btn-sm" type="button">Открыть строку в таблице ↗</button>
+            <button class="btn btn-sm" type="button">Сгенерировать текст</button>
+          </div>
+          <div class="todo-row" style="border-left:3px solid var(--red)">
+            <span class="todo-ico">🔒</span>
+            <div class="todo-text">
+              ВК не принял отложку 12.08 — истекла сессия
+              <small>Пост ушёл только в Телеграм и ОК. Войдите во ВК и нажмите «Сформировать заново».</small>
+            </div>
+            <button class="btn btn-sm" type="button">Войти во ВК</button>
+            <button class="btn btn-sm btn-ghost" type="button">Показать лог</button>
+          </div>
+        </div>
+
+        <!-- 3. Фильтры -->
+        <div class="filters">
+          <button class="f-tile on" type="button">
+            <div class="f-tile-val">91</div>
+            <div class="f-tile-lab">Все посты листа</div>
+            <div class="f-tile-sub">весь контент-план</div>
+          </button>
+          <button class="f-tile t-warn" type="button">
+            <div class="f-tile-val">10</div>
+            <div class="f-tile-lab">Ещё не собраны</div>
+            <div class="f-tile-sub">нет текста или картинки</div>
+          </button>
+          <button class="f-tile t-acc" type="button">
+            <div class="f-tile-val">3</div>
+            <div class="f-tile-lab">Готовы и ждут</div>
+            <div class="f-tile-sub">выйдут сами по часам</div>
+          </button>
+          <button class="f-tile t-ok" type="button">
+            <div class="f-tile-val">4</div>
+            <div class="f-tile-lab">Уже вышли</div>
+            <div class="f-tile-sub">за последние 2 недели</div>
+          </button>
+          <button class="f-tile t-err" type="button">
+            <div class="f-tile-val">1</div>
+            <div class="f-tile-lab">С ошибкой</div>
+            <div class="f-tile-sub">нужна ваша рука</div>
+          </button>
+        </div>
+
+        <!-- 4. План -->
+        <div class="card">
+          <div class="card-title">
+            📅 План на ближайшие две недели
+            <span class="tail">Показаны 5 постов · сегодня понедельник, 17 августа</span>
+          </div>
+
+          <div class="legend">
+            <b>Значки площадок</b>
+            <span><i class="chip set">✓</i> отложка уже стоит в соцсети</span>
+            <span><i class="chip wait">⏱</i> выйдет через Click в час выхода</span>
+            <span><i class="chip off">·</i> площадка не выбрана в таблице</span>
+            <span><i class="chip err">✕</i> ошибка — пост туда не ушёл</span>
+          </div>
+
+          <div class="feed-head">
+            <span>Когда</span><span>Тип поста</span><span>Текст</span>
+            <span class="pf-h">Фото</span>
+            <span class="pf-h">ТГ</span><span class="pf-h">ВК</span><span class="pf-h">ОК</span><span class="pf-h">МАКС</span>
+            <span></span>
+          </div>
+
+          <div class="day today">
+            <span class="day-name">Завтра · вторник, 18 августа</span>
+            <span class="day-line"></span><span class="day-tag">через 21 ч</span>
+          </div>
+          <div class="feed-row wait">
+            <div class="fr-when">09:00<small>вт 18.08</small></div>
+            <div class="fr-type"><span class="badge badge-accent">Информационный</span></div>
+            <div class="fr-text">СЕКРЕТНЫЙ МЕТАЛЛ, ИЗ-ЗА КОТОРОГО РУХНУЛ МОСТ ТЭЙ В ШОТЛАНДИИ. 28 декабря 1879 года поезд с 75 пассажирами…</div>
+            <div class="fr-photo">🖼 1</div>
+            <div class="pf wait" title="Телеграм — отправит Click в 09:00">⏱</div>
+            <div class="pf set" title="ВК — отложка уже стоит">✓</div>
+            <div class="pf set" title="ОК — отложка уже стоит">✓</div>
+            <div class="pf wait" title="МАКС — отправит Click в 09:00">⏱</div>
+            <button class="fr-more" type="button" aria-label="Действия с постом">⋯</button>
+          </div>
+
+          <div class="day">
+            <span class="day-name">Четверг, 20 августа</span>
+            <span class="day-line"></span><span class="day-tag">через 3 дня</span>
+          </div>
+          <div class="feed-row wait">
+            <div class="fr-when">09:00<small>чт 20.08</small></div>
+            <div class="fr-type"><span class="badge badge-success">Поступление</span></div>
+            <div class="fr-text">🔥 Свежее поступление: сетка кладочная на складе! Склад «Инметпром» пополнился сеткой кладочной…</div>
+            <div class="fr-photo">🖼 1</div>
+            <div class="pf wait" title="Телеграм — отправит Click">⏱</div>
+            <div class="pf set" title="ВК — отложка стоит">✓</div>
+            <div class="pf set" title="ОК — отложка стоит">✓</div>
+            <div class="pf wait" title="МАКС — отправит Click">⏱</div>
+            <button class="fr-more" type="button" aria-label="Действия с постом">⋯</button>
+          </div>
+
+          <div class="day">
+            <span class="day-name">Вторник, 25 августа</span>
+            <span class="day-line"></span><span class="day-tag">2 поста</span>
+          </div>
+          <div class="feed-row warn">
+            <div class="fr-when">09:00<small>вт 25.08</small></div>
+            <div class="fr-type"><span class="badge badge-muted">Развлекательный</span></div>
+            <div class="fr-text empty">⚠️ В таблице нет текста — пост не выйдет</div>
+            <div class="fr-photo">—</div>
+            <div class="pf off" title="Не выбрано">·</div>
+            <div class="pf off" title="Не выбрано">·</div>
+            <div class="pf off" title="Не выбрано">·</div>
+            <div class="pf off" title="Не выбрано">·</div>
+            <button class="fr-more" type="button" aria-label="Действия с постом">⋯</button>
+            <div class="fr-note">
+              Что делать: впишите текст в строку 47 листа и нажмите «Обновить план».
+              <button class="btn btn-sm" type="button">Открыть строку ↗</button>
+              <button class="btn btn-sm" type="button">Сгенерировать текст</button>
+            </div>
+          </div>
+          <div class="feed-row wait">
+            <div class="fr-when">09:00<small>вт 25.08</small></div>
+            <div class="fr-type"><span class="badge badge-accent">Информационный</span></div>
+            <div class="fr-text">КТО НА САМОМ ДЕЛЕ ПРИДУМАЛ НЕРЖАВЕЮЩУЮ СТАЛЬ — И ПОЧЕМУ ЭТО БЫЛА СЛУЧАЙНОСТЬ. Один из главных…</div>
+            <div class="fr-photo">🖼 1</div>
+            <div class="pf wait" title="Телеграм — отправит Click">⏱</div>
+            <div class="pf set" title="ВК — отложка стоит">✓</div>
+            <div class="pf off" title="ОК — площадка не выбрана в таблице">·</div>
+            <div class="pf wait" title="МАКС — отправит Click">⏱</div>
+            <button class="fr-more" type="button" aria-label="Действия с постом">⋯</button>
+          </div>
+
+          <div class="day">
+            <span class="day-name">Среда, 26 августа</span>
+            <span class="day-line"></span><span class="day-tag">всё готово</span>
+          </div>
+          <div class="feed-row ok">
+            <div class="fr-when">09:00<small>ср 26.08</small></div>
+            <div class="fr-type"><span class="badge badge-warn">Спецпредложение</span></div>
+            <div class="fr-text">Компания ИНМЕТПРОМ предлагает скидку 10% на ШВЕЛЛЕР ГОРЯЧЕКАТАНЫЙ 12П по 31 августа…</div>
+            <div class="fr-photo">🖼 1</div>
+            <div class="pf set" title="Телеграм — отложка стоит">✓</div>
+            <div class="pf set" title="ВК — отложка стоит">✓</div>
+            <div class="pf set" title="ОК — отложка стоит">✓</div>
+            <div class="pf set" title="МАКС — отложка стоит">✓</div>
+            <button class="fr-more" type="button" aria-label="Действия с постом">⋯</button>
+          </div>
+
+          <details class="exp" style="margin-top:14px">
+            <summary>Уже вышли <span class="tail">4 поста за две недели · 1 с ошибкой</span></summary>
+            <div class="exp-body">
+              <div class="feed-row past err">
+                <div class="fr-when">09:00<small>вт 12.08</small></div>
+                <div class="fr-type"><span class="badge badge-accent">Информационный</span></div>
+                <div class="fr-text">ПОЧЕМУ АРМАТУРА РЕБРИСТАЯ, А НЕ ГЛАДКАЯ — коротко о сцеплении с бетоном…</div>
+                <div class="fr-photo">🖼 1</div>
+                <div class="pf live" title="Телеграм — вышло">✓</div>
+                <div class="pf err" title="ВК — ошибка: истекла сессия">✕</div>
+                <div class="pf live" title="ОК — вышло">✓</div>
+                <div class="pf live" title="МАКС — вышло">✓</div>
+                <button class="fr-more" type="button" aria-label="Действия с постом">⋯</button>
+              </div>
+              <div class="feed-row past ok">
+                <div class="fr-when">09:00<small>чт 14.08</small></div>
+                <div class="fr-type"><span class="badge badge-success">Поступление</span></div>
+                <div class="fr-text">Пополнение склада: труба профильная 40×20 — в наличии на площадке в Екатеринбурге…</div>
+                <div class="fr-photo">🖼 2</div>
+                <div class="pf live" title="Вышло">✓</div>
+                <div class="pf live" title="Вышло">✓</div>
+                <div class="pf live" title="Вышло">✓</div>
+                <div class="pf live" title="Вышло">✓</div>
+                <button class="fr-more" type="button" aria-label="Действия с постом">⋯</button>
+              </div>
+              <div class="hint" style="margin-top:8px">Ещё 2 поста — в «Показать весь реестр листа».</div>
+            </div>
+          </details>
+        </div>
+
+        <!-- 5. Как это работает -->
+        <div class="card">
+          <div class="card-title">ℹ️ Кто как выходит</div>
+          <div class="how">
+            <div class="how-c g">
+              <div class="how-t">🟦 ВК · 🟧 ОК</div>
+              <div class="how-s">Родная отложка соцсети. Click ставит её один раз после входа — дальше площадка публикует сама, даже если Click закрыт.</div>
+            </div>
+            <div class="how-c">
+              <div class="how-t">✈️ Телеграм · 💬 МАКС</div>
+              <div class="how-s">Публикует сам Click по часам через планировщик. Нужны токены ботов и открытый Click в час выхода.</div>
+            </div>
+            <div class="how-c y">
+              <div class="how-t">🟨 Яндекс.Бизнес</div>
+              <div class="how-s">Прогон по расписанию. Идёт отдельным заданием — включается ниже, в «Подключениях».</div>
+            </div>
+            <div class="how-c">
+              <div class="how-t">⏱ Планировщик</div>
+              <div class="how-s">Проверка заданий каждые 30 с, окно опоздания 6 ч. Пропущенный за это время пост выйдет, как только Click откроют.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. Настройки — вниз, под честный заголовок -->
+        <div class="tools-head">
+          <h4>🔧 Настройка и проверка</h4>
+          <span class="hint">Обычно сюда не нужно — всё уже настроено</span>
+        </div>
+
+        <details class="exp">
+          <summary>🔌 Подключения <span class="tail">Таблица · Каналы ТГ и МАКС · Яндекс.Бизнес — 3 из 3 в порядке</span></summary>
+          <div class="exp-body">
+            <div class="tool-grid">
+              <div class="tool">
+                <div class="tool-ico">📋</div>
+                <div>
+                  <div class="tool-t">Источник реестра</div>
+                  <div class="tool-s">Google-таблица контент-плана · лист «План 2025»</div>
+                  <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button">Сменить таблицу</button></div>
+                </div>
+              </div>
+              <div class="tool">
+                <div class="tool-ico">✈️</div>
+                <div>
+                  <div class="tool-t">Каналы Телеграма и МАКС</div>
+                  <div class="tool-s">2 канала подключены, токены на месте</div>
+                  <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button">Настроить каналы</button></div>
+                </div>
+              </div>
+              <div class="tool">
+                <div class="tool-ico">🟨</div>
+                <div>
+                  <div class="tool-t">Яндекс.Бизнес по расписанию</div>
+                  <div class="tool-s">Прогон в 09:15, по будням</div>
+                  <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button">Изменить расписание</button></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="exp">
+          <summary>🧪 Проверить механику одним постом <span class="tail">Пробная отложка ВК и ОК</span></summary>
+          <div class="exp-body">
+            <div class="tool-grid">
+              <div class="tool">
+                <div class="tool-ico">🟦</div>
+                <div>
+                  <div class="tool-t">Пробная отложка ВК</div>
+                  <div class="tool-s">Поставит один тестовый пост и сразу удалит. Проверяет, что вёрстка ВК не поменялась.</div>
+                  <div class="btn-row" style="margin-top:8px">
+                    <button class="btn btn-sm" type="button">Проверить ВК</button>
+                    <button class="btn btn-sm btn-ghost" type="button">Лог прошлой проверки</button>
+                  </div>
+                </div>
+              </div>
+              <div class="tool">
+                <div class="tool-ico">🟧</div>
+                <div>
+                  <div class="tool-t">Пробная отложка ОК</div>
+                  <div class="tool-s">То же для Одноклассников. При несовпадении вёрстки кнопка скажет словами и сохранит снимок.</div>
+                  <div class="btn-row" style="margin-top:8px">
+                    <button class="btn btn-sm" type="button">Проверить ОК</button>
+                    <button class="btn btn-sm btn-ghost" type="button">Лог прошлой проверки</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="exp">
+          <summary>📜 Журналы и весь реестр <span class="tail">Журнал планировщика · 91 строка листа</span></summary>
+          <div class="exp-body">
+            <div class="btn-row">
+              <button class="btn btn-sm" type="button">Журнал планировщика</button>
+              <button class="btn btn-sm" type="button">Показать весь реестр листа (91)</button>
+              <button class="btn btn-sm" type="button">↺ Сформировать заново — если запись удалили в соцсети</button>
+            </div>
+          </div>
+        </details>
+
+      </div><!-- /screen -->
+    </div><!-- /frame -->
+
+    <div class="frame-cap" style="margin-top:12px">
+      <b>Почему так</b>
+      <span>
+        Порядок блоков = порядок вопросов в голове. Ошибки не прячутся в списке, а всплывают
+        наверх с кнопкой-лечением. Значки площадок стоят в колонках с подписанными заголовками —
+        глаз сравнивает по вертикали, а не читает каждую строку заново.
+      </span>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════ ВАРИАНТ B ═══════════════════════════ -->
+  <section class="doc-sec" id="vb">
+    <div class="doc-sec-head">
+      <span class="kicker">Вариант B — когда постов много</span>
+      <h2>Таблица-матрица</h2>
+      <p>
+        Тот же смысл, но плотнее: 91 пост в листе, и рано или поздно захочется видеть
+        два десятка строк сразу. Площадки — колонки, статус — цветная ячейка, шапка липкая.
+        Хорош как второй режим той же вкладки (переключатель «Лентой / Таблицей»).
+      </p>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar">
+        <span class="frame-dot"></span><span class="frame-dot"></span><span class="frame-dot"></span>
+        <span class="frame-url">click · кросспостинг · режим «таблицей»</span>
+      </div>
+
+      <div class="click-topbar">
+        <div class="click-logo">
+          <div class="click-logo-icon">➤</div>
+          <div>
+            <div class="click-logo-title">Click</div>
+            <div class="click-logo-sub">публикация постов</div>
+          </div>
+        </div>
+        <div class="pills">
+          <span class="pill pill-ok">Программа установлена</span>
+          <span class="pill pill-ok">Авторизован</span>
+        </div>
+        <div class="topbar-spacer"></div>
+        <span class="projbadge"><span class="projbadge-dot"></span>ИМП –<span class="projbadge-sub">Инметпром</span></span>
+      </div>
+
+      <div class="tabs">
+        <span>🚀 Запуск</span><span>📤 Публикация</span><span class="on">🔁 Кросспостинг</span>
+        <span>🔄 Актуализация</span><span>🏙 Города</span><span>📊 Отчёт</span>
+        <span>⚙️ Настройки</span><span>🔎 Сверка</span>
+      </div>
+
+      <div class="screen">
+
+        <!-- Однострочная полоса состояния -->
+        <div class="card" style="padding:12px 16px">
+          <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap">
+            <span class="pill pill-ok">Автопостинг работает</span>
+            <span style="font-size:13px; color:var(--text-2)">
+              Ближайший — <b style="font-family:var(--mono); color:var(--text)">завтра 09:00</b>,
+              Телеграм и МАКС отправит Click
+            </span>
+            <span class="badge badge-danger">1 ошибка: ВК 12.08</span>
+            <div style="flex:1"></div>
+            <label class="switch">
+              <input type="checkbox" checked>
+              <span class="switch-track"></span>
+              <span class="switch-text">Планировщик</span>
+            </label>
+            <button class="btn btn-primary" type="button">🔄 Обновить план</button>
+          </div>
+        </div>
+
+        <!-- Переключатель вида + фильтры -->
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px">
+          <div class="seg">
+            <button type="button" class="on">Все <span class="cnt">91</span></button>
+            <button type="button">Не собраны <span class="cnt">10</span></button>
+            <button type="button">Готовы <span class="cnt">3</span></button>
+            <button type="button">Вышли <span class="cnt">4</span></button>
+            <button type="button">Ошибки <span class="cnt err">1</span></button>
+          </div>
+          <div style="flex:1"></div>
+          <div class="seg">
+            <button type="button">☰ Лентой</button>
+            <button type="button" class="on">▦ Таблицей</button>
+          </div>
+        </div>
+
+        <div class="legend">
+          <b>Ячейки</b>
+          <span><i class="chip set">✓</i> отложка стоит в соцсети</span>
+          <span><i class="chip wait">⏱</i> отправит Click</span>
+          <span><i class="chip off">·</i> не выбрано</span>
+          <span><i class="chip err">✕</i> ошибка</span>
+          <span><i class="chip live">✓</i> уже вышло</span>
+        </div>
+
+        <div class="card" style="padding:0; overflow:hidden">
+          <div class="tbl-wrap">
+            <table class="plan">
+              <thead>
+                <tr>
+                  <th class="row-flag"></th>
+                  <th>Когда</th><th>Тип</th><th>Пост</th><th class="c">Фото</th>
+                  <th class="c">Телеграм</th><th class="c">ВК</th><th class="c">ОК</th><th class="c">МАКС</th>
+                  <th class="c">Что сделать</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="grp"><td colspan="10">Впереди — 5 постов</td></tr>
+
+                <tr>
+                  <td class="row-flag wait"></td>
+                  <td class="td-when">18.08 · 09:00<small>завтра, вт</small></td>
+                  <td><span class="badge badge-accent">Информационный</span></td>
+                  <td class="td-text"><b>СЕКРЕТНЫЙ МЕТАЛЛ, ИЗ-ЗА КОТОРОГО РУХНУЛ МОСТ ТЭЙ</b>28 декабря 1879 года поезд с 75 пассажирами…</td>
+                  <td class="c">🖼 1</td>
+                  <td class="c"><span class="pf wait" title="Отправит Click">⏱</span></td>
+                  <td class="c"><span class="pf set" title="Отложка стоит">✓</span></td>
+                  <td class="c"><span class="pf set" title="Отложка стоит">✓</span></td>
+                  <td class="c"><span class="pf wait" title="Отправит Click">⏱</span></td>
+                  <td class="c"><span class="hint">всё готово</span></td>
+                </tr>
+
+                <tr>
+                  <td class="row-flag wait"></td>
+                  <td class="td-when">20.08 · 09:00<small>через 3 дня, чт</small></td>
+                  <td><span class="badge badge-success">Поступление</span></td>
+                  <td class="td-text"><b>🔥 Свежее поступление: сетка кладочная на складе!</b>Склад «Инметпром» пополнился сеткой кладочной…</td>
+                  <td class="c">🖼 1</td>
+                  <td class="c"><span class="pf wait">⏱</span></td>
+                  <td class="c"><span class="pf set">✓</span></td>
+                  <td class="c"><span class="pf set">✓</span></td>
+                  <td class="c"><span class="pf wait">⏱</span></td>
+                  <td class="c"><span class="hint">всё готово</span></td>
+                </tr>
+
+                <tr style="background:var(--yel-bg)">
+                  <td class="row-flag warn"></td>
+                  <td class="td-when">25.08 · 09:00<small>вт</small></td>
+                  <td><span class="badge badge-muted">Развлекательный</span></td>
+                  <td class="td-text"><b style="color:var(--yel)">⚠️ Нет текста в таблице</b>Пост не выйдет ни на одну площадку, пока строка 47 пустая.</td>
+                  <td class="c">—</td>
+                  <td class="c"><span class="pf off">·</span></td>
+                  <td class="c"><span class="pf off">·</span></td>
+                  <td class="c"><span class="pf off">·</span></td>
+                  <td class="c"><span class="pf off">·</span></td>
+                  <td class="c"><button class="btn btn-sm" type="button">Открыть строку ↗</button></td>
+                </tr>
+
+                <tr>
+                  <td class="row-flag wait"></td>
+                  <td class="td-when">25.08 · 09:00<small>вт</small></td>
+                  <td><span class="badge badge-accent">Информационный</span></td>
+                  <td class="td-text"><b>КТО НА САМОМ ДЕЛЕ ПРИДУМАЛ НЕРЖАВЕЮЩУЮ СТАЛЬ</b>И почему это была случайность. Один из главных…</td>
+                  <td class="c">🖼 1</td>
+                  <td class="c"><span class="pf wait">⏱</span></td>
+                  <td class="c"><span class="pf set">✓</span></td>
+                  <td class="c"><span class="pf off" title="Площадка не выбрана в таблице">·</span></td>
+                  <td class="c"><span class="pf wait">⏱</span></td>
+                  <td class="c"><span class="hint">ОК не выбран</span></td>
+                </tr>
+
+                <tr>
+                  <td class="row-flag ok"></td>
+                  <td class="td-when">26.08 · 09:00<small>ср</small></td>
+                  <td><span class="badge badge-warn">Спецпредложение</span></td>
+                  <td class="td-text"><b>Скидка 10% на ШВЕЛЛЕР ГОРЯЧЕКАТАНЫЙ 12П</b>Компания ИНМЕТПРОМ, предложение по 31 августа…</td>
+                  <td class="c">🖼 1</td>
+                  <td class="c"><span class="pf set">✓</span></td>
+                  <td class="c"><span class="pf set">✓</span></td>
+                  <td class="c"><span class="pf set">✓</span></td>
+                  <td class="c"><span class="pf set">✓</span></td>
+                  <td class="c"><span class="hint">всё готово</span></td>
+                </tr>
+
+                <tr class="grp"><td colspan="10">Уже вышли — 4 поста</td></tr>
+
+                <tr>
+                  <td class="row-flag err"></td>
+                  <td class="td-when">12.08 · 09:00<small>вт</small></td>
+                  <td><span class="badge badge-accent">Информационный</span></td>
+                  <td class="td-text"><b>ПОЧЕМУ АРМАТУРА РЕБРИСТАЯ, А НЕ ГЛАДКАЯ</b>Коротко о сцеплении с бетоном…</td>
+                  <td class="c">🖼 1</td>
+                  <td class="c"><span class="pf live">✓</span></td>
+                  <td class="c"><span class="pf err" title="Истекла сессия ВК">✕</span></td>
+                  <td class="c"><span class="pf live">✓</span></td>
+                  <td class="c"><span class="pf live">✓</span></td>
+                  <td class="c"><button class="btn btn-sm" type="button">Войти во ВК</button></td>
+                </tr>
+
+                <tr>
+                  <td class="row-flag past"></td>
+                  <td class="td-when">14.08 · 09:00<small>чт</small></td>
+                  <td><span class="badge badge-success">Поступление</span></td>
+                  <td class="td-text"><b>Пополнение склада: труба профильная 40×20</b>В наличии на площадке в Екатеринбурге…</td>
+                  <td class="c">🖼 2</td>
+                  <td class="c"><span class="pf live">✓</span></td>
+                  <td class="c"><span class="pf live">✓</span></td>
+                  <td class="c"><span class="pf live">✓</span></td>
+                  <td class="c"><span class="pf live">✓</span></td>
+                  <td class="c"><span class="hint">вышло</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tools-head">
+          <h4>🔧 Настройка и проверка</h4>
+          <span class="hint">Три группы вместо девяти полосок</span>
+        </div>
+        <div class="tool-grid">
+          <div class="tool">
+            <div class="tool-ico">🔌</div>
+            <div>
+              <div class="tool-t">Подключения</div>
+              <div class="tool-s">Таблица, каналы Телеграма и МАКС, Яндекс.Бизнес</div>
+              <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button">Открыть</button></div>
+            </div>
+          </div>
+          <div class="tool">
+            <div class="tool-ico">🧪</div>
+            <div>
+              <div class="tool-t">Проверка отложки</div>
+              <div class="tool-s">Пробный пост во ВК и ОК + логи прошлых проверок</div>
+              <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button">Открыть</button></div>
+            </div>
+          </div>
+          <div class="tool">
+            <div class="tool-ico">📜</div>
+            <div>
+              <div class="tool-t">Журналы и реестр</div>
+              <div class="tool-s">Журнал планировщика, все 91 строка листа, «сформировать заново»</div>
+              <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button">Открыть</button></div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /screen -->
+    </div><!-- /frame -->
+
+    <div class="frame-cap" style="margin-top:12px">
+      <b>Почему так</b>
+      <span>
+        Колонка «Что сделать» — единственное место с кнопками: в готовых строках там тихая
+        подпись «всё готово», в проблемных — конкретное действие. Взгляд идёт по этой колонке
+        вниз и сразу находит работу.
+      </span>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════ ВАРИАНТ C ═══════════════════════════ -->
+  <section class="doc-sec" id="vc">
+    <div class="doc-sec-head">
+      <span class="kicker">Вариант C — для самого неопытного</span>
+      <h2>Три шага</h2>
+      <p>
+        Тот же приём, что на вкладке «Запуск»: страница ведёт по шагам. Пока что-то не
+        настроено — шаг горит и говорит, что нажать. Когда всё готово, шаги схлопываются
+        в одну зелёную строку, и остаётся только план.
+      </p>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar">
+        <span class="frame-dot"></span><span class="frame-dot"></span><span class="frame-dot"></span>
+        <span class="frame-url">click · кросспостинг · первый вход</span>
+      </div>
+
+      <div class="click-topbar">
+        <div class="click-logo">
+          <div class="click-logo-icon">➤</div>
+          <div>
+            <div class="click-logo-title">Click</div>
+            <div class="click-logo-sub">публикация постов</div>
+          </div>
+        </div>
+        <div class="pills">
+          <span class="pill pill-ok">Программа установлена</span>
+          <span class="pill pill-warn">Яндекс.Бизнес не настроен</span>
+        </div>
+        <div class="topbar-spacer"></div>
+        <span class="projbadge"><span class="projbadge-dot"></span>ИМП –<span class="projbadge-sub">Инметпром</span></span>
+      </div>
+
+      <div class="tabs">
+        <span>🚀 Запуск</span><span>📤 Публикация</span><span class="on">🔁 Кросспостинг</span>
+        <span>🔄 Актуализация</span><span>🏙 Города</span><span>📊 Отчёт</span>
+        <span>⚙️ Настройки</span><span>🔎 Сверка</span>
+      </div>
+
+      <div class="screen">
+
+        <div class="card">
+          <div class="card-title">Чтобы посты выходили сами, нужны три вещи <span class="tail">Готово 2 из 3</span></div>
+
+          <div class="step done">
+            <div class="step-num">✓</div>
+            <div class="step-body">
+              <div class="step-title">Таблица подключена</div>
+              <div class="step-sub">Google-таблица контент-плана · 91 пост в листе · час выхода 09:00 по Екатеринбургу</div>
+              <div class="step-mark">✓ План прочитан 5 минут назад</div>
+            </div>
+            <div class="step-act">
+              <button class="btn btn-sm" type="button">🔄 Обновить план</button>
+              <button class="btn btn-sm btn-ghost" type="button">Открыть таблицу ↗</button>
+            </div>
+          </div>
+
+          <div class="step done">
+            <div class="step-num">✓</div>
+            <div class="step-body">
+              <div class="step-title">Площадки подключены — 4 из 5</div>
+              <div class="step-sub">
+                ВК и ОК: вход выполнен, отложку держит сама соцсеть.
+                Телеграм и МАКС: токены ботов на месте, публикует Click.
+                Яндекс.Бизнес: расписание ещё не задано — посты туда не пойдут.
+              </div>
+            </div>
+            <div class="step-act">
+              <button class="btn btn-sm" type="button">Настроить Яндекс.Бизнес</button>
+            </div>
+          </div>
+
+          <div class="step active">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <div class="step-title">Планировщик включён</div>
+              <div class="step-sub">
+                Проверяет задания каждые 30 секунд и досылает пропущенное за последние 6 часов.
+                Работает, пока открыт Click — окно можно свернуть, закрывать нельзя.
+              </div>
+            </div>
+            <div class="step-act">
+              <label class="switch">
+                <input type="checkbox" checked>
+                <span class="switch-track"></span>
+                <span class="switch-text">Включён</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            📅 Что выйдет ближайшими
+            <span class="tail">Сегодня понедельник, 17 августа · впереди 5 постов</span>
+          </div>
+          <div class="legend">
+            <b>Значки</b>
+            <span><i class="chip set">✓</i> уже стоит в соцсети</span>
+            <span><i class="chip wait">⏱</i> отправит Click</span>
+            <span><i class="chip off">·</i> не выбрано</span>
+          </div>
+          <div class="cards">
+            <div class="pcard">
+              <div class="pcard-when"><span>Завтра, 09:00</span> <em>вт 18.08 · через 21 ч</em></div>
+              <div class="pcard-title">СЕКРЕТНЫЙ МЕТАЛЛ, ИЗ-ЗА КОТОРОГО РУХНУЛ МОСТ ТЭЙ В ШОТЛАНДИИ. 28 декабря 1879 года поезд с 75 пассажирами…</div>
+              <div class="pcard-foot">
+                <span class="pf-named wait">⏱ Телеграм</span>
+                <span class="pf-named set">✓ ВК</span>
+                <span class="pf-named set">✓ ОК</span>
+                <span class="pf-named wait">⏱ МАКС</span>
+              </div>
+            </div>
+
+            <div class="pcard">
+              <div class="pcard-when"><span>Четверг, 09:00</span> <em>чт 20.08 · через 3 дня</em></div>
+              <div class="pcard-title">🔥 Свежее поступление: сетка кладочная на складе! Склад «Инметпром» пополнился сеткой кладочной…</div>
+              <div class="pcard-foot">
+                <span class="pf-named wait">⏱ Телеграм</span>
+                <span class="pf-named set">✓ ВК</span>
+                <span class="pf-named set">✓ ОК</span>
+                <span class="pf-named wait">⏱ МАКС</span>
+              </div>
+            </div>
+
+            <div class="pcard warn">
+              <div class="pcard-when"><span>Вторник, 09:00</span> <em>вт 25.08</em></div>
+              <div class="pcard-title" style="color:var(--yel); font-weight:600">
+                ⚠️ Нет текста в таблице — этот пост никуда не выйдет. Впишите текст в строку 47 и обновите план.
+              </div>
+              <div class="pcard-foot">
+                <button class="btn btn-sm" type="button">Открыть строку ↗</button>
+                <button class="btn btn-sm btn-ghost" type="button">Сгенерировать текст</button>
+              </div>
+            </div>
+
+            <div class="pcard ok">
+              <div class="pcard-when"><span>Среда, 09:00</span> <em>ср 26.08</em></div>
+              <div class="pcard-title">Компания ИНМЕТПРОМ предлагает скидку 10% на ШВЕЛЛЕР ГОРЯЧЕКАТАНЫЙ 12П по 31 августа…</div>
+              <div class="pcard-foot">
+                <span class="pf-named set">✓ Телеграм</span>
+                <span class="pf-named set">✓ ВК</span>
+                <span class="pf-named set">✓ ОК</span>
+                <span class="pf-named set">✓ МАКС</span>
+              </div>
+            </div>
+          </div>
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn" type="button">Показать все 91 пост списком</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🆘 Если что-то пошло не так</div>
+          <div class="big-actions">
+            <button class="big-act" type="button">
+              <span class="big-act-ico">↺</span>
+              <span>
+                <span class="big-act-t">Пост удалили в соцсети</span>
+                <span class="big-act-s">Сформировать запись заново и поставить отложку</span>
+              </span>
+            </button>
+            <button class="big-act" type="button">
+              <span class="big-act-ico">🧪</span>
+              <span>
+                <span class="big-act-t">Отложка не ставится</span>
+                <span class="big-act-s">Проверить механику одним пробным постом — ВК или ОК</span>
+              </span>
+            </button>
+            <button class="big-act" type="button">
+              <span class="big-act-ico">📜</span>
+              <span>
+                <span class="big-act-t">Пост не вышел</span>
+                <span class="big-act-s">Открыть журнал планировщика за нужный день</span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+      </div><!-- /screen -->
+    </div><!-- /frame -->
+
+    <div class="frame-cap" style="margin-top:12px">
+      <b>Почему так</b>
+      <span>
+        Ни одной строки без глагола: каждый блок либо говорит «готово», либо предлагает
+        одно действие. «Если что-то пошло не так» переводит служебные названия
+        («пробная отложка», «журнал») на язык симптома — человек ищет по своей беде, а не по нашему термину.
+      </span>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════ ИТОГ ═══════════════════════════ -->
+  <section class="doc-sec" id="final">
+    <div class="doc-sec-head">
+      <span class="kicker">Рекомендация</span>
+      <h2>Что бы я собрал из трёх</h2>
+    </div>
+    <div class="final">
+      <ol>
+        <li><b>Основа — вариант A.</b> Полоса «сейчас», блок «требует внимания», плашки-фильтры, лента по дням, настройки внизу под честным заголовком.</li>
+        <li><b>Таблица из B — вторым режимом.</b> Переключатель «Лентой / Таблицей» справа от фильтров: лента для ежедневного взгляда, таблица — когда нужно окинуть весь месяц.</li>
+        <li><b>Шаги из C — только когда что-то не настроено.</b> Нет токена, не задано расписание ЯБ, не выполнен вход во ВК — сверху появляется степпер. Всё в порядке — он не показывается вовсе.</li>
+        <li><b>Легенда значков — всегда на виду</b>, одной строкой над списком. Это то, из-за чего сейчас страница читается как шифр.</li>
+        <li><b>Одна синяя кнопка на экран.</b> «Обновить план» — единственная primary; всё остальное — тихие кнопки. Опасное («сформировать заново») уводим в раскрывашку.</li>
+      </ol>
+
+      <h4 style="margin-top:26px; font-size:14px">Откуда приёмы</h4>
+      <ul class="src-list">
+        <li><b>Очередь и «ближайший пост»</b> — Buffer: главный экран отвечает «что уйдёт следующим», а не «вот все настройки».</li>
+        <li><b>Матрица «пост × площадка»</b> — Later и SMMplanner: статус по каждой соцсети виден в строке, без захода внутрь поста.</li>
+        <li><b>Блок «требует внимания» с кнопкой-лечением</b> — стандарт админок: ошибка бесполезна без действия рядом.</li>
+        <li><b>Прогрессивное раскрытие</b> — правило Nielsen Norman Group: редкие настройки прячем, частые держим на виду.</li>
+        <li><b>Один primary на экран</b> — общее место всех гайдлайнов (Material, HIG): вторая яркая кнопка отменяет первую.</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var btn = document.getElementById('theme');
+  btn.addEventListener('click', function () {
+    var cur = root.getAttribute('data-theme');
+    if (!cur) {
+      var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      cur = dark ? 'dark' : 'light';
+    }
+    root.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+  });
+
+  // Подсветка активного раздела в навигации
+  var links = Array.prototype.slice.call(document.querySelectorAll('.doc-nav a'));
+  var secs = links.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+  function sync() {
+    var y = window.scrollY + 120, best = 0;
+    secs.forEach(function (s, i) { if (s && s.offsetTop <= y) best = i; });
+    links.forEach(function (a, i) { a.classList.toggle('on', i === best); });
+  }
+  window.addEventListener('scroll', sync, { passive: true });
+  sync();
+
+  // Плашки-фильтры и сегменты — только визуальная реакция, это макет
+  function group(sel) {
+    var els = document.querySelectorAll(sel);
+    els.forEach(function (el) {
+      el.addEventListener('click', function () {
+        el.parentNode.querySelectorAll(sel.split(' ').pop()).forEach(function (s) {
+          s.classList.remove('on');
+        });
+        el.classList.add('on');
+      });
+    });
+  }
+  group('.filters .f-tile');
+  group('.seg button');
+})();
+</script>
+
+</body>
+</html>

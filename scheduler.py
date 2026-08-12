@@ -1,26 +1,26 @@
 """
-scheduler.py — планировщик кросспостинга: отправка в назначенное время.
+scheduler.py – планировщик кросспостинга: отправка в назначенное время.
 
-Зачем. ВК и ОК держат отложку сами — им планировщик не нужен. А у ботов
+Зачем. ВК и ОК держат отложку сами – им планировщик не нужен. А у ботов
 Телеграма и МАКС отложки нет: пост надо отправить ровно в назначенную
-минуту, и делает это Click. Планировщик — фоновый поток, который каждые
+минуту, и делает это Click. Планировщик – фоновый поток, который каждые
 полминуты смотрит, не пришло ли время какого-нибудь задания.
 
 Задание рождается при «Сформировать» (crosspost_form): по одному на пару
 «пост × мессенджер», с текстом, картинками и временем. Лежат задания в
-users-data/<ПРОЕКТ>/crosspost/tasks.json — файл, не память: перезапуск
+users-data/<ПРОЕКТ>/crosspost/tasks.json – файл, не память: перезапуск
 приложения ничего не теряет.
 
 Правило опоздания (Д-5 постановки). Click был выключен в час Х:
-    опоздание меньше окна (настройка, по умолчанию 6 ч) — отправить
-    с пометкой «с опозданием»; больше — «пропущено», НЕ отправлять
-    (утренний пост в полночь — конфуз), и тревога в личный Телеграм.
+    опоздание меньше окна (настройка, по умолчанию 6 ч) – отправить
+    с пометкой «с опозданием»; больше – «пропущено», НЕ отправлять
+    (утренний пост в полночь – конфуз), и тревога в личный Телеграм.
 
-Отказ отправки — не приговор: до 3 попыток по одной на тик, потом
+Отказ отправки – не приговор: до 3 попыток по одной на тик, потом
 «ошибка» с причиной словами и тревога.
 
 Два экземпляра Click на одной машине не шлют дважды: лок-файл с
-биением сердца — второй планировщик просто не запускается, пока жив
+биением сердца – второй планировщик просто не запускается, пока жив
 первый. Внутри процесса тик тоже один за раз (threading.Lock).
 """
 
@@ -38,13 +38,13 @@ import apptime
 import crosspost_state as cps
 import paths
 
-# Метка сборки — одна на всё приложение (см. build.py).
+# Метка сборки – одна на всё приложение (см. build.py).
 from build import BUILD  # noqa: F401
 
 TICK_SECONDS = 30
 MAX_ATTEMPTS = 3
-LATE_AFTER_S = 60          # позже планового на минуту — уже «с опозданием»
-LOCK_FRESH_S = 90          # лок живее этого — второй планировщик не стартует
+LATE_AFTER_S = 60          # позже планового на минуту – уже «с опозданием»
+LOCK_FRESH_S = 90          # лок живее этого – второй планировщик не стартует
 DONE_KEEP_DAYS = 30        # выполненные задания храним для журнала, потом чистим
 
 _tick_lock = threading.Lock()
@@ -136,7 +136,7 @@ def queue_task(project_id: str, task: dict) -> None:
     """
     Поставить задание. Идемпотентно по id: то же задание второй раз не
     множится, а обновляется (правка текста в реестре → переформирование).
-    Выполненное задание с тем же id не трогаем — дубль не поедет.
+    Выполненное задание с тем же id не трогаем – дубль не поедет.
     """
     tasks = load_tasks(project_id)
     for i, t in enumerate(tasks):
@@ -165,10 +165,10 @@ def projects_with_tasks() -> list[str]:
 # ─── Решение по заданию (чистая логика, накрыта тестами) ────────────
 def decide(task: dict, now: datetime, late_window_s: float) -> str:
     """
-    'wait'      — рано;
-    'send'      — время пришло (в пределах минуты);
-    'send-late' — опоздали, но окно ещё не вышло;
-    'missed'    — окно вышло, публиковать поздно.
+    'wait'      – рано;
+    'send'      – время пришло (в пределах минуты);
+    'send-late' – опоздали, но окно ещё не вышло;
+    'missed'    – окно вышло, публиковать поздно.
     """
     when = datetime.fromisoformat(task["when"])
     if now < when:
@@ -182,7 +182,7 @@ def decide(task: dict, now: datetime, late_window_s: float) -> str:
 # ─── Отправка ───────────────────────────────────────────────────────
 def _default_senders() -> dict[str, Callable[[dict], dict]]:
     """
-    Кто умеет отправлять. Ключ — семейство сети ('tg' обслуживает и
+    Кто умеет отправлять. Ключ – семейство сети ('tg' обслуживает и
     tg-client, и tg-staff). Импорты внутри: планировщик должен подниматься
     и тогда, когда какой-то клиент недоступен.
     """
@@ -220,12 +220,12 @@ def _alert(text: str) -> None:
     try:
         import tg_social
         tg_social.send_alert(text)
-    except Exception:  # noqa: BLE001 — тревога не должна ронять планировщик
+    except Exception:  # noqa: BLE001 – тревога не должна ронять планировщик
         pass
 
 
 def _record(project_id: str, task: dict, status: str, link: str = "", error: str = "") -> None:
-    """Исход — в память кросспостинга, чтобы сводка раздела говорила правду."""
+    """Исход – в память кросспостинга, чтобы сводка раздела говорила правду."""
     post = {"brand": task.get("brand", project_id), "date": task.get("date", ""),
             "when": task.get("when", ""), "text": task.get("sourceText", "")}
     cps.set_status(project_id, post, task.get("network", ""), status, link=link, error=error)
@@ -233,9 +233,9 @@ def _record(project_id: str, task: dict, status: str, link: str = "", error: str
 
 def _default_yb_start(task: dict) -> dict:
     """
-    Запуск прогона публикации ЯБ — тем же start_publish, что и кнопка
+    Запуск прогона публикации ЯБ – тем же start_publish, что и кнопка
     «Опубликовать»: все локи и защиты от дублей действуют. «Занято» и
-    «очередь пуста» — не провал, а «подождём»: лок освободится, очередь
+    «очередь пуста» – не провал, а «подождём»: лок освободится, очередь
     соберут, дедлайн всё равно закроет вопрос.
     """
     import runner
@@ -293,9 +293,9 @@ def tick(now: datetime | None = None,
                     task["state"] = "missed"
                     _record(project_id, task, cps.MISSED,
                             error=f"окно опоздания ({config()['lateWindowHours']:g} ч) вышло")
-                    log(f"{project_id} {task['id']}: пропущено — окно опоздания вышло")
+                    log(f"{project_id} {task['id']}: пропущено – окно опоздания вышло")
                     _alert(f"⏭ Click: пост {task.get('date')} в "
-                           f"{cps.network_ru(task.get('network', ''))} пропущен — "
+                           f"{cps.network_ru(task.get('network', ''))} пропущен – "
                            f"приложение не работало в назначенное время.")
                     dirty = True
                     changed += 1
@@ -303,8 +303,8 @@ def tick(now: datetime | None = None,
 
                 family = (task.get("network") or "").split("-")[0]
 
-                # ЯБ — не отправка, а запуск прогона. «Занято» и «очередь
-                # пуста» — повод подождать следующий тик, а не жечь попытки.
+                # ЯБ – не отправка, а запуск прогона. «Занято» и «очередь
+                # пуста» – повод подождать следующий тик, а не жечь попытки.
                 if family == "yb":
                     res = yb_start(task)
                     if res.get("ok"):
@@ -318,11 +318,11 @@ def tick(now: datetime | None = None,
                         note = res.get("error", "")
                         if task.get("lastNote") != note:   # без спама в журнал каждый тик
                             task["lastNote"] = note
-                            log(f"{project_id} {task['id']}: жду — {note}")
+                            log(f"{project_id} {task['id']}: жду – {note}")
                             dirty = True
                     else:
                         task["state"] = "failed"
-                        log(f"{project_id} {task['id']}: ошибка — {res.get('error', '')}")
+                        log(f"{project_id} {task['id']}: ошибка – {res.get('error', '')}")
                         _alert(f"❌ Click: прогон ЯБ {task.get('date')} не запустился: "
                                f"{res.get('error', '')}")
                         dirty = True
@@ -354,13 +354,13 @@ def tick(now: datetime | None = None,
                     if task["attempts"] >= MAX_ATTEMPTS:
                         task["state"] = "failed"
                         _record(project_id, task, cps.FAILED, error=err)
-                        log(f"{project_id} {task['id']}: ошибка окончательно — {err}")
+                        log(f"{project_id} {task['id']}: ошибка окончательно – {err}")
                         _alert(f"❌ Click: пост {task.get('date')} в "
                                f"{cps.network_ru(task.get('network', ''))} не вышел: {err}")
                     else:
                         task["state"] = "retry"
                         log(f"{project_id} {task['id']}: ошибка (попытка "
-                            f"{task['attempts']}/{MAX_ATTEMPTS}) — {err}")
+                            f"{task['attempts']}/{MAX_ATTEMPTS}) – {err}")
                 dirty = True
                 changed += 1
 
@@ -372,7 +372,7 @@ def tick(now: datetime | None = None,
 
 
 def _purge_old(tasks: list[dict], now: datetime) -> list[dict]:
-    """Выполненное старше DONE_KEEP_DAYS убираем — журнал не должен пухнуть вечно."""
+    """Выполненное старше DONE_KEEP_DAYS убираем – журнал не должен пухнуть вечно."""
     keep: list[dict] = []
     for t in tasks:
         if t.get("state") in ("done", "done-late", "missed", "failed", "cancelled"):
@@ -410,7 +410,7 @@ def _loop() -> None:
         try:
             _heartbeat()
             tick()
-        except Exception as e:  # noqa: BLE001 — один плохой тик не убивает поток
+        except Exception as e:  # noqa: BLE001 – один плохой тик не убивает поток
             log(f"Тик упал: {e}")
         time.sleep(TICK_SECONDS)
 
@@ -418,7 +418,7 @@ def _loop() -> None:
 def ensure_running() -> bool:
     """
     Поднять фоновый поток, если ещё не поднят. Вторая копия Click на той же
-    машине планировщик не заводит (лок с биением сердца) — иначе задания
+    машине планировщик не заводит (лок с биением сердца) – иначе задания
     уходили бы дважды. Возвращает True, если планировщик работает в ЭТОМ
     процессе.
     """

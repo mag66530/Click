@@ -1,20 +1,20 @@
 """
-ok_social.py — Одноклассники: родная отложка через REST API.
+ok_social.py – Одноклассники: родная отложка через REST API.
 
 Единственная соцсеть проекта, где остался нормальный API-путь: ВК закрыл
 регистрацию приложений, а у ОК приложение заводится (с модерацией прав,
 см. ПОСТАНОВКА-Кросспостинг.md, Приложение А.2). Пост кладётся методом
-mediatopic.post с publishAt — дальше его держит и публикует сам ОК.
+mediatopic.post с publishAt – дальше его держит и публикует сам ОК.
 
-Ключи (все — из «Настроек», в коде ничего):
+Ключи (все – из «Настроек», в коде ничего):
     ok_app_key             публичный ключ приложения (application_key)
     ok_app_secret          секретный ключ приложения
     ok_access_token        «вечный» токен, сгенерированный ПОСЛЕ выдачи прав
-    ok_session_secret_key  выдаётся вместе с токеном; если пуст — считается
+    ok_session_secret_key  выдаётся вместе с токеном; если пуст – считается
                            MD5(access_token + app_secret), это штатная схема ОК
 
 Часовой пояс: publishAt ОК принимает ТОЛЬКО по Москве. Наружу этот модуль
-берёт время Екатеринбурга (как весь Click) и конвертирует сам — человек
+берёт время Екатеринбурга (как весь Click) и конвертирует сам – человек
 про Москву не думает. Ошибка здесь = пост уехал на 2 часа, поэтому
 конвертация накрыта тестом.
 """
@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 
 import secrets_local
 
-# Метка сборки — одна на всё приложение (см. build.py).
+# Метка сборки – одна на всё приложение (см. build.py).
 from build import BUILD  # noqa: F401
 
 API = "https://api.ok.ru/fb.do"
@@ -60,8 +60,8 @@ def session_secret(token: str, app_secret: str, explicit: str = "") -> str:
 def sign(params: dict, session_secret_key: str) -> str:
     """
     Подпись запроса по схеме ОК: параметры сортируются по имени, склеиваются
-    в «имя=значение» без разделителей, в хвост — секрет сессии, всё в MD5.
-    access_token в подпись НЕ входит — это правило ОК, не наша прихоть.
+    в «имя=значение» без разделителей, в хвост – секрет сессии, всё в MD5.
+    access_token в подпись НЕ входит – это правило ОК, не наша прихоть.
     """
     line = "".join(f"{k}={params[k]}" for k in sorted(params))
     return hashlib.md5((line + session_secret_key).encode("utf-8")).hexdigest().lower()
@@ -71,7 +71,7 @@ def sign(params: dict, session_secret_key: str) -> str:
 def publish_at_msk(when_local: datetime) -> str:
     """Время Екатеринбурга (или любое со своим поясом) → строка ОК по Москве."""
     if when_local.tzinfo is None:
-        raise ValueError("publish_at_msk ждёт время С ПОЯСОМ — иначе конвертация наугад")
+        raise ValueError("publish_at_msk ждёт время С ПОЯСОМ – иначе конвертация наугад")
     return when_local.astimezone(MSK).strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -105,7 +105,7 @@ def _call(method: str, extra: dict, files: dict | None = None) -> dict:
 
 
 def upload_photos(group_id: str, image_paths: list[str]) -> list[str]:
-    """Фото в альбом группы → токены для вложения. Пути — уже скачанные файлы."""
+    """Фото в альбом группы → токены для вложения. Пути – уже скачанные файлы."""
     import requests
 
     if not image_paths:
@@ -131,7 +131,7 @@ def schedule_topic(group_id: str, text: str, image_paths: list[str],
                    when_local: datetime) -> dict:
     """
     Поставить отложенный пост в группу. Возвращает {"ok": True, "topicId": …}
-    либо {"ok": False, "error": "…"}. Время — екатеринбургское с поясом,
+    либо {"ok": False, "error": "…"}. Время – екатеринбургское с поясом,
     в Москву переводим здесь.
     """
     if not is_configured():
@@ -148,12 +148,12 @@ def schedule_topic(group_id: str, text: str, image_paths: list[str],
         })
         topic_id = resp if isinstance(resp, (str, int)) else (resp or {}).get("id", "")
         return {"ok": True, "topicId": str(topic_id)}
-    except Exception as e:  # noqa: BLE001 — наружу словами, решает вызывающий
+    except Exception as e:  # noqa: BLE001 – наружу словами, решает вызывающий
         return {"ok": False, "error": str(e)}
 
 
 def check_access() -> str:
-    """Живая проверка ключей: пусто — всё хорошо, иначе причина словами."""
+    """Живая проверка ключей: пусто – всё хорошо, иначе причина словами."""
     if not is_configured():
         return "не заполнены ключи ОК"
     try:

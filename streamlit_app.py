@@ -46,7 +46,17 @@ import streamlit.components.v1 as components
 # проскочить между двумя выселениями.
 _OWN_MODULES = ("build", "apptime", "paths", "projects_data", "repo_store", "ui_theme",
                 "llm", "reviews", "kp_sheet", "kp_audit", "secrets_local",
-                "yb_playwright", "gis_playwright", "playwright_worker", "runner")
+                "yb_playwright", "gis_playwright", "playwright_worker", "runner",
+                # Кросспостинг. Раньше их тут не было – и правки в них
+                # доезжали до облака как придётся: модуль остаётся в памяти
+                # от прежней сборки, а по метке его никто не проверяет.
+                # Заказчица дважды получила «та же ошибка» на уже
+                # исправленном коде, и оба раза мы гадали, дело в правке или
+                # в том, что она ещё не доехала. Список меток должен знать
+                # обо ВСЕХ модулях, которые мы правим.
+                "content_plan", "crosspost_state", "crosspost_form", "post_text",
+                "scheduler", "social_session", "vk_social", "ok_browser",
+                "ok_social", "tg_social", "max_social")
 
 
 def _settle_imports() -> None:
@@ -2330,7 +2340,7 @@ _SENT_LABELS = {
     # они тоже нужны: там видно всё найденное, а не только отправленное.
     rv.DRAFTED: "✍ черновик ждёт подтверждения",
     rv.NEEDS_HUMAN: "⚠️ отвечаете сами",
-    rv.NO_DRAFT: "— черновика нет",
+    rv.NO_DRAFT: "– черновика нет",
 }
 
 
@@ -3267,48 +3277,61 @@ _REPORT_KINDS = {"publish": "📤 Публикация", "actualize": "🔄 Ак
 # соцсетям). Раздел показывает этот план внутри Click и то, что с ним уже
 # сделано. Разбор таблицы – content_plan.py, память о сделанном – crosspost_state.py.
 
-CROSSPOST_HORIZON_DAYS = 14      # на сколько дней вперёд показываем план
+CROSSPOST_HORIZON_DAYS = 14      # минимум, сколько дней вперёд показываем план
 
 
-def _crosspost_has_source(project_id: str, config: dict) -> bool:
-    """Есть ли из чего читать план: ссылка на таблицу или загруженная выгрузка."""
-    return bool((config.get("planSheetUrl") or "").strip()
-                or st.session_state.get(f"plan-upload-bytes-{project_id}"))
+def _crosspost_horizon(today):
+    """
+    До какого дня показываем план: до конца ТЕКУЩЕГО месяца, но не меньше
+    двух недель вперёд.
+
+    Было ровно 14 дней – и заказчица, перенеся пост с 11-го на 30-е, перестала
+    его видеть: 30-е за горизонт уходило. А планируют помесячно, реестр так и
+    свёрстан – «Август 2026» отдельным заголовком. В конце месяца две недели
+    всё равно остаются: последние числа не должны обрывать план на послезавтра.
+    """
+    from calendar import monthrange
+    end_of_month = today.replace(day=monthrange(today.year, today.month)[1])
+    return max(end_of_month, today + timedelta(days=CROSSPOST_HORIZON_DAYS))
 
 
-def _crosspost_source_form(project_id: str, config: dict) -> None:
+def _crosspost_source_block(project_id: str, config: dict) -> bool:
     """
     Источник реестра. Доступ – тот же сервисный аккаунт Google, что читает КП:
     заказчику достаточно расшарить на него таблицу реестра, новых ключей не нужно.
-    Раскрывашки вокруг нет: блок живёт внутри группы «Подключения», а вложенные
-    экспандеры Streamlit не разрешает.
+    Возвращает True, если из чего читать.
     """
     saved = (config.get("planSheetUrl") or "").strip()
     has_key = kp_sheet.service_account_info() is not None
 
-    url = st.text_input("Ссылка на таблицу реестра", value=saved,
-                        key=f"plan-url-{project_id}",
-                        placeholder="https://docs.google.com/spreadsheets/d/…")
-    if url.strip() != saved:
-        config["planSheetUrl"] = url.strip()
-        save_config(project_id)
-        st.rerun()
+    with st.expander("🗓 Источник реестра – Google-таблица контент-плана",
+                     expanded=not saved and not st.session_state.get(f"plan-file-{project_id}")):
+        url = st.text_input("Ссылка на таблицу реестра", value=saved,
+                            key=f"plan-url-{project_id}",
+                            placeholder="https://docs.google.com/spreadsheets/d/…")
+        if url.strip() != saved:
+            config["planSheetUrl"] = url.strip()
+            save_config(project_id)
+            st.rerun()
 
-    st.caption(f"Лист бренда в таблице – «{project_id}» или его русское имя "
-               f"(СМУ, ИМП, МПЭ, МПИ, АПС). Читаются колонки «Когда выложить», "
-               f"«Соцсеть», «Ссылка», «Формат», «Тип», «Пост», «Фото».")
-    if not has_key:
-        st.warning(
-            "Не найден ключ сервисного аккаунта Google – тот же, что читает КП. "
-            "Расшарьте таблицу реестра на него как Читателя. Пока ключа нет, "
-            "план можно посмотреть, загрузив файл ниже.", icon="🔑")
+        st.caption(f"Лист бренда в таблице – «{project_id}» или его русское имя "
+                   f"(СМУ, ИМП, МПЭ, МПИ, АПС). Читаются колонки «Когда выложить», "
+                   f"«Соцсеть», «Ссылка», «Формат», «Тип», «Пост», «Фото».")
+        if not has_key:
+            st.warning(
+                "Не найден ключ сервисного аккаунта Google – тот же, что читает КП. "
+                "Расшарьте таблицу реестра на него как Читателя. Пока ключа нет, "
+                "план можно посмотреть, загрузив файл ниже.", icon="🔑")
 
-    # Файл – запасной путь: посмотреть свой план можно сразу, не дожидаясь
-    # доступов. Файл живёт только в этой вкладке и никуда не сохраняется.
-    up = st.file_uploader("…или загрузите выгрузку реестра (.xlsx) для просмотра",
-                          type=["xlsx"], key=f"plan-file-{project_id}")
-    if up is not None:
-        st.session_state[f"plan-upload-bytes-{project_id}"] = up.getvalue()
+        # Файл – запасной путь: посмотреть свой план можно сразу, не дожидаясь
+        # доступов. Файл живёт только в этой вкладке и никуда не сохраняется.
+        up = st.file_uploader("…или загрузите выгрузку реестра (.xlsx) для просмотра",
+                              type=["xlsx"], key=f"plan-file-{project_id}")
+        if up is not None:
+            st.session_state[f"plan-upload-bytes-{project_id}"] = up.getvalue()
+
+    return bool((config.get("planSheetUrl") or "").strip()
+                or st.session_state.get(f"plan-upload-bytes-{project_id}"))
 
 
 def _crosspost_load_posts(project_id: str, config: dict) -> tuple[list[dict], str]:
@@ -3340,7 +3363,7 @@ def _crosspost_load_posts(project_id: str, config: dict) -> tuple[list[dict], st
 
 
 def _crosspost_targets_html(post: dict, state: dict) -> str:
-    """Строка площадок поста: «ВК 🕓 · ОК ✅ · ТГ —». Нужна списку прошлых постов."""
+    """Строка площадок поста: «ВК 🕓 · ОК ✅ · ТГ –»."""
     # Видео и статьи Click не формирует. Показываем это прямо в строке, иначе
     # человек будет ждать, что пост «поедет», и не поймёт, почему он стоит.
     fmt = (post.get("format") or "Пост").strip()
@@ -3365,20 +3388,20 @@ def _crosspost_targets_html(post: dict, state: dict) -> str:
 
 
 def _crosspost_plan_row(post: dict, state: dict) -> str:
-    """Одна строка плана: дата и час, тип, текст, площадки (список прошлых)."""
+    """Одна строка плана: дата и час, тип, текст, площадки."""
     when = apptime.to_local(post.get("when"))
     day = when.strftime("%d.%m") if when else post.get("date", "")
     weekday = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"][when.weekday()] if when else ""
-    # В превью — текст без разметки: маркеры **…** здесь только мусорят.
+    # В превью – текст без разметки: маркеры **…** здесь только мусорят.
     text = " ".join(post_text.strip_markup(post.get("text") or "").split())
     if len(text) > 90:
         text = text[:90] + "…"
-    photos = f'📷 {len(post["images"])}' if post.get("images") else "—"
+    photos = f'📷 {len(post["images"])}' if post.get("images") else "–"
     return (
         '<div class="report-row">'
         f'<span class="cp-day">{T.esc(day)} <em>{T.esc(weekday)}</em> '
         f'{T.esc(post.get("time", ""))}</span>'
-        f'<span class="cp-type">{T.esc(post.get("post_type") or "—")}</span>'
+        f'<span class="cp-type">{T.esc(post.get("post_type") or "–")}</span>'
         f'<span class="report-row-reason">{T.esc(text or "нет текста")}</span>'
         f'<span class="cp-photos">{T.esc(photos)}</span>'
         f'<span class="cp-nets">{_crosspost_targets_html(post, state)}</span>'
@@ -3386,57 +3409,48 @@ def _crosspost_plan_row(post: dict, state: dict) -> str:
     )
 
 
-# ─── Полоса состояния: работает ли автопостинг и что выйдет ближайшим ───
+def _crosspost_has_source(project_id: str, config: dict) -> bool:
+    """Есть ли из чего читать план: ссылка на таблицу или загруженная выгрузка."""
+    return bool((config.get("planSheetUrl") or "").strip()
+                or st.session_state.get(f"plan-upload-bytes-{project_id}"))
+
+
 def _crosspost_bar(project_id: str, config: dict, posts: list[dict],
-                   upcoming: list[dict], state: dict) -> None:
+                   upcoming: list[dict], state: dict, horizon: date) -> None:
     """
     Первое, что видно на вкладке, отвечает на главный вопрос: идёт ли всё само.
-    Раньше ответ приходилось собирать из чекбокса внизу страницы и списка в
-    середине — человек не понимал, выйдут посты или нет.
+    Раньше ответ приходилось собирать из галочки внизу страницы, четырёх цифр
+    и списка в середине – и «работает ли автопостинг» оставалось непонятным.
     """
-    import scheduler
-
-    cfg = scheduler.config()
-    if cfg["enabled"]:
-        scheduler.ensure_running()
-        alive = True
-        state_text = "Автопостинг работает"
-    else:
-        alive = False
-        state_text = "Планировщик выключен"
-
+    sched = _crosspost_scheduler_state(project_id)
     nearest = crosspost_calendar.next_out(posts, state, apptime.now().isoformat())
     if nearest:
         when = apptime.to_local(nearest["when"])
-        day = crosspost_calendar.relative_day(when.date(), apptime.now().date()) \
-            or crosspost_calendar.human_day(when.date())
+        day = (crosspost_calendar.relative_day(when.date(), apptime.now().date())
+               or crosspost_calendar.human_day(when.date()))
         who = ", ".join(dict.fromkeys(n["name"] for n in nearest["pending"]))
-        sub = (f'Ближайший пост — <b>{T.esc(day)} в {T.esc(when.strftime("%H:%M"))}</b>, '
+        sub = (f'Ближайший пост – <b>{T.esc(day)} в {T.esc(when.strftime("%H:%M"))}</b>, '
                f'{T.esc(who)}')
     elif upcoming:
-        sub = "Ближайшие посты ещё не сформированы — нажмите «Сформировать план»"
+        sub = "Ближайшие посты ещё не сформированы – нажмите «Сформировать план»"
     else:
         sub = "Впереди постов нет"
 
     meta = [
         f"В листе <b>{len(posts)}</b> постов",
-        f"впереди <b>{len(upcoming)}</b> (ближайшие {CROSSPOST_HORIZON_DAYS} дней)",
+        f"впереди <b>{len(upcoming)}</b> (по {horizon.strftime('%d.%m')} включительно)",
         f"час выхода <b>{T.esc(content_plan.brand_default_time(project_id))}</b> по Екатеринбургу",
     ]
 
     with st.container(border=True):
-        html(T.crosspost_bar(state_text, sub, meta, alive=alive))
-        if not cfg["enabled"]:
-            st.caption("Пока планировщик выключен, Телеграм и МАКС не получат ни одного "
-                       "поста. ВК и ОК выйдут сами — их отложку держит сама площадка.")
+        html(T.crosspost_bar(sched["title"], sub, meta, alive=sched["enabled"]))
+        st.caption(sched["note"])
         c1, c2, c3 = st.columns([2, 2, 3])
-        on = c1.toggle("Планировщик", value=cfg["enabled"], key="cp-sched-on")
-        if on != cfg["enabled"]:
-            scheduler.set_config(enabled=on)
-            st.rerun()
+        with c1:
+            _crosspost_scheduler_switch(project_id)
         if c2.button("🔄 Обновить план", key=f"plan-refresh-btn-{project_id}",
                      use_container_width=True,
-                     help="Перечитать таблицу — после правок в реестре"):
+                     help="Перечитать таблицу – после правок в реестре"):
             st.session_state[f"plan-refresh-{project_id}"] = True
             st.session_state.pop(f"plan-posts-{project_id}", None)
             st.rerun()
@@ -3445,7 +3459,7 @@ def _crosspost_bar(project_id: str, config: dict, posts: list[dict],
 
 
 def _crosspost_attention(upcoming: list[dict], state: dict) -> None:
-    """Беды — наверх и с датой: в календаре жёлтая плитка видна, но не объясняет."""
+    """Беды – наверх и с датой словами: в календаре жёлтая плитка видна, но молчит."""
     troubles = cps.problems(state, upcoming)
     if not troubles:
         return
@@ -3453,20 +3467,19 @@ def _crosspost_attention(upcoming: list[dict], state: dict) -> None:
         html('<div class="card-title">⚠️ Требует внимания '
              f'<span class="badge badge-warn">{len(troubles)}</span></div>')
         for tr in troubles[:12]:
-            p = tr["post"]
+            post = tr["post"]
             who = f' · {cps.network_ru(tr["network"])}' if tr.get("network") else ""
-            d = content_plan.parse_date(p.get("date", ""))
-            when = crosspost_calendar.human_day(d) if d else p.get("date", "")
+            d = content_plan.parse_date(post.get("date", ""))
+            when = crosspost_calendar.human_day(d) if d else post.get("date", "")
             st.write(f'**{when}**{who} – {tr["what"]}')
         if len(troubles) > 12:
             st.caption(f"…и ещё {len(troubles) - 12}. Остальное видно в календаре "
                        "жёлтыми и красными плитками.")
 
 
-# ─── Календарь ─────────────────────────────────────────────────────────
 def _crosspost_day_cell(project_id: str, cell: dict, idx: int,
                         weekend: bool = False) -> None:
-    """Одна ячейка дня: шапка с числом и плитки постов (плитка — кнопка)."""
+    """Ячейка дня: шапка с числом и плитки постов. Плитка – это сама кнопка."""
     flag = ("today" if cell["is_today"]
             else "we" if weekend
             else "past" if cell["is_past"]
@@ -3488,16 +3501,22 @@ def _crosspost_day_cell(project_id: str, cell: dict, idx: int,
 
 
 def _crosspost_calendar(project_id: str, posts: list[dict], state: dict,
-                        today: date) -> None:
+                        today: date, horizon: date) -> None:
     """
-    План — сетка недель. Рабочая неделя из пяти дней; суббота и воскресенье
-    показываются отдельной узкой колонкой и только когда на них стоит пост
-    (обычно перед праздниками) — иначе выходные съедали треть ширины.
-    """
-    cal = crosspost_calendar.build(posts, state, today)
+    План – сетка недель: видно ритм (где пусто, где два поста подряд), а не
+    список одинаковых строк. Показываем столько недель, сколько нужно до
+    горизонта плана (он тянется до конца месяца, см. _crosspost_horizon).
 
-    # Тексты плиток идут CSS-переменными: подпись кнопки Streamlit — одна
-    # строка, а в плитке нужно ещё превью поста (см. crosspost_tile_css).
+    Рабочая неделя – пять дней. Суббота и воскресенье уходят в узкую колонку
+    справа и показываются, только когда на выходной действительно стоит пост:
+    отложку на выходные ставят редко, обычно перед праздниками, а места
+    пустые сб и вс съедали треть ширины.
+    """
+    weeks = max(2, min(6, (horizon - (today - timedelta(days=today.weekday()))).days // 7 + 1))
+    cal = crosspost_calendar.build(posts, state, today, weeks=weeks)
+
+    # Текст поста в плитке – CSS-переменной: подпись кнопки Streamlit это одна
+    # строка, а в плитке нужно ещё превью (см. T.crosspost_tile_css).
     rules, idx = [], 0
     for week in cal["weeks"]:
         for cell in list(week["days"]) + list(week["weekend"]):
@@ -3506,8 +3525,7 @@ def _crosspost_calendar(project_id: str, posts: list[dict], state: dict,
             idx += 1
     html(T.crosspost_tile_css(rules))
 
-    html(f'<div class="card-title">🗓 План: {T.esc(cal["title"])}'
-         f'<span class="tail"></span></div>')
+    html(f'<div class="card-title">🗓 План: {T.esc(cal["title"])}</div>')
     html(T.crosspost_legend())
 
     widths = [1, 1, 1, 1, 1] + ([0.75] if cal["has_weekend"] else [])
@@ -3537,21 +3555,21 @@ def _crosspost_calendar(project_id: str, posts: list[dict], state: dict,
                     html(T.crosspost_empty_day(f'{week["weekend_empty"]} · постов нет'))
 
     if not cal["has_weekend"]:
-        st.caption("Суббота и воскресенье в сетке не показываются — они появятся "
+        st.caption("Суббота и воскресенье в сетке не показываются – они появятся "
                    "отдельной колонкой, если в реестре будет пост на выходной "
                    "(например, перед праздниками).")
 
 
 def _crosspost_open_block(project_id: str, config: dict, posts: list[dict],
                           state: dict) -> None:
-    """Панель выбранного поста: текст целиком и площадки словами, а не значками."""
+    """Выбранный пост: текст целиком и площадки словами, а не значками."""
     key = st.session_state.get(f"cp-open-{project_id}")
     if not key:
         return
     post = next((p for p in posts if cps.post_key(p) == key), None)
     if post is None:
-        # План перечитали, и пост изменился — ключ разошёлся. Молча закрываем:
-        # ругаться тут не на что, человек просто увидит календарь.
+        # План перечитали, текст поста поправили – ключ разошёлся. Молча
+        # закрываем: ругаться не на что, человек просто видит календарь.
         st.session_state.pop(f"cp-open-{project_id}", None)
         return
 
@@ -3560,55 +3578,52 @@ def _crosspost_open_block(project_id: str, config: dict, posts: list[dict],
     with st.container(border=True):
         html(T.crosspost_open(view, crosspost_calendar.human_day(day) if day
                               else post.get("date", "")))
-        c1, c2, c3 = st.columns([2, 2, 4])
+        c1, c2 = st.columns([2, 5])
         if c1.button("Закрыть", key=f"cp-close-{project_id}", use_container_width=True):
             st.session_state.pop(f"cp-open-{project_id}", None)
             st.rerun()
-        if c2.button("↺ Сформировать заново", key=f"cp-forget-{project_id}",
-                     use_container_width=True,
-                     help="Забыть, что по этому посту уже сделано — нужно, если "
-                          "запись удалили в соцсети"):
-            cps.forget_post(project_id, post)
-            st.toast("Готово: пост снова считается несформированным.")
-            st.rerun()
         url = (config.get("planSheetUrl") or "").strip()
         if url:
-            c3.link_button(f"Открыть таблицу ↗ (строка {view['row']})", url,
-                           use_container_width=True)
+            c2.link_button(f"Открыть таблицу ↗ (строка {view['row']})", url)
+        else:
+            c2.caption("«Сформировать заново» – в группе «Журналы и весь реестр» внизу.")
 
 
-# ─── Настройка и проверка: три группы вместо девяти раскрывашек ────────
 def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
-                     state: dict, today: date) -> None:
-    import scheduler
-
+                     state: dict, today: date, upcoming: list[dict]) -> None:
+    """
+    Настройка и проверка – три группы вместо девяти раскрывашек подряд.
+    Сами блоки не переписаны: это те же функции, просто разложены по полкам.
+    """
     html('<div class="card-title">🔧 Настройка и проверка'
-         '<span class="hint"> — обычно сюда не нужно, всё уже настроено</span></div>')
+         '<span class="hint"> – обычно сюда не нужно, всё уже настроено</span></div>')
+    t1, t2, t3 = st.tabs(["🔌 Подключения", "🧪 Проверка отложки", "📜 Журналы и весь реестр"])
 
-    with st.expander("🔌 Подключения — таблица, каналы Телеграма и МАКС, Яндекс.Бизнес"):
-        t1, t2, t3 = st.tabs(["Таблица реестра", "Каналы ТГ и МАКС", "Яндекс.Бизнес"])
-        with t1:
-            _crosspost_source_form(project_id, config)
-        with t2:
-            _crosspost_channels_form(project_id, config)
-        with t3:
-            _crosspost_yb_form(project_id, config)
+    with t1:
+        _crosspost_source_block(project_id, config)
+        _crosspost_channels_block(project_id, config)
+        _crosspost_yb_block(project_id, config)
 
-    with st.expander("🧪 Проверить механику одним постом — пробная отложка ВК"):
-        _crosspost_vk_probe_form(project_id, config)
+    with t2:
+        # Обе сети – своей пробной отложкой. Логи зовём ОТСЮДА, а не из конца
+        # самой пробы: у той три ранних выхода (нет сессии, нет сообщества, идёт
+        # прогон), и лог прошлого раза на них молча пропадал бы.
+        for network in PROBE_NETWORKS:
+            _crosspost_probe(project_id, config, network)
+            _probe_last_log(project_id, network)
 
-    with st.expander("📜 Журналы и весь реестр"):
-        t1, t2 = st.tabs(["Журнал планировщика", "Весь реестр листа"])
-        with t1:
-            journal = scheduler.tail()
-            st.code(journal or "Журнал пуст — планировщик ещё ничего не делал.",
-                    language=None)
-        with t2:
+    with t3:
+        _crosspost_scheduler_journal()
+        _crosspost_forget_block(project_id, upcoming, state)
+        # Прошлые посты – архив, а не рабочий список. Блок живёт ЗДЕСЬ, где
+        # есть posts/today/state: в отдельной функции их нет (на этом раздел
+        # когда-то падал).
+        with st.expander("Показать весь реестр листа (включая прошлые)"):
             st.caption("Прошлые посты со ссылкой в колонке «Ссылка» считаются вышедшими.")
             past = [p for p in posts
                     if (d := content_plan.parse_date(p["date"])) and d < today]
             html("".join(_crosspost_plan_row(p, state) for p in past[-40:])
-                 or T.empty("—", "Прошлых постов нет", ""))
+                 or T.empty("–", "Прошлых постов нет", ""))
 
 
 def tab_crosspost(project_id: str, config: dict) -> None:
@@ -3618,8 +3633,7 @@ def tab_crosspost(project_id: str, config: dict) -> None:
         html(T.empty("🗓", "Реестр не подключён",
                      "Укажите ссылку на таблицу контент-плана – или загрузите "
                      "выгрузку .xlsx, чтобы посмотреть план прямо сейчас."))
-        with st.container(border=True):
-            _crosspost_source_form(project_id, config)
+        _crosspost_source_block(project_id, config)
         # Выгрузку кладёт в session_state сам загрузчик – уже во время этой
         # отрисовки. Проверка выше её не застала, поэтому перерисовываем сразу:
         # иначе человек загрузил файл и всё равно видит «реестр не подключён».
@@ -3635,21 +3649,28 @@ def tab_crosspost(project_id: str, config: dict) -> None:
         html(T.empty("🗓", "В листе бренда постов не нашлось",
                      f"Проверьте, что в таблице есть лист «{project_id}» (или СМУ/ИМП/МПЭ/МПИ/АПС) "
                      "с колонками «Когда выложить», «Соцсеть», «Пост»."))
-        with st.container(border=True):
-            _crosspost_source_form(project_id, config)
+        _crosspost_source_block(project_id, config)
         return
 
     today = apptime.now().date()
-    horizon = today + timedelta(days=CROSSPOST_HORIZON_DAYS)
+    horizon = _crosspost_horizon(today)
     upcoming = [p for p in posts
                 if (d := content_plan.parse_date(p["date"])) and today <= d <= horizon]
     state = cps.load(project_id)
 
-    _crosspost_bar(project_id, config, posts, upcoming, state)
+    _crosspost_bar(project_id, config, posts, upcoming, state, horizon)
     _crosspost_attention(upcoming, state)
-    _crosspost_calendar(project_id, posts, state, today)
+    _crosspost_calendar(project_id, posts, state, today, horizon)
     _crosspost_open_block(project_id, config, posts, state)
-    _crosspost_tools(project_id, config, posts, state, today)
+    _crosspost_tools(project_id, config, posts, state, today, upcoming)
+
+    # Честно про границы: что работает и при каких условиях.
+    st.info("Полный цикл собран: ВК и ОК – родные отложки после входа (держит сама "
+            "площадка); Телеграм и МАКС – по времени через планировщик (нужны токены "
+            "ботов); ЯБ – прогон по расписанию. Для ТГ/МАКС/ЯБ в час выхода Click "
+            "должен работать. Отложка ОК уточняется первым живым прогоном – при "
+            "несовпадении вёрстки кнопка скажет словами и сохранит снимок.",
+            icon="ℹ️")
 
 
 def _crosspost_channels(config: dict) -> dict[str, str]:
@@ -3658,30 +3679,123 @@ def _crosspost_channels(config: dict) -> dict[str, str]:
             "max": (config.get("maxChatId") or "").strip()}
 
 
-def _crosspost_channels_form(project_id: str, config: dict) -> None:
-    """Каналы мессенджеров бренда. Токены ботов — в «Ключах к веб-сервисам»."""
+def _crosspost_forget_block(project_id: str, upcoming: list[dict], state: dict) -> None:
+    """
+    «Сформировать заново»: забыть, что пост уже формировали.
+
+    Зачем это нужно. Click помнит сделанное, чтобы не наплодить дублей, – и
+    правильно делает. Но память живёт у него, а отложки – в соцсети, и они
+    расходятся: заказчица удалила записи в ВК, а Click по-прежнему считал их
+    поставленными и заново формировать отказывался. Выхода из этого не было
+    вовсе. Теперь есть – и он ручной нарочно: забыть пост можно только
+    осознанно, глядя на список.
+    """
+    done = []
+    for post in upcoming:
+        for t in post.get("targets", []):
+            if (t.get("published_link") or "").strip():
+                continue
+            if cps.status_of(state, post, t["network"]) in (
+                    cps.SCHEDULED, cps.SENT, cps.SENT_LATE, cps.FAILED, cps.MISSED):
+                done.append(post)
+                break
+    if not done:
+        return
+
+    with st.expander("↺ Сформировать заново – если запись удалили в соцсети"):
+        st.caption("Click помнит, что уже формировал, и второй раз не делает – так "
+                   "не появляются дубли. Если запись из соцсети удалили, скажите "
+                   "об этом здесь: пост снова станет «ждёт формирования».")
+        titles = {}
+        for post in done:
+            nets = ", ".join(
+                f'{cps.network_ru(t["network"])} – {cps.status_of(state, post, t["network"])}'
+                for t in post.get("targets", [])
+                if not (t.get("published_link") or "").strip())
+            head = (post.get("text") or "").strip().split("\n")[0][:60] or "без текста"
+            titles[f'{post["date"]} · {head} · {nets}'] = post
+        picked = st.selectbox("Какой пост забыть", list(titles),
+                              key=f"cp-forget-pick-{project_id}")
+        if st.button("↺ Забыть и сформировать заново", key=f"cp-forget-go-{project_id}"):
+            cps.forget_post(project_id, titles[picked])
+            st.success("Готово – пост снова в очереди на формирование. "
+                       "Проверьте, что в соцсети его правда нет, и нажмите "
+                       "«Сформировать план».")
+            st.rerun()
+
+
+def _crosspost_channels_block(project_id: str, config: dict) -> None:
+    """Каналы мессенджеров бренда. Токены ботов – в «Ключах к веб-сервисам»."""
     import tg_social
 
-    c1, c2, c3 = st.columns(3)
-    vals = {
-        "tgChannelClient": c1.text_input("ТГ клиенты", value=config.get("tgChannelClient", ""),
-                                         key=f"cp-tgc-{project_id}", placeholder="@stalmetural"),
-        "tgChannelStaff": c2.text_input("ТГ сотрудники", value=config.get("tgChannelStaff", ""),
-                                        key=f"cp-tgs-{project_id}", placeholder="@SMUdaily"),
-        "maxChatId": c3.text_input("МАКС: id канала", value=config.get("maxChatId", ""),
-                                   key=f"cp-max-{project_id}"),
-    }
-    if any(vals[k].strip() != (config.get(k) or "") for k in vals):
-        config.update({k: v.strip() for k, v in vals.items()})
-        save_config(project_id)
-    if not tg_social.is_configured() and (vals["tgChannelClient"] or vals["tgChannelStaff"]):
-        st.caption("Токен бота Телеграма не заполнен — «Настройки» → «Ключи к веб-сервисам».")
+    with st.expander("💬 Каналы Телеграма и МАКС"):
+        c1, c2, c3 = st.columns(3)
+        vals = {
+            "tgChannelClient": c1.text_input("ТГ клиенты", value=config.get("tgChannelClient", ""),
+                                             key=f"cp-tgc-{project_id}", placeholder="@stalmetural"),
+            "tgChannelStaff": c2.text_input("ТГ сотрудники", value=config.get("tgChannelStaff", ""),
+                                            key=f"cp-tgs-{project_id}", placeholder="@SMUdaily"),
+            "maxChatId": c3.text_input("МАКС: id канала", value=config.get("maxChatId", ""),
+                                       key=f"cp-max-{project_id}"),
+        }
+        if any(vals[k].strip() != (config.get(k) or "") for k in vals):
+            config.update({k: v.strip() for k, v in vals.items()})
+            save_config(project_id)
+        if not tg_social.is_configured() and (vals["tgChannelClient"] or vals["tgChannelStaff"]):
+            st.caption("Токен бота Телеграма не заполнен – «Настройки» → «Ключи к веб-сервисам».")
+
+
+def _crosspost_scheduler_state(project_id: str) -> dict:
+    """
+    Планировщик для строки состояния: жив ли и что это значит словами.
+
+    Раньше и состояние, и выключатель, и журнал жили одним блоком внизу
+    страницы. Состояние переехало наверх – это первое, что человек должен
+    узнать про вкладку, – а журнал остался внизу, среди служебного.
+    """
+    import scheduler
+
+    cfg = scheduler.config()
+    running = scheduler.ensure_running() if cfg["enabled"] else False
+    if not cfg["enabled"]:
+        title = "Планировщик выключен"
+        note = ("Задания Телеграма и МАКС не отправляются. ВК и ОК выйдут сами – "
+                "их отложку держит сама площадка.")
+    elif running or scheduler.is_running_here():
+        title = "Автопостинг работает"
+        note = (f"Проверка заданий каждые {scheduler.TICK_SECONDS} с, окно опоздания "
+                f"{cfg['lateWindowHours']:g} ч. Работает, пока открыт Click.")
+    else:
+        title = "Автопостинг работает"
+        note = "Планировщик уже работает в другой копии Click на этой машине."
+    return {"enabled": bool(cfg["enabled"]), "title": title, "note": note}
+
+
+def _crosspost_scheduler_switch(project_id: str) -> None:
+    """Выключатель планировщика – один на весь раздел, в строке состояния."""
+    import scheduler
+
+    cfg = scheduler.config()
+    # Именно checkbox, а не toggle: CSS приложения рисует галочке квадрат
+    # 16×16, и широкий тумблер Streamlit налезал на первую букву подписи.
+    on = st.checkbox("Планировщик включён", value=cfg["enabled"], key="cp-sched-on")
+    if on != cfg["enabled"]:
+        scheduler.set_config(enabled=on)
+        st.rerun()
+
+
+def _crosspost_scheduler_journal() -> None:
+    """Журнал планировщика – в группе «Журналы и весь реестр»."""
+    import scheduler
+
+    journal = scheduler.tail()
+    st.code(journal or "Журнал пуст – планировщик ещё ничего не делал.", language=None)
 
 
 def _crosspost_form_block(project_id: str, config: dict,
                           upcoming: list[dict], state: dict) -> None:
     """
-    «Сформировать план»: ВК и ОК — родные отложки браузером, Телеграм и МАКС —
+    «Сформировать план»: ВК – родные отложки браузером, Телеграм и МАКС –
     задания планировщику. Каждая площадка независима; исходы пишутся в
     память сразу, повтор кнопки доформирует только несделанное (Д-6).
     """
@@ -3701,9 +3815,7 @@ def _crosspost_form_block(project_id: str, config: dict,
     if not vk_todo and not ok_todo and not msg_todo:
         if not (vk_ready or ok_ready):
             st.caption("Формирование ВК и ОК появится после входа: «Настройки» → "
-                       "«Вход в ВК/ОК (кросспостинг)».")
-        else:
-            st.caption("Формировать нечего — всё, что впереди, уже стоит отложками.")
+                       "«Вход в ВК/ОК (кросспостинг)». Каналы ТГ/МАКС – в блоке ниже.")
         return
 
     parts = []
@@ -3715,10 +3827,10 @@ def _crosspost_form_block(project_id: str, config: dict,
         parts.append(f"ТГ/МАКС: {len(msg_todo)}")
     busy = runner.busy_reason(project_id, "publish") if (vk_todo or ok_todo) else ""
     if busy:
-        st.caption(f"Сформировать ({', '.join(parts)}): сейчас нельзя — {busy}.")
+        st.caption(f"Поставить отложенные посты ({', '.join(parts)}): сейчас нельзя – {busy}.")
         return
 
-    if st.button(f"📌 Сформировать план ({', '.join(parts)})", type="primary",
+    if st.button(f"📌 Поставить отложенные посты ({', '.join(parts)})", type="primary",
                  key=f"cp-form-all-{project_id}", use_container_width=True):
         site = ((project_endings(project_id).get("contacts") or {})
                 .get("Россия") or {}).get("site", "")
@@ -3747,105 +3859,213 @@ def _crosspost_form_block(project_id: str, config: dict,
         st.rerun()
 
 
-def _crosspost_yb_form(project_id: str, config: dict) -> None:
+def _crosspost_yb_block(project_id: str, config: dict) -> None:
     """
     ЯБ по расписанию. ЯБ живёт не в соцреестре, а в своей очереди задач
     («Публикация» → «Сохранить очередь в задачи»). Здесь эта очередь
     ставится на время: в назначенный час планировщик запустит обычный
-    прогон публикации; занято другим прогоном — дождётся и запустит следом.
+    прогон публикации; занято другим прогоном – дождётся и запустит следом.
     """
     import scheduler
 
-    n_files = len(list(runner.p_tasks(project_id).glob("*.json")))
-    yb_tasks = [t for t in scheduler.load_tasks(project_id)
-                if t.get("network") == "yb" and t.get("state") in ("waiting", "retry")]
+    with st.expander("🕚 Яндекс.Бизнес по расписанию"):
+        n_files = len(list(runner.p_tasks(project_id).glob("*.json")))
+        yb_tasks = [t for t in scheduler.load_tasks(project_id)
+                    if t.get("network") == "yb" and t.get("state") in ("waiting", "retry")]
 
-    for t in yb_tasks:
-        c1, c2 = st.columns([4, 1])
-        c1.write(f"⏰ Прогон запланирован на "
-                 f"**{apptime.human(t['when'], '%d.%m.%Y %H:%M')}** (Екатеринбург)")
-        if c2.button("Отменить", key=f"yb-cancel-{t['id']}"):
-            scheduler.cancel_task(project_id, t["id"])
-            st.rerun()
+        for t in yb_tasks:
+            c1, c2 = st.columns([4, 1])
+            c1.write(f"⏰ Прогон запланирован на "
+                     f"**{apptime.human(t['when'], '%d.%m.%Y %H:%M')}** (Екатеринбург)")
+            if c2.button("Отменить", key=f"yb-cancel-{t['id']}"):
+                scheduler.cancel_task(project_id, t["id"])
+                st.rerun()
 
-    if not n_files:
-        st.caption("Очередь ЯБ пуста. Соберите пост во вкладке «Публикация» → "
-                   "«Сохранить очередь в задачи», потом планируйте время здесь.")
-        return
-    st.caption(f"В очереди ЯБ — {n_files} файл(ов) задач. В назначенный час планировщик "
-               "запустит обычный прогон публикации со всеми защитами; если будет идти "
-               "другой прогон — дождётся его и стартует следом. Click в этот момент "
-               "должен работать.")
-    c1, c2, c3 = st.columns([2, 2, 3])
-    d = c1.date_input("Дата", key=f"yb-when-d-{project_id}",
-                      value=apptime.now().date() + timedelta(days=1))
-    default_t = content_plan.brand_default_time(project_id)
-    t_ = c2.time_input("Время (Екб)", key=f"yb-when-t-{project_id}",
-                       value=datetime.strptime(default_t, "%H:%M").time())
-    if c3.button("⏰ Запланировать прогон ЯБ", type="primary",
-                 key=f"yb-plan-{project_id}", use_container_width=True):
-        when = datetime(d.year, d.month, d.day, t_.hour, t_.minute, tzinfo=apptime.TZ)
-        if when <= apptime.now():
-            st.error("Это время уже прошло — выберите будущее.")
-        else:
-            scheduler.queue_task(project_id, {
-                "id": f"yb|{project_id}|{when.strftime('%Y-%m-%dT%H:%M')}",
-                "project": project_id, "brand": project_id, "network": "yb",
-                "when": when.isoformat(), "date": when.strftime("%Y-%m-%d"),
-                "headless": bool(get_settings(project_id)["headless"]),
-                "expectedEmail": (config.get("email") or "").strip(),
-            })
-            scheduler.ensure_running()
-            st.success(f"Запланировано: прогон ЯБ {when.strftime('%d.%m.%Y в %H:%M')} "
-                       "по Екатеринбургу.")
-            time.sleep(1.0)
-            st.rerun()
+        if not n_files:
+            st.caption("Очередь ЯБ пуста. Соберите пост во вкладке «Публикация» → "
+                       "«Сохранить очередь в задачи», потом планируйте время здесь.")
+            return
+        st.caption(f"В очереди ЯБ – {n_files} файл(ов) задач. В назначенный час планировщик "
+                   "запустит обычный прогон публикации со всеми защитами; если будет идти "
+                   "другой прогон – дождётся его и стартует следом. Click в этот момент "
+                   "должен работать.")
+        c1, c2, c3 = st.columns([2, 2, 3])
+        d = c1.date_input("Дата", key=f"yb-when-d-{project_id}",
+                          value=apptime.now().date() + timedelta(days=1))
+        default_t = content_plan.brand_default_time(project_id)
+        t_ = c2.time_input("Время (Екб)", key=f"yb-when-t-{project_id}",
+                           value=datetime.strptime(default_t, "%H:%M").time())
+        if c3.button("⏰ Запланировать прогон ЯБ", type="primary",
+                     key=f"yb-plan-{project_id}", use_container_width=True):
+            when = datetime(d.year, d.month, d.day, t_.hour, t_.minute, tzinfo=apptime.TZ)
+            if when <= apptime.now():
+                st.error("Это время уже прошло – выберите будущее.")
+            else:
+                scheduler.queue_task(project_id, {
+                    "id": f"yb|{project_id}|{when.strftime('%Y-%m-%dT%H:%M')}",
+                    "project": project_id, "brand": project_id, "network": "yb",
+                    "when": when.isoformat(), "date": when.strftime("%Y-%m-%d"),
+                    "headless": bool(get_settings(project_id)["headless"]),
+                    "expectedEmail": (config.get("email") or "").strip(),
+                })
+                scheduler.ensure_running()
+                st.success(f"Запланировано: прогон ЯБ {when.strftime('%d.%m.%Y в %H:%M')} "
+                           "по Екатеринбургу.")
+                time.sleep(1.0)
+                st.rerun()
 
 
-def _crosspost_vk_probe_form(project_id: str, config: dict) -> None:
+# Пробная отложка одинакова для ВК и ОК: сессия, ссылка на сообщество,
+# текст, время, окно браузера, лог. Отличаются только подписи и модуль,
+# который умеет ставить отложку. Держим это таблицей, а не двумя почти
+# одинаковыми функциями: правка в одной из копий рано или поздно забудется.
+PROBE_NETWORKS = {
+    "vk": {"ru": "ВК", "module": "vk_social", "url_key": "vkGroupUrl",
+           "where": "«Настройки» → «Вход в ВК (кросспостинг)»",
+           "shelf": "«Отложенные записи» сообщества"},
+    "ok": {"ru": "ОК", "module": "ok_browser", "url_key": "okGroupUrl",
+           "where": "«Настройки» → «Вход в ОК (кросспостинг)»",
+           "shelf": "«Отложенные» в группе"},
+}
+
+
+def _crosspost_probe(project_id: str, config: dict, network: str) -> None:
     """
-    Пробная отложка ВК: один тестовый пост в сообщество бренда на +N минут.
-    Это боевой пилот механики (форма поста → календарь → «Добавить в очередь»)
-    под сохранённой сессией. Ничего не публикуется сразу: запись видна в
-    «Отложенных записях» сообщества, там же её можно удалить.
+    Пробная отложка: один тестовый пост в сообщество бренда на +N минут.
+    Боевой пилот всей механики под сохранённой сессией. Ничего не
+    публикуется сразу: запись встаёт в отложенные, оттуда её можно удалить.
     """
-    import vk_social
+    import importlib
+    meta = PROBE_NETWORKS[network]
+    ru = meta["ru"]
+    social = importlib.import_module(meta["module"])
 
-    if not vk_social.has_saved_session(project_id):
-        st.caption("Сначала войдите в ВК: «Настройки» → «Вход в ВК (кросспостинг)».")
-        return
-    group_url = (config.get("vkGroupUrl") or "").strip()
-    if not group_url:
-        st.caption("Укажите ссылку на сообщество бренда: «Настройки» → «Вход в ВК (кросспостинг)».")
-        return
+    with st.expander(f"🧪 Пробная отложка {ru} – проверить механику одним постом"):
+        if not social.has_saved_session(project_id):
+            st.caption(f"Сначала войдите в {ru}: {meta['where']}.")
+            return
+        group_url = (config.get(meta["url_key"]) or "").strip()
+        if not group_url:
+            st.caption(f"Укажите ссылку на сообщество бренда: {meta['where']}.")
+            return
 
-    st.caption(f"Сообщество: {group_url}. Запись встанет в «Отложенные записи» — "
-               "оттуда её можно удалить.")
-    text = st.text_area("Текст пробного поста", key=f"vk-probe-text-{project_id}",
-                        value="Проверка планировщика Click — тестовая отложенная запись, "
-                              "можно удалить.")
-    minutes = st.number_input("Опубликовать через, минут", 10, 24 * 60, 40, step=5,
-                              key=f"vk-probe-min-{project_id}",
-                              help="ВК не даёт планировать ближе чем на несколько минут — "
-                                   "меньше 10 не ставим.")
-    busy = runner.busy_reason(project_id, "publish")
-    if busy:
-        st.caption(f"Сейчас нельзя: {busy}. Дождитесь окончания прогона.")
-        return
-    if st.button("Поставить пробную отложку", type="primary",
-                 key=f"vk-probe-go-{project_id}", disabled=not text.strip()):
-        when = apptime.now() + timedelta(minutes=int(minutes))
-        worker = get_worker()
-        with st.spinner("Открываю ВК и ставлю отложку — обычно меньше минуты…"):
-            res = worker.call(
-                vk_social.schedule_postponed_post, project_id, group_url,
-                text.strip(), [], when,
-                headless=bool(get_settings(project_id)["headless"]))
-        if res.get("ok"):
-            st.success(f"Готово: отложка на {when.strftime('%H:%M')} стоит. Проверьте "
-                       f"«Отложенные записи» сообщества — и удалите тестовую запись.")
+        st.caption(f"Сообщество: {group_url}. Запись встанет в {meta['shelf']} – "
+                   "оттуда её можно удалить.")
+        text = st.text_area("Текст пробного поста", key=f"{network}-probe-text-{project_id}",
+                            value="Проверка планировщика Click – тестовая отложенная запись, "
+                                  "можно удалить.")
+        minutes = st.number_input("Опубликовать через, минут", 10, 24 * 60, 40, step=5,
+                                  key=f"{network}-probe-min-{project_id}",
+                                  help=f"{ru} не даёт планировать ближе чем на несколько "
+                                       "минут – меньше 10 не ставим.")
+        # Смотреть, КАК он это делает. Галочка та же, что у публикации
+        # (HEADED_KEY), поэтому включённая здесь она останется включённой и
+        # в «Сформировать план» – ходить за ней в «Настройки» больше не надо.
+        if can_show_browser():
+            st.checkbox(f"Показывать окно браузера – видно каждый шаг в {ru}",
+                        value=bool(st.session_state.get(HEADED_KEY)),
+                        key=f"show-browser-{network}-probe",
+                        on_change=lambda: st.session_state.__setitem__(
+                            HEADED_KEY,
+                            bool(st.session_state.get(f"show-browser-{network}-probe"))),
+                        help="Только на своём компьютере: в облаке экрана нет, "
+                             "показывать окно негде.")
         else:
-            st.error(f"Не получилось: {res.get('error')}")
+            st.caption("Окно браузера показать негде: в облаке нет экрана. "
+                       "Ход отложки виден в логе ниже, а при отказе – на снимке экрана.")
+
+        busy = runner.busy_reason(project_id, "publish")
+        if busy:
+            st.caption(f"Сейчас нельзя: {busy}. Дождитесь окончания прогона.")
+            return
+        if st.button("Поставить пробную отложку", type="primary",
+                     key=f"{network}-probe-go-{project_id}", disabled=not text.strip()):
+            when = apptime.now() + timedelta(minutes=int(minutes))
+            # Лог шагов. Копится в списке, а не пишется в виджет на лету:
+            # отложку ведёт отдельный поток воркера, а рисовать из чужого
+            # потока Streamlit не даёт. Пишем построчно и показываем целиком,
+            # когда воркер вернулся.
+            steps: list[str] = []
+
+            def note(msg: str) -> None:
+                steps.append(f"[{apptime.stamp()}] {msg}")
+
+            note(f"Пробная отложка: {group_url} на "
+                 f"{when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
+            # Свежий поток, а НЕ постоянный воркер. Отложка сама открывает и
+            # закрывает браузер – хранить между вызовами ей нечего, а вот
+            # отравиться постоянный поток успел: после неудачной попытки в нём
+            # остаётся недоразмотанный цикл Playwright, и дальше КАЖДЫЙ вызов
+            # падает с «Sync API inside the asyncio loop» до перезапуска
+            # приложения. У нового потока свои локальные данные – отравить
+            # его прошлому нечем.
+            with st.spinner(f"Открываю {ru} и ставлю отложку – обычно меньше минуты…"):
+                res = playwright_worker.run_once(
+                    social.schedule_postponed_post, project_id, group_url,
+                    text.strip(), [], when, log=note,
+                    headless=bool(get_settings(project_id)["headless"]))
+            note("ИТОГ: отложка поставлена" if res.get("ok")
+                 else f"ИТОГ: не получилось – {res.get('error')}")
+            log_text = "\n".join(steps)
+            _probe_save_log(project_id, network, log_text)
+
+            if res.get("ok"):
+                st.success(f"Готово: отложка на {when.strftime('%H:%M')} стоит. Проверьте "
+                           f"{meta['shelf']} – и удалите тестовую запись.")
+            else:
+                st.error(f"Не получилось: {res.get('error')}")
+                # Снимок экрана ВК в момент отказа: по нему сразу видно, что
+                # случилось – капча, форма входа или изменившаяся вёрстка.
+                if res.get("shot"):
+                    st.image(res["shot"], use_container_width=True)
+                    st.caption(f"Что Click видел в {ru} в момент отказа.")
+
+            # Лог показываем всегда, и на успехе тоже: по нему видно, где
+            # отложка запнулась, и он же нужен, чтобы прислать его на разбор.
+            st.text_area("Лог отложки – что Click делал по шагам", value=log_text,
+                         height=220, key=f"{network}-probe-log-{project_id}")
+            st.download_button(
+                "⬇ Лог отложки (.txt)", data=log_text.encode("utf-8"),
+                file_name=f"{network}-otlozhka-{apptime.stamp('%Y-%m-%dT%H-%M-%S')}.txt",
+                mime="text/plain", key=f"{network}-probe-log-dl-{project_id}")
+
+
+def _probe_log_path(project_id: str, network: str):
+    """Файл с логом последней пробной отложки – рядом с данными проекта."""
+    d = paths.data_root() / project_id / "crosspost"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{network}-probe-last.log"
+
+
+def _probe_save_log(project_id: str, network: str, text: str) -> None:
+    try:
+        _probe_log_path(project_id, network).write_text(text, encoding="utf-8")
+    except OSError:
+        pass                      # лог – удобство, ронять из-за него нечего
+
+
+def _probe_last_log(project_id: str, network: str) -> None:
+    """
+    Лог прошлой отложки. Нужен потому, что кнопка живёт внутри expander:
+    любое следующее нажатие на странице перерисовывает её, и лог, показанный
+    сразу после прогона, исчезает вместе с ним. На диске он остаётся.
+    """
+    fp = _probe_log_path(project_id, network)
+    if not fp.exists():
+        return
+    try:
+        text = fp.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    if not text.strip():
+        return
+    with st.expander(f"📄 Лог прошлой пробной отложки {PROBE_NETWORKS[network]['ru']}"):
+        st.text_area("Что Click делал по шагам", value=text, height=220,
+                     key=f"{network}-probe-log-prev-{project_id}")
+        st.download_button("⬇ Скачать (.txt)", data=text.encode("utf-8"),
+                           file_name=f"{network}-otlozhka-proshlaya.txt",
+                           mime="text/plain",
+                           key=f"{network}-probe-log-prev-dl-{project_id}")
 
 
 def _last_run_kind(project_id: str) -> str:
@@ -4052,6 +4272,9 @@ def tab_settings(project_id: str, config: dict) -> None:
     _gis_login_block(project_id, config)
 
     st.divider()
+    _both_sessions_block(project_id)
+
+    st.divider()
     _vk_login_block(project_id, config)
 
     st.divider()
@@ -4065,6 +4288,9 @@ def tab_settings(project_id: str, config: dict) -> None:
 
     st.divider()
     _reviews_settings_block(project_id)
+
+    st.divider()
+    _free_memory_block()
 
     st.divider()
     engine = yb.current_engine()
@@ -4092,6 +4318,50 @@ def tab_settings(project_id: str, config: dict) -> None:
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
             st.rerun()
+
+
+def _free_memory_block() -> None:
+    """
+    «Освободить память» – вместо перезапуска всего приложения.
+
+    Что она делает на самом деле. Память после упавшего прогона держит не
+    Click, а брошенный браузер: прогон умер, а его процесс остался и занял
+    свои 400–500 МБ. Раньше это лечилось только перезапуском приложения –
+    тяжело и не всегда возможно. Кнопка закрывает именно такие браузеры.
+
+    Пока идёт прогон, кнопка отказывается работать: его браузер выглядит
+    точно так же, и закрыть его – значит оборвать работу на середине.
+    """
+    html('<div class="card-title">🧹 Память приложения</div>')
+    used = runner.memory_mb()
+    _, _, hard = runner.mem_gates()
+    strays = runner.stray_browsers()
+    busy = runner.busy_details_ru()
+
+    line = f"Занято **{used} МБ**"
+    if hard:
+        line += f" (порог остановки прогонов – {hard} МБ)"
+    st.caption(line + ".")
+    if busy:
+        st.caption(f"Сейчас работают: {busy}. Пока прогон идёт, чистить нечего – "
+                   "браузер занят делом.")
+    elif strays:
+        st.caption(f"Брошенных браузеров: **{len(strays)}** – это они и держат память. "
+                   "Прогонов при этом не идёт ни одного: значит, остались от упавшего.")
+    else:
+        st.caption("Брошенных браузеров нет. Если цифра всё равно велика, память "
+                   "держит сам Python – тут поможет только перезапуск приложения.")
+
+    said = st.session_state.pop("free-memory-said", None)
+    if said:
+        (st.success if said[0] else st.warning)(said[1])
+
+    if st.button("🧹 Освободить память", key="btn-free-memory",
+                 disabled=bool(busy) or not strays, use_container_width=True):
+        with st.spinner("Закрываю брошенные браузеры…"):
+            done, msg = runner.free_memory()
+        st.session_state["free-memory-said"] = (done, msg)
+        st.rerun()
 
 
 def _web_keys_block() -> None:
@@ -4135,7 +4405,7 @@ def _web_keys_block() -> None:
                 заголовок = подписи.get(ключ, (ключ, ""))[0]
                 откуда = secrets_local.source_of(ключ)
                 if откуда and откуда != "настройки приложения":
-                    st.caption(f"**{заголовок}** — задан через «{откуда}», поле не нужно.")
+                    st.caption(f"**{заголовок}** – задан через «{откуда}», поле не нужно.")
                     continue
                 есть = secrets_local.get(ключ)
                 новые[ключ] = st.text_area(
@@ -4156,7 +4426,7 @@ def _web_keys_block() -> None:
                 except Exception as e:  # noqa: BLE001
                     st.error(f"Не сохранилось: {e}")
 
-    st.caption(f"Ключи хранятся в файле `{secrets_local.path()}` — вне папки Click, "
+    st.caption(f"Ключи хранятся в файле `{secrets_local.path()}` – вне папки Click, "
                "поэтому обновление программы их не тронет и в репозиторий они не "
                "попадут. Файл обычный, без шифрования: там же лежит и сохранённая "
                "сессия Яндекса.")
@@ -4379,12 +4649,80 @@ def _gis_login_block(project_id: str, config: dict) -> None:
         st.rerun()
 
 
+def _both_sessions_block(project_id: str) -> None:
+    """
+    Один файл сессий на обе сети – ВК и ОК сразу.
+
+    Мысль заказчицы, и правильная: «может, одним входом оба куки собирать,
+    в один файлик, и один раз вставлять». Куки-то снимаются ОДНИМ браузером
+    за ОДИН заход – ОК и пускает-то через ВК. Делить их на два файла и
+    заставлять человека вставлять дважды было работой на ровном месте.
+    Click раскладывает по сетям сам и говорит, что нашёл.
+    """
+    import ok_browser
+    import social_session
+    import vk_social
+
+    html('<div class="card-title">🔑 Файл сессий ВК и ОК</div>')
+    есть_вк = vk_social.has_saved_session(project_id)
+    есть_ок = ok_browser.has_saved_session(project_id)
+    st.caption(
+        f"Сейчас: ВК – {'вход есть' if есть_вк else 'входа нет'} · "
+        f"ОК – {'вход есть' if есть_ок else 'входа нет'}. "
+        "Файл делает VHOD-VK-i-OK.py на вашем компьютере: вошли в обе сети – "
+        "получился один файл. Загрузите его сюда, и обе сети возьмутся сразу.")
+    # Итог прошлой загрузки. Держим в session_state, а не показываем сразу:
+    # после успеха страница перерисовывается (чтобы обновились «вход есть»),
+    # и сообщение, написанное до перерисовки, стиралось вместе с ней. Со
+    # стороны выглядело так, будто не произошло ничего.
+    said_before = st.session_state.pop(f"sess-both-said-{project_id}", None)
+    if said_before:
+        (st.success if said_before[0] else st.error)(said_before[1])
+
+    up = st.file_uploader("Файл сессий (VK-i-OK-sessii.json)", type=["json"],
+                          key=f"sess-both-up-{project_id}")
+    if up is not None and st.button("Загрузить обе сессии", type="primary",
+                                    key=f"sess-both-go-{project_id}"):
+        took, said = social_session.import_combined(project_id, up.getvalue())
+        st.session_state[f"sess-both-said-{project_id}"] = (
+            took, ("✅ Готово. " + said) if took else said)
+        st.rerun()
+
+
+def _session_import_block(project_id: str, name: str, importer, key: str) -> None:
+    """
+    Принести готовый файл сессии вместо входа в приложении.
+
+    Зачем. В облаке окна браузера нет, а ВК защищает вход проверками
+    «вы не робот», QR и кодами в МАКС – пройти их вслепую по снимкам
+    получается не всегда. Тогда самый быстрый путь: войти там, где браузер
+    видно, и принести сюда файл сессии. Click проверит, что в нём есть
+    признак входа, и дальше будет работать как после обычного входа.
+    """
+    with st.expander(f"📥 Загрузить готовый файл сессии {name} (если вход не проходит)"):
+        st.caption(
+            f"Файл сессии – это storage_state браузера с куками {name}. Его "
+            "сохраняет тот, кто уже входил в этот аккаунт автоматизацией. "
+            "Click проверит, что внутри есть признак настоящего входа.")
+        up = st.file_uploader(f"Файл сессии {name} (.json)", type=["json"],
+                              key=f"sess-up-{key}-{project_id}")
+        if up is not None and st.button(f"Принять сессию {name}",
+                                        key=f"sess-go-{key}-{project_id}"):
+            ok, msg = importer(project_id, up.getvalue())
+            if ok:
+                st.success(msg)
+                time.sleep(1.0)
+                st.rerun()
+            else:
+                st.error(msg)
+
+
 def _vk_login_block(project_id: str, config: dict) -> None:
     """
-    Вход в ВК для кросспостинга — тот же порядок, что у Яндекса и 2ГИС:
+    Вход в ВК для кросспостинга – тот же порядок, что у Яндекса и 2ГИС:
     скриншот вместо окна, шаги распознаются, сессия сохраняется в файл.
     Телефон и пароль в конфиг НЕ пишутся: телефон достаточно ввести при
-    входе, пароль тем более — сессия дальше живёт сама.
+    входе, пароль тем более – сессия дальше живёт сама.
     """
     import vk_social
 
@@ -4393,13 +4731,33 @@ def _vk_login_block(project_id: str, config: dict) -> None:
 
     group_url = st.text_input(
         "Ссылка на сообщество ВК этого бренда", value=config.get("vkGroupUrl", ""),
-        key=f"vk-group-{project_id}", placeholder="https://vk.com/club… или https://vk.com/stalmetural")
+        key=f"vk-group-{project_id}", placeholder="https://vk.ru/club… или https://vk.ru/название")
+    st.caption("Можно писать и vk.com, и vk.ru – Click сам приведёт ссылку к тому "
+               "домену, на котором сохранена сессия. Это разные сайты для браузера, "
+               "и куки входа у них не общие.")
     if group_url.strip() != (config.get("vkGroupUrl") or ""):
         config["vkGroupUrl"] = group_url.strip()
         save_config(project_id)
 
     if vk_social.has_saved_session(project_id):
-        st.success("Сессия ВК сохранена — отложки будут ставиться без повторного входа.")
+        st.success("Сессия ВК сохранена – отложки будут ставиться без повторного входа.")
+        # Проверка до боя: «сессия сохранена» ещё не значит «ВК нас пускает».
+        # Кнопка отвечает на это прямо, а не оставляет гадать после отказа.
+        if st.button("🔍 Проверить сессию ВК", key="vk-check"):
+            # Тоже свежим потоком: проверка открывает и закрывает свой браузер,
+            # и незачем ей рисковать общим потоком входа (см. run_once).
+            with st.spinner("Открываю ВК и смотрю, пускает ли…"):
+                res = playwright_worker.run_once(
+                    vk_social.check_session, project_id,
+                    (config.get("vkGroupUrl") or "").strip(),
+                    bool(get_settings(project_id)["headless"]))
+            if res.get("ok"):
+                st.success("Сессия жива, сообщество открывается, права на публикацию есть.")
+            else:
+                st.error(res.get("error", "не удалось проверить"))
+                if res.get("shot"):
+                    st.image(res["shot"], use_container_width=True)
+                    st.caption("Что Click видит в ВК с этой сессией.")
         with st.container(key="danger-reset-vk"):
             if st.button("Войти заново (сбросить сессию)", key="vk-reset"):
                 vk_social.session_path(project_id).unlink(missing_ok=True)
@@ -4410,13 +4768,23 @@ def _vk_login_block(project_id: str, config: dict) -> None:
 
     flow = st.session_state.get("vk_flow")
     if flow is None:
-        st.caption("Нужен аккаунт-администратор сообщества — тот, кем постят руками. "
+        st.caption("Нужен аккаунт-администратор сообщества – тот, кем постят руками. "
                    "Click откроет форму входа ВК: телефон, пароль или код из SMS "
                    "вводятся здесь же, по снимку экрана.")
+        _session_import_block(project_id, "ВК", vk_social.import_session, "vk")
+        show_window = False
+        if can_show_browser():
+            show_window = st.checkbox(
+                "Показать окно браузера – если ВК просит подтвердить «я не робот»",
+                key="vk-show-window",
+                help="Откроется настоящее окно: проверку можно пройти руками, "
+                     "а Click продолжит вход. Работает только на своём компьютере.")
         if st.button("🔑 Войти в ВК", type="primary", key="vk-login", use_container_width=True):
             try:
-                flow = vk_social.VkLoginFlow(project_id,
-                                             headless=bool(get_settings(project_id)["headless"]))
+                flow = vk_social.VkLoginFlow(
+                    project_id,
+                    headless=(False if show_window
+                              else bool(get_settings(project_id)["headless"])))
                 with st.spinner("Открываю форму входа ВК…"):
                     st.session_state["vk_state"] = worker.call(flow.start)
                 st.session_state["vk_flow"] = flow
@@ -4438,10 +4806,13 @@ def _vk_login_block(project_id: str, config: dict) -> None:
             worker.call(flow.close)
         st.session_state.pop("vk_flow", None)
         st.session_state.pop("vk_state", None)
+        # has_saved_session требует настоящую куку входа, а не любые куки:
+        # гостевой заход тоже их ставит, и раньше это выглядело как успех.
         if vk_social.has_saved_session(project_id):
             st.success("Вошли в ВК. Сессия сохранена.")
         else:
-            st.warning("ВК пустил, но сессия не сохранилась — попробуйте ещё раз.")
+            st.warning("ВК показал страницу без формы входа, но признака входа нет – "
+                       "сессия не сохранена. Попробуйте войти ещё раз.")
         time.sleep(1.0)
         st.rerun()
     elif step == "phone":
@@ -4450,19 +4821,70 @@ def _vk_login_block(project_id: str, config: dict) -> None:
             st.session_state["vk_state"] = worker.call(flow.submit_phone, phone)
             st.rerun()
     elif step == "password":
+        st.caption("Если пароля у аккаунта нет – входите по коду из SMS, "
+                   "это обычный путь для рабочих аккаунтов брендов.")
         pwd = st.text_input("Пароль ВК", type="password", key="vk-pass")
-        if st.button("Войти", key="vk-pass-go", type="primary") and pwd:
+        c1, c2 = st.columns(2)
+        if c1.button("Войти по паролю", key="vk-pass-go", type="primary") and pwd:
             st.session_state["vk_state"] = worker.call(flow.submit_password, pwd)
             st.rerun()
+        if c2.button("📱 Войти по коду из SMS", key="vk-pass-sms"):
+            st.session_state["vk_state"] = worker.call(flow.request_code_instead)
+            st.rerun()
     elif step == "code":
-        st.caption("ВК просит код подтверждения — из SMS или приложения.")
-        code = st.text_input("Код", key="vk-code")
-        if st.button("Подтвердить", key="vk-code-go", type="primary") and code.strip():
+        st.caption("ВК просит код подтверждения. Смотрите снимок: код может "
+                   "прийти в МАКС, в SMS – либо вместо кода поступит звонок-сброс, "
+                   "и тогда нужны последние 6 цифр номера, с которого звонили.")
+        code = st.text_input("Код (6 цифр)", key="vk-code")
+        c1, c2 = st.columns(2)
+        if c1.button("Подтвердить", key="vk-code-go", type="primary") and code.strip():
             st.session_state["vk_state"] = worker.call(flow.submit_code, code)
             st.rerun()
+        if c2.button("🔄 Подтвердить другим способом", key="vk-other-confirm"):
+            st.session_state["vk_state"] = worker.call(flow.press_other_confirm)
+            st.rerun()
+    elif step == "qr":
+        st.caption("ВК предлагает вход по QR-коду – камеры у нас нет. Переходим "
+                   "на вход по телефону.")
+        if st.button("➡️ Войти другим способом", key="vk-other-way", type="primary"):
+            st.session_state["vk_state"] = worker.call(flow.press_other_way)
+            st.rerun()
+    elif step == "captcha":
+        st.caption("ВК проверяет, что вход делает человек. Обычно хватает одного "
+                   "нажатия – жмите кнопку ниже.")
+        if st.button("✅ Продолжить (я не робот)", key="vk-captcha-go", type="primary"):
+            st.session_state["vk_state"] = worker.call(flow.press_captcha_continue)
+            st.rerun()
+        if can_show_browser():
+            st.caption("Если проверка не проходит с одного нажатия – выключите "
+                       "«Скрытый браузер» в блоке входа в Яндекс выше и войдите "
+                       "заново: тогда откроется настоящее окно, где проверку можно "
+                       "пройти руками.")
+        else:
+            st.caption("Если проверка не проходит – её нужно пройти руками в окне "
+                       "браузера, а это возможно только при локальном запуске Click.")
+    elif step == "start-over":
+        st.caption("ВК вернул нас на главную страницу – форма входа закрылась. "
+                   "Так бывает, если истекло время кода или проверка сорвалась. "
+                   "Откроем форму заново.")
+        if st.button("🔄 Открыть форму входа заново", key="vk-restart", type="primary"):
+            st.session_state["vk_state"] = worker.call(flow.restart_login)
+            st.rerun()
     else:
-        st.warning("Не разобрал, что за шаг на странице, — смотрите снимок выше. "
-                   "Можно ввести данные на нужном шаге ещё раз или отменить вход.")
+        st.warning("Не разобрал, что за шаг на странице, – смотрите снимок выше.")
+        c1, c2 = st.columns(2)
+        # Кнопка жмёт «Продолжить» ТОЛЬКО по тексту: раньше в крайнем случае
+        # нажималась любая кнопка, и на капче это был крестик – проверка
+        # закрывалась, и ВК выбрасывал на главную.
+        if c1.button("✅ Нажать «Продолжить» на экране", key="vk-blind-continue"):
+            st.session_state["vk_state"] = worker.call(flow.press_captcha_continue)
+            st.rerun()
+        if c2.button("🔄 Открыть форму входа заново", key="vk-restart-unknown"):
+            st.session_state["vk_state"] = worker.call(flow.restart_login)
+            st.rerun()
+        if can_show_browser():
+            st.caption("Не помогает – отмените вход, поставьте галочку «Показать окно "
+                       "браузера» и войдите заново: проверку пройдёте руками.")
 
     if st.button("Отменить вход", key="vk-cancel"):
         try:
@@ -4476,30 +4898,31 @@ def _vk_login_block(project_id: str, config: dict) -> None:
 
 def _ok_login_block(project_id: str, config: dict) -> None:
     """
-    Вход в ОК для кросспостинга. API-права заказчику не дали (2026-08-10),
-    поэтому ОК — как ВК: вход с сохранением сессии, отложка через интерфейс
-    группы. Логин храним в конфиге (удобно), пароль — нет: вводится при
-    входе, дальше живёт сессия.
+    Вход в ОК для кросспостинга.
+
+    ОСНОВНОЙ ПУТЬ – «Войти через ВК»: у рабочих аккаунтов брендов своего
+    пароля ОК нет, и ВК, и ОК открываются одной учёткой ВК. Click подкладывает
+    сохранённую сессию ВК, поэтому чаще всего вход в ОК проходит вообще без
+    ввода – «вошли в ВК, ОК подтянулся». Если сессии ВК нет, телефон и код
+    вводятся в том же всплывающем окне ВК.
+
+    Запасной путь – обычный логин и пароль ОК, если они всё же есть.
     """
     import ok_browser
+    import vk_social
 
     worker = get_worker()
     html('<div class="card-title">🔐 Вход в ОК (кросспостинг)</div>')
 
-    c1, c2 = st.columns(2)
-    ok_login = c1.text_input("Логин ОК (телефон/почта админа группы)",
-                             value=config.get("okLogin", ""), key=f"ok-login-{project_id}")
-    group_url = c2.text_input("Ссылка на группу ОК бренда", value=config.get("okGroupUrl", ""),
+    group_url = st.text_input("Ссылка на группу ОК бренда", value=config.get("okGroupUrl", ""),
                               key=f"ok-group-{project_id}",
                               placeholder="https://ok.ru/group/…")
-    if ok_login.strip() != (config.get("okLogin") or "") \
-            or group_url.strip() != (config.get("okGroupUrl") or ""):
-        config["okLogin"] = ok_login.strip()
+    if group_url.strip() != (config.get("okGroupUrl") or ""):
         config["okGroupUrl"] = group_url.strip()
         save_config(project_id)
 
     if ok_browser.has_saved_session(project_id):
-        st.success("Сессия ОК сохранена — отложки будут ставиться без повторного входа.")
+        st.success("Сессия ОК сохранена – отложки будут ставиться без повторного входа.")
         with st.container(key="danger-reset-ok"):
             if st.button("Войти заново (сбросить сессию)", key="ok-reset"):
                 ok_browser.session_path(project_id).unlink(missing_ok=True)
@@ -4510,26 +4933,33 @@ def _ok_login_block(project_id: str, config: dict) -> None:
 
     flow = st.session_state.get("ok_flow")
     if flow is None:
-        password = st.text_input("Пароль ОК", type="password", key=f"ok-pass-{project_id}")
-        if st.button("🔑 Войти в ОК", type="primary", key="ok-go",
-                     use_container_width=True, disabled=not (ok_login.strip() and password)):
+        if vk_social.has_saved_session(project_id):
+            st.caption("Сессия ВК есть – скорее всего, ОК пустит сразу, без ввода: "
+                       "это та самая связка, ВК и ОК под одной учёткой.")
+        else:
+            st.caption("Сначала лучше войти в ВК (блок выше) – тогда ОК пустит без "
+                       "ввода. Можно и сразу сюда: телефон и код спросят в окне ВК.")
+        _session_import_block(project_id, "ОК", ok_browser.import_session, "ok")
+        if st.button("🔑 Войти в ОК через ВК", type="primary", key="ok-go",
+                     use_container_width=True):
             try:
-                flow = ok_browser.OkLoginFlow(project_id,
-                                              headless=bool(get_settings(project_id)["headless"]))
-                with st.spinner("Открываю ОК…"):
-                    worker.call(flow.start)
-                    st.session_state["ok_state"] = worker.call(
-                        flow.submit_credentials, ok_login.strip(), password)
+                flow = ok_browser.OkViaVkLoginFlow(
+                    project_id, headless=bool(get_settings(project_id)["headless"]))
+                with st.spinner("Открываю ОК и жму «Войти через ВК»…"):
+                    st.session_state["ok_state"] = worker.call(flow.start)
                 st.session_state["ok_flow"] = flow
                 st.rerun()
             except Exception as e:  # noqa: BLE001
                 _browser_error(e)
+        _ok_password_fallback(project_id, config, worker)
         return
 
     state = st.session_state.get("ok_state") or {}
+    if state.get("note"):
+        st.warning(state["note"])
     if state.get("screenshot"):
         st.image(state["screenshot"], use_container_width=True)
-        st.caption("Это то, что Click видит в ОК прямо сейчас.")
+        st.caption("Это то, что Click видит прямо сейчас.")
 
     step = state.get("step")
     if step == "done":
@@ -4542,18 +4972,84 @@ def _ok_login_block(project_id: str, config: dict) -> None:
         if ok_browser.has_saved_session(project_id):
             st.success("Вошли в ОК. Сессия сохранена.")
         else:
-            st.warning("ОК пустил, но сессия не сохранилась — попробуйте ещё раз.")
+            st.warning("ОК показал вход выполненным, но признака входа в куках нет – "
+                       "сессия не сохранена. Попробуйте ещё раз.")
         time.sleep(1.0)
         st.rerun()
+    elif step == "phone":
+        phone = st.text_input("Телефон аккаунта ВК", key="ok-phone", placeholder="+7…")
+        if st.button("Далее", key="ok-phone-go", type="primary") and phone.strip():
+            st.session_state["ok_state"] = worker.call(flow.submit_phone, phone)
+            st.rerun()
+    elif step == "password":
+        st.caption("Пароля у аккаунта может не быть – тогда входите по коду из SMS.")
+        pwd = st.text_input("Пароль ВК", type="password", key="ok-vkpass")
+        c1, c2 = st.columns(2)
+        if c1.button("Войти по паролю", key="ok-pass-go", type="primary") and pwd:
+            st.session_state["ok_state"] = worker.call(flow.submit_password, pwd)
+            st.rerun()
+        if c2.button("📱 Войти по коду из SMS", key="ok-pass-sms"):
+            st.session_state["ok_state"] = worker.call(flow.request_code_instead)
+            st.rerun()
     elif step == "code":
-        st.caption("ОК просит код подтверждения — из SMS или почты.")
+        st.caption("ВК просит код подтверждения – из SMS или приложения.")
         code = st.text_input("Код", key="ok-code")
         if st.button("Подтвердить", key="ok-code-go", type="primary") and code.strip():
             st.session_state["ok_state"] = worker.call(flow.submit_code, code)
             st.rerun()
+    elif step == "captcha":
+        st.caption("ВК проверяет, что вход делает человек – обычно хватает "
+                   "одного нажатия.")
+        if st.button("✅ Продолжить (я не робот)", key="ok-captcha-go", type="primary"):
+            st.session_state["ok_state"] = worker.call(flow.press_captcha_continue)
+            st.rerun()
+    elif step == "consent":
+        st.caption("ВК узнал аккаунт и спрашивает, входить ли им – это последний "
+                   "шаг связки. Нажмите кнопку, и ОК откроется.")
+        if st.button("✅ Войти этим аккаунтом", key="ok-consent-go", type="primary"):
+            st.session_state["ok_state"] = worker.call(flow.confirm_account)
+            st.rerun()
+    elif step == "profile":
+        st.caption("ОК спрашивает, наш ли это профиль – так он иногда проверяет "
+                   "вход с нового места. Click пробовал подтвердить сам и не смог, "
+                   "нажмите здесь. Кнопку «Это не мой профиль» в ОК не трогайте: "
+                   "это жалоба на угон, после неё аккаунт блокируют.")
+        if st.button("✅ Да, это наш профиль", key="ok-profile-go", type="primary"):
+            st.session_state["ok_state"] = worker.call(flow.confirm_profile_step)
+            st.rerun()
+    elif step == "verify":
+        st.caption("ОК хочет прислать код по СМС на телефон аккаунта – номер "
+                   "виден на снимке. Нажмите «Получить код», дождитесь СМС и "
+                   "введите его на следующем шаге.")
+        c1, c2 = st.columns(2)
+        if c1.button("📱 Получить код по СМС", key="ok-verify-send", type="primary"):
+            st.session_state["ok_state"] = worker.call(flow.request_code_step)
+            st.rerun()
+        if c2.button("✉️ Подтвердить по почте", key="ok-verify-mail"):
+            st.session_state["ok_state"] = worker.call(flow.request_mail_step)
+            st.rerun()
+    elif step == "verify-code":
+        st.caption("Введите код, который прислал ОК.")
+        vcode = st.text_input("Код из СМС", key="ok-verify-code")
+        if st.button("Подтвердить", key="ok-verify-go", type="primary") and vcode.strip():
+            st.session_state["ok_state"] = worker.call(flow.submit_verify_step, vcode)
+            st.rerun()
+    elif step == "no-vk-button":
+        st.caption("Значок ВК так и не появился – он в ряду иконок под кнопкой "
+                   "«Войти по QR-коду». Войдите логином и паролем ОК ниже.")
+    elif step == "no-popup":
+        st.caption("Значок ВК нажали, но окно входа ВК не открылось. Попробуйте "
+                   "ещё раз – или войдите логином и паролем ОК ниже.")
     else:
-        st.warning("ОК не пустил с этой парой логин/пароль — проверьте и попробуйте "
-                   "снова. На снимке видно, что показывает ОК.")
+        st.warning("Не разобрал, что за шаг на экране – смотрите снимок выше.")
+        # Экран «Войти как…» узнаётся не всегда: подписи у ВК разные. Даём
+        # нажать вслепую, вместо того чтобы человек упирался в тупик.
+        # hasattr – потому что запасной вход по паролю ОК идёт другим
+        # классом, у которого окна ВК нет и подтверждать нечего.
+        if hasattr(flow, "confirm_account") and \
+                st.button("✅ Попробовать подтвердить вход", key="ok-consent-blind"):
+            st.session_state["ok_state"] = worker.call(flow.confirm_account)
+            st.rerun()
 
     if st.button("Отменить вход", key="ok-cancel"):
         try:
@@ -4563,6 +5059,33 @@ def _ok_login_block(project_id: str, config: dict) -> None:
         st.session_state.pop("ok_flow", None)
         st.session_state.pop("ok_state", None)
         st.rerun()
+
+
+def _ok_password_fallback(project_id: str, config: dict, worker) -> None:
+    """Запасной вход в ОК – своим логином и паролем, если они есть."""
+    import ok_browser
+
+    with st.expander("…или войти логином и паролем ОК"):
+        c1, c2 = st.columns(2)
+        ok_login = c1.text_input("Логин ОК (телефон/почта)", value=config.get("okLogin", ""),
+                                 key=f"ok-login-{project_id}")
+        password = c2.text_input("Пароль ОК", type="password", key=f"ok-pass-{project_id}")
+        if ok_login.strip() != (config.get("okLogin") or ""):
+            config["okLogin"] = ok_login.strip()
+            save_config(project_id)
+        if st.button("Войти логином и паролем", key="ok-plain-go",
+                     disabled=not (ok_login.strip() and password)):
+            try:
+                flow = ok_browser.OkLoginFlow(
+                    project_id, headless=bool(get_settings(project_id)["headless"]))
+                with st.spinner("Открываю ОК…"):
+                    worker.call(flow.start)
+                    st.session_state["ok_state"] = worker.call(
+                        flow.submit_credentials, ok_login.strip(), password)
+                st.session_state["ok_flow"] = flow
+                st.rerun()
+            except Exception as e:  # noqa: BLE001
+                _browser_error(e)
 
 
 def _yandex_login_block(project_id: str, config: dict) -> None:
@@ -4586,7 +5109,13 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
         st.success("Сессия Яндекса сохранена – публикация пойдёт в фоне без повторного входа.")
         if st.button("Проверить сессию", key="btn-check-session"):
             with st.spinner("Открываю профиль Яндекса…"):
-                who = _check_session(project_id, config.get("email") or project["yandexEmail"])
+                # PROJECTS[project_id], а не project: эта переменная живёт в
+                # tab_settings, сюда она никогда не приходила. «Проверить
+                # сессию» падало с NameError у всех, кто не вписал почту в
+                # «Настройки» руками: при пустом поле код шёл во вторую
+                # половину «или» и утыкался в несуществующее имя.
+                who = _check_session(project_id,
+                                     config.get("email") or PROJECTS[project_id]["yandexEmail"])
             if who["state"] == "ok":
                 st.success(f"В Яндексе залогинен {who['account']} – всё верно.")
             elif who["state"] == "other":

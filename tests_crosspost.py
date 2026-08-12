@@ -45,7 +45,7 @@ SAMPLE = [
     ["", "", "Однокласники", "", "https://ok.ru/group/70000004574376/topic/1", "Пост", "", "", "", "", ""],
     ["", "", "Вконтакте", "", "https://vk.com/wall-217668235_743", "Пост", "", "", "", "", ""],
     ["", "", "Max (клиент)", "", "https://max.ru/xxx", "Пост", "", "", "", "", ""],
-    # будущий пост — часть площадок ещё не опубликована (пустая «Ссылка»)
+    # будущий пост – часть площадок ещё не опубликована (пустая «Ссылка»)
     ["", "2099-01-10 00:00:00", "Вконтакте", "СМУ", "", "Пост", "Спецпредложение",
      "Скидка на арматуру", "https://i.ibb.co/bbb/2.jpg https://i.ibb.co/ccc/3.jpg", "", ""],
     ["", "", "Однокласники", "", "", "Пост", "", "", "", "", ""],
@@ -110,7 +110,7 @@ def test_posts_to_form() -> None:
     check("в будущем формируем vk, ok, tg-client", nets == ["ok", "tg-client", "vk"], str(nets))
     check("дзен (вне scope) не формируем", "zen" not in nets)
 
-    # если у площадки «Ссылка» уже стоит — второй раз не формируем
+    # если у площадки «Ссылка» уже стоит – второй раз не формируем
     already = cp.posts_to_form(
         [{"brand": "SMU", "date": "2099-01-10", "time": "11:00", "when": "x",
           "post_type": "", "format": "Пост", "text": "t", "images": [],
@@ -119,7 +119,7 @@ def test_posts_to_form() -> None:
         today=date(2026, 8, 7))
     check("площадка с готовой ссылкой пропускается", already == [])
 
-    # пустой текст — не формируем
+    # пустой текст – не формируем
     empty = cp.posts_to_form(
         [{"brand": "SMU", "date": "2099-01-10", "time": "11:00", "when": "x",
           "post_type": "", "format": "Пост", "text": "", "images": [],
@@ -129,13 +129,13 @@ def test_posts_to_form() -> None:
 
 
 def test_real_file_optional() -> None:
-    """Если рядом лежит выгрузка реестра СМУ — прогнать и на ней (не обязательно)."""
+    """Если рядом лежит выгрузка реестра СМУ – прогнать и на ней (не обязательно)."""
     import glob
     hits = glob.glob(str(Path(__file__).parent / "*.xlsx")) + \
         glob.glob("/root/.claude/uploads/**/*.xlsx", recursive=True)
     real = next((h for h in hits if "sheet" not in h.lower()), None)
     if not real:
-        print("Реальный файл реестра рядом не найден — пропускаю (это норма).")
+        print("Реальный файл реестра рядом не найден – пропускаю (это норма).")
         return
     print(f"Реальный файл: {Path(real).name}")
     try:
@@ -159,7 +159,7 @@ def test_state() -> None:
     check("ключ поста стабилен", cps.post_key(p) == cps.post_key(dict(p)))
     p2 = {**p, "text": "Другой текст"}
     check("правка текста меняет ключ", cps.post_key(p) != cps.post_key(p2))
-    check("по умолчанию — не сформировано", cps.status_of({}, p, "vk") == cps.WAITING)
+    check("по умолчанию – не сформировано", cps.status_of({}, p, "vk") == cps.WAITING)
     check("ссылка в реестре = вышло", cps.summarize({}, [p])[cps.SENT] == 1)
     check("вторая площадка ждёт", cps.summarize({}, [p])[cps.WAITING] == 1)
     check("is_done по умолчанию False", cps.is_done({}, p, "vk") is False)
@@ -195,17 +195,46 @@ def test_post_text() -> None:
     check("автоссылка только на первое вхождение", m2.count("](") == 1)
     m3 = pt.autolink("уже есть [нашем сайте](https://x.ru)", "stalmetural.ru")
     check("внутрь готовой ссылки не лезем", m3 == "уже есть [нашем сайте](https://x.ru)")
-    check("без сайта — без изменений", pt.autolink("на нашем сайте", "") == "на нашем сайте")
+    check("без сайта – без изменений", pt.autolink("на нашем сайте", "") == "на нашем сайте")
 
     check("html: жирный и ссылка",
           pt.render("**Важно**: [сайт](https://a.ru/?a=1&b=2) <3", "html")
           == '<b>Важно</b>: <a href="https://a.ru/?a=1&amp;b=2">сайт</a> &lt;3')
-    check("plain: жирный снят, ссылка раскрыта",
+    check("plain: жирный снят, ссылка – голым адресом",
           pt.render("**Важно**: [нашем сайте](https://a.ru)", "plain")
-          == "Важно: нашем сайте (https://a.ru)")
+          == "Важно: нашем сайте a.ru")
     check("plain: текст-адрес не дублируется",
           pt.render("[stalmetural.ru](https://stalmetural.ru)", "plain") == "stalmetural.ru")
-    check("strip_markup для превью", pt.strip_markup("**а** [б](https://в.ru)") == "а б (https://в.ru)")
+    check("strip_markup для превью", pt.strip_markup("**а** [б](https://в.ru)") == "а б в.ru")
+
+    # ВК/ОК ссылку в слова не зашивают. Живой случай (11.08.2026): в реестре
+    # адрес уже стоял, Click добавлял свой автоссылкой, и в ВК выходило
+    # «на нашем сайте (inmetprom.ru) (inmetprom.ru/)» – два адреса подряд.
+    real = pt.autolink(
+        "🔹 Полный сортамент нержавеющего металлопроката – на нашем сайте (inmetprom.ru/).",
+        "inmetprom.ru")
+    check("ВК: адрес один раз, без скобок",
+          pt.render(real, "plain")
+          == "🔹 Полный сортамент нержавеющего металлопроката – на нашем сайте inmetprom.ru.",
+          pt.render(real, "plain"))
+    check("ВК: адреса нет в реестре – ставим свой",
+          pt.render(pt.autolink("Заказ – на нашем сайте.", "a.ru"), "plain")
+          == "Заказ – на нашем сайте a.ru.")
+    check("ВК: адрес в реестре голым – второй раз не пишем",
+          pt.render(pt.autolink("Заказ – на нашем сайте a.ru.", "a.ru"), "plain")
+          == "Заказ – на нашем сайте a.ru.")
+    check("ТГ: ссылка остаётся зашитой в слова",
+          "<a href=\"https://a.ru\">" in pt.render(pt.autolink("на нашем сайте.", "a.ru"), "html"))
+
+    # Жирная фраза со ссылкой внутри – штатный плод autolink. Раньше пост
+    # уходил в Телеграм со звёздочками: разбор шёл по ссылкам, и парные **
+    # оказывались в разных кусках.
+    check("ТГ: жирная ссылка – без звёздочек в тексте",
+          pt.render("на **[нашем сайте](https://a.ru)**", "html")
+          == 'на <a href="https://a.ru"><b>нашем сайте</b></a>',
+          pt.render("на **[нашем сайте](https://a.ru)**", "html"))
+    check("ВК: жирная ссылка – просто текст и адрес",
+          pt.render("на **[нашем сайте](https://a.ru)**", "plain") == "на нашем сайте a.ru")
 
 
 def test_bold_from_real_file() -> None:
@@ -213,7 +242,7 @@ def test_bold_from_real_file() -> None:
     import glob
     hits = glob.glob("/root/.claude/uploads/**/*.xlsx", recursive=True)
     if not hits:
-        print("Реальный файл реестра не найден — пропускаю проверку жирного (это норма).")
+        print("Реальный файл реестра не найден – пропускаю проверку жирного (это норма).")
         return
     print("Жирное из реального реестра")
     posts = cp.load_from_xlsx(hits[0], "SMU")
@@ -223,6 +252,267 @@ def test_bold_from_real_file() -> None:
     check("жирная разметка не сломала даты", dates_ok)
     nets = {t["network"] for p in posts for t in p["targets"]}
     check("и не сломала распознавание сетей", {"vk", "ok", "max"} <= nets, str(sorted(nets)))
+
+
+def test_vk_domain() -> None:
+    """
+    Домен сообщества обязан совпадать с доменом сессии.
+
+    Почему это отдельная проверка. vk.ru и vk.com – разные сайты для
+    браузера, куки входа между ними не ходят. Ссылку с «чужим» доменом ВК
+    открывает как гостю: кнопки «Создать» нет, и выглядит это как сломанный
+    вход, хотя вход целый. Один раз мы на это уже потратили день.
+    """
+    print("\nВК: домен сообщества")
+    import vk_social
+
+    check("vk.com → vk.ru",
+          vk_social.same_domain("https://vk.com/club123") == "https://vk.ru/club123")
+    check("m.vk.com тоже приводится",
+          vk_social.same_domain("https://m.vk.com/club123") == "https://vk.ru/club123")
+    check("www.vk.com тоже приводится",
+          vk_social.same_domain("http://www.vk.com/abc") == "https://vk.ru/abc")
+    check("свой домен не трогаем",
+          vk_social.same_domain("https://vk.ru/club7") == "https://vk.ru/club7")
+    check("путь и хвост сохраняются",
+          vk_social.same_domain("https://vk.com/club1?w=wall-1_2")
+          == "https://vk.ru/club1?w=wall-1_2")
+    check("пустая ссылка остаётся пустой", vk_social.same_domain("") == "")
+    check("чужой адрес не переписываем",
+          vk_social.same_domain("https://ok.ru/group/1") == "https://ok.ru/group/1")
+    check("похожий домен не ловим по подстроке",
+          vk_social.same_domain("https://notvk.com/x") == "https://notvk.com/x")
+
+
+def test_ok_via_vk() -> None:
+    """
+    Вход в ОК через значок ВК: что можно проверить без браузера.
+
+    Живьём проверено отдельно (2026-08-11) на копии страницы ОК: значок ВК
+    лежит внутри <template style="display:none">, поиск по странице внутрь не
+    заходит, и один взгляд сразу после загрузки давал ноль. Ожидание находит
+    кнопку за полторы секунды. Здесь закрепляем то, что от браузера не
+    зависит: признаки в селекторах и распознавание экрана «Войти как…».
+    """
+    print("\nОК: вход значком ВК")
+    import ok_browser
+
+    check("селектор опирается на data-module (он у ОК стабильнее классов)",
+          "registration/vkconnect" in ok_browser.SEL["vk_id_button"])
+    check("класс со страницы тоже учтён",
+          "__vk_id" in ok_browser.SEL["vk_id_button"])
+    check("подпись на плашке cookie известна",
+          "Разрешить все" in ok_browser.SEL["cookie_accept"])
+
+    class FakePopup:
+        """Окно ВК, показывающее заданный текст."""
+
+        def __init__(self, text: str):
+            self._text = text
+            self.frames: list = []
+            self.main_frame = object()
+
+        def evaluate(self, *_a, **_k):
+            return self._text
+
+        def is_closed(self):
+            return False
+
+        def locator(self, *_a, **_k):
+            class _L:
+                def count(self):
+                    return 0
+            return _L()
+
+    flow = ok_browser.OkViaVkLoginFlow("SMU")
+
+    flow.popup = FakePopup("Войти как Виктория")
+    check("экран «Войти как Имя» опознан", flow._asks_confirm())
+    check("шаг называется consent", flow.page_state().get("step") == "consent")
+
+    flow.popup = FakePopup("Продолжить как Виктория")
+    check("вариант «Продолжить как Имя» тоже опознан", flow._asks_confirm())
+
+    flow.popup = FakePopup("Введите номер телефона")
+    check("обычный экран за подтверждение не принимаем", not flow._asks_confirm())
+
+    flow.popup = None
+    check("закрытое окно не считается вопросом", not flow._asks_confirm())
+    check("закрытое окно видно как закрытое", flow._popup_gone())
+
+    # Вход слоем в странице. Живьём проверено на копии: окно не открывается,
+    # ВК ID подгружается кадром внутрь страницы – раньше Click считал это
+    # «клик не сработал» и упирался в тупик.
+    check("адрес входа ВК известен",
+          "connect.vk.com" in ok_browser.SEL["vkid_hosts"])
+    fake_page = FakePopup("Войти как Виктория")
+    flow.page = fake_page
+    flow.popup = fake_page
+    check("режим «слой в странице» распознан", flow.inline)
+    check("слою закрываться нечему", not flow._popup_gone())
+    check("вопрос читается и в этом режиме", flow._asks_confirm())
+
+    flow.popup = FakePopup("что-то другое")
+    check("чужое окно за слой не принимаем", not flow.inline)
+
+    # В ссылке входа ВК едет одноразовый токен – показывать его нельзя.
+    check("адрес обрезается до пути",
+          ok_browser.safe_url("https://connect.vk.com/auth?state=СЕКРЕТ&app_id=1")
+          == "https://connect.vk.com/auth")
+    check("токена в обрезанном адресе нет",
+          "СЕКРЕТ" not in ok_browser.safe_url(
+              "https://connect.vk.com/auth?state=СЕКРЕТ"))
+    check("пустой адрес не ломает", ok_browser.safe_url("") == "")
+
+
+def test_ok_profile_check() -> None:
+    """
+    Проверка ОК «Имя – это вы?»: подтверждаем, но только правильную кнопку.
+
+    Вторая кнопка на этом экране – «Это не мой профиль» – это жалоба на
+    угон, после которой аккаунт уходит на блокировку. Нажать её случайно
+    нельзя ни при каких обстоятельствах, поэтому проверяем не только «жмём
+    нужную», но и «не жмём опасную, даже если другой на экране нет».
+    """
+    print("\nОК: проверка профиля «это вы?»")
+    import ok_browser
+
+    опасные = set(ok_browser.SEL["profile_never"])
+    check("опасная кнопка не попала в список подтверждений",
+          not (set(ok_browser.SEL["profile_yes"]) & опасные))
+
+    class FakePage:
+        def __init__(self, text: str, buttons=()):
+            self._text = text
+            self._buttons = set(buttons)
+            self.clicked: list = []
+
+        def inner_text(self, _sel):
+            return self._text
+
+        def wait_for_timeout(self, _ms):
+            pass
+
+        def locator(self, selector: str):
+            label = selector.split('"')[1]
+            outer = self
+
+            class _L:
+                @property
+                def first(self):
+                    return self
+
+                def count(self):
+                    return 1 if label in outer._buttons else 0
+
+                def click(self, timeout=None):
+                    outer.clicked.append(label)
+
+            return _L()
+
+    ЭКРАН = ("Имп Инметпром - это вы? Мы заметили, что этот профиль мог "
+             "попасть к злоумышленникам. Необходимо подтвердить, что это ваш профиль")
+
+    page = FakePage(ЭКРАН, ("Да, подтвердить", "Это не мой профиль"))
+    check("экран опознан", ok_browser.asks_profile(page))
+    check("подтверждение нажато", ok_browser.confirm_profile(page))
+    check("нажали именно «Да, подтвердить»", page.clicked == ["Да, подтвердить"])
+
+    # Самое важное: подтверждения нет, опасная кнопка есть – не трогаем.
+    only_bad = FakePage(ЭКРАН, ("Это не мой профиль",))
+    check("без кнопки подтверждения ничего не нажимаем",
+          not ok_browser.confirm_profile(only_bad))
+    check("опасная кнопка осталась нетронутой", only_bad.clicked == [])
+
+    обычная = FakePage("Обычная лента", ("Да, подтвердить",))
+    check("на обычной странице экран не мерещится", not ok_browser.asks_profile(обычная))
+    check("на обычной странице ничего не нажимаем",
+          not ok_browser.confirm_profile(обычная) and обычная.clicked == [])
+
+
+def test_ok_verify_code() -> None:
+    """
+    Цепочка проверок ОК: «это вы?» → «получите код» → ввод кода.
+
+    Каждый экран сам по себе выглядит как «сессия не работает», хотя вход
+    целый. Проверено вживую на копии (2026-08-11): цепочка проходится
+    целиком. Здесь закрепляем распознавание шагов без браузера.
+    """
+    print("\nОК: код подтверждения")
+    import ok_browser
+
+    class FakeOkPage:
+        def __init__(self, text="", present=(), buttons=()):
+            self._text = text
+            self._present = set(present)
+            self._buttons = set(buttons)
+            self.clicked: list = []
+            self.filled = None
+
+        def inner_text(self, _sel):
+            return self._text
+
+        def wait_for_timeout(self, _ms):
+            pass
+
+        def locator(self, selector: str):
+            outer = self
+            by_text = 'has-text("' in selector or 'value="' in selector
+            label = selector.split('"')[1] if '"' in selector else selector
+            hit = label in outer._buttons if by_text else selector in outer._present
+
+            class _L:
+                @property
+                def first(self):
+                    return self
+
+                def count(self):
+                    return 1 if hit else 0
+
+                def is_visible(self):
+                    return hit
+
+                def click(self, timeout=None):
+                    outer.clicked.append(label)
+
+                def fill(self, value):
+                    outer.filled = value
+
+            return _L()
+
+    ЭКРАН = ("Получите проверочный код. С его помощью мы убедимся, что это ваш "
+             "профиль. Для этого отправим бесплатное СМС с кодом на указанный номер")
+
+    экран = FakeOkPage(ЭКРАН, buttons=("Получить код", "Подтвердить по эл. почте"))
+    check("шаг «получите код» распознан", ok_browser.page_block(экран) == "verify")
+    check("«Получить код» нажимается", ok_browser.request_verify_code(экран))
+    check("нажали именно «Получить код»", экран.clicked == ["Получить код"])
+
+    почта = FakeOkPage(ЭКРАН, buttons=("Подтвердить по эл. почте",))
+    check("запасной путь письмом есть", ok_browser.request_verify_by_mail(почта))
+
+    ввод = FakeOkPage("Введите код", present=('input[name="st.smsCode"]',),
+                      buttons=("Подтвердить",))
+    check("шаг ввода кода распознан", ok_browser.page_block(ввод) == "verify-code")
+    check("код отправляется", ok_browser.submit_verify_code(ввод, " 123456 "))
+    check("код вписан без лишних пробелов", ввод.filled == "123456")
+    check("подтверждение нажато", ввод.clicked == ["Подтвердить"])
+
+    # Гостевая форма входа: там тоже есть числовое поле телефона. Без
+    # оговорки про пароль она выглядела бы как «введите код».
+    гость = FakeOkPage("Вход", present=(ok_browser.SEL["password"],
+                                        'input[type="tel"]'))
+    check("обычная форма входа проверкой не считается",
+          ok_browser.page_block(гость) == "")
+
+    # «Это вы?» разбираем первым: он заслоняет всё остальное.
+    оба = FakeOkPage("Имп – это вы? Необходимо подтвердить, что это ваш профиль. "
+                     "Получите проверочный код",
+                     present=('input[name="st.smsCode"]',))
+    check("проверка профиля идёт первой", ok_browser.page_block(оба) == "profile")
+
+    чисто = FakeOkPage("Лента новостей")
+    check("на обычной странице помех нет", ok_browser.page_block(чисто) == "")
 
 
 def test_platform_clients() -> None:
@@ -251,14 +541,14 @@ def test_platform_clients() -> None:
           __import__("hashlib").md5(b"toksec").hexdigest())
     import json as _json
     att = _json.loads(ok_social.build_attachment("текст", ["p1", "p2"]))
-    check("ОК: вложение — текст, потом фото",
+    check("ОК: вложение – текст, потом фото",
           [m["type"] for m in att["media"]] == ["text", "photo"]
           and len(att["media"][1]["list"]) == 2)
 
-    check("ТГ: без фото — текстом", tg_social.plan_delivery(500, 0) == "text")
+    check("ТГ: без фото – текстом", tg_social.plan_delivery(500, 0) == "text")
     check("ТГ: 1 фото + короткий текст", tg_social.plan_delivery(1000, 1) == "photo+caption")
     check("ТГ: альбом + подпись", tg_social.plan_delivery(1000, 3) == "album+caption")
-    check("ТГ: длинный текст — отдельно", tg_social.plan_delivery(1500, 2) == "media+text")
+    check("ТГ: длинный текст – отдельно", tg_social.plan_delivery(1500, 2) == "media+text")
     check("ТГ: граница 1024 включительно", tg_social.plan_delivery(1024, 1) == "photo+caption")
     parts = tg_social.split_text("а" * 3000 + "\n" + "б" * 3000)
     check("ТГ: длинный текст режется по абзацу",
@@ -274,10 +564,10 @@ def test_platform_clients() -> None:
     post = {"brand": "SMU", "date": "2099-01-10", "when": "2099-01-10T11:00:00+05:00",
             "format": "Пост", "text": "т", "images": [],
             "targets": [{"network": "vk", "raw": "Вконтакте", "published_link": ""}]}
-    check("формирование: ждёт — в списке",
+    check("формирование: ждёт – в списке",
           len(crosspost_form.pending_for([post], {}, "vk", today=_d(2026, 8, 10))) == 1)
     st_done = {cps.post_key(post): {"targets": {"vk": {"state": cps.SCHEDULED}}}}
-    check("формирование: отложка стоит — не в списке",
+    check("формирование: отложка стоит – не в списке",
           crosspost_form.pending_for([post], st_done, "vk", today=_d(2026, 8, 10)) == [])
     check("формирование: время поста с поясом Екб",
           crosspost_form.when_local(post).utcoffset() == timedelta(hours=5))
@@ -340,7 +630,7 @@ def test_scheduler() -> None:
         for i in range(3):
             scheduler.tick(now=when + timedelta(minutes=1 + i), senders=fail)
         bad_state = next(t2 for t2 in scheduler.load_tasks("SMU") if t2["network"] == "max")
-        check("после 3 попыток — ошибка", bad_state["state"] == "failed"
+        check("после 3 попыток – ошибка", bad_state["state"] == "failed"
               and bad_state["attempts"] == 3)
 
         # пропуск: задание в прошлом за окном
@@ -349,10 +639,10 @@ def test_scheduler() -> None:
         scheduler.queue_task("SMU", late)
         scheduler.tick(now=when, senders=senders)
         late_state = next(t2 for t2 in scheduler.load_tasks("SMU") if t2["id"] == late["id"])
-        check("старое задание — «пропущено», не отправлено",
+        check("старое задание – «пропущено», не отправлено",
               late_state["state"] == "missed" and len(sent) == 1)
 
-        # ЯБ: «занято» — ждём без сжигания попыток; лок освободился — прогон запущен
+        # ЯБ: «занято» – ждём без сжигания попыток; лок освободился – прогон запущен
         yb_task = {"id": "yb|SMU|2026-08-14T11:00", "project": "SMU", "brand": "SMU",
                    "network": "yb", "when": when.replace(day=14).isoformat(),
                    "date": "2026-08-14"}
@@ -366,7 +656,7 @@ def test_scheduler() -> None:
         scheduler.tick(now=yb_now + timedelta(minutes=5), senders=senders,
                        yb_start=lambda tk: {"ok": True})
         t_yb = next(t2 for t2 in scheduler.load_tasks("SMU") if t2["network"] == "yb")
-        # через 6 минут после планового времени это уже «с опозданием» — и это правда
+        # через 6 минут после планового времени это уже «с опозданием» – и это правда
         check("ЯБ лок свободен → прогон запущен", t_yb["state"] in ("done", "done-late"))
 
         # отмена задания человеком
@@ -459,6 +749,15 @@ def test_calendar_view() -> None:
     long_text = cal.post_view(post("2025-08-19", text="о" * 200), {})
     check("превью подрезано", len(long_text["title"]) <= cal.TITLE_LIMIT + 1)
 
+
+    # Хвост пустых недель не рисуем: горизонт тянется до конца месяца, и в
+    # начале месяца это давало три ряда пустых клеток.
+    far = cal.build(posts, {}, monday, weeks=6)
+    check("пустые недели с конца обрезаны", len(far["weeks"]) == 2, str(len(far["weeks"])))
+    late = cal.build(posts + [post("2025-09-09")], {}, monday, weeks=6)
+    check("неделя с постом остаётся", len(late["weeks"]) == 4, str(len(late["weeks"])))
+    check("минимум две недели", len(cal.build([], {}, monday, weeks=6)["weeks"]) == 2)
+
     # Ближайший выход для строки состояния.
     nearest = cal.next_out([p], {cps.post_key(p): {"targets": {"vk": {"state": cps.SCHEDULED}}}},
                            "2025-08-18T10:00:00+05:00")
@@ -470,9 +769,603 @@ def test_calendar_view() -> None:
                        "2025-08-18T10:00:00+05:00") is None)
 
 
+def test_vk_time_pickers() -> None:
+    """
+    Календарь ВК: верим подписи самого ВК, а не чтению полей.
+
+    Две потерянные отложки подряд, обе – на пустом месте. «Минута не
+    принялась: ждали 14, в поле 00», а на снимке отказа стояло 15:14.
+    Потом «ждали 20, в поле 00» – и в логе перед этим «Час: значение
+    прочитать не вышло», при том что ВК внизу окна писал «Сегодня в 19:20».
+    Причина: поля времени у ВК – компонент, значение живёт внутри него,
+    в <select> или <input>, а снаружи текстом не читается.
+
+    Отсюда правило: спрашиваем у ВК, какое время он считает назначенным,
+    и это ответ. Поля – только запасной источник.
+    """
+    print("\nВК: чтение времени в календаре")
+    from datetime import datetime
+
+    import vk_social
+
+    class FakePicker:
+        """Поле-компонент: текстом читается то, что дали (часто – ничего)."""
+
+        def __init__(self, values: list[str]):
+            self.values = values
+            self.reads = 0
+
+        def inner_text(self) -> str:
+            v = self.values[min(self.reads, len(self.values) - 1)]
+            self.reads += 1
+            return v
+
+    class FakeLocator:
+        def __init__(self, hour: "FakePicker", minute: "FakePicker"):
+            self.first = hour
+            self.last = minute
+
+    class FakePage:
+        """Страница: подпись под календарём + два поля времени."""
+
+        def __init__(self, footer: str = "", hour: str = "", minute: str = ""):
+            self.footer = footer
+            self.hour, self.minute = hour, minute
+            self.waited = 0
+
+        def eval_on_selector(self, selector: str, script: str) -> str:
+            return self.footer
+
+        def locator(self, selector: str) -> "FakeLocator":
+            return FakeLocator(FakePicker([self.hour]), FakePicker([self.minute]))
+
+        def wait_for_timeout(self, ms: int) -> None:
+            self.waited += ms
+
+    when = datetime(2026, 8, 11, 19, 20)
+    notes: list[str] = []
+
+    # Подпись ВК читается – её и слушаем, поля при этом молчат (как в жизни).
+    page = FakePage(footer="Сохранить черновик\nСегодня в 19:20\nДобавить в очередь")
+    check("подпись ВК разобрана", vk_social._scheduled_time_shown(page) == "19:20")
+    check("время признано выставленным", vk_social._time_is_set(page, when, notes.append))
+
+    # Та самая беда: поля не читаются вовсе. Раньше это валило отложку.
+    blind = FakePage(footer="Сегодня в 19:20")
+    check("нечитаемые поля отложку не рушат",
+          vk_social._time_is_set(blind, when, notes.append))
+
+    # ВК показывает ЧУЖОЕ время – вот это настоящая неудача.
+    wrong = FakePage(footer="Сегодня в 19:00")
+    check("чужое время не выдаём за своё",
+          not vk_social._time_is_set(wrong, when, notes.append, tries=2))
+
+    # Подписи нет – работает запасной источник, сами поля.
+    fields = FakePage(footer="", hour="19", minute="20")
+    check("без подписи верим полям", vk_social._time_is_set(fields, when, notes.append))
+    bad_fields = FakePage(footer="", hour="19", minute="00")
+    check("поля с чужой минутой не проходят",
+          not vk_social._time_is_set(bad_fields, when, notes.append, tries=2))
+
+    # Час без ведущего нуля, минуты с ним – ровно так ВК их и пишет.
+    check("«9:05» разбирается",
+          vk_social._scheduled_time_shown(FakePage(footer="Завтра в 9:05")) == "9:05")
+    check("текста без времени не выдумываем",
+          vk_social._scheduled_time_shown(FakePage(footer="Добавить в очередь")) == "")
+
+    # Мгновенная проверка поля – по ней решается, нужен ли запасной путь.
+    page = FakePage()
+    check("«05» – это пять минут",
+          vk_social._picker_shows(page, lambda: FakePicker(["05"]), 5))
+    check("«00» – это не четырнадцать",
+          not vk_social._picker_shows(page, lambda: FakePicker(["00"]), 14))
+    check("пустое поле – не совпадение",
+          not vk_social._picker_shows(page, lambda: FakePicker([""]), 14))
+
+
+def test_probe_networks() -> None:
+    """
+    Пробная отложка есть у ОБЕИХ сетей и ведёт в правильные модули.
+
+    Раньше проба была только у ВК, и отдельной функцией. Заказчица попросила
+    такую же для ОК – копировать функцию не стали: правка в одной из копий
+    рано или поздно забудется. Вместо этого таблица сетей, и вот проверка,
+    что в ней всё сходится.
+    """
+    print("\nПробная отложка: обе сети")
+    import importlib
+
+    import streamlit_app as app
+
+    check("сети описаны обе", set(app.PROBE_NETWORKS) == {"vk", "ok"},
+          str(sorted(app.PROBE_NETWORKS)))
+    for net, meta in app.PROBE_NETWORKS.items():
+        mod = importlib.import_module(meta["module"])
+        check(f"{net}: модуль умеет отложку", hasattr(mod, "schedule_postponed_post"))
+        check(f"{net}: модуль знает про сессию", hasattr(mod, "has_saved_session"))
+        check(f"{net}: подписи заполнены",
+              all(meta.get(k) for k in ("ru", "url_key", "where", "shelf")))
+    check("ключи ссылок у сетей разные",
+          app.PROBE_NETWORKS["vk"]["url_key"] != app.PROBE_NETWORKS["ok"]["url_key"])
+
+
+def test_combined_session_file() -> None:
+    """
+    Один файл на обе сети: вошли раз – вставили раз.
+
+    Мысль заказчицы: «может, одним входом оба куки собирать, в один файлик,
+    и один раз вставлять». Куки и правда снимаются одним браузером за один
+    заход – ОК пускает через ВК. Здесь закреплено, что Click раскладывает
+    их по сетям сам и не путает чужое со своим.
+    """
+    print("\nСессии: один файл на ВК и ОК")
+    import json
+    import os
+    import tempfile
+
+    import social_session as ss
+
+    state = {"cookies": [
+        {"name": "remixsid", "value": "v", "domain": ".vk.ru"},
+        {"name": "AUTH_ID", "value": "o", "domain": ".ok.ru"},
+        {"name": "vkid_token", "value": "s", "domain": "id.vk.com"},
+        {"name": "_ga", "value": "junk", "domain": ".google-analytics.com"},
+    ], "origins": [{"origin": "https://ok.ru"}, {"origin": "https://vk.ru"}]}
+
+    vk, ok = ss.split_state(state)
+    vk_names = {c["name"] for c in vk["cookies"]}
+    ok_names = {c["name"] for c in ok["cookies"]}
+    check("кука ВК ушла в ВК", "remixsid" in vk_names and "remixsid" not in ok_names)
+    check("кука ОК ушла в ОК", "AUTH_ID" in ok_names and "AUTH_ID" not in vk_names)
+    check("общий вход VK ID – в обе сети",
+          "vkid_token" in vk_names and "vkid_token" in ok_names)
+    check("посторонние куки отброшены",
+          "_ga" not in vk_names and "_ga" not in ok_names)
+    check("origins разложены по сетям",
+          len(ok["origins"]) == 1 and len(vk["origins"]) == 1)
+
+    # Приём файла целиком – в отдельной папке данных, чтобы не задеть рабочие.
+    tmp = tempfile.mkdtemp()
+    was = os.environ.get("CLICK_DATA_DIR")
+    os.environ["CLICK_DATA_DIR"] = tmp
+    try:
+        import importlib
+
+        import ok_browser
+        import paths
+        import vk_social
+        importlib.reload(paths)
+        importlib.reload(vk_social)
+        importlib.reload(ok_browser)
+        importlib.reload(ss)
+
+        took, said = ss.import_combined("TEST-BOTH", json.dumps(state).encode())
+        check("файл принят", took, said)
+        check("обе сети названы принятыми",
+              said.count("принят") == 2, said)
+        check("сессия ВК на месте", vk_social.has_saved_session("TEST-BOTH"))
+        check("сессия ОК на месте", ok_browser.has_saved_session("TEST-BOTH"))
+
+        # Половинчатый файл – это не повод отказать целиком.
+        only_vk = {"cookies": [{"name": "remixsid", "value": "v", "domain": ".vk.ru"}]}
+        took2, said2 = ss.import_combined("TEST-HALF", json.dumps(only_vk).encode())
+        check("файл только с ВК тоже берём", took2, said2)
+        check("и честно говорим, что ОК в нём нет", "не найдены" in said2, said2)
+
+        bad, why = ss.import_combined("TEST-BAD", "это не json".encode("utf-8"))
+        check("не-json отклоняем", not bad and "не файл сессии" in why.lower(), why)
+    finally:
+        if was is None:
+            os.environ.pop("CLICK_DATA_DIR", None)
+        else:
+            os.environ["CLICK_DATA_DIR"] = was
+        import importlib
+        import paths
+        importlib.reload(paths)
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_ok_session_detection() -> None:
+    """
+    Вход в ОК узнаём от обратного – по тому, чего у гостя быть не может.
+
+    Список «правильных» имён подвёл дважды (11.08.2026). Заказчица вошла в
+    ОК руками, а файл сессии не сохранился: ни AUTH_ID, ни AUTH_SIG, ни
+    OK_LOGIN среди её кук не оказалось – ОК зовёт их иначе. И в обратную
+    сторону список врал: в нём был JSESSIONID, который ОК выдаёт ЛЮБОМУ,
+    даже не входя, – Click объявлял «сессия сохранена» о пустышке.
+
+    Гостевые куки сняты с живой ok.ru: bci, _statid, JSESSIONID,
+    cookieChoice, ss_wb.
+    """
+    print("\nОК: признак входа в файле сессии")
+    import json
+
+    import ok_browser as ok
+
+    def cookies(*names):
+        return [{"name": n, "value": "x"} for n in names]
+
+    guest = cookies("bci", "_statid", "JSESSIONID", "cookieChoice", "ss_wb")
+    check("гостевые куки за вход не считаем", not ok.looks_logged_in(guest))
+    check("один JSESSIONID – это гость",
+          not ok.looks_logged_in(cookies("JSESSIONID")))
+    check("известная кука входа – вошли",
+          ok.looks_logged_in(guest + cookies("AUTH_ID")))
+    check("НЕЗНАКОМАЯ кука сверх гостевых – тоже вошли",
+          ok.looks_logged_in(guest + cookies("OK_NEW_NAME_2027")))
+    check("пустой список – не вошли", not ok.looks_logged_in([]))
+    check("кука без значения не считается",
+          not ok.looks_logged_in([{"name": "AUTH_ID", "value": ""}]))
+
+    accepted, msg = ok.import_session("TEST-OK", json.dumps({"cookies": guest}).encode())
+    check("гостевой файл не принимаем", not accepted)
+    check("и показываем, что нашли", "JSESSIONID" in msg and "bci" in msg, msg)
+
+
+def test_ok_schedule_flow() -> None:
+    """
+    Отложка ОК: успех считаем по ответу площадки, а не по закрытию окна.
+
+    Разобрано по живому прогону заказчицы (2026-08-11): «Создать новую тему»
+    → текст → плюсик «Контентные блоки» → «Фотографии» → «Загрузить фото» →
+    галочка «Время публикации» → дата и время → «Сохранить», и снизу
+    появляется «Тема опубликуется 13.08.2026 в 08:59».
+    """
+    print("\nОК: отложенная публикация")
+    from datetime import datetime
+
+    import ok_browser as ok
+
+    when = datetime(2026, 8, 13, 8, 59)
+
+    class FakePage:
+        def __init__(self, body: str):
+            self.body = body
+
+        def evaluate(self, script: str) -> str:
+            return self.body
+
+    said = ok._toast_scheduled(
+        FakePage("Лента\nТема опубликуется 13.08.2026 в 08:59 Посмотреть\nЕщё"), when)
+    check("ответ ОК распознан", said.startswith("Тема опубликуется"), said)
+    check("в ответе видны дата и время", "13.08.2026" in said and "08:59" in said, said)
+    check("нет ответа – не выдумываем",
+          ok._toast_scheduled(FakePage("Лента группы\nУчастники 2"), when) == "")
+    check("страница не прочиталась – тоже пусто",
+          ok._toast_scheduled(FakePage(""), when) == "")
+
+    # Подписи, на которые опираемся, должны остаться на месте: если кто-то
+    # их «почистит», отложка ОК тихо перестанет работать.
+    check("ищем «Создать новую тему»",
+          any("Создать новую тему" in s for s in ok.SEL["create_post"]))
+    check("ищем галочку «Время публикации»",
+          any("Время публикации" in s for s in ok.SEL["schedule_toggle"]))
+    check("сохраняем кнопкой «Сохранить»",
+          any("Сохранить" in s for s in ok.SEL["submit_scheduled"]))
+    check("«Поделиться» держим отдельно – она публикует сейчас",
+          any("Поделиться" in s for s in ok.SEL["submit_now"])
+          and not any("Поделиться" in s for s in ok.SEL["submit_scheduled"]))
+    check("путь к фото – через контентные блоки",
+          "Контентные блоки" in ok.SEL["menu_content_blocks"]
+          and any("Фотографии" in s for s in ok.SEL["menu_photos"]))
+
+    # Открываться надо на вкладке «Темы»: по обычному адресу группы ОК
+    # показывает ЛЕНТУ, а поля «Создать новую тему» там нет вовсе. Первый
+    # живой прогон (12.08.2026) на этом и встал: Click честно искал поле три
+    # раза с прокруткой на странице, где его не могло быть.
+    check("к адресу группы добавляется /topics",
+          ok.topics_url("https://ok.ru/group/70000005388115/")
+          == "https://ok.ru/group/70000005388115/topics")
+    check("хвостовой слэш не мешает",
+          ok.topics_url("https://ok.ru/group/70000005388115")
+          == "https://ok.ru/group/70000005388115/topics")
+    check("дважды /topics не приписываем",
+          ok.topics_url("https://ok.ru/group/1/topics") == "https://ok.ru/group/1/topics")
+    check("группа по имени тоже работает",
+          ok.topics_url("https://ok.ru/inmetprom") == "https://ok.ru/inmetprom/topics")
+    check("пустой адрес остаётся пустым", ok.topics_url("") == "")
+
+    # «Отложенные» группы – по ним проверяем результат, если всплывашка
+    # «Тема опубликуется …» уже погасла. Запись надёжнее уведомления:
+    # уведомление живёт секунды, запись – до самой публикации.
+    check("адрес отложенных собирается",
+          ok.delayed_url("https://ok.ru/group/1/") == "https://ok.ru/group/1/delayed")
+    check("из адреса тем тоже",
+          ok.delayed_url("https://ok.ru/group/1/topics") == "https://ok.ru/group/1/delayed")
+    check("дважды /delayed не приписываем",
+          ok.delayed_url("https://ok.ru/group/1/delayed") == "https://ok.ru/group/1/delayed")
+    check("пустой адрес остаётся пустым", ok.delayed_url("") == "")
+
+    # Ссылку на форму ОК зовёт a.pf-head_itx_a – снято инспектором со
+    # страницы заказчицы. Класс держим запасным: подписи надёжнее, но и
+    # терять подтверждённый селектор незачем.
+    check("подтверждённый класс формы на месте",
+          any("pf-head_itx_a" in s for s in ok.SEL["create_post"]))
+
+    # Разметка формы снята заказчицей с живой страницы 12.08.2026. Имена
+    # полей устойчивее подписей – на них и опираемся.
+    check("галочка ищется по имени input", "timer" in ok.SEL["schedule_checkbox"])
+    check("дата – по имени st.layer.date",
+          any("st.layer.date" in s for s in ok.SEL["date_input"]))
+    check("часы – по имени st.layer.hours",
+          any("st.layer.hours" in s for s in ok.SEL["hours_select"]))
+    check("минуты – по имени st.layer.mins",
+          any("st.layer.mins" in s for s in ok.SEL["mins_select"]))
+
+    # ОК принимает минуты только кратные пяти: в его списке 00, 05 … 55.
+    # Округляем ВВЕРХ – пост не должен выйти раньше, чем просили.
+    from datetime import datetime as _dt
+    check("15:08 → 15:10", ok._round_to_five(_dt(2026, 8, 12, 15, 8)) == _dt(2026, 8, 12, 15, 10))
+    check("15:00 не трогаем", ok._round_to_five(_dt(2026, 8, 12, 15, 0)) == _dt(2026, 8, 12, 15, 0))
+    check("09:30 не трогаем", ok._round_to_five(_dt(2026, 8, 12, 9, 30)) == _dt(2026, 8, 12, 9, 30))
+    check("15:57 → 16:00", ok._round_to_five(_dt(2026, 8, 12, 15, 57)) == _dt(2026, 8, 12, 16, 0))
+    check("23:58 → следующий день 00:00",
+          ok._round_to_five(_dt(2026, 8, 12, 23, 58)) == _dt(2026, 8, 13, 0, 0))
+    check("округляем только вверх, никогда вниз",
+          all(ok._round_to_five(_dt(2026, 8, 12, 10, m)) >= _dt(2026, 8, 12, 10, m)
+              for m in range(60)))
+
+
+def test_plan_horizon_and_past() -> None:
+    """
+    Горизонт плана – до конца месяца, и отложек в прошлое не бывает.
+
+    Две жалобы одного дня (11.08.2026). Первая: заказчица перенесла пост
+    с 11-го на 30-е и перестала его видеть – горизонт был ровно 14 дней,
+    а планируют помесячно. Вторая: Click пытался поставить отложку на
+    сегодня 9:00 вечером того же дня, ВК подставлял своё время, и прогон
+    падал с «ВК показывает 20:00».
+    """
+    print("\nПлан: горизонт и прошедшее время")
+    from datetime import timedelta
+
+    import apptime
+    import crosspost_form as cf
+    import streamlit_app as app
+
+    # Горизонт: конец месяца, но не ближе двух недель.
+    check("середина месяца – видно до конца месяца",
+          app._crosspost_horizon(date(2026, 8, 11)) == date(2026, 8, 31))
+    check("30-е число теперь в плане",
+          app._crosspost_horizon(date(2026, 8, 11)) >= date(2026, 8, 30))
+    check("конец месяца – всё равно две недели вперёд",
+          app._crosspost_horizon(date(2026, 8, 30)) == date(2026, 9, 13))
+    check("февраль считается по своей длине",
+          app._crosspost_horizon(date(2027, 2, 1)) == date(2027, 2, 28))
+
+    # Прошедшее время: формировать нечего, соцсеть такое не примет.
+    now = apptime.now()
+
+    def post_at(dt):
+        return {"date": dt.strftime("%Y-%m-%d"), "time": dt.strftime("%H:%M"),
+                "when": dt.isoformat(), "text": "текст", "images": [], "targets": []}
+
+    def skipped(dt) -> bool:
+        return (now - cf.when_local(post_at(dt))) > timedelta(minutes=-cf.MIN_LEAD_MINUTES)
+
+    check("вчерашний пост не формируем", skipped(now - timedelta(days=1)))
+    check("сегодняшний, но уже прошедший – не формируем",
+          skipped(now - timedelta(hours=2)))
+    check("до выхода пара минут – тоже поздно", skipped(now + timedelta(minutes=3)))
+    check("через полчаса – формируем", not skipped(now + timedelta(minutes=30)))
+    check("завтрашний – формируем", not skipped(now + timedelta(days=1)))
+
+
+def test_vk_confirm_schedule() -> None:
+    """
+    «Добавить в очередь» иногда требует двух нажатий – и ровно одного.
+
+    Живой случай (11.08.2026): время встало верно, Click нажимал кнопку –
+    заказчица видела нажатие своими глазами, – а отложенных записей в
+    сообществе не появлялось. Причина: календарь открывается ПОВЕРХ экрана
+    настроек, а кнопка живёт под ним, и первый клик уходит на закрытие
+    календаря. Второй нажимает саму кнопку.
+
+    Обратная опасность здесь же: если первое нажатие сработало, второго быть
+    не должно – иначе вместо одной записи получится две.
+    """
+    print("\nВК: подтверждение отложки")
+    import vk_social
+
+    class FakeForm:
+        """Форма ВК, которая закрывается только после N-го нажатия."""
+
+        def __init__(self, closes_after: int, disabled: bool = False):
+            self.closes_after = closes_after
+            self.disabled = disabled
+            self.clicks = 0
+
+        def wait_for_selector(self, selector, state=None, timeout=None):
+            if state == "hidden" and self.clicks < self.closes_after:
+                raise RuntimeError("ещё видно")
+            return True
+
+        def eval_on_selector(self, selector, script):
+            return self.disabled
+
+        def click(self, selector, timeout=None):
+            self.clicks += 1
+
+        def wait_for_timeout(self, ms: int) -> None:
+            pass
+
+        def evaluate(self, script):
+            return []
+
+    notes: list[str] = []
+
+    # Сработало с первого раза – второго нажатия быть не должно.
+    once = FakeForm(closes_after=1)
+    vk_social._confirm_schedule(once, notes.append)
+    check("хватило одного нажатия – жмём один раз", once.clicks == 1)
+
+    # Живой случай: первый клик убрал календарь, второй нажал кнопку.
+    twice = FakeForm(closes_after=2)
+    notes.clear()
+    vk_social._confirm_schedule(twice, notes.append)
+    check("перекрытую кнопку дожимаем со второго раза", twice.clicks == 2)
+    check("и говорим об этом в логе", any("ещё раз" in n for n in notes))
+
+    # Не закрывается вовсе – честная ошибка, и не больше трёх нажатий.
+    never = FakeForm(closes_after=99)
+    try:
+        vk_social._confirm_schedule(never, notes.append)
+        check("непринятую отложку не выдаём за принятую", False, "ошибки не было")
+    except RuntimeError as e:
+        check("непринятую отложку не выдаём за принятую", "не принял отложку" in str(e))
+    check("бесконечно не жмём", never.clicks == 3)
+
+    # Кнопка неактивна – не жмём вовсе, дата не принята.
+    dead = FakeForm(closes_after=1, disabled=True)
+    try:
+        vk_social._confirm_schedule(dead, notes.append)
+        check("неактивную кнопку не жмём", False, "ошибки не было")
+    except RuntimeError as e:
+        check("неактивную кнопку не жмём", "неактивна" in str(e) and dead.clicks == 0)
+
+
+def test_vk_captcha_on_posting() -> None:
+    """
+    Проверка «вы не робот» на пути отложки, а не только входа.
+
+    Живой случай (11.08.2026, облако): ВК накрыл страницу сообщества
+    проверкой, и Click написал «кнопка Создать не нажалась, проверьте, что
+    вы вошли под администратором» – совет мимо: права были в порядке,
+    мешала проверка. Здесь закреплено, что проверка распознаётся и что
+    человеку говорят, ЧТО делать, а не куда посмотреть.
+    """
+    print("\nВК: проверка «вы не робот» при отложке")
+    import vk_social
+
+    advice = vk_social._CAPTCHA_ADVICE
+    check("сказано, что это проверка «не робот»", "не робот" in advice)
+    check("сказано, что программой её не пройти", "программой" in advice)
+    check("назван файл ручного входа", "VHOD-VK-i-OK.py" in advice)
+    check("сказано, куда деть готовую сессию",
+          "vk-session.json" in advice and "Настройка" in advice)
+    check("про права администратора здесь не поминаем",
+          "администратор" not in advice.lower())
+
+    # Проверки нет – путь свободен, ничего не нажимаем.
+    notes: list[str] = []
+
+    class NoCaptchaPage:
+        def wait_for_timeout(self, ms: int) -> None:
+            pass
+
+    was = vk_social.captcha_frame
+    try:
+        vk_social.captcha_frame = lambda page: None
+        check("без проверки идём дальше молча",
+              vk_social._pass_captcha(NoCaptchaPage(), notes.append) is True
+              and not notes)
+
+        # Проверка висит и не проходится – честное «нет», а не бесконечный цикл.
+        vk_social.captcha_frame = lambda page: object()
+        was_press = vk_social.press_captcha_in
+        try:
+            vk_social.press_captcha_in = lambda frame: False
+            notes.clear()
+            check("непроходимую проверку не выдаём за пройденную",
+                  vk_social._pass_captcha(NoCaptchaPage(), notes.append) is False)
+            check("и говорим об этом в логе",
+                  any("не робот" in n for n in notes))
+        finally:
+            vk_social.press_captcha_in = was_press
+    finally:
+        vk_social.captcha_frame = was
+
+
+def test_playwright_worker() -> None:
+    """
+    Отравленный поток: одна неудача не должна ломать всё до перезапуска.
+
+    Живой случай (11.08.2026): после нескольких неудачных отложек КАЖДАЯ
+    следующая падала с «Playwright Sync API inside the asyncio loop», хотя
+    чинить было нечего. Sync-версия Playwright работает на гринлетах, а те
+    делят один поток ОС: оборвалась сессия неудачно – цикл остаётся
+    «запущенным» для всего потока навсегда.
+    """
+    print("\nPlaywright: отравленный поток")
+    import playwright_worker as pw
+
+    check("узнаём отравление по тексту ошибки",
+          pw.is_poisoned_thread(RuntimeError(
+              "It looks like you are using Playwright Sync API inside the "
+              "asyncio loop. Please use the Async API instead.")))
+    check("обычная ошибка отравлением не считается",
+          not pw.is_poisoned_thread(RuntimeError("Timeout 10000ms exceeded")))
+
+    worker = pw.PlaywrightWorker()
+    check("свежий воркер живой", worker.alive())
+    try:
+        worker.call(lambda: (_ for _ in ()).throw(RuntimeError("обычная беда")))
+    except RuntimeError:
+        pass
+    check("обычная ошибка воркер не убивает", worker.alive())
+    try:
+        worker.call(lambda: (_ for _ in ()).throw(RuntimeError(
+            "Playwright Sync API inside the asyncio loop")))
+    except RuntimeError:
+        pass
+    check("после отравления воркер считается мёртвым", not worker.alive())
+    worker.stop()
+
+    # Одноразовый запуск: значение возвращается, ошибка долетает как есть,
+    # и каждый раз это НОВЫЙ поток – иначе отравить его было бы чем.
+    check("run_once возвращает значение", pw.run_once(lambda a, b: a + b, 2, 3) == 5)
+    check("run_once понимает именованные", pw.run_once(lambda a, b=0: a + b, 2, b=5) == 7)
+    try:
+        pw.run_once(lambda: (_ for _ in ()).throw(ValueError("наружу")))
+        check("run_once отдаёт ошибку наружу", False, "ошибки не было")
+    except ValueError as e:
+        check("run_once отдаёт ошибку наружу", str(e) == "наружу")
+
+    import threading
+
+    def who() -> tuple[str, int]:
+        return threading.current_thread().name, threading.get_ident()
+
+    # Номер потока сравнивать бесполезно: ОС переиспользует номера
+    # завершившихся потоков, и два подряд запуска запросто получат один и тот
+    # же. Важно другое – что это КАЖДЫЙ РАЗ отдельный поток под нашим именем,
+    # а не поток вызывающего: у нового потока свои локальные данные, и
+    # отравить его прошлой сессии нечем.
+    name, ident = pw.run_once(who)
+    check("run_once уходит в отдельный поток", ident != threading.get_ident())
+    check("поток заведён нами", name.startswith("click-pw-once-"))
+    check("имя потока называет задачу", pw.run_once(who)[0].endswith("who"))
+
+    # И главное: локальные данные потока не переезжают между запусками.
+    local = threading.local()
+
+    def stamp() -> bool:
+        was = getattr(local, "been_here", False)
+        local.been_here = True
+        return was
+
+    check("следы прошлого запуска не переносятся",
+          pw.run_once(stamp) is False and pw.run_once(stamp) is False)
+
+
 def main() -> int:
     print("═" * 60)
+    test_probe_networks()
+    test_combined_session_file()
+    test_ok_session_detection()
+    test_ok_schedule_flow()
+    test_plan_horizon_and_past()
+    test_vk_confirm_schedule()
+    test_vk_captcha_on_posting()
+    test_playwright_worker()
     test_scheduler()
+    test_vk_domain()
+    test_vk_time_pickers()
+    test_ok_via_vk()
+    test_ok_profile_check()
+    test_ok_verify_code()
     test_platform_clients()
     test_post_text()
     test_bold_from_real_file()

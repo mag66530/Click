@@ -331,8 +331,14 @@ _ENGINE: str | None = None
 CHROMIUM_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
 
 
-def _launch(pw, engine: str, headless: bool = True):
-    args = CHROMIUM_ARGS if engine == "chromium" else []
+def _launch(pw, engine: str, headless: bool = True, extra_args: list[str] | None = None):
+    """
+    Запустить браузер. `extra_args` – дополнительные ключи для конкретного
+    вызова; по умолчанию пусто, то есть Яндекс и 2ГИС стартуют ровно как
+    раньше. Нужен соцсетям: ВК показывает проверку «вы не робот» скрытому
+    браузеру заметно чаще, и один ключ (см. vk_social) её приглушает.
+    """
+    args = (CHROMIUM_ARGS if engine == "chromium" else []) + list(extra_args or [])
     return getattr(pw, engine).launch(headless=headless, args=args)
 
 

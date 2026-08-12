@@ -363,6 +363,30 @@ def test_parallel_runs(tmp: Path) -> None:
     eq("идут оба прогона", sorted(runner.running_kinds(pid)), ["actualize", "collect"])
     check("третий прогон упирается в потолок", bool(runner.busy_reason(pid, "publish")))
 
+    # Отказ обязан называть виновника. «Занято 2034 МБ» без имени – тупик:
+    # заказчица видела цифру, а какой проект что делает и как давно, понять
+    # было неоткуда, и тестировать она не могла – только ждать вслепую.
+    from datetime import datetime, timedelta, timezone
+    began = (datetime.now(timezone.utc) - timedelta(minutes=73)).isoformat()
+    runner._write_state(pid, {"status": "running", "ownerPid": os.getpid(),
+                              "action": "actualize", "startedAt": began,
+                              "total": 58, "current": 34, "currentCity": "Казань"})
+    details = runner.busy_details_ru()
+    check("в отказе назван проект", pid in details, details)
+    check("и что он делает", "актуализация" in details, details)
+    check("и сколько уже идёт", "1 ч 13 мин" in details, details)
+    check("и на каком городе", "34 из 58" in details and "Казань" in details, details)
+    eq("время меньше минуты не пугает нулями",
+       runner._how_long(datetime.now(timezone.utc).isoformat()), "меньше минуты")
+    eq("битую дату не выдумываем", runner._how_long("не дата"), "")
+    eq("пустую дату тоже", runner._how_long(""), "")
+
+    # «Освободить память» не должна трогать браузер ИДУЩЕГО прогона: он
+    # выглядит точно так же, а закрыть его – значит оборвать работу.
+    done, why = runner.free_memory()
+    check("во время прогона память не чистим", not done, why)
+    check("и сказано, кто работает", pid in why, why)
+
     # Стоп-флаги раздельные: остановили сверку – актуализация идёт дальше.
     runner.request_stop(pid, "collect")
     check("сверке сказали остановиться", runner.p_stop(pid, "collect").exists())
@@ -3031,8 +3055,10 @@ def test_reviews() -> None:
           rv.clean_draft(простой, "MPI").startswith(pdata.REVIEW_MPI_OPENER_PLAIN + "\n\n"))
     check("и наоборот", rv.clean_draft(сырой, "MPI").startswith(pdata.REVIEW_MPI_OPENER + "\n\n"))
     # У остальных брендов «рекомендацию» не трогаем – там своя форма ответа.
+    # Берём ИМП, а не СМУ: у СМУ теперь своя формовка ответа (fix_smu_shape),
+    # и она меняет черновик по своим правилам – на ней это правило не проверить.
     чужой = "Благодарим за отзыв и рекомендацию! Всё отгружено вовремя."
-    eq("правило только для МПИ", rv.clean_draft(чужой, "SMU"), чужой)
+    eq("правило только для МПИ", rv.clean_draft(чужой, "IMP"), чужой)
 
     # ─── деловой язык вместо слов клиента ───
     # Заказчик: «"классные цены" – это больше разговорный стиль, нам надо более

@@ -1,15 +1,15 @@
 """
-tg_social.py — Телеграм: публикация в каналы через Bot API.
+tg_social.py – Телеграм: публикация в каналы через Bot API.
 
-У ботов отложки нет — этот модуль шлёт «сейчас», а «в 11:00» обеспечивает
-планировщик Click (позже — опция родной отложки через сессию, Q-9).
+У ботов отложки нет – этот модуль шлёт «сейчас», а «в 11:00» обеспечивает
+планировщик Click (позже – опция родной отложки через сессию, Q-9).
 Зато бот честно поддерживает форматирование: жирное и ссылки уезжают
 как HTML (post_text.render(..., "html")).
 
-Правило укладки — лимиты Телеграма, зашитые в plan_delivery():
+Правило укладки – лимиты Телеграма, зашитые в plan_delivery():
     подпись к фото ≤ 1024 видимых знаков, текст ≤ 4096, альбом 2–10 фото.
-Ключи: tg_bot_token — в «Настройках»; канал бренда — в projects-config.
-Один бот на все каналы, бот — админ каждого канала с правом публикации.
+Ключи: tg_bot_token – в «Настройках»; канал бренда – в projects-config.
+Один бот на все каналы, бот – админ каждого канала с правом публикации.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from typing import Callable
 import post_text
 import secrets_local
 
-# Метка сборки — одна на всё приложение (см. build.py).
+# Метка сборки – одна на всё приложение (см. build.py).
 from build import BUILD  # noqa: F401
 
 API = "https://api.telegram.org"
@@ -41,10 +41,10 @@ def is_configured() -> bool:
 def plan_delivery(visible_len: int, n_images: int) -> str:
     """
     Как везти пост:
-      'text'          — фото нет: одним сообщением (≤4096; длиннее — частями)
-      'photo+caption' — 1 фото, текст влезает подписью
-      'album+caption' — 2..10 фото, текст влезает подписью первого
-      'media+text'    — фото есть, текст длиннее подписи: альбом, следом текст
+      'text'          – фото нет: одним сообщением (≤4096; длиннее – частями)
+      'photo+caption' – 1 фото, текст влезает подписью
+      'album+caption' – 2..10 фото, текст влезает подписью первого
+      'media+text'    – фото есть, текст длиннее подписи: альбом, следом текст
     """
     if n_images <= 0:
         return "text"
@@ -56,8 +56,8 @@ def plan_delivery(visible_len: int, n_images: int) -> str:
 def split_text(html: str, limit: int = TEXT_LIMIT) -> list[str]:
     """
     Длинный текст → части по границам абзацев (не резать слово и не рвать
-    HTML-тег посередине — режем только по \n). Посты реестра сюда почти
-    не попадают, но «почти» — не гарантия.
+    HTML-тег посередине – режем только по \n). Посты реестра сюда почти
+    не попадают, но «почти» – не гарантия.
     """
     if len(html) <= limit:
         return [html]
@@ -99,7 +99,7 @@ def publish(chat_id: str, markup: str, image_paths: list[str],
             log: Callable[[str], None] | None = None) -> dict:
     """
     Опубликовать пост в канал СЕЙЧАС. Возвращает {"ok": True, "link": …}
-    либо {"ok": False, "error": "…"}. markup — внутренняя разметка Click,
+    либо {"ok": False, "error": "…"}. markup – внутренняя разметка Click,
     HTML собирается здесь.
     """
     log = log or (lambda m: None)
@@ -112,7 +112,7 @@ def publish(chat_id: str, markup: str, image_paths: list[str],
     visible = len(post_text.strip_markup(markup))
     images = list(image_paths or [])[:ALBUM_MAX]
     mode = plan_delivery(visible, len(images))
-    log(f"Телеграм: способ доставки — {mode}")
+    log(f"Телеграм: способ доставки – {mode}")
 
     try:
         first: dict = {}
@@ -153,7 +153,7 @@ def publish(chat_id: str, markup: str, image_paths: list[str],
 def send_alert(text: str) -> bool:
     """
     Тревога в личный чат заказчика (tg_alert_chat_id): сессия умерла, пост
-    пропущен. Тихо возвращает False, если не настроено, — тревоги не должны
+    пропущен. Тихо возвращает False, если не настроено, – тревоги не должны
     ронять то, о чём тревожатся.
     """
     chat = secrets_local.get("tg_alert_chat_id")
@@ -167,7 +167,7 @@ def send_alert(text: str) -> bool:
 
 
 def check_access(chat_id: str = "") -> str:
-    """Пусто — всё хорошо, иначе причина словами."""
+    """Пусто – всё хорошо, иначе причина словами."""
     if not is_configured():
         return "не заполнен tg_bot_token"
     try:

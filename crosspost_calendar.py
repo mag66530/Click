@@ -169,9 +169,13 @@ def _cell(d: date, today: date, posts_by_day: dict[date, list[dict]]) -> dict:
 
 
 def build(posts: list[dict], state: dict, today: date,
-          weeks: int = DEFAULT_WEEKS) -> dict:
+          weeks: int = DEFAULT_WEEKS, min_weeks: int = DEFAULT_WEEKS) -> dict:
     """
     Календарь на `weeks` недель начиная с понедельника текущей недели.
+
+    Хвостовые недели без постов отбрасываются (но не меньше `min_weeks`):
+    горизонт плана тянется до конца месяца, и в начале месяца это давало
+    три-четыре ряда пустых клеток – экран занят, сказать ему нечего.
 
     Возвращает {weeks: [...], has_weekend: bool, first: date, last: date,
     title: «17 – 30 августа»}. Неделя — {days: [5 будних ячеек],
@@ -202,8 +206,13 @@ def build(posts: list[dict], state: dict, today: date,
             "weekend_empty": f'{weekend[0]["num"]} – {weekend[1]["num"]}',
         })
 
+    while len(out_weeks) > max(1, min_weeks) and not any(
+            c["posts"] for c in out_weeks[-1]["days"] + out_weeks[-1]["weekend"]):
+        out_weeks.pop()
+    has_weekend = any(w["weekend"] for w in out_weeks)
+
     first = monday
-    last = monday + timedelta(days=7 * max(1, weeks) - 1)
+    last = monday + timedelta(days=7 * len(out_weeks) - 1)
     return {
         "weeks": out_weeks,
         "has_weekend": has_weekend,

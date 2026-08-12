@@ -17,6 +17,13 @@ users-data/
 
 *.log
 
+# Файлы сессий, которые делает ВХОД-ВК.py. Это доступ к аккаунту –
+# в репозиторий им нельзя ни при каких обстоятельствах.
+vk-session.json
+ok-session.json
+*-session.json
+VK-i-OK-sessii.json
+
 # Секреты Streamlit
 .streamlit/secrets.toml
 .claude/settings.local.json

@@ -35,6 +35,7 @@ class _Job:
 class PlaywrightWorker:
     def __init__(self):
         self._jobs: "queue.Queue[_Job | None]" = queue.Queue()
+        self._poisoned = False
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -54,10 +55,12 @@ class PlaywrightWorker:
                 result = job.func(*job.args, **job.kwargs)
                 job.result_q.put((True, result))
             except Exception as e:  # noqa: BLE001
+                if is_poisoned_thread(e):
+                    self._poisoned = True
                 job.result_q.put((False, e))
 
     def alive(self) -> bool:
-        return self._thread.is_alive()
+        return self._thread.is_alive() and not self._poisoned
 
     def call(self, func: Callable, *args, **kwargs) -> Any:
         job = _Job(func, args, kwargs)
@@ -69,3 +72,57 @@ class PlaywrightWorker:
 
     def stop(self):
         self._jobs.put(None)
+
+
+# ─── Отравленный поток ──────────────────────────────────────────────
+#
+# Playwright перед стартом смотрит, не крутится ли в ЭТОМ потоке цикл
+# asyncio, и отказывается работать, если крутится. Беда в том, что цикл
+# может остаться «запущенным» от прошлого раза: sync-версия Playwright
+# работает на гринлетах, а гринлеты делят один поток операционной системы.
+# Оборвалась прошлая сессия неудачно (упало посреди работы, не закрылся
+# браузер) – диспетчер остаётся припаркованным внутри run_until_complete,
+# и для потока цикл числится запущенным НАВСЕГДА.
+#
+# Снаружи это выглядит так: один раз что-то не получилось, и дальше ВСЕ
+# попытки падают с «Sync API inside the asyncio loop» до перезапуска
+# приложения – хотя чинить было нечего.
+#
+# Отсюда два правила. Отравленный поток помечаем мёртвым, чтобы вместо
+# него завели новый. А одноразовые задачи (открыл браузер, сделал, закрыл)
+# вообще пускаем в СВЕЖЕМ потоке: у нового потока свои локальные данные,
+# и отравить его прошлому нечем.
+POISON_MARK = "sync api inside the asyncio loop"
+
+
+def is_poisoned_thread(err: BaseException) -> bool:
+    return POISON_MARK in str(err).lower()
+
+
+def run_once(func: Callable, *args, **kwargs) -> Any:
+    """
+    Выполнить одноразовую задачу Playwright в отдельном свежем потоке.
+
+    Для задач, которые сами открывают и закрывают браузер (отложка ВК,
+    проверка сессии). Постоянный поток-воркер им не нужен – ему нечего
+    между вызовами хранить, зато он копит риск отравиться.
+    """
+    box: dict[str, Any] = {}
+
+    def target() -> None:
+        try:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            box["value"] = func(*args, **kwargs)
+        except BaseException as e:  # noqa: BLE001 – отдаём наружу как есть
+            box["error"] = e
+
+    t = threading.Thread(target=target, daemon=True,
+                         name=f"click-pw-once-{getattr(func, '__name__', 'job')}")
+    t.start()
+    t.join()
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")

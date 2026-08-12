@@ -46,7 +46,17 @@ import streamlit.components.v1 as components
 # проскочить между двумя выселениями.
 _OWN_MODULES = ("build", "apptime", "paths", "projects_data", "repo_store", "ui_theme",
                 "llm", "reviews", "kp_sheet", "kp_audit", "secrets_local",
-                "yb_playwright", "gis_playwright", "playwright_worker", "runner")
+                "yb_playwright", "gis_playwright", "playwright_worker", "runner",
+                # Кросспостинг. Раньше их тут не было – и правки в них
+                # доезжали до облака как придётся: модуль остаётся в памяти
+                # от прежней сборки, а по метке его никто не проверяет.
+                # Заказчица дважды получила «та же ошибка» на уже
+                # исправленном коде, и оба раза мы гадали, дело в правке или
+                # в том, что она ещё не доехала. Список меток должен знать
+                # обо ВСЕХ модулях, которые мы правим.
+                "content_plan", "crosspost_state", "crosspost_form", "post_text",
+                "scheduler", "social_session", "vk_social", "ok_browser",
+                "ok_social", "tg_social", "max_social")
 
 
 def _settle_imports() -> None:

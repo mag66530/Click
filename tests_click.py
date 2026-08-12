@@ -363,6 +363,24 @@ def test_parallel_runs(tmp: Path) -> None:
     eq("идут оба прогона", sorted(runner.running_kinds(pid)), ["actualize", "collect"])
     check("третий прогон упирается в потолок", bool(runner.busy_reason(pid, "publish")))
 
+    # Отказ обязан называть виновника. «Занято 2034 МБ» без имени – тупик:
+    # заказчица видела цифру, а какой проект что делает и как давно, понять
+    # было неоткуда, и тестировать она не могла – только ждать вслепую.
+    from datetime import datetime, timedelta, timezone
+    began = (datetime.now(timezone.utc) - timedelta(minutes=73)).isoformat()
+    runner._write_state(pid, {"status": "running", "ownerPid": os.getpid(),
+                              "action": "actualize", "startedAt": began,
+                              "total": 58, "current": 34, "currentCity": "Казань"})
+    details = runner.busy_details_ru()
+    check("в отказе назван проект", pid in details, details)
+    check("и что он делает", "актуализация" in details, details)
+    check("и сколько уже идёт", "1 ч 13 мин" in details, details)
+    check("и на каком городе", "34 из 58" in details and "Казань" in details, details)
+    eq("время меньше минуты не пугает нулями",
+       runner._how_long(datetime.now(timezone.utc).isoformat()), "меньше минуты")
+    eq("битую дату не выдумываем", runner._how_long("не дата"), "")
+    eq("пустую дату тоже", runner._how_long(""), "")
+
     # Стоп-флаги раздельные: остановили сверку – актуализация идёт дальше.
     runner.request_stop(pid, "collect")
     check("сверке сказали остановиться", runner.p_stop(pid, "collect").exists())

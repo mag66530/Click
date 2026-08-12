@@ -455,6 +455,75 @@ def live_runs_everywhere() -> list[tuple[str, str]]:
     return out
 
 
+def _raw_state(project_id: str, kind: str) -> dict:
+    """
+    Состояние КАК ЗАПИСАНО, без правки «чужой процесс – значит прервано».
+
+    Для рассказа о том, кто занял память, важно именно записанное: прогон
+    из другого окна для нас «прерван», а на деле живёхонек и жуёт память.
+    """
+    try:
+        return json.loads(p_state(project_id, kind).read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _how_long(started_at: str) -> str:
+    """«12 мин» / «1 ч 5 мин». Пусто – времени старта нет или оно битое."""
+    if not started_at:
+        return ""
+    try:
+        began = datetime.fromisoformat(started_at)
+    except ValueError:
+        return ""
+    if began.tzinfo is None:
+        began = began.replace(tzinfo=timezone.utc)
+    minutes = int((datetime.now(timezone.utc) - began).total_seconds() // 60)
+    if minutes < 1:
+        return "меньше минуты"
+    if minutes < 60:
+        return f"{minutes} мин"
+    return f"{minutes // 60} ч {minutes % 60} мин"
+
+
+def running_now() -> list[dict]:
+    """
+    Кто прямо сейчас работает – по всем проектам и видам, с подробностями.
+
+    Нужно для честного отказа. «Занято 2034 МБ» без имени виновника –
+    тупик: заказчица видит цифру, а какой проект что делает и как давно,
+    понять неоткуда, и остаётся только ждать вслепую.
+    """
+    out: list[dict] = []
+    for pid, kind in live_runs_everywhere():
+        st_ = _raw_state(pid, kind)
+        out.append({
+            "project": pid,
+            "kind": kind,
+            "ru": KIND_RU.get(kind, kind),
+            "for": _how_long(st_.get("startedAt") or ""),
+            "current": st_.get("current") or 0,
+            "total": st_.get("total") or 0,
+            "city": st_.get("currentCity") or "",
+        })
+    return out
+
+
+def busy_details_ru() -> str:
+    """Одной строкой: кто, что, как давно и на чём. Пусто – никто ничего."""
+    parts = []
+    for run in running_now():
+        line = f"{run['project']} – {run['ru'].lower()}"
+        if run["for"]:
+            line += f", идёт {run['for']}"
+        if run["total"]:
+            line += f", город {run['current']} из {run['total']}"
+        if run["city"]:
+            line += f" ({run['city']})"
+        parts.append(line)
+    return "; ".join(parts)
+
+
 def busy_reason(project_id: str, kind: str) -> str:
     """
     Почему прогон этого вида сейчас не запустить. Пустая строка – можно.
@@ -482,19 +551,31 @@ def busy_reason(project_id: str, kind: str) -> str:
     # и облако убивало приложение целиком.
     everywhere = live_runs_everywhere()
     if len(everywhere) >= MAX_PARALLEL_RUNS:
-        where = ", ".join(f"{p}: {KIND_RU[k].lower()}" for p, k in sorted(everywhere))
-        return (f"Уже идут {len(everywhere)} прогона ({where}) – это потолок на всё "
-                "приложение, включая другие проекты и другие компьютеры. Браузеры "
-                "тяжёлые, а память у облака одна на всех. Дождитесь окончания.")
+        return (f"Уже идут {len(everywhere)} прогона – это потолок на всё приложение, "
+                "включая другие проекты и другие компьютеры. Браузеры тяжёлые, а "
+                f"память у облака одна на всех. Сейчас работают: {busy_details_ru()}. "
+                "Дождитесь окончания.")
 
     # И отдельно – по факту занятой памяти. Прогонов может быть мало, а память
     # уже на исходе: сотня городов ест куда больше десятка.
     used = memory_mb()
     start_at, _, _ = mem_gates()
     if used and used > start_at:
-        return (f"Сейчас занято {used} МБ памяти – для нового прогона это много, "
-                "приложение может не выдержать. Дождитесь окончания текущих "
-                "или обновите страницу через минуту.")
+        # Обязательно говорим, КТО занял. «Занято 2034 МБ» – тупик: цифру
+        # видно, а какой проект что делает и как давно, понять неоткуда, и
+        # остаётся ждать вслепую. Заказчица на этом застряла с тестами.
+        details = busy_details_ru()
+        if details:
+            return (f"Сейчас занято {used} МБ памяти – для нового прогона это много. "
+                    f"Работают: {details}. Дождитесь окончания.")
+        # Прогонов нет, а память занята – значит её держит не работа, а
+        # брошенный браузер от упавшего прогона. Ждать тут бесполезно, и
+        # честнее сказать это прямо, чем советовать «дождитесь окончания»
+        # того, что уже кончилось.
+        return (f"Сейчас занято {used} МБ памяти, но НИ ОДНОГО прогона не идёт – "
+                "похоже, память держит браузер от упавшего прогона. Ждать смысла "
+                "нет: обновите страницу, а если цифра не падает – перезапустите "
+                "приложение (в облаке: Manage app → Reboot).")
     return ""
 
 

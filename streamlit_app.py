@@ -3505,17 +3505,13 @@ def _crosspost_bar(project_id: str, config: dict, posts: list[dict],
     else:
         sub = "Впереди постов нет"
 
-    # Колонку под «Сформировать план» заводим, только если формировать правда
-    # есть что, – иначе она пустая и кнопки висят посреди карточки.
-    todo = _crosspost_form_todo(project_id, config, upcoming, state)
-    will_form = bool(todo["vk"] or todo["ok"] or todo["max"] or todo["msg"])
-
     with st.container(border=True):
         # Состояние и кнопки – одной строкой: слева что происходит, справа что
-        # можно нажать. Раньше состояние рисовалось отдельным блоком над
-        # кнопками, и левая половина карточки висела выше правой.
-        cols = st.columns([4.8, 2, 2, 2.4] if will_form else [6.6, 2, 2],
-                          vertical_alignment="center")
+        # можно нажать. Кнопки формирования здесь нет намеренно: её подпись
+        # («ВК: 4, ОК: 4, МАКС: 4, ТГ: 6») в узкую колонку не влезала и ломала
+        # строку на три этажа. Она живёт под планом, где ей хватает ширины, –
+        # и там же, где человек только что посмотрел, что именно поедет.
+        cols = st.columns([6.6, 2, 2], vertical_alignment="center")
         with cols[0]:
             # Ни счётчиков листа, ни устройства планировщика: читать это каждый
             # день не нужно. Час выхода переехал к заголовку плана.
@@ -3528,9 +3524,6 @@ def _crosspost_bar(project_id: str, config: dict, posts: list[dict],
             st.session_state[f"plan-refresh-{project_id}"] = True
             st.session_state.pop(f"plan-posts-{project_id}", None)
             st.rerun()
-        if will_form:
-            with cols[3]:
-                _crosspost_form_block(project_id, config, upcoming, state, hints=False)
         if not sched["enabled"]:
             st.caption(sched["note"])
 
@@ -3652,7 +3645,12 @@ def tab_crosspost(project_id: str, config: dict) -> None:
 
     posts, err = _crosspost_load_posts(project_id, config)
     if err:
+        # Не тупик: рядом с ошибкой оставляем сам источник реестра. Иначе
+        # человек видит красную полосу и всё – ни поменять ссылку, ни
+        # загрузить выгрузку неоткуда, настройки лежат ниже по странице,
+        # которой уже нет.
         st.error(f"Не удалось прочитать реестр: {err}")
+        _crosspost_source_block(project_id, config)
         return
     if not posts:
         html(T.empty("🗓", "В листе бренда постов не нашлось",
@@ -3670,6 +3668,7 @@ def tab_crosspost(project_id: str, config: dict) -> None:
     _crosspost_bar(project_id, config, posts, upcoming, state, horizon)
     _crosspost_attention(upcoming, state)
     _crosspost_plan_table(project_id, config, posts, state, today, horizon)
+    _crosspost_form_block(project_id, config, upcoming, state, hints=False)
     _crosspost_tools(project_id, config, posts, state, today, upcoming)
 
     # Честно про границы: что работает и при каких условиях.

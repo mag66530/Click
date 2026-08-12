@@ -4722,6 +4722,40 @@ def test_run_title() -> None:
        "Актуализация 2ГИС + проверка отзывов")
 
 
+def test_own_modules_cover_imports() -> None:
+    """
+    Список сверки по метке знает обо ВСЕХ наших модулях.
+
+    Живой случай: появился новый модуль (crosspost_plan), в список его не
+    внесли – и облако осталось со старым ui_theme, пока главный скрипт был уже
+    новым. Заказчица получила «AttributeError: crosspost_table» на рабочем
+    экране. Забыть модуль легко, поэтому проверяет тест, а не память.
+    """
+    import ast
+    from pathlib import Path
+
+    import streamlit_app as app
+    print("\n▸ Список модулей знает обо всех наших импортах")
+
+    root = Path(app.__file__).parent
+    tree = ast.parse((root / "streamlit_app.py").read_text(encoding="utf-8"))
+    local: set[str] = set()
+    for node in ast.walk(tree):
+        names = []
+        if isinstance(node, ast.Import):
+            names = [a.name.split(".")[0] for a in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            names = [node.module.split(".")[0]]
+        local.update(n for n in names if (root / f"{n}.py").exists())
+
+    missing = sorted(local - set(app._OWN_MODULES) - {"streamlit_app"})  # noqa: SLF001
+    check("все наши модули есть в списке сверки", not missing, str(missing))
+
+    ghosts = sorted(n for n in app._OWN_MODULES  # noqa: SLF001
+                    if not (root / f"{n}.py").exists())
+    check("в списке нет исчезнувших модулей", not ghosts, str(ghosts))
+
+
 def test_one_build_at_a_time() -> None:
     """
     Приложение не работает вразнобой: экран новый, а модуль старый.
@@ -5216,6 +5250,7 @@ def main() -> int:
         test_side_page_after_restart()
         test_run_title()
         test_one_build_at_a_time()
+        test_own_modules_cover_imports()
         test_batch_browser_survives_rerun()
         test_one_build()
         test_actualize_selection()

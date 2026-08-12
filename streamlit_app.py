@@ -21,7 +21,7 @@ import re
 import sys
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import streamlit as st
@@ -66,6 +66,7 @@ _settle_imports()
 
 import apptime  # noqa: E402
 import content_plan  # noqa: E402
+import crosspost_calendar  # noqa: E402
 import crosspost_state as cps  # noqa: E402
 import gis_playwright as gis  # noqa: E402
 import kp_audit  # noqa: E402
@@ -3269,43 +3270,45 @@ _REPORT_KINDS = {"publish": "📤 Публикация", "actualize": "🔄 Ак
 CROSSPOST_HORIZON_DAYS = 14      # на сколько дней вперёд показываем план
 
 
-def _crosspost_source_block(project_id: str, config: dict) -> bool:
+def _crosspost_has_source(project_id: str, config: dict) -> bool:
+    """Есть ли из чего читать план: ссылка на таблицу или загруженная выгрузка."""
+    return bool((config.get("planSheetUrl") or "").strip()
+                or st.session_state.get(f"plan-upload-bytes-{project_id}"))
+
+
+def _crosspost_source_form(project_id: str, config: dict) -> None:
     """
     Источник реестра. Доступ – тот же сервисный аккаунт Google, что читает КП:
     заказчику достаточно расшарить на него таблицу реестра, новых ключей не нужно.
-    Возвращает True, если из чего читать.
+    Раскрывашки вокруг нет: блок живёт внутри группы «Подключения», а вложенные
+    экспандеры Streamlit не разрешает.
     """
     saved = (config.get("planSheetUrl") or "").strip()
     has_key = kp_sheet.service_account_info() is not None
 
-    with st.expander("🗓 Источник реестра – Google-таблица контент-плана",
-                     expanded=not saved and not st.session_state.get(f"plan-file-{project_id}")):
-        url = st.text_input("Ссылка на таблицу реестра", value=saved,
-                            key=f"plan-url-{project_id}",
-                            placeholder="https://docs.google.com/spreadsheets/d/…")
-        if url.strip() != saved:
-            config["planSheetUrl"] = url.strip()
-            save_config(project_id)
-            st.rerun()
+    url = st.text_input("Ссылка на таблицу реестра", value=saved,
+                        key=f"plan-url-{project_id}",
+                        placeholder="https://docs.google.com/spreadsheets/d/…")
+    if url.strip() != saved:
+        config["planSheetUrl"] = url.strip()
+        save_config(project_id)
+        st.rerun()
 
-        st.caption(f"Лист бренда в таблице – «{project_id}» или его русское имя "
-                   f"(СМУ, ИМП, МПЭ, МПИ, АПС). Читаются колонки «Когда выложить», "
-                   f"«Соцсеть», «Ссылка», «Формат», «Тип», «Пост», «Фото».")
-        if not has_key:
-            st.warning(
-                "Не найден ключ сервисного аккаунта Google – тот же, что читает КП. "
-                "Расшарьте таблицу реестра на него как Читателя. Пока ключа нет, "
-                "план можно посмотреть, загрузив файл ниже.", icon="🔑")
+    st.caption(f"Лист бренда в таблице – «{project_id}» или его русское имя "
+               f"(СМУ, ИМП, МПЭ, МПИ, АПС). Читаются колонки «Когда выложить», "
+               f"«Соцсеть», «Ссылка», «Формат», «Тип», «Пост», «Фото».")
+    if not has_key:
+        st.warning(
+            "Не найден ключ сервисного аккаунта Google – тот же, что читает КП. "
+            "Расшарьте таблицу реестра на него как Читателя. Пока ключа нет, "
+            "план можно посмотреть, загрузив файл ниже.", icon="🔑")
 
-        # Файл – запасной путь: посмотреть свой план можно сразу, не дожидаясь
-        # доступов. Файл живёт только в этой вкладке и никуда не сохраняется.
-        up = st.file_uploader("…или загрузите выгрузку реестра (.xlsx) для просмотра",
-                              type=["xlsx"], key=f"plan-file-{project_id}")
-        if up is not None:
-            st.session_state[f"plan-upload-bytes-{project_id}"] = up.getvalue()
-
-    return bool((config.get("planSheetUrl") or "").strip()
-                or st.session_state.get(f"plan-upload-bytes-{project_id}"))
+    # Файл – запасной путь: посмотреть свой план можно сразу, не дожидаясь
+    # доступов. Файл живёт только в этой вкладке и никуда не сохраняется.
+    up = st.file_uploader("…или загрузите выгрузку реестра (.xlsx) для просмотра",
+                          type=["xlsx"], key=f"plan-file-{project_id}")
+    if up is not None:
+        st.session_state[f"plan-upload-bytes-{project_id}"] = up.getvalue()
 
 
 def _crosspost_load_posts(project_id: str, config: dict) -> tuple[list[dict], str]:
@@ -3337,7 +3340,7 @@ def _crosspost_load_posts(project_id: str, config: dict) -> tuple[list[dict], st
 
 
 def _crosspost_targets_html(post: dict, state: dict) -> str:
-    """Строка площадок поста: «ВК 🕓 · ОК ✅ · ТГ —»."""
+    """Строка площадок поста: «ВК 🕓 · ОК ✅ · ТГ —». Нужна списку прошлых постов."""
     # Видео и статьи Click не формирует. Показываем это прямо в строке, иначе
     # человек будет ждать, что пост «поедет», и не поймёт, почему он стоит.
     fmt = (post.get("format") or "Пост").strip()
@@ -3362,7 +3365,7 @@ def _crosspost_targets_html(post: dict, state: dict) -> str:
 
 
 def _crosspost_plan_row(post: dict, state: dict) -> str:
-    """Одна строка плана: дата и час, тип, текст, площадки."""
+    """Одна строка плана: дата и час, тип, текст, площадки (список прошлых)."""
     when = apptime.to_local(post.get("when"))
     day = when.strftime("%d.%m") if when else post.get("date", "")
     weekday = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"][when.weekday()] if when else ""
@@ -3383,21 +3386,245 @@ def _crosspost_plan_row(post: dict, state: dict) -> str:
     )
 
 
+# ─── Полоса состояния: работает ли автопостинг и что выйдет ближайшим ───
+def _crosspost_bar(project_id: str, config: dict, posts: list[dict],
+                   upcoming: list[dict], state: dict) -> None:
+    """
+    Первое, что видно на вкладке, отвечает на главный вопрос: идёт ли всё само.
+    Раньше ответ приходилось собирать из чекбокса внизу страницы и списка в
+    середине — человек не понимал, выйдут посты или нет.
+    """
+    import scheduler
+
+    cfg = scheduler.config()
+    if cfg["enabled"]:
+        scheduler.ensure_running()
+        alive = True
+        state_text = "Автопостинг работает"
+    else:
+        alive = False
+        state_text = "Планировщик выключен"
+
+    nearest = crosspost_calendar.next_out(posts, state, apptime.now().isoformat())
+    if nearest:
+        when = apptime.to_local(nearest["when"])
+        day = crosspost_calendar.relative_day(when.date(), apptime.now().date()) \
+            or crosspost_calendar.human_day(when.date())
+        who = ", ".join(dict.fromkeys(n["name"] for n in nearest["pending"]))
+        sub = (f'Ближайший пост — <b>{T.esc(day)} в {T.esc(when.strftime("%H:%M"))}</b>, '
+               f'{T.esc(who)}')
+    elif upcoming:
+        sub = "Ближайшие посты ещё не сформированы — нажмите «Сформировать план»"
+    else:
+        sub = "Впереди постов нет"
+
+    meta = [
+        f"В листе <b>{len(posts)}</b> постов",
+        f"впереди <b>{len(upcoming)}</b> (ближайшие {CROSSPOST_HORIZON_DAYS} дней)",
+        f"час выхода <b>{T.esc(content_plan.brand_default_time(project_id))}</b> по Екатеринбургу",
+    ]
+
+    with st.container(border=True):
+        html(T.crosspost_bar(state_text, sub, meta, alive=alive))
+        if not cfg["enabled"]:
+            st.caption("Пока планировщик выключен, Телеграм и МАКС не получат ни одного "
+                       "поста. ВК и ОК выйдут сами — их отложку держит сама площадка.")
+        c1, c2, c3 = st.columns([2, 2, 3])
+        on = c1.toggle("Планировщик", value=cfg["enabled"], key="cp-sched-on")
+        if on != cfg["enabled"]:
+            scheduler.set_config(enabled=on)
+            st.rerun()
+        if c2.button("🔄 Обновить план", key=f"plan-refresh-btn-{project_id}",
+                     use_container_width=True,
+                     help="Перечитать таблицу — после правок в реестре"):
+            st.session_state[f"plan-refresh-{project_id}"] = True
+            st.session_state.pop(f"plan-posts-{project_id}", None)
+            st.rerun()
+        with c3:
+            _crosspost_form_block(project_id, config, upcoming, state)
+
+
+def _crosspost_attention(upcoming: list[dict], state: dict) -> None:
+    """Беды — наверх и с датой: в календаре жёлтая плитка видна, но не объясняет."""
+    troubles = cps.problems(state, upcoming)
+    if not troubles:
+        return
+    with st.container(border=True):
+        html('<div class="card-title">⚠️ Требует внимания '
+             f'<span class="badge badge-warn">{len(troubles)}</span></div>')
+        for tr in troubles[:12]:
+            p = tr["post"]
+            who = f' · {cps.network_ru(tr["network"])}' if tr.get("network") else ""
+            d = content_plan.parse_date(p.get("date", ""))
+            when = crosspost_calendar.human_day(d) if d else p.get("date", "")
+            st.write(f'**{when}**{who} – {tr["what"]}')
+        if len(troubles) > 12:
+            st.caption(f"…и ещё {len(troubles) - 12}. Остальное видно в календаре "
+                       "жёлтыми и красными плитками.")
+
+
+# ─── Календарь ─────────────────────────────────────────────────────────
+def _crosspost_day_cell(project_id: str, cell: dict, idx: int,
+                        weekend: bool = False) -> None:
+    """Одна ячейка дня: шапка с числом и плитки постов (плитка — кнопка)."""
+    flag = ("today" if cell["is_today"]
+            else "we" if weekend
+            else "past" if cell["is_past"]
+            else "day")
+    with st.container(border=True, key=f"cp-cell-{flag}-{idx}"):
+        html(T.crosspost_day_head(cell))
+        if not cell["posts"]:
+            html(T.crosspost_empty_day())
+            return
+        for j, view in enumerate(cell["posts"]):
+            with st.container(key=f"cp-tile-{view['state']}-{idx}-{j}"):
+                label = f'{view["time"]} · {view["kind"] or "пост"}'
+                if st.button(label, key=f"cp-open-{project_id}-{idx}-{j}",
+                             use_container_width=True,
+                             help="Открыть пост: текст целиком и где он выйдет"):
+                    st.session_state[f"cp-open-{project_id}"] = view["key"]
+                    st.rerun()
+                html(T.crosspost_marks(view["nets"]))
+
+
+def _crosspost_calendar(project_id: str, posts: list[dict], state: dict,
+                        today: date) -> None:
+    """
+    План — сетка недель. Рабочая неделя из пяти дней; суббота и воскресенье
+    показываются отдельной узкой колонкой и только когда на них стоит пост
+    (обычно перед праздниками) — иначе выходные съедали треть ширины.
+    """
+    cal = crosspost_calendar.build(posts, state, today)
+
+    # Тексты плиток идут CSS-переменными: подпись кнопки Streamlit — одна
+    # строка, а в плитке нужно ещё превью поста (см. crosspost_tile_css).
+    rules, idx = [], 0
+    for week in cal["weeks"]:
+        for cell in list(week["days"]) + list(week["weekend"]):
+            for j, view in enumerate(cell["posts"]):
+                rules.append((f"cp-tile-{view['state']}-{idx}-{j}", view["title"]))
+            idx += 1
+    html(T.crosspost_tile_css(rules))
+
+    html(f'<div class="card-title">🗓 План: {T.esc(cal["title"])}'
+         f'<span class="tail"></span></div>')
+    html(T.crosspost_legend())
+
+    widths = [1, 1, 1, 1, 1] + ([0.75] if cal["has_weekend"] else [])
+    names = ("Понедельник", "Вторник", "Среда", "Четверг", "Пятница")
+    head = st.columns(widths, gap="small")
+    for col, name in zip(head, names):
+        with col:
+            html(f'<div class="cp-dow">{name}</div>')
+    if cal["has_weekend"]:
+        with head[5]:
+            html('<div class="cp-dow we">Выходные</div>')
+
+    idx = 0
+    for week in cal["weeks"]:
+        cols = st.columns(widths, gap="small")
+        for col, cell in zip(cols, week["days"]):
+            with col:
+                _crosspost_day_cell(project_id, cell, idx)
+            idx += 1
+        if cal["has_weekend"]:
+            with cols[5]:
+                if week["weekend"]:
+                    for cell in week["weekend"]:
+                        _crosspost_day_cell(project_id, cell, idx, weekend=True)
+                        idx += 1
+                else:
+                    html(T.crosspost_empty_day(f'{week["weekend_empty"]} · постов нет'))
+
+    if not cal["has_weekend"]:
+        st.caption("Суббота и воскресенье в сетке не показываются — они появятся "
+                   "отдельной колонкой, если в реестре будет пост на выходной "
+                   "(например, перед праздниками).")
+
+
+def _crosspost_open_block(project_id: str, config: dict, posts: list[dict],
+                          state: dict) -> None:
+    """Панель выбранного поста: текст целиком и площадки словами, а не значками."""
+    key = st.session_state.get(f"cp-open-{project_id}")
+    if not key:
+        return
+    post = next((p for p in posts if cps.post_key(p) == key), None)
+    if post is None:
+        # План перечитали, и пост изменился — ключ разошёлся. Молча закрываем:
+        # ругаться тут не на что, человек просто увидит календарь.
+        st.session_state.pop(f"cp-open-{project_id}", None)
+        return
+
+    view = crosspost_calendar.post_view(post, state)
+    day = content_plan.parse_date(post.get("date", ""))
+    with st.container(border=True):
+        html(T.crosspost_open(view, crosspost_calendar.human_day(day) if day
+                              else post.get("date", "")))
+        c1, c2, c3 = st.columns([2, 2, 4])
+        if c1.button("Закрыть", key=f"cp-close-{project_id}", use_container_width=True):
+            st.session_state.pop(f"cp-open-{project_id}", None)
+            st.rerun()
+        if c2.button("↺ Сформировать заново", key=f"cp-forget-{project_id}",
+                     use_container_width=True,
+                     help="Забыть, что по этому посту уже сделано — нужно, если "
+                          "запись удалили в соцсети"):
+            cps.forget_post(project_id, post)
+            st.toast("Готово: пост снова считается несформированным.")
+            st.rerun()
+        url = (config.get("planSheetUrl") or "").strip()
+        if url:
+            c3.link_button(f"Открыть таблицу ↗ (строка {view['row']})", url,
+                           use_container_width=True)
+
+
+# ─── Настройка и проверка: три группы вместо девяти раскрывашек ────────
+def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
+                     state: dict, today: date) -> None:
+    import scheduler
+
+    html('<div class="card-title">🔧 Настройка и проверка'
+         '<span class="hint"> — обычно сюда не нужно, всё уже настроено</span></div>')
+
+    with st.expander("🔌 Подключения — таблица, каналы Телеграма и МАКС, Яндекс.Бизнес"):
+        t1, t2, t3 = st.tabs(["Таблица реестра", "Каналы ТГ и МАКС", "Яндекс.Бизнес"])
+        with t1:
+            _crosspost_source_form(project_id, config)
+        with t2:
+            _crosspost_channels_form(project_id, config)
+        with t3:
+            _crosspost_yb_form(project_id, config)
+
+    with st.expander("🧪 Проверить механику одним постом — пробная отложка ВК"):
+        _crosspost_vk_probe_form(project_id, config)
+
+    with st.expander("📜 Журналы и весь реестр"):
+        t1, t2 = st.tabs(["Журнал планировщика", "Весь реестр листа"])
+        with t1:
+            journal = scheduler.tail()
+            st.code(journal or "Журнал пуст — планировщик ещё ничего не делал.",
+                    language=None)
+        with t2:
+            st.caption("Прошлые посты со ссылкой в колонке «Ссылка» считаются вышедшими.")
+            past = [p for p in posts
+                    if (d := content_plan.parse_date(p["date"])) and d < today]
+            html("".join(_crosspost_plan_row(p, state) for p in past[-40:])
+                 or T.empty("—", "Прошлых постов нет", ""))
+
+
 def tab_crosspost(project_id: str, config: dict) -> None:
     html(T.crosspost_css())
-    have_source = _crosspost_source_block(project_id, config)
 
-    c1, c2 = st.columns([1, 4])
-    if c1.button("🔄 Обновить план", key=f"plan-refresh-btn-{project_id}",
-                 use_container_width=True, disabled=not have_source):
-        st.session_state[f"plan-refresh-{project_id}"] = True
-        st.session_state.pop(f"plan-posts-{project_id}", None)
-        st.rerun()
-
-    if not have_source:
+    if not _crosspost_has_source(project_id, config):
         html(T.empty("🗓", "Реестр не подключён",
-                     "Укажите ссылку на таблицу контент-плана выше – или загрузите "
+                     "Укажите ссылку на таблицу контент-плана – или загрузите "
                      "выгрузку .xlsx, чтобы посмотреть план прямо сейчас."))
+        with st.container(border=True):
+            _crosspost_source_form(project_id, config)
+        # Выгрузку кладёт в session_state сам загрузчик – уже во время этой
+        # отрисовки. Проверка выше её не застала, поэтому перерисовываем сразу:
+        # иначе человек загрузил файл и всё равно видит «реестр не подключён».
+        if _crosspost_has_source(project_id, config):
+            st.rerun()
         return
 
     posts, err = _crosspost_load_posts(project_id, config)
@@ -3408,6 +3635,8 @@ def tab_crosspost(project_id: str, config: dict) -> None:
         html(T.empty("🗓", "В листе бренда постов не нашлось",
                      f"Проверьте, что в таблице есть лист «{project_id}» (или СМУ/ИМП/МПЭ/МПИ/АПС) "
                      "с колонками «Когда выложить», «Соцсеть», «Пост»."))
+        with st.container(border=True):
+            _crosspost_source_form(project_id, config)
         return
 
     today = apptime.now().date()
@@ -3416,47 +3645,11 @@ def tab_crosspost(project_id: str, config: dict) -> None:
                 if (d := content_plan.parse_date(p["date"])) and today <= d <= horizon]
     state = cps.load(project_id)
 
-    # ─── Сводка: цифры по целям, а не по постам ───
-    total = cps.summarize(state, upcoming)
-    c2.caption(f"В листе {len(posts)} постов · впереди {len(upcoming)} "
-               f"(ближайшие {CROSSPOST_HORIZON_DAYS} дней) · час выхода "
-               f"{content_plan.brand_default_time(project_id)} по Екатеринбургу")
-    m = st.columns(4)
-    m[0].metric("Ждут формирования", total[cps.WAITING])
-    m[1].metric("Запланировано", total[cps.SCHEDULED])
-    m[2].metric("Вышли", total[cps.SENT] + total[cps.SENT_LATE])
-    m[3].metric("Ошибки", total[cps.FAILED] + total[cps.MISSED])
-
-    # ─── Что требует внимания ───
-    troubles = cps.problems(state, upcoming)
-    if troubles:
-        with st.expander(f"⚠️ Требует внимания – {len(troubles)}", expanded=True):
-            for tr in troubles:
-                p = tr["post"]
-                who = f' · {cps.network_ru(tr["network"])}' if tr.get("network") else ""
-                st.write(f'**{p["date"]}**{who} – {tr["what"]}')
-
-    # ─── План ───
-    html('<div class="card-title">План на ближайшие две недели</div>')
-    if not upcoming:
-        html(T.empty("📭", "На ближайшие две недели постов нет",
-                     "Появятся здесь, как только в реестре будут строки с будущей датой."))
-    else:
-        html("".join(_crosspost_plan_row(p, state) for p in upcoming))
-
-    _crosspost_form_block(project_id, config, upcoming, state)
-    _crosspost_channels_block(project_id, config)
-    _crosspost_yb_block(project_id, config)
-    _crosspost_scheduler_block(project_id)
-    _crosspost_vk_probe(project_id, config)
-
-    # Честно про границы: что работает и при каких условиях.
-    st.info("Полный цикл собран: ВК и ОК — родные отложки после входа (держит сама "
-            "площадка); Телеграм и МАКС — по времени через планировщик (нужны токены "
-            "ботов); ЯБ — прогон по расписанию. Для ТГ/МАКС/ЯБ в час выхода Click "
-            "должен работать. Отложка ОК уточняется первым живым прогоном — при "
-            "несовпадении вёрстки кнопка скажет словами и сохранит снимок.",
-            icon="ℹ️")
+    _crosspost_bar(project_id, config, posts, upcoming, state)
+    _crosspost_attention(upcoming, state)
+    _crosspost_calendar(project_id, posts, state, today)
+    _crosspost_open_block(project_id, config, posts, state)
+    _crosspost_tools(project_id, config, posts, state, today)
 
 
 def _crosspost_channels(config: dict) -> dict[str, str]:
@@ -3465,58 +3658,30 @@ def _crosspost_channels(config: dict) -> dict[str, str]:
             "max": (config.get("maxChatId") or "").strip()}
 
 
-def _crosspost_channels_block(project_id: str, config: dict) -> None:
+def _crosspost_channels_form(project_id: str, config: dict) -> None:
     """Каналы мессенджеров бренда. Токены ботов — в «Ключах к веб-сервисам»."""
     import tg_social
 
-    with st.expander("💬 Каналы Телеграма и МАКС"):
-        c1, c2, c3 = st.columns(3)
-        vals = {
-            "tgChannelClient": c1.text_input("ТГ клиенты", value=config.get("tgChannelClient", ""),
-                                             key=f"cp-tgc-{project_id}", placeholder="@stalmetural"),
-            "tgChannelStaff": c2.text_input("ТГ сотрудники", value=config.get("tgChannelStaff", ""),
-                                            key=f"cp-tgs-{project_id}", placeholder="@SMUdaily"),
-            "maxChatId": c3.text_input("МАКС: id канала", value=config.get("maxChatId", ""),
-                                       key=f"cp-max-{project_id}"),
-        }
-        if any(vals[k].strip() != (config.get(k) or "") for k in vals):
-            config.update({k: v.strip() for k, v in vals.items()})
-            save_config(project_id)
-        if not tg_social.is_configured() and (vals["tgChannelClient"] or vals["tgChannelStaff"]):
-            st.caption("Токен бота Телеграма не заполнен — «Настройки» → «Ключи к веб-сервисам».")
-
-
-def _crosspost_scheduler_block(project_id: str) -> None:
-    """Планировщик: жив ли, выключатель, журнал. Тревоги — ботом в личный ТГ."""
-    import scheduler
-
-    cfg = scheduler.config()
-    running = scheduler.ensure_running() if cfg["enabled"] else False
-    c1, c2 = st.columns([3, 2])
-    with c1:
-        if not cfg["enabled"]:
-            st.warning("Планировщик ВЫКЛЮЧЕН — задания Телеграма и МАКС не отправляются.")
-        elif running or scheduler.is_running_here():
-            st.caption(f"⏱ Планировщик работает: проверка заданий каждые "
-                       f"{scheduler.TICK_SECONDS} с, окно опоздания "
-                       f"{cfg['lateWindowHours']:g} ч. Работает, пока открыт Click.")
-        else:
-            st.caption("⏱ Планировщик уже работает в другой копии Click на этой машине.")
-    with c2:
-        on = st.toggle("Планировщик включён", value=cfg["enabled"], key="cp-sched-on")
-        if on != cfg["enabled"]:
-            scheduler.set_config(enabled=on)
-            st.rerun()
-    journal = scheduler.tail()
-    if journal:
-        with st.expander("Журнал планировщика"):
-            st.code(journal, language=None)
+    c1, c2, c3 = st.columns(3)
+    vals = {
+        "tgChannelClient": c1.text_input("ТГ клиенты", value=config.get("tgChannelClient", ""),
+                                         key=f"cp-tgc-{project_id}", placeholder="@stalmetural"),
+        "tgChannelStaff": c2.text_input("ТГ сотрудники", value=config.get("tgChannelStaff", ""),
+                                        key=f"cp-tgs-{project_id}", placeholder="@SMUdaily"),
+        "maxChatId": c3.text_input("МАКС: id канала", value=config.get("maxChatId", ""),
+                                   key=f"cp-max-{project_id}"),
+    }
+    if any(vals[k].strip() != (config.get(k) or "") for k in vals):
+        config.update({k: v.strip() for k, v in vals.items()})
+        save_config(project_id)
+    if not tg_social.is_configured() and (vals["tgChannelClient"] or vals["tgChannelStaff"]):
+        st.caption("Токен бота Телеграма не заполнен — «Настройки» → «Ключи к веб-сервисам».")
 
 
 def _crosspost_form_block(project_id: str, config: dict,
                           upcoming: list[dict], state: dict) -> None:
     """
-    «Сформировать план»: ВК — родные отложки браузером, Телеграм и МАКС —
+    «Сформировать план»: ВК и ОК — родные отложки браузером, Телеграм и МАКС —
     задания планировщику. Каждая площадка независима; исходы пишутся в
     память сразу, повтор кнопки доформирует только несделанное (Д-6).
     """
@@ -3536,7 +3701,9 @@ def _crosspost_form_block(project_id: str, config: dict,
     if not vk_todo and not ok_todo and not msg_todo:
         if not (vk_ready or ok_ready):
             st.caption("Формирование ВК и ОК появится после входа: «Настройки» → "
-                       "«Вход в ВК/ОК (кросспостинг)». Каналы ТГ/МАКС — в блоке ниже.")
+                       "«Вход в ВК/ОК (кросспостинг)».")
+        else:
+            st.caption("Формировать нечего — всё, что впереди, уже стоит отложками.")
         return
 
     parts = []
@@ -3580,7 +3747,7 @@ def _crosspost_form_block(project_id: str, config: dict,
         st.rerun()
 
 
-def _crosspost_yb_block(project_id: str, config: dict) -> None:
+def _crosspost_yb_form(project_id: str, config: dict) -> None:
     """
     ЯБ по расписанию. ЯБ живёт не в соцреестре, а в своей очереди задач
     («Публикация» → «Сохранить очередь в задачи»). Здесь эта очередь
@@ -3589,54 +3756,53 @@ def _crosspost_yb_block(project_id: str, config: dict) -> None:
     """
     import scheduler
 
-    with st.expander("🕚 Яндекс.Бизнес по расписанию"):
-        n_files = len(list(runner.p_tasks(project_id).glob("*.json")))
-        yb_tasks = [t for t in scheduler.load_tasks(project_id)
-                    if t.get("network") == "yb" and t.get("state") in ("waiting", "retry")]
+    n_files = len(list(runner.p_tasks(project_id).glob("*.json")))
+    yb_tasks = [t for t in scheduler.load_tasks(project_id)
+                if t.get("network") == "yb" and t.get("state") in ("waiting", "retry")]
 
-        for t in yb_tasks:
-            c1, c2 = st.columns([4, 1])
-            c1.write(f"⏰ Прогон запланирован на "
-                     f"**{apptime.human(t['when'], '%d.%m.%Y %H:%M')}** (Екатеринбург)")
-            if c2.button("Отменить", key=f"yb-cancel-{t['id']}"):
-                scheduler.cancel_task(project_id, t["id"])
-                st.rerun()
+    for t in yb_tasks:
+        c1, c2 = st.columns([4, 1])
+        c1.write(f"⏰ Прогон запланирован на "
+                 f"**{apptime.human(t['when'], '%d.%m.%Y %H:%M')}** (Екатеринбург)")
+        if c2.button("Отменить", key=f"yb-cancel-{t['id']}"):
+            scheduler.cancel_task(project_id, t["id"])
+            st.rerun()
 
-        if not n_files:
-            st.caption("Очередь ЯБ пуста. Соберите пост во вкладке «Публикация» → "
-                       "«Сохранить очередь в задачи», потом планируйте время здесь.")
-            return
-        st.caption(f"В очереди ЯБ — {n_files} файл(ов) задач. В назначенный час планировщик "
-                   "запустит обычный прогон публикации со всеми защитами; если будет идти "
-                   "другой прогон — дождётся его и стартует следом. Click в этот момент "
-                   "должен работать.")
-        c1, c2, c3 = st.columns([2, 2, 3])
-        d = c1.date_input("Дата", key=f"yb-when-d-{project_id}",
-                          value=apptime.now().date() + timedelta(days=1))
-        default_t = content_plan.brand_default_time(project_id)
-        t_ = c2.time_input("Время (Екб)", key=f"yb-when-t-{project_id}",
-                           value=datetime.strptime(default_t, "%H:%M").time())
-        if c3.button("⏰ Запланировать прогон ЯБ", type="primary",
-                     key=f"yb-plan-{project_id}", use_container_width=True):
-            when = datetime(d.year, d.month, d.day, t_.hour, t_.minute, tzinfo=apptime.TZ)
-            if when <= apptime.now():
-                st.error("Это время уже прошло — выберите будущее.")
-            else:
-                scheduler.queue_task(project_id, {
-                    "id": f"yb|{project_id}|{when.strftime('%Y-%m-%dT%H:%M')}",
-                    "project": project_id, "brand": project_id, "network": "yb",
-                    "when": when.isoformat(), "date": when.strftime("%Y-%m-%d"),
-                    "headless": bool(get_settings(project_id)["headless"]),
-                    "expectedEmail": (config.get("email") or "").strip(),
-                })
-                scheduler.ensure_running()
-                st.success(f"Запланировано: прогон ЯБ {when.strftime('%d.%m.%Y в %H:%M')} "
-                           "по Екатеринбургу.")
-                time.sleep(1.0)
-                st.rerun()
+    if not n_files:
+        st.caption("Очередь ЯБ пуста. Соберите пост во вкладке «Публикация» → "
+                   "«Сохранить очередь в задачи», потом планируйте время здесь.")
+        return
+    st.caption(f"В очереди ЯБ — {n_files} файл(ов) задач. В назначенный час планировщик "
+               "запустит обычный прогон публикации со всеми защитами; если будет идти "
+               "другой прогон — дождётся его и стартует следом. Click в этот момент "
+               "должен работать.")
+    c1, c2, c3 = st.columns([2, 2, 3])
+    d = c1.date_input("Дата", key=f"yb-when-d-{project_id}",
+                      value=apptime.now().date() + timedelta(days=1))
+    default_t = content_plan.brand_default_time(project_id)
+    t_ = c2.time_input("Время (Екб)", key=f"yb-when-t-{project_id}",
+                       value=datetime.strptime(default_t, "%H:%M").time())
+    if c3.button("⏰ Запланировать прогон ЯБ", type="primary",
+                 key=f"yb-plan-{project_id}", use_container_width=True):
+        when = datetime(d.year, d.month, d.day, t_.hour, t_.minute, tzinfo=apptime.TZ)
+        if when <= apptime.now():
+            st.error("Это время уже прошло — выберите будущее.")
+        else:
+            scheduler.queue_task(project_id, {
+                "id": f"yb|{project_id}|{when.strftime('%Y-%m-%dT%H:%M')}",
+                "project": project_id, "brand": project_id, "network": "yb",
+                "when": when.isoformat(), "date": when.strftime("%Y-%m-%d"),
+                "headless": bool(get_settings(project_id)["headless"]),
+                "expectedEmail": (config.get("email") or "").strip(),
+            })
+            scheduler.ensure_running()
+            st.success(f"Запланировано: прогон ЯБ {when.strftime('%d.%m.%Y в %H:%M')} "
+                       "по Екатеринбургу.")
+            time.sleep(1.0)
+            st.rerun()
 
 
-def _crosspost_vk_probe(project_id: str, config: dict) -> None:
+def _crosspost_vk_probe_form(project_id: str, config: dict) -> None:
     """
     Пробная отложка ВК: один тестовый пост в сообщество бренда на +N минут.
     Это боевой пилот механики (форма поста → календарь → «Добавить в очередь»)
@@ -3645,48 +3811,41 @@ def _crosspost_vk_probe(project_id: str, config: dict) -> None:
     """
     import vk_social
 
-    with st.expander("🧪 Пробная отложка ВК — проверить механику одним постом"):
-        if not vk_social.has_saved_session(project_id):
-            st.caption("Сначала войдите в ВК: «Настройки» → «Вход в ВК (кросспостинг)».")
-            return
-        group_url = (config.get("vkGroupUrl") or "").strip()
-        if not group_url:
-            st.caption("Укажите ссылку на сообщество бренда: «Настройки» → «Вход в ВК (кросспостинг)».")
-            return
+    if not vk_social.has_saved_session(project_id):
+        st.caption("Сначала войдите в ВК: «Настройки» → «Вход в ВК (кросспостинг)».")
+        return
+    group_url = (config.get("vkGroupUrl") or "").strip()
+    if not group_url:
+        st.caption("Укажите ссылку на сообщество бренда: «Настройки» → «Вход в ВК (кросспостинг)».")
+        return
 
-        st.caption(f"Сообщество: {group_url}. Запись встанет в «Отложенные записи» — "
-                   "оттуда её можно удалить.")
-        text = st.text_area("Текст пробного поста", key=f"vk-probe-text-{project_id}",
-                            value="Проверка планировщика Click — тестовая отложенная запись, "
-                                  "можно удалить.")
-        minutes = st.number_input("Опубликовать через, минут", 10, 24 * 60, 40, step=5,
-                                  key=f"vk-probe-min-{project_id}",
-                                  help="ВК не даёт планировать ближе чем на несколько минут — "
-                                       "меньше 10 не ставим.")
-        busy = runner.busy_reason(project_id, "publish")
-        if busy:
-            st.caption(f"Сейчас нельзя: {busy}. Дождитесь окончания прогона.")
-            return
-        if st.button("Поставить пробную отложку", type="primary",
-                     key=f"vk-probe-go-{project_id}", disabled=not text.strip()):
-            when = apptime.now() + timedelta(minutes=int(minutes))
-            worker = get_worker()
-            with st.spinner("Открываю ВК и ставлю отложку — обычно меньше минуты…"):
-                res = worker.call(
-                    vk_social.schedule_postponed_post, project_id, group_url,
-                    text.strip(), [], when,
-                    headless=bool(get_settings(project_id)["headless"]))
-            if res.get("ok"):
-                st.success(f"Готово: отложка на {when.strftime('%H:%M')} стоит. Проверьте "
-                           f"«Отложенные записи» сообщества — и удалите тестовую запись.")
-            else:
-                st.error(f"Не получилось: {res.get('error')}")
-
-    with st.expander("Показать весь реестр листа (включая прошлые)"):
-        st.caption("Прошлые посты со ссылкой в колонке «Ссылка» считаются вышедшими.")
-        past = [p for p in posts if (d := content_plan.parse_date(p["date"])) and d < today]
-        html("".join(_crosspost_plan_row(p, state) for p in past[-40:]) or
-             T.empty("—", "Прошлых постов нет", ""))
+    st.caption(f"Сообщество: {group_url}. Запись встанет в «Отложенные записи» — "
+               "оттуда её можно удалить.")
+    text = st.text_area("Текст пробного поста", key=f"vk-probe-text-{project_id}",
+                        value="Проверка планировщика Click — тестовая отложенная запись, "
+                              "можно удалить.")
+    minutes = st.number_input("Опубликовать через, минут", 10, 24 * 60, 40, step=5,
+                              key=f"vk-probe-min-{project_id}",
+                              help="ВК не даёт планировать ближе чем на несколько минут — "
+                                   "меньше 10 не ставим.")
+    busy = runner.busy_reason(project_id, "publish")
+    if busy:
+        st.caption(f"Сейчас нельзя: {busy}. Дождитесь окончания прогона.")
+        return
+    if st.button("Поставить пробную отложку", type="primary",
+                 key=f"vk-probe-go-{project_id}", disabled=not text.strip()):
+        when = apptime.now() + timedelta(minutes=int(minutes))
+        worker = get_worker()
+        with st.spinner("Открываю ВК и ставлю отложку — обычно меньше минуты…"):
+            res = worker.call(
+                vk_social.schedule_postponed_post, project_id, group_url,
+                text.strip(), [], when,
+                headless=bool(get_settings(project_id)["headless"]))
+        if res.get("ok"):
+            st.success(f"Готово: отложка на {when.strftime('%H:%M')} стоит. Проверьте "
+                       f"«Отложенные записи» сообщества — и удалите тестовую запись.")
+        else:
+            st.error(f"Не получилось: {res.get('error')}")
 
 
 def _last_run_kind(project_id: str) -> str:

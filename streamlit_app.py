@@ -3437,26 +3437,30 @@ def _crosspost_bar(project_id: str, config: dict, posts: list[dict],
     else:
         sub = "Впереди постов нет"
 
-    meta = [
-        f"В листе <b>{len(posts)}</b> постов",
-        f"впереди <b>{len(upcoming)}</b> (по {horizon.strftime('%d.%m')} включительно)",
-        f"час выхода <b>{T.esc(content_plan.brand_default_time(project_id))}</b> по Екатеринбургу",
-    ]
-
     with st.container(border=True):
-        html(T.crosspost_bar(sched["title"], sub, meta, alive=sched["enabled"]))
-        st.caption(sched["note"])
-        c1, c2, c3 = st.columns([2, 2, 3])
-        with c1:
+        # Ни счётчиков листа, ни устройства планировщика: заказчица попросила
+        # убрать – каждый день это читать не нужно. Час выхода переехал к
+        # заголовку плана, там он и к месту.
+        html(T.crosspost_bar(sched["title"], sub, [], alive=sched["enabled"]))
+        if not sched["enabled"]:
+            st.caption(sched["note"])
+        # Кнопки – справа: слева состояние, справа то, что можно нажать.
+        # Колонку под «Сформировать план» заводим, только если формировать
+        # правда есть что, – иначе она пустая и кнопки висят посреди карточки.
+        todo = _crosspost_form_todo(project_id, config, upcoming, state)
+        will_form = bool(todo["vk"] or todo["ok"] or todo["msg"])
+        cols = st.columns([5, 2.2, 2.2, 2.6] if will_form else [7.4, 2.2, 2.2])
+        with cols[1]:
             _crosspost_scheduler_switch(project_id)
-        if c2.button("🔄 Обновить план", key=f"plan-refresh-btn-{project_id}",
-                     use_container_width=True,
-                     help="Перечитать таблицу – после правок в реестре"):
+        if cols[2].button("🔄 Обновить план", key=f"plan-refresh-btn-{project_id}",
+                          use_container_width=True,
+                          help="Перечитать таблицу – после правок в реестре"):
             st.session_state[f"plan-refresh-{project_id}"] = True
             st.session_state.pop(f"plan-posts-{project_id}", None)
             st.rerun()
-        with c3:
-            _crosspost_form_block(project_id, config, upcoming, state)
+        if will_form:
+            with cols[3]:
+                _crosspost_form_block(project_id, config, upcoming, state, hints=False)
 
 
 def _crosspost_attention(upcoming: list[dict], state: dict) -> None:
@@ -3495,10 +3499,30 @@ def _crosspost_plan_table(project_id: str, config: dict, posts: list[dict],
                      "Появятся здесь, как только в реестре будут строки с будущей датой."))
         return
 
-    html(f'<div class="card-title">🗓 План: {T.esc(plan["title"])}</div>')
+    # Час выхода стоит у заголовка: даты меняются каждую неделю, а час – нет.
+    html(f'<div class="card-title">🗓 План: {T.esc(plan["title"])}'
+         f'<span class="hint"> · час выхода '
+         f'{T.esc(content_plan.brand_default_time(project_id))} по Екатеринбургу</span></div>')
     html(T.crosspost_legend())
     html(T.crosspost_table(plan, sheet_url=(config.get("planSheetUrl") or "").strip(),
                            group_title=f'Впереди — {crosspost_plan.plural(len(plan["rows"]), "пост", "поста", "постов")}'))
+
+
+def _crosspost_login_hint(project_id: str, config: dict) -> None:
+    """
+    Где включается формирование ВК и ОК. Раньше эта фраза висела у кнопок
+    наверху и мозолила глаза каждый день; читают её один раз – при настройке.
+    """
+    import ok_browser
+    import vk_social
+
+    not_ready = [name for name, ready in (
+        ("ВК", vk_social.has_saved_session(project_id) and (config.get("vkGroupUrl") or "").strip()),
+        ("ОК", ok_browser.has_saved_session(project_id) and (config.get("okGroupUrl") or "").strip()),
+    ) if not ready]
+    if not_ready:
+        st.caption(f"Формирование {' и '.join(not_ready)} появится после входа: "
+                   f"«Настройки» → «Вход в ВК/ОК (кросспостинг)».")
 
 
 def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
@@ -3512,6 +3536,7 @@ def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
     t1, t2, t3 = st.tabs(["🔌 Подключения", "🧪 Проверка отложки", "📜 Журналы и весь реестр"])
 
     with t1:
+        _crosspost_login_hint(project_id, config)
         _crosspost_source_block(project_id, config)
         _crosspost_channels_block(project_id, config)
         _crosspost_yb_block(project_id, config)
@@ -3711,13 +3736,9 @@ def _crosspost_scheduler_journal() -> None:
     st.code(journal or "Журнал пуст – планировщик ещё ничего не делал.", language=None)
 
 
-def _crosspost_form_block(project_id: str, config: dict,
-                          upcoming: list[dict], state: dict) -> None:
-    """
-    «Сформировать план»: ВК – родные отложки браузером, Телеграм и МАКС –
-    задания планировщику. Каждая площадка независима; исходы пишутся в
-    память сразу, повтор кнопки доформирует только несделанное (Д-6).
-    """
+def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
+                         state: dict) -> dict:
+    """Что осталось сформировать по площадкам — и готовы ли к этому входы."""
     import crosspost_form
     import ok_browser
     import vk_social
@@ -3727,14 +3748,37 @@ def _crosspost_form_block(project_id: str, config: dict,
                     and (config.get("vkGroupUrl") or "").strip())
     ok_ready = bool(ok_browser.has_saved_session(project_id)
                     and (config.get("okGroupUrl") or "").strip())
-    vk_todo = crosspost_form.pending_for(upcoming, state, "vk") if vk_ready else []
-    ok_todo = crosspost_form.pending_for(upcoming, state, "ok") if ok_ready else []
-    msg_todo = [p for net, chat in channels.items() if chat
-                for p in crosspost_form.pending_for(upcoming, state, net)]
+    return {
+        "channels": channels,
+        "vk_ready": vk_ready,
+        "ok_ready": ok_ready,
+        "vk": crosspost_form.pending_for(upcoming, state, "vk") if vk_ready else [],
+        "ok": crosspost_form.pending_for(upcoming, state, "ok") if ok_ready else [],
+        "msg": [p for net, chat in channels.items() if chat
+                for p in crosspost_form.pending_for(upcoming, state, net)],
+    }
+
+
+def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
+                          state: dict, hints: bool = True) -> None:
+    """
+    «Сформировать план»: ВК – родные отложки браузером, Телеграм и МАКС –
+    задания планировщику. Каждая площадка независима; исходы пишутся в
+    память сразу, повтор кнопки доформирует только несделанное (Д-6).
+    """
+    import crosspost_form
+
+    todo = _crosspost_form_todo(project_id, config, upcoming, state)
+    channels = todo["channels"]
+    vk_ready, ok_ready = todo["vk_ready"], todo["ok_ready"]
+    vk_todo, ok_todo, msg_todo = todo["vk"], todo["ok"], todo["msg"]
     if not vk_todo and not ok_todo and not msg_todo:
-        if not (vk_ready or ok_ready):
+        # Рядом с кнопками объяснение не живёт: hints=False зовут из строки
+        # состояния, где нужна одна кнопка и ничего больше. Подсказка про вход
+        # показывается в «Подключениях», где её и ищут.
+        if hints and not (vk_ready or ok_ready):
             st.caption("Формирование ВК и ОК появится после входа: «Настройки» → "
-                       "«Вход в ВК/ОК (кросспостинг)». Каналы ТГ/МАКС – в блоке ниже.")
+                       "«Вход в ВК/ОК (кросспостинг)».")
         return
 
     parts = []

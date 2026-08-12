@@ -1397,7 +1397,8 @@ _CROSSPOST_TABLE_CSS = (
     "font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;"
     "color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap}"
     "table.cp-plan th.c,table.cp-plan td.c{text-align:center}"
-    "table.cp-plan td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}"
+    "table.cp-plan td{padding:9px 12px;border-bottom:1px solid var(--border);"
+    "vertical-align:middle;text-align:left}"
     "table.cp-plan tr:last-child td{border-bottom:none}"
     "table.cp-plan tbody tr:hover td{background:var(--bg-3)}"
     "table.cp-plan tr.cp-group td{background:var(--bg-4);color:var(--muted);padding:7px 12px;"
@@ -1412,22 +1413,23 @@ _CROSSPOST_TABLE_CSS = (
     ".cp-flag.warn{background:var(--yel)}"
     ".cp-flag.err{background:var(--red)}"
     ".cp-flag.todo,.cp-flag.manual{background:var(--border-2)}"
-    ".cp-when{font-family:var(--mono);font-weight:700;color:var(--text);white-space:nowrap}"
-    ".cp-when small{display:block;font-family:var(--font);font-weight:500;color:var(--dim);"
-    "font-size:10.5px;margin-top:2px}"
+    ".cp-when{font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--text);"
+    "white-space:nowrap}"
+    ".cp-kind-cell{white-space:nowrap}"
     ".cp-post{min-width:0}"
     ".cp-post b{display:block;color:var(--text);font-weight:600;font-size:12.5px;line-height:1.4;"
     "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
     ".cp-post span{display:block;color:var(--text-2);font-size:12px;line-height:1.45;margin-top:2px;"
     "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
     ".cp-post b.warn{color:var(--yel)}"
-    ".cp-kind{font-size:11px;padding:2px 9px;border-radius:20px;white-space:nowrap;"
-    "background:var(--bg-4);color:var(--muted)}"
+    ".cp-kind{display:inline-flex;align-items:center;height:22px;font-size:11px;"
+    "padding:0 10px;border-radius:20px;white-space:nowrap;background:var(--bg-4);"
+    "color:var(--muted)}"
     ".cp-photo{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap}"
     # Ячейка площадки — тот же значок, что и в легенде.
-    ".cp-mark{width:34px;height:26px;margin:0 auto;border-radius:6px;display:flex;"
+    ".cp-mark{width:30px;height:24px;border-radius:6px;display:inline-flex;"
     "align-items:center;justify-content:center;font-size:12px;font-weight:800;"
-    "border:1px solid transparent}"
+    "border:1px solid transparent;vertical-align:middle}"
     ".cp-mark.set{background:var(--grn-bg);color:var(--grn);border-color:rgba(16,185,129,.3)}"
     ".cp-mark.wait{background:var(--acc-bg);color:var(--acc);border-color:rgba(91,124,250,.3)}"
     ".cp-mark.off{color:var(--dim);border:1px dashed var(--border-2)}"
@@ -1454,7 +1456,7 @@ _CROSSPOST_TABLE_CSS = (
     ".cp-legend{display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:12px;"
     "color:var(--muted);padding:2px 0 8px}"
     ".cp-legend span{display:inline-flex;align-items:center;gap:7px}"
-    ".cp-legend .cp-mark{width:22px;height:22px;margin:0}"
+    ".cp-legend .cp-mark{width:22px;height:22px}"
     "@media(max-width:900px){table.cp-plan{table-layout:auto}}"
 )
 
@@ -1508,11 +1510,11 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
     жёсткий набор врал бы: у одного бренда есть Дзен, у другого нет ОК.
     """
     cols = plan["columns"]
-    widths = ('<colgroup><col style="width:3px"><col style="width:118px">'
-              '<col style="width:132px"><col>'
-              '<col style="width:56px">'
-              + f'<col style="width:{64 if len(cols) < 5 else 56}px">' * len(cols)
-              + '<col style="width:190px"></colgroup>')
+    widths = ('<colgroup><col style="width:3px"><col style="width:66px">'
+              '<col style="width:140px"><col>'
+              '<col style="width:52px">'
+              + f'<col style="width:{62 if len(cols) < 5 else 54}px">' * len(cols)
+              + '<col style="width:186px"></colgroup>')
     head = (
         '<tr><th class="cp-flag"></th><th>Когда</th><th>Тип</th><th>Пост</th>'
         '<th class="c">Фото</th>'
@@ -1543,9 +1545,9 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
         body.append(
             f'<tr class="{"cp-warn" if view["state"] == "warn" else ""}">'
             f'<td class="cp-flag {esc(view["state"])}"></td>'
-            f'<td class="cp-when">{esc(view["when_day"])} · {esc(view["time"])}'
-            f'<small>{esc(view["when_note"])}</small></td>'
-            f'<td><span class="cp-kind">{esc(view["kind"] or "—")}</span></td>'
+            f'<td class="cp-when">{esc(view["when_day"])}</td>'
+            f'<td class="cp-kind-cell"><span class="cp-kind">'
+            f'{esc(view["kind"] or "—")}</span></td>'
             f'<td class="cp-post">{text_html}</td>'
             f'<td class="c cp-photo">{("🖼 " + str(view["photos"])) if view["photos"] else "—"}</td>'
             + "".join(cells)

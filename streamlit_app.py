@@ -56,7 +56,7 @@ _OWN_MODULES = ("build", "apptime", "paths", "projects_data", "repo_store", "ui_
                 # обо ВСЕХ модулях, которые мы правим.
                 "content_plan", "crosspost_state", "crosspost_form", "post_text",
                 "scheduler", "social_session", "vk_social", "ok_browser",
-                "ok_social", "tg_social", "max_social")
+                "ok_social", "tg_social", "max_social", "max_browser")
 
 
 def _settle_imports() -> None:
@@ -3562,9 +3562,20 @@ def _crosspost_channels_block(project_id: str, config: dict) -> None:
                                              key=f"cp-tgc-{project_id}", placeholder="@stalmetural"),
             "tgChannelStaff": c2.text_input("ТГ сотрудники", value=config.get("tgChannelStaff", ""),
                                             key=f"cp-tgs-{project_id}", placeholder="@SMUdaily"),
-            "maxChatId": c3.text_input("МАКС: id канала", value=config.get("maxChatId", ""),
+            "maxChatId": c3.text_input("МАКС: id канала (для бота)",
+                                       value=config.get("maxChatId", ""),
                                        key=f"cp-max-{project_id}"),
         }
+        # Ссылка на канал в веб-версии МАКС – для РОДНОЙ отложки. У бота
+        # отложки нет вовсе (проверено по документации), он шлёт «сейчас», и
+        # тогда Click обязан работать в час выхода. По этой ссылке отложку
+        # держит сам МАКС, как ВК и ОК держат свои.
+        vals["maxWebUrl"] = st.text_input(
+            "МАКС: ссылка на канал в веб-версии (для отложки)",
+            value=config.get("maxWebUrl", ""), key=f"cp-maxweb-{project_id}",
+            placeholder="https://web.max.ru/-70916890460398",
+            help="Откройте канал на web.max.ru и скопируйте адрес из строки браузера. "
+                 "По нему Click поставит отложку, которую держит сам МАКС.")
         if any(vals[k].strip() != (config.get(k) or "") for k in vals):
             config.update({k: v.strip() for k, v in vals.items()})
             save_config(project_id)
@@ -3735,6 +3746,9 @@ PROBE_NETWORKS = {
     "ok": {"ru": "ОК", "module": "ok_browser", "url_key": "okGroupUrl",
            "where": "«Настройки» → «Вход в ОК (кросспостинг)»",
            "shelf": "«Отложенные» в группе"},
+    "max": {"ru": "МАКС", "module": "max_browser", "url_key": "maxWebUrl",
+            "where": "«Настройки» → «Файл сессий» и поле «МАКС: ссылка на канал»",
+            "shelf": "«Запланированные посты» канала"},
 }
 
 

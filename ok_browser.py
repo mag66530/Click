@@ -165,6 +165,55 @@ SEL = {
 }
 
 
+def delayed_url(group_url: str) -> str:
+    """
+    Адрес «Отложенных» группы: ok.ru/group/<id>/delayed.
+
+    Там лежат созданные отложки – по нему и проверяем результат, когда
+    всплывашка «Тема опубликуется …» уже погасла. Запись надёжнее
+    уведомления: уведомление живёт секунды, запись – до публикации.
+    """
+    url = (group_url or "").strip().rstrip("/")
+    if not url:
+        return ""
+    for tail in ("/topics", "/delayed"):
+        if url.endswith(tail):
+            url = url[: -len(tail)]
+    return url + "/delayed"
+
+
+def _found_in_delayed(page, group_url: str, text: str,
+                      log: Callable[[str], None]) -> str:
+    """
+    Найти нашу запись в «Отложенных» группы. Возвращает строку с
+    подтверждением или пусто.
+
+    Спрашиваем у ОК напрямую, вместо того чтобы гадать по исчезнувшей
+    всплывашке. Сверяем по началу текста: заголовков у тем нет, а первые
+    слова у пробной и настоящей записи всегда свои.
+    """
+    where = delayed_url(group_url)
+    if not where:
+        return ""
+    try:
+        page.goto(where, wait_until="domcontentloaded", timeout=30_000)
+        page.wait_for_timeout(2_500)
+        body = page.evaluate(
+            "() => document.body ? (document.body.innerText || '') : ''") or ""
+    except Exception as e:  # noqa: BLE001
+        log(f"  «Отложенные» открыть не вышло: {str(e).split(chr(10))[0]}")
+        return ""
+    head = " ".join((text or "").split())[:40]
+    if head and head in " ".join(body.split()):
+        # Рядом с записью ОК пишет «будет опубликовано сегодня в 15:40» –
+        # забираем эту строку целиком, она и есть ответ площадки.
+        for line in body.split("\n"):
+            if "будет опубликовано" in line:
+                return " ".join(line.split())
+        return "запись найдена в «Отложенных» группы"
+    return ""
+
+
 def topics_url(group_url: str) -> str:
     """
     Адрес вкладки «Темы» группы – именно там живёт «Создать новую тему».
@@ -1586,7 +1635,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             log(f"Ввожу текст ({len(text)} знаков)")
             page.click(text_sel)
             page.type(text_sel, text, delay=8)
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(1_200)
             typed = (page.eval_on_selector(text_sel, "el => el.textContent || ''") or "")
             if text.strip() and not typed.strip():
                 return {"ok": False, "error": "Текст не попал в поле поста ОК",
@@ -1629,7 +1678,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             page.click(date_sel, click_count=3)
             page.type(date_sel, when.strftime("%d.%m.%Y"), delay=25)
             page.keyboard.press("Enter")
-            page.wait_for_timeout(600)
+            page.wait_for_timeout(1_200)
             # Календарь остаётся открытым и накрывает списки времени –
             # «нажимаем на пустое место» вместо человека. Строго по своему
             # полю текста: клик по подписи «Время публикации» снял бы галочку.
@@ -1663,8 +1712,9 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                             "shot": shot}
                 if picked != value:
                     log(f"  {what}: ОК даёт только свои значения, взял ближайшее {picked}")
-                page.wait_for_timeout(300)
+                page.wait_for_timeout(600)
 
+            page.wait_for_timeout(800)
             log("Сохраняю отложку")
             if not _click_first(page, SEL["submit_scheduled"], timeout=10_000):
                 shot = _debug_shot(project_id, page, "no-save")
@@ -1676,19 +1726,31 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             # Ответ самой площадки: «Тема опубликуется 13.08.2026 в 08:59».
             # Ждём именно его, а не закрытия окна: окно может закрыться и
             # тогда, когда пост ушёл не туда, куда мы просили.
+            #
+            # Ждём НЕ ТОРОПЯСЬ. Заказчица: «как-то слишком быстро всё делает,
+            # пусть чуть-чуть подольше ждёт ответа» – и она права: восемь
+            # секунд на ответ живого сайта мало, а цена спешки высока. Пост,
+            # объявленный неудачным, зовут формировать заново – и получается
+            # дубль там, где всё было в порядке.
             said = ""
-            for _ in range(20):
+            for _ in range(30):
                 said = _toast_scheduled(page, when)
                 if said:
                     break
-                page.wait_for_timeout(400)
+                page.wait_for_timeout(500)
+            if not said:
+                # Уведомление могло промелькнуть и погаснуть. Спросим у ОК
+                # напрямую: заглянем в «Отложенные» группы. Это надёжнее
+                # всплывашки – там лежит сама запись.
+                log("  уведомления не видно – проверяю «Отложенные» в группе")
+                said = _found_in_delayed(page, group_url, text, log)
             if not said:
                 shot = _debug_shot(project_id, page, "no-toast")
                 return {"ok": False,
-                        "error": "ОК не подтвердил отложку: уведомления «Тема "
-                                 "опубликуется …» не появилось. Проверьте «Отложенные» "
-                                 "в группе – если тема там есть, формировать заново не "
-                                 "нужно", "shot": shot}
+                        "error": "ОК не подтвердил отложку: ни уведомления «Тема "
+                                 "опубликуется …», ни записи в «Отложенных» группы. "
+                                 "Загляните туда сами – если тема там есть, "
+                                 "формировать заново не нужно", "shot": shot}
             log(f"ОК подтвердил: {said}")
             yb._save_storage_state(context, session_path(project_id))
             return {"ok": True}

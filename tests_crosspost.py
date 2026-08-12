@@ -983,6 +983,17 @@ def test_ok_schedule_flow() -> None:
           ok.topics_url("https://ok.ru/inmetprom") == "https://ok.ru/inmetprom/topics")
     check("пустой адрес остаётся пустым", ok.topics_url("") == "")
 
+    # «Отложенные» группы – по ним проверяем результат, если всплывашка
+    # «Тема опубликуется …» уже погасла. Запись надёжнее уведомления:
+    # уведомление живёт секунды, запись – до самой публикации.
+    check("адрес отложенных собирается",
+          ok.delayed_url("https://ok.ru/group/1/") == "https://ok.ru/group/1/delayed")
+    check("из адреса тем тоже",
+          ok.delayed_url("https://ok.ru/group/1/topics") == "https://ok.ru/group/1/delayed")
+    check("дважды /delayed не приписываем",
+          ok.delayed_url("https://ok.ru/group/1/delayed") == "https://ok.ru/group/1/delayed")
+    check("пустой адрес остаётся пустым", ok.delayed_url("") == "")
+
     # Ссылку на форму ОК зовёт a.pf-head_itx_a – снято инспектором со
     # страницы заказчицы. Класс держим запасным: подписи надёжнее, но и
     # терять подтверждённый селектор незачем.

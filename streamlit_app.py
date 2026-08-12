@@ -3735,12 +3735,17 @@ def _crosspost_channels_block(project_id: str, config: dict) -> None:
                                              key=f"cp-tgc-{project_id}", placeholder="@stalmetural"),
             "tgChannelStaff": c2.text_input("ТГ сотрудники", value=config.get("tgChannelStaff", ""),
                                             key=f"cp-tgs-{project_id}", placeholder="@SMUdaily"),
-            "maxChatId": c3.text_input("МАКС: id канала (для бота)",
+            "maxChatId": c3.text_input("МАКС: id канала для бота (не обязательно)",
                                        value=config.get("maxChatId", ""),
                                        key=f"cp-max-{project_id}"),
         }
-        st.caption("Ссылка на канал МАКС для отложки – в «Настройках», блок "
-                   "«🔒 МАКС (кросспостинг)»: там же, где ссылки ВК и ОК.")
+        st.caption("МАКС можно вести двумя путями, и id канала нужен только "
+                   "первому. **Бот** шлёт «сейчас», а время держит планировщик – "
+                   "значит Click должен работать в час выхода; для него и нужен id. "
+                   "**Отложка** – родная, её держит сам МАКС, Click при этом может "
+                   "быть выключен; для неё нужен не id, а ссылка на канал в "
+                   "веб-версии, и она в «Настройках», блок «🔒 МАКС (кросспостинг)». "
+                   "Обычно достаточно второго пути – поле id можно оставить пустым.")
         if any(vals[k].strip() != (config.get(k) or "") for k in vals):
             config.update({k: v.strip() for k, v in vals.items()})
             save_config(project_id)
@@ -4678,9 +4683,14 @@ def _max_login_block(project_id: str, config: dict) -> None:
                         value=config.get("maxWebUrl", ""),
                         key=f"set-maxweb-{project_id}",
                         placeholder="https://web.max.ru/-70916890460398",
-                        help="Откройте канал на web.max.ru и скопируйте адрес из "
-                             "строки браузера. По нему Click поставит отложку, "
-                             "которую держит сам МАКС.")
+                        help="Откройте web.max.ru, зайдите в канал и скопируйте адрес "
+                             "из строки браузера – он выглядит как web.max.ru/-70916… "
+                             "Ссылка-приглашение вида max.ru/join/… НЕ подойдёт: это "
+                             "приглашение вступить, а не адрес канала.")
+    if url.strip() and "/join/" in url:
+        st.warning("Это ссылка-приглашение (max.ru/join/…) – по ней в канал "
+                   "вступают, а не публикуют. Откройте канал на web.max.ru и "
+                   "скопируйте адрес из строки браузера: web.max.ru/-70916…")
     if url.strip() != (config.get("maxWebUrl") or ""):
         config["maxWebUrl"] = url.strip()
         save_config(project_id)

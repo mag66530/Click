@@ -1464,11 +1464,139 @@ def test_max_calendar() -> None:
           mx.caption_ok("", when, today))
 
 
+def test_social_defaults() -> None:
+    """
+    Ссылки брендов зашиты и подставляются только в ПУСТОЕ поле.
+
+    Заказчица прислала их списком (12.08.2026) со словами «зашить, чтобы
+    каждый раз ничего не вводить»: в облаке файловая система временная, и
+    после каждого перезапуска два десятка ссылок приходилось вбивать заново.
+    Главное здесь – старшинство: то, что вписано руками, всегда выше кода.
+    """
+    print("\nСсылки площадок: заготовка и старшинство")
+    import projects_data as pdata
+    import streamlit_app as app
+
+    check("заготовки есть у всех пяти брендов",
+          set(pdata.SOCIAL) == {"SMU", "IMP", "MPE", "MPI", "APS"},
+          str(sorted(pdata.SOCIAL)))
+    for pid, links in pdata.SOCIAL.items():
+        check(f"{pid}: ВК и ОК на месте",
+              links.get("vkGroupUrl", "").startswith("https://vk.ru/")
+              and links.get("okGroupUrl", "").startswith("https://ok.ru/group/"))
+        check(f"{pid}: канал ТГ через @",
+              links.get("tgChannelClient", "").startswith("@"),
+              links.get("tgChannelClient", ""))
+        # Приглашение max.ru/join/… не годится: по нему вступают, а не
+        # публикуют. Нужен адрес канала в веб-версии.
+        mx = links.get("maxWebUrl", "")
+        check(f"{pid}: МАКС – адрес веб-версии, не приглашение",
+              mx.startswith("https://web.max.ru/-") and "/join/" not in mx, mx)
+
+    smu = pdata.social_defaults("SMU")
+    check("реестр – одной таблицей на все бренды",
+          smu["planSheetUrl"].startswith("https://docs.google.com/spreadsheets/d/"))
+    check("у неизвестного бренда заготовки нет", pdata.social_defaults("XXX") == {})
+
+    # Пустое поле заполняем, занятое – никогда.
+    sub = {"vkGroupUrl": "", "okGroupUrl": "https://ok.ru/group/МОЁ"}
+    app._fill_social("SMU", sub)
+    check("пустое поле заполнено заготовкой",
+          sub["vkGroupUrl"] == pdata.SOCIAL["SMU"]["vkGroupUrl"], sub["vkGroupUrl"])
+    check("занятое поле не тронуто",
+          sub["okGroupUrl"] == "https://ok.ru/group/МОЁ", sub["okGroupUrl"])
+    check("пробелы за значение не считаем",
+          app._fill_social("IMP", {"vkGroupUrl": "   "})["vkGroupUrl"]
+          == pdata.SOCIAL["IMP"]["vkGroupUrl"])
+
+    # Ссылки должны переживать перезапуск облака – значит лежать в списке
+    # того, что уезжает наружу.
+    for key in ("vkGroupUrl", "okGroupUrl", "tgChannelClient", "tgChannelStaff",
+                "maxWebUrl", "planSheetUrl", "zenUrl"):
+        check(f"{key} хранится снаружи", key in app._KEPT)
+    check("пароль наружу не уезжает", "password" not in app._KEPT)
+
+
+def test_max_native_scheduling() -> None:
+    """
+    МАКС переехал с бота на родную отложку – и не должен уйти дважды.
+
+    У бота МАКС отложки нет вовсе: он шлёт «сейчас», а время держал
+    планировщик, значит Click обязан был работать в час выхода. Через
+    веб-версию пост держит сам МАКС. Опасность одна: если оставить и
+    задание боту, тот же пост уйдёт вторым экземпляром.
+    """
+    print("\nМАКС: родная отложка вместо задания боту")
+    import crosspost_form
+    import crosspost_plan as plan
+    import crosspost_state as cps
+    import streamlit_app as app
+
+    check("формирование МАКС существует", hasattr(crosspost_form, "form_max_all"))
+
+    with_web = {"tgChannelClient": "@a", "maxChatId": "-123",
+                "maxWebUrl": "https://web.max.ru/-70916890460398"}
+    check("есть ссылка – боту задание не ставим",
+          app._crosspost_channels(with_web)["max"] == "")
+    check("а Телеграм при этом на месте",
+          app._crosspost_channels(with_web)["tg-client"] == "@a")
+    check("нет ссылки – бот остаётся запасным путём",
+          app._crosspost_channels({"maxChatId": "-123"})["max"] == "-123")
+    check("ни того, ни другого – пусто",
+          app._crosspost_channels({})["max"] == "")
+
+    # Знак в плане: одно и то же «запланировано» значит разное.
+    post = {"date": "14.08.2026", "when": "2026-08-14T20:08:00",
+            "text": "текст", "targets": [{"network": "max"}]}
+    key = cps.post_key(post)
+    native = {key: {"targets": {"max": {"state": cps.SCHEDULED, "native": True}}}}
+    by_bot = {key: {"targets": {"max": {"state": cps.SCHEDULED}}}}
+    m1 = plan.net_view(post, {"network": "max"}, native)
+    m2 = plan.net_view(post, {"network": "max"}, by_bot)
+    check("родная отложка – держит сама площадка",
+          m1["note"] == "отложка стоит в соцсети", m1["note"])
+    check("задание боту – держит Click",
+          m2["note"] == "отправит Click в час выхода", m2["note"])
+
+
+def test_sessions_in_store() -> None:
+    """
+    Вход в соцсети переживает перезапуск облака.
+
+    Файловая система Streamlit Cloud временная: после каждого рестарта
+    заказчица заново вставляла файл сессии. Сессии Яндекса и 2ГИС уже
+    лежали в закрытой ветке проекта – теперь туда же уезжают ВК, ОК и МАКС.
+    """
+    print("\nСессии соцсетей: переживают перезапуск")
+    import streamlit_app as app
+
+    names = [n for n, _ in app._session_files("SMU")]
+    for want in ("session-SMU", "device-SMU", "session-gis-SMU",
+                 "session-vk-SMU", "session-ok-SMU", "session-max-SMU"):
+        check(f"{want} хранится снаружи", want in names, str(names))
+    check("имена не повторяются", len(set(names)) == len(names), str(names))
+    paths = [str(p) for _, p in app._session_files("SMU")]
+    check("файлы у всех разные", len(set(paths)) == len(paths), str(paths))
+
+    # «Войти заново» должно стирать и копию в хранилище. Иначе кнопка врёт:
+    # локальный файл исчез, а при следующем запуске Click вернёт его назад.
+    import inspect
+    src = inspect.getsource(app._forget_session)
+    check("сброс стирает и локально, и снаружи",
+          "unlink" in src and "repo_store.save" in src)
+    for kind in ("vk", "ok", "gis", "max"):
+        check(f"кнопка сброса {kind} зовёт общий сброс",
+              f'_forget_session(project_id, "{kind}")' in inspect.getsource(app))
+
+
 def main() -> int:
     print("═" * 60)
     test_probe_networks()
     test_combined_session_file()
     test_max_calendar()
+    test_social_defaults()
+    test_max_native_scheduling()
+    test_sessions_in_store()
     test_ok_session_detection()
     test_ok_schedule_flow()
     test_plan_horizon_and_past()

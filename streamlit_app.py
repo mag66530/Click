@@ -267,7 +267,27 @@ def _default_subproject(project_id: str) -> dict:
 # Что из конфига храним снаружи (в репозитории). Пароль от Яндекса – НИКОГДА:
 # он остаётся только в этом контейнере.
 _KEPT = ("countries", "countriesGis", "email", "kpSheetUrl", "kpSheetTitle",
-        "kpSyncedAt", "gisPhotosDefault")
+        "kpSyncedAt", "gisPhotosDefault",
+        # Ссылки на площадки и на реестр. Раньше их тут не было – и после
+        # каждого перезапуска облака все поля стояли пустыми: файловая
+        # система временная, а наружу уезжали только города. Заказчица
+        # вбивала два десятка ссылок заново.
+        "vkGroupUrl", "okGroupUrl", "tgChannelClient", "tgChannelStaff",
+        "maxWebUrl", "maxChatId", "zenUrl", "planSheetUrl")
+
+
+def _fill_social(project_id: str, sub: dict) -> dict:
+    """
+    Дописать зашитые ссылки бренда в ПУСТЫЕ поля.
+
+    Порядок старшинства тут ровно тот же, что у городов: сохранённое
+    заказчицей главнее кода. Заготовка лишь избавляет от набора вручную –
+    стоило один раз потерять их при перезапуске, и работа встала.
+    """
+    for key, value in pdata.social_defaults(project_id).items():
+        if not (sub.get(key) or "").strip():
+            sub[key] = value
+    return sub
 
 
 def load_raw_config(project_id: str) -> dict:
@@ -308,13 +328,14 @@ def _merge_kept(project_id: str, raw: dict, from_preset: bool = False) -> dict:
     сохранял. Правки, сделанные в самом приложении (локальный файл есть),
     по-прежнему главнее: их писал человек, а не код.
     """
-    saved = repo_store.load(f"project-{project_id}")
-    if not saved:
-        return raw
     sub = next((x for x in raw["projects"] if x["id"] == raw.get("activeProjectId")), raw["projects"][0])
+    saved = repo_store.load(f"project-{project_id}")
     for key in _KEPT:
-        if key in saved and (from_preset or not sub.get(key)):
+        if saved and key in saved and (from_preset or not sub.get(key)):
             sub[key] = saved[key]
+    # Ссылки – в последнюю очередь и только в пустое: и сохранённое, и
+    # набранное руками старше заготовки.
+    _fill_social(project_id, sub)
     return raw
 
 
@@ -342,30 +363,58 @@ def _pull_session(project_id: str) -> None:
     """
     if not repo_store.is_configured():
         return
-    pairs = ((f"session-{project_id}", yb.session_path(project_id)),
-             (f"device-{project_id}", yb.device_path(project_id)),
-             (f"session-gis-{project_id}", gis.session_path(project_id)))
-    for name, path in pairs:
+    for name, path in _session_files(project_id):
         if path.exists() and path.stat().st_size > 2:
             continue
         try:
             data = repo_store.load(name)
-            if data and data.get("cookies"):
+            # У МАКС вход живёт не в куках, а в localStorage (раздел origins) –
+            # проверка «есть ли cookies» отбраковала бы живую сессию.
+            if data and (data.get("cookies") or data.get("origins")):
                 path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         except Exception:  # noqa: BLE001
             pass
+
+
+def _session_files(project_id: str) -> tuple[tuple[str, Path], ...]:
+    """
+    Все файлы входов проекта: что храним снаружи и под каким именем.
+
+    Соцсети сюда добавлены по просьбе заказчицы (12.08.2026): в облаке
+    файловая система временная, и после каждого перезапуска вход в ВК, ОК и
+    МАКС приходилось проходить заново – вставлять файл сессии руками. Куки
+    ложатся в ту же закрытую ветку, где уже лежат сессии Яндекса и 2ГИС.
+    """
+    import max_browser
+    import ok_browser
+    import vk_social
+
+    return ((f"session-{project_id}", yb.session_path(project_id)),
+            (f"device-{project_id}", yb.device_path(project_id)),
+            (f"session-gis-{project_id}", gis.session_path(project_id)),
+            (f"session-vk-{project_id}", vk_social.session_path(project_id)),
+            (f"session-ok-{project_id}", ok_browser.session_path(project_id)),
+            (f"session-max-{project_id}", max_browser.session_path(project_id)))
 
 
 def _push_session(project_id: str) -> None:
     """Свежие куки – в хранилище. Прогон продлевает их, копия не должна отставать."""
     if not repo_store.is_configured():
         return
-    pairs = ((f"session-{project_id}", yb.session_path(project_id), yb.has_saved_session),
-             (f"device-{project_id}", yb.device_path(project_id), None),
-             # Сессия 2ГИС – туда же: без неё после перезапуска облака вход
-             # пришлось бы проходить заново, а обещано, что не придётся.
-             (f"session-gis-{project_id}", gis.session_path(project_id), gis.has_saved_session))
-    for name, path, alive in pairs:
+    import max_browser
+    import ok_browser
+    import vk_social
+
+    alive_by_name = {
+        f"session-{project_id}": yb.has_saved_session,
+        f"session-gis-{project_id}": gis.has_saved_session,
+        f"session-vk-{project_id}": vk_social.has_saved_session,
+        f"session-ok-{project_id}": ok_browser.has_saved_session,
+        f"session-max-{project_id}": max_browser.has_saved_session,
+    }
+    where_by_name = {"gis": "2ГИС", "vk": "ВК", "ok": "ОК", "max": "МАКС"}
+    for name, path in _session_files(project_id):
+        alive = alive_by_name.get(name)
         if not path.exists() or (alive and not alive(project_id)):
             continue
         mark = f"_pushed_{name}"
@@ -373,7 +422,8 @@ def _push_session(project_id: str) -> None:
         if st.session_state.get(mark) == mtime:
             continue
         try:
-            where = "2ГИС" if "gis" in name else "Яндекса"
+            kind = name.split("-")[1] if name.count("-") > 1 else ""
+            where = where_by_name.get(kind, "Яндекса")
             repo_store.save(name, json.loads(path.read_text(encoding="utf-8")),
                             f"Click: сессия {where} ({project_id})")
             st.session_state[mark] = mtime
@@ -421,13 +471,25 @@ def _push_ledger(project_id: str) -> None:
         pass
 
 
-def _forget_session(project_id: str) -> None:
-    """«Войти заново»: стираем сессию и локально, и в хранилище."""
-    yb.session_path(project_id).unlink(missing_ok=True)
+def _forget_session(project_id: str, kind: str = "") -> None:
+    """
+    «Войти заново»: стираем сессию и локально, И в хранилище.
+
+    Стереть один локальный файл мало: копия лежит в закрытой ветке, и при
+    следующем запуске Click честно вернёт её обратно – кнопка «сбросить»
+    выглядела бы сработавшей, а вход остался бы прежним. Особенно больно
+    это на соцсетях: заказчица однажды собрала куки по СМУ и пыталась ими
+    же зайти в ИМП – пока сессия не стёрта до конца, выхода из этого нет.
+    """
+    name = f"session-{kind}-{project_id}" if kind else f"session-{project_id}"
+    path = dict(_session_files(project_id)).get(name)
+    if path is None:
+        return
+    path.unlink(missing_ok=True)
+    st.session_state.pop(f"_pushed_{name}", None)
     if repo_store.is_configured():
         try:
-            repo_store.save(f"session-{project_id}", {},
-                            f"Click: сессия сброшена ({project_id})")
+            repo_store.save(name, {}, f"Click: сессия сброшена ({project_id})")
         except Exception:  # noqa: BLE001
             pass
 
@@ -517,8 +579,14 @@ def _save_kept(project_id: str, raw: dict) -> None:
     """Города и настройки – наружу, чтобы пережили перезапуск. Пароль не берём."""
     sub = next((x for x in raw["projects"] if x["id"] == raw.get("activeProjectId")), raw["projects"][0])
     data = {k: sub.get(k) for k in _KEPT if sub.get(k)}
-    if not data.get("countries"):
+    if not data:
         return
+    if not data.get("countries"):
+        # Городов в этом конфиге нет – но это не повод не сохранить ссылки.
+        # Пустым списком поверх сохранённых городов не пишем никогда: у МПИ
+        # города приходят из КП и в конфиге появляются не сразу.
+        old = repo_store.load(f"project-{project_id}") or {}
+        data = {**old, **data}
     try:
         repo_store.save(f"project-{project_id}", data, f"Click: города и настройки {project_id}")
     except Exception as e:  # noqa: BLE001
@@ -3576,18 +3644,26 @@ def tab_crosspost(project_id: str, config: dict) -> None:
     _crosspost_tools(project_id, config, posts, state, today, upcoming)
 
     # Честно про границы: что работает и при каких условиях.
-    st.info("Полный цикл собран: ВК и ОК – родные отложки после входа (держит сама "
-            "площадка); Телеграм и МАКС – по времени через планировщик (нужны токены "
-            "ботов); ЯБ – прогон по расписанию. Для ТГ/МАКС/ЯБ в час выхода Click "
-            "должен работать. Отложка ОК уточняется первым живым прогоном – при "
-            "несовпадении вёрстки кнопка скажет словами и сохранит снимок.",
+    st.info("Полный цикл собран: ВК, ОК и МАКС – родные отложки после входа "
+            "(держит сама площадка, Click в час выхода не нужен); Телеграм – по "
+            "времени через планировщик (нужен токен бота), и вот для него Click "
+            "в час выхода работать обязан; ЯБ – прогон по расписанию.",
             icon="ℹ️")
 
 
 def _crosspost_channels(config: dict) -> dict[str, str]:
+    """
+    Кому ставим задание планировщику.
+
+    МАКС попадает сюда ТОЛЬКО как запасной путь – когда ссылки на канал в
+    веб-версии нет, а id для бота есть. Есть ссылка – МАКС формируется
+    родной отложкой, и задание боту было бы вторым экземпляром того же
+    поста.
+    """
+    max_native = bool((config.get("maxWebUrl") or "").strip())
     return {"tg-client": (config.get("tgChannelClient") or "").strip(),
             "tg-staff": (config.get("tgChannelStaff") or "").strip(),
-            "max": (config.get("maxChatId") or "").strip()}
+            "max": "" if max_native else (config.get("maxChatId") or "").strip()}
 
 
 def _crosspost_forget_block(project_id: str, upcoming: list[dict], state: dict) -> None:
@@ -3649,6 +3725,14 @@ def _crosspost_channels_block(project_id: str, config: dict) -> None:
             "maxChatId": c3.text_input("МАКС: id канала для бота (не обязательно)",
                                        value=config.get("maxChatId", ""),
                                        key=f"cp-max-{project_id}"),
+            # Дзен Click пока не публикует. Ссылку храним, чтобы она была под
+            # рукой и не терялась при перезапуске облака, – и подписываем
+            # честно, чтобы поле не выглядело обещанием.
+            "zenUrl": st.text_input("Дзен: канал (пока только для справки)",
+                                    value=config.get("zenUrl", ""),
+                                    key=f"cp-zen-{project_id}",
+                                    help="Дзен в кросспостинге не подключён – "
+                                         "Click туда ничего не отправляет."),
         }
         st.caption("МАКС можно вести двумя путями, и id канала нужен только "
                    "первому. **Бот** шлёт «сейчас», а время держит планировщик – "
@@ -3678,7 +3762,7 @@ def _crosspost_scheduler_state(project_id: str) -> dict:
     running = scheduler.ensure_running() if cfg["enabled"] else False
     if not cfg["enabled"]:
         title = "Планировщик выключен"
-        note = ("Задания Телеграма и МАКС не отправляются. ВК и ОК выйдут сами – "
+        note = ("Задания Телеграма не отправляются. ВК, ОК и МАКС выйдут сами – "
                 "их отложку держит сама площадка.")
     elif running or scheduler.is_running_here():
         title = "Автопостинг работает"
@@ -3714,11 +3798,12 @@ def _crosspost_scheduler_journal() -> None:
 def _crosspost_form_block(project_id: str, config: dict,
                           upcoming: list[dict], state: dict) -> None:
     """
-    «Сформировать план»: ВК – родные отложки браузером, Телеграм и МАКС –
+    «Сформировать план»: ВК, ОК и МАКС – родные отложки браузером, Телеграм –
     задания планировщику. Каждая площадка независима; исходы пишутся в
     память сразу, повтор кнопки доформирует только несделанное (Д-6).
     """
     import crosspost_form
+    import max_browser
     import ok_browser
     import vk_social
 
@@ -3727,14 +3812,17 @@ def _crosspost_form_block(project_id: str, config: dict,
                     and (config.get("vkGroupUrl") or "").strip())
     ok_ready = bool(ok_browser.has_saved_session(project_id)
                     and (config.get("okGroupUrl") or "").strip())
+    max_ready = bool(max_browser.has_saved_session(project_id)
+                     and (config.get("maxWebUrl") or "").strip())
     vk_todo = crosspost_form.pending_for(upcoming, state, "vk") if vk_ready else []
     ok_todo = crosspost_form.pending_for(upcoming, state, "ok") if ok_ready else []
+    max_todo = crosspost_form.pending_for(upcoming, state, "max") if max_ready else []
     msg_todo = [p for net, chat in channels.items() if chat
                 for p in crosspost_form.pending_for(upcoming, state, net)]
-    if not vk_todo and not ok_todo and not msg_todo:
-        if not (vk_ready or ok_ready):
-            st.caption("Формирование ВК и ОК появится после входа: «Настройки» → "
-                       "«Вход в ВК/ОК (кросспостинг)». Каналы ТГ/МАКС – в блоке ниже.")
+    if not vk_todo and not ok_todo and not max_todo and not msg_todo:
+        if not (vk_ready or ok_ready or max_ready):
+            st.caption("Формирование ВК, ОК и МАКС появится после входа: "
+                       "«Настройки» → блоки входа в соцсети. Каналы ТГ – ниже.")
         return
 
     parts = []
@@ -3742,9 +3830,11 @@ def _crosspost_form_block(project_id: str, config: dict,
         parts.append(f"ВК: {len(vk_todo)}")
     if ok_todo:
         parts.append(f"ОК: {len(ok_todo)}")
+    if max_todo:
+        parts.append(f"МАКС: {len(max_todo)}")
     if msg_todo:
-        parts.append(f"ТГ/МАКС: {len(msg_todo)}")
-    busy = runner.busy_reason(project_id, "publish") if (vk_todo or ok_todo) else ""
+        parts.append(f"ТГ: {len(msg_todo)}")
+    busy = runner.busy_reason(project_id, "publish") if (vk_todo or ok_todo or max_todo) else ""
     if busy:
         st.caption(f"Поставить отложенные посты ({', '.join(parts)}): сейчас нельзя – {busy}.")
         return
@@ -3761,7 +3851,8 @@ def _crosspost_form_block(project_id: str, config: dict,
         ok += len(msg_results)
         for net_name, todo, former, url_key in (
                 ("ВК", vk_todo, crosspost_form.form_vk_all, "vkGroupUrl"),
-                ("ОК", ok_todo, crosspost_form.form_ok_all, "okGroupUrl")):
+                ("ОК", ok_todo, crosspost_form.form_ok_all, "okGroupUrl"),
+                ("МАКС", max_todo, crosspost_form.form_max_all, "maxWebUrl")):
             if not todo:
                 continue
             results = former(project_id, config[url_key].strip(), upcoming, site,
@@ -4502,7 +4593,7 @@ def _gis_login_block(project_id: str, config: dict) -> None:
         st.success("Сессия 2ГИС сохранена – прогон пойдёт без повторного входа.")
         with st.container(key="danger-reset-gis"):
             if st.button("Войти заново (сбросить сессию)", key="gis-reset"):
-                gis.session_path(project_id).unlink(missing_ok=True)
+                _forget_session(project_id, "gis")
                 for k in ("gis_flow", "gis_state"):
                     st.session_state.pop(k, None)
                 st.rerun()
@@ -4608,6 +4699,13 @@ def _max_login_block(project_id: str, config: dict) -> None:
 
     if max_browser.has_saved_session(project_id):
         st.success("Сессия МАКС сохранена – отложки будут ставиться без повторного входа.")
+        # Сбросить нужно бывает не «когда сломалось», а когда сессия от
+        # ЧУЖОГО бренда: на ОК это стоило заказчице половины дня – куки были
+        # сняты по СМУ, а отложка ставилась в ИМП.
+        with st.container(key="danger-reset-max"):
+            if st.button("Войти заново (сбросить сессию)", key="max-reset"):
+                _forget_session(project_id, "max")
+                st.rerun()
     else:
         st.warning("Сессии МАКС нет. Войти кнопкой отсюда нельзя: МАКС не пускает "
                    "автоматический браузер – он не показывает ему проверку «вы не "
@@ -4735,7 +4833,7 @@ def _vk_login_block(project_id: str, config: dict) -> None:
                     st.caption("Что Click видит в ВК с этой сессией.")
         with st.container(key="danger-reset-vk"):
             if st.button("Войти заново (сбросить сессию)", key="vk-reset"):
-                vk_social.session_path(project_id).unlink(missing_ok=True)
+                _forget_session(project_id, "vk")
                 for k in ("vk_flow", "vk_state"):
                     st.session_state.pop(k, None)
                 st.rerun()
@@ -4900,7 +4998,7 @@ def _ok_login_block(project_id: str, config: dict) -> None:
         st.success("Сессия ОК сохранена – отложки будут ставиться без повторного входа.")
         with st.container(key="danger-reset-ok"):
             if st.button("Войти заново (сбросить сессию)", key="ok-reset"):
-                ok_browser.session_path(project_id).unlink(missing_ok=True)
+                _forget_session(project_id, "ok")
                 for k in ("ok_flow", "ok_state"):
                     st.session_state.pop(k, None)
                 st.rerun()

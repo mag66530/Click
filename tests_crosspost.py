@@ -1536,6 +1536,51 @@ def test_max_slow_load() -> None:
     check("и не отправляем пост", "НЕ отправлен" in why, why)
 
 
+def test_tg_access_advice() -> None:
+    """
+    Отказ Телеграма переводим в действие, а не показываем как есть.
+
+    Публикация идёт ботом, и мало токена: бот обязан быть администратором
+    канала с правом отправки сообщений. Телеграм отвечает коротко и
+    по-английски («chat not found»), а сделать по этому нужно вполне
+    определённое – иначе это выясняется в час выхода поста.
+    """
+    print("\nТелеграм: отказ доступа – словами и по делу")
+    import tg_social as tg
+
+    def advice(said: str) -> str:
+        was_check, was_conf = tg.check_access, tg.is_configured
+        tg.check_access = lambda chat_id="": said
+        tg.is_configured = lambda: True
+        try:
+            return tg.access_advice("@channel")
+        finally:
+            tg.check_access, tg.is_configured = was_check, was_conf
+
+    check("всё хорошо – молчим", advice("") == "")
+    check("канала нет – проверяем имя",
+          "@" in advice("Телеграм отказал в getChat: chat not found"))
+    check("бот не в канале – зовём в админы",
+          "администратор" in advice("Bad Request: bot is not a member of the channel chat"))
+    check("нет прав – называем нужное право",
+          "Post Messages" in advice("Bad Request: not enough rights to send text messages"))
+    check("бота выгнали – видно, что именно",
+          "удалили" in advice("Forbidden: bot was kicked from the channel chat"))
+    check("токен не тот – к BotFather",
+          "BotFather" in advice("Unauthorized"))
+    check("незнакомый отказ показываем как есть",
+          advice("Совсем новая беда") == "Совсем новая беда")
+
+    # Без токена проверять нечего – и это отдельная, понятная причина.
+    was = tg.bot_token
+    tg.bot_token = lambda: ""
+    try:
+        check("нет токена – так и говорим",
+              "tg_bot_token" in tg.access_advice("@channel"))
+    finally:
+        tg.bot_token = was
+
+
 def test_social_defaults() -> None:
     """
     Ссылки брендов зашиты и подставляются только в ПУСТОЕ поле.
@@ -1667,6 +1712,7 @@ def main() -> int:
     test_combined_session_file()
     test_max_calendar()
     test_max_slow_load()
+    test_tg_access_advice()
     test_social_defaults()
     test_max_native_scheduling()
     test_sessions_in_store()

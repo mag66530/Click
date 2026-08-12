@@ -3775,6 +3775,37 @@ def _crosspost_channels_block(project_id: str, config: dict) -> None:
             save_config(project_id)
         if not tg_social.is_configured() and (vals["tgChannelClient"] or vals["tgChannelStaff"]):
             st.caption("Токен бота Телеграма не заполнен – «Настройки» → «Ключи к веб-сервисам».")
+        _tg_access_check(project_id, config)
+
+
+def _tg_access_check(project_id: str, config: dict) -> None:
+    """
+    «Проверит ли бот каналы» – до часа выхода, а не в него.
+
+    Публикация в Телеграм идёт ботом, и для неё мало токена: бот обязан
+    быть АДМИНИСТРАТОРОМ канала с правом отправки сообщений. Пока это не
+    сделано, пост просто не уйдёт – и узнать об этом в 11:00, когда он
+    должен был выйти, поздно. Кнопка спрашивает у Телеграма заранее.
+    """
+    import tg_social
+
+    channels = [("клиенты", (config.get("tgChannelClient") or "").strip()),
+                ("сотрудники", (config.get("tgChannelStaff") or "").strip())]
+    channels = [(who, chat) for who, chat in channels if chat]
+    if not channels:
+        return
+    if not st.button("Проверить доступ бота в каналы", key=f"cp-tg-check-{project_id}"):
+        return
+    if not tg_social.is_configured():
+        st.error("Сначала заполните токен бота: «Настройки» → «Ключи к веб-сервисам» "
+                 "→ «Телеграм: токен бота». Берётся у @BotFather.")
+        return
+    for who, chat in channels:
+        why = tg_social.access_advice(chat)
+        if why:
+            st.error(f"{chat} ({who}): {why}")
+        else:
+            st.success(f"{chat} ({who}): бот на месте, публиковать может.")
 
 
 def _crosspost_scheduler_state(project_id: str) -> dict:

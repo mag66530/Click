@@ -62,6 +62,13 @@ OK_AUTH = ("AUTH_ID", "auth_id", "AUTH_SIG", "OK_LOGIN", "AUTHCODE")
 # берём тот, что идёт с playwright.
 CHANNELS = ("chrome", "msedge", None)
 
+# Маскировка автоматизации. Без неё сайты видят, что окном управляет
+# программа, и ведут себя иначе: МАКС показал заголовок «Проверяем, что вы
+# не робот», а сам виджет с галочкой не нарисовал вовсе – проверять стало
+# нечего, и вход встал. Те же две строки давно стоят в самом Click.
+ANTIBOT_ARGS = ["--disable-blink-features=AutomationControlled"]
+ANTIBOT_INIT = "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+
 
 def _split(state: dict) -> tuple[dict, dict]:
     """Разделить куки на ВК-шные и ОК-шные: Click хранит сессии отдельно."""
@@ -92,6 +99,24 @@ def _names(cookies: list) -> list[str]:
     return sorted({str(c.get("name", "")) for c in cookies if c.get("value")})
 
 
+def _has_max(state: dict) -> bool:
+    """
+    Есть ли в снимке вход в МАКС.
+
+    У МАКС он живёт не только в куках, но и в localStorage – это
+    одностраничное приложение. Поэтому смотрим и раздел origins, иначе
+    живая сессия выглядела бы пустой.
+    """
+    for c in state.get("cookies") or []:
+        if "max.ru" in str(c.get("domain", "")) and c.get("value"):
+            if str(c.get("name", "")) not in OK_GUEST:
+                return True
+    for o in state.get("origins") or []:
+        if "max.ru" in str(o.get("origin", "")) and o.get("localStorage"):
+            return True
+    return False
+
+
 def _has_ok(cookies: list) -> bool:
     """Та же проверка, что делает Click в ok_browser.looks_logged_in."""
     names = set(_names(cookies))
@@ -104,8 +129,9 @@ def _open_browser(pw):
     for channel in CHANNELS:
         try:
             if channel:
-                return pw.chromium.launch(headless=False, channel=channel)
-            return pw.chromium.launch(headless=False)
+                return pw.chromium.launch(headless=False, channel=channel,
+                                          args=ANTIBOT_ARGS)
+            return pw.chromium.launch(headless=False, args=ANTIBOT_ARGS)
         except Exception as exc:          # нет такого браузера – пробуем следующий
             last = exc
     raise RuntimeError(
@@ -142,6 +168,7 @@ def main() -> int:
         context = browser.new_context(
             viewport={"width": 1280, "height": 900},
             locale="ru-RU", timezone_id="Asia/Yekaterinburg")
+        context.add_init_script(ANTIBOT_INIT)
         page = context.new_page()
         page.goto("https://vk.ru/login", wait_until="domcontentloaded")
 
@@ -167,9 +194,13 @@ def main() -> int:
         # ШАГ 3 – МАКС. Отложка там родная (у бота её нет вовсе), поэтому
         # сессия нужна такая же, как у ВК и ОК.
         print("\n" + "─" * 62)
-        print("ШАГ 3 из 3. Открываю МАКС во третьей вкладке.")
+        print("ШАГ 3 из 3. Открываю МАКС в третьей вкладке.")
         print("Войдите по номеру телефона: кнопка под QR-кодом, галочка")
         print("«я не робот», код из СМС. Не нужен МАКС? Просто Enter.")
+        print()
+        print("Если галочка «я не робот» не появилась и окно пустое –")
+        print("обновите страницу (F5): виджет проверки иногда не успевает")
+        print("нарисоваться с первого раза.")
         print("─" * 62)
         try:
             max_page = context.new_page()
@@ -211,6 +242,13 @@ def main() -> int:
         print("   ℹ️  ОК: входа не видно. Что нашлось: " + found)
         print("      Если вы точно вошли и видели свою страницу ОК – пришлите")
         print("      эту строку разработчику: ОК назвал куки по-новому.")
+
+    if _has_max(state):
+        print("   МАКС: вход есть")
+    else:
+        print("   ℹ️  МАКС: входа не видно. Если проверка «я не робот» так и не")
+        print("      показала галочку – обновите страницу МАКС (F5) и повторите:")
+        print("      виджет проверки иногда не рисуется с первого раза.")
 
     print("\nТеперь загрузите ЭТОТ ОДИН файл в Click:")
     print("  «Настройки» → «Файл сессий ВК и ОК» → «Загрузить»")

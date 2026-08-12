@@ -1174,6 +1174,9 @@ _ROW_STYLE = {
     "no-session": ("err", "🔒"),
     "actualized": ("ok", "✅"),
     "not-needed": ("skip", "⊝"),
+    # Не сбой Click – статус в КП разошёлся с тем, что на площадке. Жёлтый,
+    # не красный: это сигнал «поправьте таблицу», а не «приложение сломалось».
+    "status-mismatch": ("warn", "🚦"),
 }
 
 
@@ -1350,3 +1353,31 @@ def preview_box(text: str) -> str:
     """
     body = esc(text).replace("\r\n", "\n").replace("\n", "&#10;")
     return f'<div class="preview-box">{body}</div>'
+
+
+def crosspost_css() -> str:
+    """
+    Стили раздела «Кросспостинг». Строка плана – та же `report-row`, что в
+    отчёте: разделы должны выглядеть одним приложением, а не набором разных.
+    Своё здесь только колонки даты/типа/площадок.
+    """
+    return (
+        "<style>"
+        ".cp-day{font-size:12.5px;font-weight:700;color:var(--text);"
+        "flex:0 0 108px;font-family:var(--mono)}"
+        ".cp-day em{font-style:normal;color:var(--dim);font-weight:500}"
+        ".cp-type{font-size:11.5px;color:var(--dim);flex:0 0 120px}"
+        ".cp-photos{font-size:11.5px;color:var(--dim);flex:0 0 46px;text-align:right}"
+        ".cp-nets{display:flex;gap:5px;flex-wrap:wrap;flex:0 0 auto;justify-content:flex-end}"
+        ".cp-net{font-size:11px;padding:2px 7px;border-radius:999px;white-space:nowrap;"
+        "background:var(--bg-3,var(--bg-2));border:1px solid var(--border);color:var(--text-2)}"
+        "a.cp-net{text-decoration:none}"
+        ".cp-net-ok{border-color:var(--grn);color:var(--grn)}"
+        ".cp-net-skip{border-color:var(--acc);color:var(--acc)}"
+        ".cp-net-warn{border-color:var(--yel);color:var(--yel)}"
+        ".cp-net-err{border-color:var(--red);color:var(--red)}"
+        ".cp-net-off{opacity:.45}"
+        "@media(max-width:900px){.cp-type,.cp-photos{display:none}"
+        ".cp-nets{flex:1 0 100%;justify-content:flex-start;margin-top:4px}}"
+        "</style>"
+    )

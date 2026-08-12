@@ -28,6 +28,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 import runner  # noqa: E402
 import yb_playwright as yb  # noqa: E402
 
+# Ссылка на настоящую функцию, снятая ДО того, как сценарии начнут подменять
+# yb.actualize_city заглушками (и не восстанавливать её обратно). Объект
+# функции от переприсваивания атрибута модуля не страдает, а её тело
+# по-прежнему смотрит на глобальные имена модуля (is_404, looks_like_login_page
+# и т.п.) вживую – значит, локальные подмены ЭТИХ имён в тесте всё ещё
+# работают, просто сама функция гарантированно настоящая.
+_REAL_ACTUALIZE_CITY = yb.actualize_city
+
 FAILED: list[str] = []
 PASSED = 0
 
@@ -850,12 +858,41 @@ def scenario_dead_session(pid: str) -> None:
     try:
         real_yb.is_404 = lambda page: False                      # type: ignore[assignment]
         real_yb.looks_like_login_page = lambda page: True        # type: ignore[assignment]
-        res = real_yb.actualize_city(
+        res = _REAL_ACTUALIZE_CITY(
             FakePage(), {"cityName": "Тест",
                          "companyUrl": "https://yandex.ru/sprav/1/p/edit/"})
         eq("страница входа – это no-session, а не «кнопки нет»", res.get("status"), "no-session")
         check("и причина человеческая", "страница входа" in (res.get("reason") or "").lower(),
               res.get("reason", ""))
+
+        # ── Сверка статусов: карточка правда 404, а КП обещал «Активную» ──
+        # Ровно тот случай, ради которого затевалась вся эта работа: вместо
+        # общей «404» в отчёте – понятное «в КП X, а карточки нет».
+        real_yb.is_404 = lambda page: True                       # type: ignore[assignment]
+        real_yb.looks_like_login_page = lambda page: False       # type: ignore[assignment]
+        bad = _REAL_ACTUALIZE_CITY(
+            FakePage(), {"cityName": "Тест", "kpStatus": "Активная",
+                         "companyUrl": "https://yandex.ru/sprav/1/p/edit/"})
+        eq("404 + КП «Активная» → status-mismatch", bad.get("status"), "status-mismatch")
+        eq("cardAlive – False, карточки правда нет", bad.get("cardAlive"), False)
+        check("причина – про расхождение статуса", "в кп" in (bad.get("reason") or "").lower(),
+              bad.get("reason", ""))
+
+        # ── Тот же 404, но КП корректно говорит «Удалена» – это НЕ mismatch,
+        #    обычный «failed», как было раньше (карточки и не должно быть) ──
+        ok404 = _REAL_ACTUALIZE_CITY(
+            FakePage(), {"cityName": "Тест", "kpStatus": "Удалена",
+                         "companyUrl": "https://yandex.ru/sprav/1/p/edit/"})
+        eq("404 + КП «Удалена» → обычный failed", ok404.get("status"), "failed")
+        eq("statusVerdict – ok, КП было право", ok404.get("statusVerdict"), "ok")
+
+        # ── А без статуса в КП вовсе – тоже обычный failed (сверять нечего) ──
+        noverdict = _REAL_ACTUALIZE_CITY(
+            FakePage(), {"cityName": "Тест",
+                         "companyUrl": "https://yandex.ru/sprav/1/p/edit/"})
+        eq("404 без статуса КП → обычный failed, не mismatch",
+           noverdict.get("status"), "failed")
+        eq("statusVerdict – skip", noverdict.get("statusVerdict"), "skip")
     finally:
         real_yb.is_404, real_yb.looks_like_login_page = было_404, было_login
 
@@ -1114,7 +1151,7 @@ def scenario_gis_only(pid: str) -> None:
     yb.verify_account = lambda page, email: (   # type: ignore[assignment]
         аккаунт.append(email) or fake_verify_account(page, email))
     try:
-        folder = runner.p_tasks(pid)
+        folder = runner.p_tasks_gis(pid)          # своя папка, не общая с постами
         folder.mkdir(parents=True, exist_ok=True)
         shot = Path(tempfile.mkdtemp()) / "витрина.jpg"
         shot.write_bytes(b"\xff\xd8\xff" + b"z" * 32)
@@ -1132,8 +1169,11 @@ def scenario_gis_only(pid: str) -> None:
             ],
         }, ensure_ascii=False), encoding="utf-8")
 
+        eq("для обычной очереди этих задач не существует",
+           runner.count_pending(pid, "tasks"), (0, 0))
+        eq("а в своей очереди они есть", runner.count_pending(pid, "gis")[1], 2)
         ok, msg = runner.start_publish(pid, delay_between_posts_s=0,
-                                       expected_email="test@yandex.ru")
+                                       expected_email="test@yandex.ru", source="gis")
         check("прогон стартовал", ok, msg)
         wait_done(pid); settle(pid)
 
@@ -1166,7 +1206,7 @@ def scenario_gis_only(pid: str) -> None:
         }, ensure_ascii=False), encoding="utf-8")
         ушло.clear()
         ok, msg = runner.start_publish(pid, delay_between_posts_s=0,
-                                       expected_email="test@yandex.ru")
+                                       expected_email="test@yandex.ru", source="gis")
         check("второй прогон стартовал", ok, msg)
         wait_done(pid); settle(pid)
         eq("те же снимки второй раз не заливаются", len(ушло), 0)

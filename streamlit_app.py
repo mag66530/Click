@@ -19,8 +19,9 @@ import json
 import os
 import re
 import sys
+import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import streamlit as st
@@ -64,11 +65,14 @@ def _settle_imports() -> None:
 _settle_imports()
 
 import apptime  # noqa: E402
+import content_plan  # noqa: E402
+import crosspost_state as cps  # noqa: E402
 import gis_playwright as gis  # noqa: E402
 import kp_audit  # noqa: E402
 import kp_sheet  # noqa: E402
 import llm  # noqa: E402
 import paths  # noqa: E402
+import post_text  # noqa: E402
 import projects_data as pdata  # noqa: E402
 import repo_store  # noqa: E402
 import secrets_local  # noqa: E402
@@ -110,8 +114,14 @@ USERS_DATA = paths.data_root()
 st.set_page_config(page_title="Click – публикация постов", page_icon="📮", layout="wide")
 
 SALT = "click-salt-v1-2026"
-SECTIONS = ["🚀 Запуск", "📤 Публикация", "🔄 Актуализация", "🏙 Города", "📊 Отчёт",
-            "⚙️ Настройки", "🔎 Сверка"]
+SECTIONS = ["🚀 Запуск", "📤 Публикация", "🗓 Кросспостинг", "🔄 Актуализация", "🏙 Города",
+            "📊 Отчёт", "⚙️ Настройки", "🔎 Сверка"]
+
+# Разделы адресуются ИМЕНАМИ, а не номерами. Раньше по коду были разбросаны
+# SECTIONS[4] и SECTIONS[2]; стоило вставить раздел в середину – и кнопка
+# «к отчёту» молча уводила в «Города». Имена от перестановки не страдают.
+(SEC_RUN, SEC_COMPOSE, SEC_CROSSPOST, SEC_ACTUALIZE,
+ SEC_CITIES, SEC_REPORT, SEC_SETTINGS, SEC_AUDIT) = SECTIONS
 
 
 def _hash(password: str) -> str:
@@ -244,7 +254,8 @@ def _default_subproject(project_id: str) -> dict:
 
 # Что из конфига храним снаружи (в репозитории). Пароль от Яндекса – НИКОГДА:
 # он остаётся только в этом контейнере.
-_KEPT = ("countries", "countriesGis", "email", "kpSheetUrl", "kpSyncedAt", "gisPhotosDefault")
+_KEPT = ("countries", "countriesGis", "email", "kpSheetUrl", "kpSheetTitle",
+        "kpSyncedAt", "gisPhotosDefault")
 
 
 def load_raw_config(project_id: str) -> dict:
@@ -534,7 +545,9 @@ def kp_pull(project_id: str, config: dict) -> tuple[bool, str]:
     город появляется в списке по-разному в зависимости от того, как его
     загрузили.
     """
-    cities, diag = kp_sheet.load_cities(project_id, (config.get("kpSheetUrl") or "").strip())
+    saved_title = (config.get("kpSheetTitle") or "").strip()
+    cities, diag = kp_sheet.load_cities(project_id, (config.get("kpSheetUrl") or "").strip(),
+                                        title=saved_title)
     if diag.get("error"):
         return False, diag["error"]
     if not cities:
@@ -544,6 +557,11 @@ def kp_pull(project_id: str, config: dict) -> tuple[bool, str]:
     # строках, отдельного чтения не требуется.
     config["countriesGis"] = kp_sheet.to_countries(cities, project_id, platform=kp_sheet.GIS)
     config["kpSyncedAt"] = datetime.now(timezone.utc).isoformat()
+    # Лист ещё не выбирали явно в «⚙️ Настройки» – запоминаем тот, что нашла
+    # эвристика. Дальше выбор явный и не меняется сам по себе: заново гадать
+    # незачем, а вкладка «Настройки» сразу покажет то, что реально читается.
+    if not saved_title and diag.get("usedSheet"):
+        config["kpSheetTitle"] = diag["usedSheet"]
     save_config(project_id)
     note = f'Загружено: {cities_word(len(cities))} в {diag.get("countries", 0)} странах.'
     if diag.get("gisCities"):
@@ -705,8 +723,6 @@ def gis_url_for_city(config: dict, country_name: str, city_name: str) -> str | N
 
 
 def save_queue_to_tasks(project_id: str, config: dict, queue: list[dict]) -> int:
-    tasks_dir = project_base(project_id) / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
     ts = int(time.time() * 1000)
     saved = 0
     for idx, item in enumerate(queue):
@@ -748,8 +764,14 @@ def save_queue_to_tasks(project_id: str, config: dict, queue: list[dict]) -> int
             "headlessMode": True,
             "tasks": city_tasks,
         }
+        # Задания «только фото в 2ГИС» кладём в ОТДЕЛЬНУЮ папку. Это не про
+        # порядок в файлах: прогон прежней сборки про такие задания не знает и,
+        # увидев пустой текст, публикует пустой пост – так у заказчика и вышло.
+        # В чужую папку он не заглянет, потому что в его коде её нет.
+        folder = tasks_dir(project_id, "gis" if item.get("gisOnly") else "tasks")
+        folder.mkdir(parents=True, exist_ok=True)
         name = f"{idx + 1:02d}-{safe_filename(country['name'])}-{ts}.json"
-        (tasks_dir / name).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        (folder / name).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         saved += 1
     return saved
 
@@ -773,7 +795,10 @@ def save_actualize_tasks(project_id: str, config: dict, selection: dict[str, lis
         if not country or not city_ids:
             continue
         city_tasks = [
-            {"cityName": c["name"], "companyUrl": c["url"], "companyId": yb.extract_company_id(c["url"])}
+            {"cityName": c["name"], "companyUrl": c["url"], "companyId": yb.extract_company_id(c["url"]),
+             # Статус из КП едет вместе с городом – actualize_city сверит его
+             # с тем, что реально в кабинете (см. kp_sheet.status_verdict).
+             "kpStatus": c.get("kpStatus", "")}
             for c in country["cities"] if c["id"] in city_ids
         ]
         if not city_tasks:
@@ -788,8 +813,18 @@ def save_actualize_tasks(project_id: str, config: dict, selection: dict[str, lis
     return total
 
 
-def clear_tasks(project_id: str) -> None:
-    for fp in (project_base(project_id) / "tasks").glob("*.json"):
+def tasks_dir(project_id: str, source: str = "tasks") -> Path:
+    """
+    Папка очереди. `gis` – задания «только фото в 2ГИС», они лежат ОТДЕЛЬНО.
+
+    Имя папки спрашиваем у runner: очередь читает он, и знать про неё двоим –
+    это рано или поздно разные имена в двух файлах.
+    """
+    return project_base(project_id) / runner.tasks_folder(project_id, source).name
+
+
+def clear_tasks(project_id: str, source: str = "tasks") -> None:
+    for fp in tasks_dir(project_id, source).glob("*.json"):
         fp.unlink(missing_ok=True)
 
 
@@ -1169,7 +1204,7 @@ def _open_report(kind: str, run_id: str = "") -> None:
     """Уйти на вкладку «Отчёт» и показать там нужный вид отчёта."""
     st.session_state["report-kind"] = kind
     st.session_state.pop("report-select", None)   # выбор из другого вида не подойдёт
-    goto_section(SECTIONS[4])
+    goto_section(SEC_REPORT)
     st.rerun()
 
 
@@ -1260,32 +1295,29 @@ def live_panel(project_id: str, running: bool, run_kind: str) -> None:
         st.caption("Обновите страницу, чтобы увидеть свежий прогресс.")
 
 
-def _pending_is_gis_only(project_id: str) -> bool:
-    """
-    Вся очередь – только фото в 2ГИС?
-
-    ВРЕМЕННО, вместе с одноимённым блоком на «Публикации». Нужно, чтобы
-    «Запуск» не врал: постов не будет, и сессия Яндекса для такого прогона
-    не требуется – нужна сессия 2ГИС.
-    """
-    tasks: list[dict] = []
-    for fp in (project_base(project_id) / "tasks").glob("*.json"):
-        try:
-            tasks.extend(json.loads(fp.read_text(encoding="utf-8")).get("tasks") or [])
-        except (json.JSONDecodeError, OSError):
-            continue
-    return bool(tasks) and all(t.get("gisOnly") for t in tasks)
-
-
 def tab_run(project_id: str, config: dict) -> None:
     settings = get_settings(project_id)
     state = runner.read_state(project_id, "publish")
     running = state.get("status") == "running"
     busy = runner.busy_reason(project_id, "publish")   # пусто – запускать можно
-    files, cities = runner.count_pending(project_id)
-    gis_only = _pending_is_gis_only(project_id)
+
+    # Две очереди, и они не смешиваются: посты в своей папке, «только фото в
+    # 2ГИС» – в своей. Заказчик просила отдельную функцию, и отдельная она
+    # именно здесь: у этих заданий своя очередь, свой запуск и свой смысл.
+    files_post, cities_post = runner.count_pending(project_id, "tasks")
+    files_gis, cities_gis = runner.count_pending(project_id, "gis")
+    both = bool(cities_post and cities_gis)
+    gis_only = bool(cities_gis) and not cities_post
+    source = "gis" if gis_only else "tasks"
+    files = files_gis if gis_only else files_post
+    cities = cities_gis if gis_only else cities_post
     has_session = gis.has_saved_session(project_id) if gis_only else yb.has_saved_session(project_id)
     has_creds = bool((config.get("email") or "").strip())
+
+    if both:
+        st.warning(f"В очереди сразу два разных задания: посты ({cities_word(cities_post)}) "
+                   f"и только фото в 2ГИС ({cities_word(cities_gis)}). Запуск заблокирован, "
+                   "чтобы не уехало не то – уберите одно из двух кнопками ниже.")
 
     # ─── Степпер как в оригинале ───
     html(T.step(1, "Вход в 2ГИС" if gis_only else "Вход в Яндекс",
@@ -1296,10 +1328,11 @@ def tab_run(project_id: str, config: dict) -> None:
         st.info("Перейдите в раздел «⚙️ Настройки» → "
                 + ("«Вход в 2ГИС»." if gis_only else "«Вход в Яндекс»."))
 
-    html(T.step(2, "Очередь задач",
-                f"Посты собираются во вкладке «Публикация» и складываются в очередь. "
+    html(T.step(2, "Очередь заданий «только фото в 2ГИС»" if gis_only else "Очередь задач",
+                f"Собирается во вкладке «Публикация». "
                 f"Сейчас: <b>{plural(files, 'файл', 'файла', 'файлов')}</b>, "
-                f"<b>{cities_word(cities)}</b>.",
+                f"<b>{cities_word(cities)}</b>."
+                + (f" Отдельно лежат посты: {cities_word(cities_post)}." if both else ""),
                 "done" if cities else ("active" if has_session else "locked"),
                 f"{cities_word(cities)} готово" if cities else ""))
 
@@ -1316,7 +1349,7 @@ def tab_run(project_id: str, config: dict) -> None:
     # ─── Кнопки ───
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1:
-        disabled = bool(busy) or not cities or not has_session
+        disabled = bool(busy) or not cities or not has_session or both
         подпись = "📸 Залить фото в 2ГИС" if gis_only else "▶ Опубликовать"
         if st.button(f"{подпись} ({cities_word(cities)})", type="primary",
                      use_container_width=True, disabled=disabled, key="btn-publish"):
@@ -1328,6 +1361,7 @@ def tab_run(project_id: str, config: dict) -> None:
                 strict_account_check=bool(settings["strictAccountCheck"]),
                 retry_unknown=bool(settings["retryUnknown"]),
                 dedup_window_hours=float(settings["dedupWindowHours"]),
+                source=source,
             )
             (st.toast if ok else st.error)(msg)
             time.sleep(0.6)
@@ -1356,36 +1390,44 @@ def tab_run(project_id: str, config: dict) -> None:
 
     # ─── Очередь задач ───
     st.divider()
-    if cities:
-        # Кнопка очистки – НА ВИДУ, а не внутри свёрнутого списка файлов.
+    if cities_post or cities_gis:
+        # Кнопки очистки – НА ВИДУ, а не внутри свёрнутого списка файлов.
         # Заказчик: «старая очередь при остановке не сбросилась, и очистить я
         # её не могу». Кнопка была – но лежала внутри «Файлы задач в очереди»,
         # который по умолчанию закрыт, и найти её было нечем. А очередь после
         # остановки и правда остаётся: недоделанные города ждут следующего
         # запуска – это нарочно, но сказать об этом надо здесь же.
         q1, q2 = st.columns([2, 3])
-        with q1, st.container(key="danger-clear-tasks"):
-            if st.button(f"🗑 Очистить очередь ({cities_word(cities)})", disabled=running,
-                         use_container_width=True, key="btn-clear-tasks"):
-                clear_tasks(project_id)
-                st.rerun()
+        with q1:
+            if cities_post:
+                with st.container(key="danger-clear-tasks"):
+                    if st.button(f"🗑 Очистить очередь постов ({cities_word(cities_post)})",
+                                 disabled=running, use_container_width=True, key="btn-clear-tasks"):
+                        clear_tasks(project_id, "tasks")
+                        st.rerun()
+            if cities_gis:
+                with st.container(key="danger-clear-gis"):
+                    if st.button(f"🗑 Очистить очередь фото в 2ГИС ({cities_word(cities_gis)})",
+                                 disabled=running, use_container_width=True, key="btn-clear-gis"):
+                        clear_tasks(project_id, "gis")
+                        st.rerun()
         with q2:
             st.caption("После остановки недоделанные города остаются в очереди – следующий "
                        "запуск продолжит с них, а уже опубликованное реестр повторно не отправит. "
                        "Если продолжать не нужно – очистите очередь.")
 
-        with st.expander(f"📋 Файлы задач в очереди ({files})"):
-            for fp in sorted((project_base(project_id) / "tasks").glob("*.json")):
-                try:
-                    data = json.loads(fp.read_text(encoding="utf-8"))
-                except (json.JSONDecodeError, OSError):
-                    continue
-                tasks = data.get("tasks") or []
-                what = "📸 только фото в 2ГИС" if tasks and all(t.get("gisOnly") for t in tasks) \
-                    else T.esc(data.get("country", "–"))
-                html(f'<div class="city-row"><span class="city-row-name">{what}</span>'
-                     f'<span class="city-row-url">{T.esc(fp.name)}</span>'
-                     f'<span class="badge badge-accent">{len(tasks)} гор.</span></div>')
+        with st.expander(f"📋 Файлы задач в очереди ({files_post + files_gis})"):
+            for source_id, подпись in (("tasks", ""), ("gis", "📸 только фото в 2ГИС · ")):
+                for fp in sorted(tasks_dir(project_id, source_id).glob("*.json")):
+                    try:
+                        data = json.loads(fp.read_text(encoding="utf-8"))
+                    except (json.JSONDecodeError, OSError):
+                        continue
+                    tasks = data.get("tasks") or []
+                    html(f'<div class="city-row">'
+                         f'<span class="city-row-name">{подпись}{T.esc(data.get("country", "–"))}</span>'
+                         f'<span class="city-row-url">{T.esc(fp.name)}</span>'
+                         f'<span class="badge badge-accent">{len(tasks)} гор.</span></div>')
     else:
         html(T.empty("📭", "Очередь пуста", "Соберите пост во вкладке «Публикация» и добавьте города в очередь."))
 
@@ -1814,7 +1856,7 @@ def tab_compose(project_id: str, config: dict) -> None:
                 saved = save_queue_to_tasks(project_id, config, queue)
                 st.session_state["queue"] = []
                 st.session_state.pop("compose-note", None)
-                goto_section(SECTIONS[0])       # дальше человеку всё равно на «Запуск»
+                goto_section(SEC_RUN)          # дальше человеку всё равно на «Запуск»
                 # Новое поколение ключей очищает загрузчики файлов: их состояние
                 # переживает перерисовки, и старые картинки тихо прицеплялись к
                 # СЛЕДУЮЩЕМУ посту («я вообще ничего не прикрепляла»).
@@ -2832,70 +2874,129 @@ def tab_actualize(project_id: str, config: dict) -> None:
 #  РАЗДЕЛ: ГОРОДА
 # ════════════════════════════════════════════════════════════════════
 
-def _cities_source_block(project_id: str, config: dict) -> None:
+def _kp_sheet_settings_block(project_id: str, config: dict) -> None:
     """
-    Источник городов – Google-таблица КП. В облаке файловая система временная,
-    поэтому набитый руками список пропадает при перезапуске; таблица живёт
-    снаружи и подтягивается обратно.
+    Источник городов – ссылка на таблицу КП и явный выбор листа.
+
+    Раньше лист внутри таблицы подбирался эвристикой в двух разных местах
+    («Города» и «Сверка») по-разному, и они могли молча выбрать разные листы.
+    Теперь выбор один, здесь, и сохраняется в конфиге – «Города» и «Сверка»
+    просто читают то, что тут выбрано.
     """
+    html('<div class="card-title">📊 Источник городов – Google-таблица КП</div>')
     saved_url = (config.get("kpSheetUrl") or "").strip()
+    saved_title = (config.get("kpSheetTitle") or "").strip()
     effective = kp_sheet.sheet_url(project_id, saved_url)
     has_key = kp_sheet.service_account_info() is not None
 
-    with st.expander("📊 Источник городов – Google-таблица КП",
-                     expanded=not config["countries"]):
-        url = st.text_input("Ссылка на таблицу КП этого проекта", value=saved_url,
-                            key=f"kp-url-{project_id}",
-                            placeholder="https://docs.google.com/spreadsheets/d/…")
-        if url.strip() != saved_url:
-            config["kpSheetUrl"] = url.strip()
-            save_config(project_id)
-            st.rerun()
+    url = st.text_input("Ссылка на таблицу КП этого проекта", value=saved_url,
+                        key=f"kp-url-{project_id}",
+                        placeholder="https://docs.google.com/spreadsheets/d/…")
+    if url.strip() != saved_url:
+        config["kpSheetUrl"] = url.strip()
+        # Сменили таблицу – старый выбор листа к ней уже не относится.
+        config["kpSheetTitle"] = ""
+        save_config(project_id)
+        _audit_forget()
+        st.rerun()
 
-        if not effective:
-            st.caption("Ссылку можно задать здесь или секретом `kp_sheet_url_"
-                       f"{project_id}` в настройках приложения.")
-        elif not saved_url:
-            st.caption(f"Используется таблица проекта по умолчанию: {effective}")
-        if not has_key:
-            st.warning(
-                "Не найден ключ сервисного аккаунта Google. Добавьте в секреты приложения "
-                "`gcp_service_account_b64` – весь JSON-ключ в base64. Таблица должна быть "
-                "расшарена на этот аккаунт как Читатель.",
-                icon="🔑",
-            )
+    if not effective:
+        st.caption("Ссылку можно задать здесь или секретом `kp_sheet_url_"
+                   f"{project_id}` в настройках приложения.")
+        return
+    if not saved_url:
+        st.caption(f"Используется таблица проекта по умолчанию: {effective}")
+    if not has_key:
+        st.warning(
+            "Не найден ключ сервисного аккаунта Google. Добавьте в секреты приложения "
+            "`gcp_service_account_b64` – весь JSON-ключ в base64. Таблица должна быть "
+            "расшарена на этот аккаунт как Читатель.",
+            icon="🔑",
+        )
+        return
 
-        c1, c2 = st.columns([2, 3])
-        if c1.button("⬇️ Загрузить города из таблицы", type="primary",
-                     disabled=not (effective and has_key), key=f"kp-pull-{project_id}",
-                     use_container_width=True):
-            try:
-                with st.spinner("Читаю таблицу КП…"):
-                    ok, note = kp_pull(project_id, config)
-            except Exception as e:  # noqa: BLE001
-                ok, note = False, str(e)
-            if not ok:
-                st.error(note)
-                return
-            st.success(note)
-            time.sleep(1.2)
-            st.rerun()
+    try:
+        titles, prefer = _audit_cache(f"titles|{project_id}|{saved_url}",
+                                      lambda: kp_sheet.sheet_titles(project_id, saved_url))
+    except Exception as e:  # noqa: BLE001
+        st.error(str(e))
+        return
+    if not titles:
+        st.error("В таблице нет ни одного листа.")
+        return
 
-        synced = local_time(config.get("kpSyncedAt"))
-        c2.caption(f"Последняя загрузка: {synced}" if synced else
-                   "Города из таблицы ещё не загружались.")
-        st.caption(f"Загружается само: если с последней загрузки прошло больше "
-                   f"{KP_SYNC_TTL_HOURS} часов, Click перечитает таблицу при открытии проекта. "
-                   "Кнопка – когда нужно прямо сейчас.")
-        st.caption("Загрузка ЗАМЕНЯЕТ список стран и городов данными из таблицы. "
-                   "Карточки со статусом «Удалена» не попадают.")
+    # Приоритет подсказки: уже сохранённый выбор → лист по gid из ссылки →
+    # угадка по названию («КП», «Карта присутствия» и т.п.). Содержимое
+    # листов тут не читаем – это только подсказка, выбирает человек.
+    default = saved_title if saved_title in titles else (
+        prefer if prefer in titles else kp_sheet.guess_sheet(titles, prefer))
+
+    # bottom – чтобы кнопка встала вровень с самим полем выбора, а не с его
+    # подписью: у селектбокса сверху есть заголовок, у кнопки его нет, и без
+    # выравнивания она висела выше поля.
+    c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
+    title = c1.selectbox("Лист таблицы", titles,
+                         index=titles.index(default) if default in titles else 0,
+                         key=f"kp-title-{project_id}")
+    if title != saved_title:
+        config["kpSheetTitle"] = title
+        save_config(project_id)
+    if c2.button("↻ Обновить список листов", key=f"kp-titles-refresh-{project_id}",
+                use_container_width=True):
+        _audit_forget()
+        st.rerun()
+
+    if not saved_title:
+        st.caption("Лист подобран по названию – проверьте, что это тот самый, где ведётся "
+                   "работа, и при необходимости выберите другой.")
+    st.caption("Этот лист читают и «Города», и «Сверка» – выбор общий на весь проект.")
+
+    # Загрузка живёт здесь же, рядом с выбором таблицы и листа: раньше кнопка
+    # стояла на «Городах», и человек, сменив лист в настройках, не понимал,
+    # куда идти, чтобы список перечитался.
+    st.divider()
+    c1, c2 = st.columns([2, 3])
+    if c1.button("⬇️ Загрузить города из таблицы", type="primary",
+                 key=f"kp-pull-{project_id}", use_container_width=True):
+        try:
+            with st.spinner("Читаю таблицу КП…"):
+                ok, note = kp_pull(project_id, config)
+        except Exception as e:  # noqa: BLE001
+            ok, note = False, str(e)
+        if not ok:
+            st.error(note)
+            return
+        st.success(note)
+        time.sleep(1.2)
+        st.rerun()
+
+    synced = local_time(config.get("kpSyncedAt"))
+    total = sum(len(c.get("cities") or []) for c in config.get("countries") or [])
+    c2.caption((f"Последняя загрузка: {synced} · сейчас {cities_word(total)}" if synced
+                else "Города из таблицы ещё не загружались."))
+    st.caption(f"Загружается само: если с последней загрузки прошло больше "
+               f"{KP_SYNC_TTL_HOURS} часов, Click перечитает таблицу при открытии проекта. "
+               "Кнопка – когда нужно прямо сейчас.")
+    st.caption("Загрузка ЗАМЕНЯЕТ список стран и городов данными из таблицы. "
+               "Карточки со статусом «Удалена» не попадают.")
 
 
 def tab_cities(project_id: str, config: dict) -> None:
-    _cities_source_block(project_id, config)
     html('<div class="card-title">Страны и города проекта</div>')
-    st.caption("Ссылка города – адрес карточки Яндекс.Бизнеса. Подойдёт любой вид "
-               "(/edit/, /edit/photos/, /p/edit/posts/) – Click сам приведёт его к разделу «Посты».")
+
+    # Сколько всего городов и где обновляется список. Блок загрузки из КП
+    # переехал в «Настройки», к самой ссылке на таблицу и выбору листа:
+    # держать выбор листа в одном месте, а кнопку «загрузить» в другом было
+    # неоткуда понять.
+    total = sum(len(c.get("cities") or []) for c in config.get("countries") or [])
+    countries = len(config.get("countries") or [])
+    if total:
+        st.caption(f"Всего {cities_word(total)} в "
+                   f"{plural(countries, 'стране', 'странах', 'странах')}. "
+                   "Для обновления списка перейдите в «Настройки» → «Источник городов»")
+    else:
+        st.info("Городов пока нет. Для обновления списка перейдите в "
+                "«Настройки» → «Источник городов»")
 
     with st.expander("➕ Добавить страну"):
         c1, c2 = st.columns([3, 1])
@@ -3040,6 +3141,11 @@ _PUB_TILES = [
 _ACT_TILES = [
     {"key": "actualized", "status": "actualized", "label": "Актуализировано", "colour": "ok",   "always": True},
     {"key": "notNeeded",  "status": "not-needed", "label": "Не требовалось",  "colour": "skip", "always": True},
+    # Не сбой Click – статус в КП разошёлся с площадкой (карточки нет, а КП
+    # обещал живую, или наоборот). Отдельно от «Ошибок»: одно говорит
+    # «поправьте таблицу», другое – «Click не справился», путать нельзя.
+    {"key": "statusMismatch", "status": "status-mismatch", "label": "Статус в КП не совпал",
+     "colour": "warn", "always": False},
     {"key": "failed",     "status": "failed",     "label": "Ошибок",          "colour": "err",  "always": True},
 ]
 # Цвет, фон и рамка плашки – те же, что у не кликабельных .report-stat.
@@ -3071,6 +3177,10 @@ def _report_notes(data: dict, totals: dict) -> list[str]:
         notes.append(f'⚠️ {cities_word(totals["unknown"])} с неподтверждённой публикацией. '
                      "Клик «Создать» был сделан, но Яндекс не подтвердил. "
                      "Проверьте вручную – повторять автоматически опасно (дубль).")
+    if totals.get("statusMismatch"):
+        notes.append(f'🚦 {cities_word(totals["statusMismatch"])} со статусом в КП, который не '
+                     "совпал с площадкой (например, в таблице «Активная», а карточки там нет). "
+                     "Это не сбой Click – поправьте статус в КП или разберитесь с карточкой.")
     if totals.get("skipped"):
         notes.append(f'⏭ {cities_word(totals["skipped"])} пропущено: этот же текст уже уходил '
                      "в эти карточки недавно (защита от дублей).")
@@ -3146,6 +3256,437 @@ def _report_csv(data: dict) -> bytes:
 
 _REPORT_KINDS = {"publish": "📤 Публикация", "actualize": "🔄 Актуализация",
                  "actualize-gis": "2ГИС"}
+
+
+# ════════════════════════════════════════════════════════════════════
+#  Кросспостинг: план из реестра
+# ════════════════════════════════════════════════════════════════════
+# Реестр («контент-план») – Google-таблица, которую заказчик ведёт руками:
+# лист на бренд, пост – блок строк (дата, текст, фото, тип и ниже строки по
+# соцсетям). Раздел показывает этот план внутри Click и то, что с ним уже
+# сделано. Разбор таблицы – content_plan.py, память о сделанном – crosspost_state.py.
+
+CROSSPOST_HORIZON_DAYS = 14      # на сколько дней вперёд показываем план
+
+
+def _crosspost_source_block(project_id: str, config: dict) -> bool:
+    """
+    Источник реестра. Доступ – тот же сервисный аккаунт Google, что читает КП:
+    заказчику достаточно расшарить на него таблицу реестра, новых ключей не нужно.
+    Возвращает True, если из чего читать.
+    """
+    saved = (config.get("planSheetUrl") or "").strip()
+    has_key = kp_sheet.service_account_info() is not None
+
+    with st.expander("🗓 Источник реестра – Google-таблица контент-плана",
+                     expanded=not saved and not st.session_state.get(f"plan-file-{project_id}")):
+        url = st.text_input("Ссылка на таблицу реестра", value=saved,
+                            key=f"plan-url-{project_id}",
+                            placeholder="https://docs.google.com/spreadsheets/d/…")
+        if url.strip() != saved:
+            config["planSheetUrl"] = url.strip()
+            save_config(project_id)
+            st.rerun()
+
+        st.caption(f"Лист бренда в таблице – «{project_id}» или его русское имя "
+                   f"(СМУ, ИМП, МПЭ, МПИ, АПС). Читаются колонки «Когда выложить», "
+                   f"«Соцсеть», «Ссылка», «Формат», «Тип», «Пост», «Фото».")
+        if not has_key:
+            st.warning(
+                "Не найден ключ сервисного аккаунта Google – тот же, что читает КП. "
+                "Расшарьте таблицу реестра на него как Читателя. Пока ключа нет, "
+                "план можно посмотреть, загрузив файл ниже.", icon="🔑")
+
+        # Файл – запасной путь: посмотреть свой план можно сразу, не дожидаясь
+        # доступов. Файл живёт только в этой вкладке и никуда не сохраняется.
+        up = st.file_uploader("…или загрузите выгрузку реестра (.xlsx) для просмотра",
+                              type=["xlsx"], key=f"plan-file-{project_id}")
+        if up is not None:
+            st.session_state[f"plan-upload-bytes-{project_id}"] = up.getvalue()
+
+    return bool((config.get("planSheetUrl") or "").strip()
+                or st.session_state.get(f"plan-upload-bytes-{project_id}"))
+
+
+def _crosspost_load_posts(project_id: str, config: dict) -> tuple[list[dict], str]:
+    """
+    Посты реестра: (список, ошибка). Таблица – источник правды, поэтому читаем
+    её заново по кнопке и при первом открытии, а между перерисовками держим в
+    session_state: Streamlit перезапускает скрипт на каждое нажатие, и без
+    этого раздел ходил бы в Google на каждый клик.
+    """
+    cache_key = f"plan-posts-{project_id}"
+    if st.session_state.get(cache_key) is not None and not st.session_state.pop(f"plan-refresh-{project_id}", False):
+        return st.session_state[cache_key], ""
+
+    raw = st.session_state.get(f"plan-upload-bytes-{project_id}")
+    try:
+        if raw:
+            import io
+            posts = content_plan.parse_workbook_bytes(io.BytesIO(raw), project_id)
+        else:
+            url = (config.get("planSheetUrl") or "").strip()
+            if not url:
+                return [], ""
+            posts = content_plan.load_from_google(url, project_id)
+    except Exception as e:  # noqa: BLE001 – причину показываем человеку словами
+        return [], str(e)
+
+    st.session_state[cache_key] = posts
+    return posts, ""
+
+
+def _crosspost_targets_html(post: dict, state: dict) -> str:
+    """Строка площадок поста: «ВК 🕓 · ОК ✅ · ТГ —»."""
+    # Видео и статьи Click не формирует. Показываем это прямо в строке, иначе
+    # человек будет ждать, что пост «поедет», и не поймёт, почему он стоит.
+    fmt = (post.get("format") or "Пост").strip()
+    if fmt.lower() != "пост":
+        return f'<span class="cp-net cp-net-off">{T.esc(fmt.lower())} – вручную</span>'
+    bits = []
+    for t in post.get("targets", []):
+        net = t.get("network") or ""
+        name = cps.network_ru(net)
+        if net not in content_plan.SUPPORTED:
+            bits.append(f'<span class="cp-net cp-net-off">{T.esc(name)} ⏸</span>')
+            continue
+        link = (t.get("published_link") or "").strip()
+        if link:
+            bits.append(f'<a class="cp-net cp-net-ok" href="{T.esc(link)}" target="_blank">'
+                        f'{T.esc(name)} ✅</a>')
+            continue
+        status = cps.status_of(state, post, net)
+        ico, _, cls = cps.HUMAN[status]
+        bits.append(f'<span class="cp-net cp-net-{cls or "wait"}">{T.esc(name)} {ico}</span>')
+    return " ".join(bits)
+
+
+def _crosspost_plan_row(post: dict, state: dict) -> str:
+    """Одна строка плана: дата и час, тип, текст, площадки."""
+    when = apptime.to_local(post.get("when"))
+    day = when.strftime("%d.%m") if when else post.get("date", "")
+    weekday = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"][when.weekday()] if when else ""
+    # В превью — текст без разметки: маркеры **…** здесь только мусорят.
+    text = " ".join(post_text.strip_markup(post.get("text") or "").split())
+    if len(text) > 90:
+        text = text[:90] + "…"
+    photos = f'📷 {len(post["images"])}' if post.get("images") else "—"
+    return (
+        '<div class="report-row">'
+        f'<span class="cp-day">{T.esc(day)} <em>{T.esc(weekday)}</em> '
+        f'{T.esc(post.get("time", ""))}</span>'
+        f'<span class="cp-type">{T.esc(post.get("post_type") or "—")}</span>'
+        f'<span class="report-row-reason">{T.esc(text or "нет текста")}</span>'
+        f'<span class="cp-photos">{T.esc(photos)}</span>'
+        f'<span class="cp-nets">{_crosspost_targets_html(post, state)}</span>'
+        '</div>'
+    )
+
+
+def tab_crosspost(project_id: str, config: dict) -> None:
+    html(T.crosspost_css())
+    have_source = _crosspost_source_block(project_id, config)
+
+    c1, c2 = st.columns([1, 4])
+    if c1.button("🔄 Обновить план", key=f"plan-refresh-btn-{project_id}",
+                 use_container_width=True, disabled=not have_source):
+        st.session_state[f"plan-refresh-{project_id}"] = True
+        st.session_state.pop(f"plan-posts-{project_id}", None)
+        st.rerun()
+
+    if not have_source:
+        html(T.empty("🗓", "Реестр не подключён",
+                     "Укажите ссылку на таблицу контент-плана выше – или загрузите "
+                     "выгрузку .xlsx, чтобы посмотреть план прямо сейчас."))
+        return
+
+    posts, err = _crosspost_load_posts(project_id, config)
+    if err:
+        st.error(f"Не удалось прочитать реестр: {err}")
+        return
+    if not posts:
+        html(T.empty("🗓", "В листе бренда постов не нашлось",
+                     f"Проверьте, что в таблице есть лист «{project_id}» (или СМУ/ИМП/МПЭ/МПИ/АПС) "
+                     "с колонками «Когда выложить», «Соцсеть», «Пост»."))
+        return
+
+    today = apptime.now().date()
+    horizon = today + timedelta(days=CROSSPOST_HORIZON_DAYS)
+    upcoming = [p for p in posts
+                if (d := content_plan.parse_date(p["date"])) and today <= d <= horizon]
+    state = cps.load(project_id)
+
+    # ─── Сводка: цифры по целям, а не по постам ───
+    total = cps.summarize(state, upcoming)
+    c2.caption(f"В листе {len(posts)} постов · впереди {len(upcoming)} "
+               f"(ближайшие {CROSSPOST_HORIZON_DAYS} дней) · час выхода "
+               f"{content_plan.brand_default_time(project_id)} по Екатеринбургу")
+    m = st.columns(4)
+    m[0].metric("Ждут формирования", total[cps.WAITING])
+    m[1].metric("Запланировано", total[cps.SCHEDULED])
+    m[2].metric("Вышли", total[cps.SENT] + total[cps.SENT_LATE])
+    m[3].metric("Ошибки", total[cps.FAILED] + total[cps.MISSED])
+
+    # ─── Что требует внимания ───
+    troubles = cps.problems(state, upcoming)
+    if troubles:
+        with st.expander(f"⚠️ Требует внимания – {len(troubles)}", expanded=True):
+            for tr in troubles:
+                p = tr["post"]
+                who = f' · {cps.network_ru(tr["network"])}' if tr.get("network") else ""
+                st.write(f'**{p["date"]}**{who} – {tr["what"]}')
+
+    # ─── План ───
+    html('<div class="card-title">План на ближайшие две недели</div>')
+    if not upcoming:
+        html(T.empty("📭", "На ближайшие две недели постов нет",
+                     "Появятся здесь, как только в реестре будут строки с будущей датой."))
+    else:
+        html("".join(_crosspost_plan_row(p, state) for p in upcoming))
+
+    _crosspost_form_block(project_id, config, upcoming, state)
+    _crosspost_channels_block(project_id, config)
+    _crosspost_yb_block(project_id, config)
+    _crosspost_scheduler_block(project_id)
+    _crosspost_vk_probe(project_id, config)
+
+    # Честно про границы: что работает и при каких условиях.
+    st.info("Полный цикл собран: ВК и ОК — родные отложки после входа (держит сама "
+            "площадка); Телеграм и МАКС — по времени через планировщик (нужны токены "
+            "ботов); ЯБ — прогон по расписанию. Для ТГ/МАКС/ЯБ в час выхода Click "
+            "должен работать. Отложка ОК уточняется первым живым прогоном — при "
+            "несовпадении вёрстки кнопка скажет словами и сохранит снимок.",
+            icon="ℹ️")
+
+
+def _crosspost_channels(config: dict) -> dict[str, str]:
+    return {"tg-client": (config.get("tgChannelClient") or "").strip(),
+            "tg-staff": (config.get("tgChannelStaff") or "").strip(),
+            "max": (config.get("maxChatId") or "").strip()}
+
+
+def _crosspost_channels_block(project_id: str, config: dict) -> None:
+    """Каналы мессенджеров бренда. Токены ботов — в «Ключах к веб-сервисам»."""
+    import tg_social
+
+    with st.expander("💬 Каналы Телеграма и МАКС"):
+        c1, c2, c3 = st.columns(3)
+        vals = {
+            "tgChannelClient": c1.text_input("ТГ клиенты", value=config.get("tgChannelClient", ""),
+                                             key=f"cp-tgc-{project_id}", placeholder="@stalmetural"),
+            "tgChannelStaff": c2.text_input("ТГ сотрудники", value=config.get("tgChannelStaff", ""),
+                                            key=f"cp-tgs-{project_id}", placeholder="@SMUdaily"),
+            "maxChatId": c3.text_input("МАКС: id канала", value=config.get("maxChatId", ""),
+                                       key=f"cp-max-{project_id}"),
+        }
+        if any(vals[k].strip() != (config.get(k) or "") for k in vals):
+            config.update({k: v.strip() for k, v in vals.items()})
+            save_config(project_id)
+        if not tg_social.is_configured() and (vals["tgChannelClient"] or vals["tgChannelStaff"]):
+            st.caption("Токен бота Телеграма не заполнен — «Настройки» → «Ключи к веб-сервисам».")
+
+
+def _crosspost_scheduler_block(project_id: str) -> None:
+    """Планировщик: жив ли, выключатель, журнал. Тревоги — ботом в личный ТГ."""
+    import scheduler
+
+    cfg = scheduler.config()
+    running = scheduler.ensure_running() if cfg["enabled"] else False
+    c1, c2 = st.columns([3, 2])
+    with c1:
+        if not cfg["enabled"]:
+            st.warning("Планировщик ВЫКЛЮЧЕН — задания Телеграма и МАКС не отправляются.")
+        elif running or scheduler.is_running_here():
+            st.caption(f"⏱ Планировщик работает: проверка заданий каждые "
+                       f"{scheduler.TICK_SECONDS} с, окно опоздания "
+                       f"{cfg['lateWindowHours']:g} ч. Работает, пока открыт Click.")
+        else:
+            st.caption("⏱ Планировщик уже работает в другой копии Click на этой машине.")
+    with c2:
+        on = st.toggle("Планировщик включён", value=cfg["enabled"], key="cp-sched-on")
+        if on != cfg["enabled"]:
+            scheduler.set_config(enabled=on)
+            st.rerun()
+    journal = scheduler.tail()
+    if journal:
+        with st.expander("Журнал планировщика"):
+            st.code(journal, language=None)
+
+
+def _crosspost_form_block(project_id: str, config: dict,
+                          upcoming: list[dict], state: dict) -> None:
+    """
+    «Сформировать план»: ВК — родные отложки браузером, Телеграм и МАКС —
+    задания планировщику. Каждая площадка независима; исходы пишутся в
+    память сразу, повтор кнопки доформирует только несделанное (Д-6).
+    """
+    import crosspost_form
+    import ok_browser
+    import vk_social
+
+    channels = _crosspost_channels(config)
+    vk_ready = bool(vk_social.has_saved_session(project_id)
+                    and (config.get("vkGroupUrl") or "").strip())
+    ok_ready = bool(ok_browser.has_saved_session(project_id)
+                    and (config.get("okGroupUrl") or "").strip())
+    vk_todo = crosspost_form.pending_for(upcoming, state, "vk") if vk_ready else []
+    ok_todo = crosspost_form.pending_for(upcoming, state, "ok") if ok_ready else []
+    msg_todo = [p for net, chat in channels.items() if chat
+                for p in crosspost_form.pending_for(upcoming, state, net)]
+    if not vk_todo and not ok_todo and not msg_todo:
+        if not (vk_ready or ok_ready):
+            st.caption("Формирование ВК и ОК появится после входа: «Настройки» → "
+                       "«Вход в ВК/ОК (кросспостинг)». Каналы ТГ/МАКС — в блоке ниже.")
+        return
+
+    parts = []
+    if vk_todo:
+        parts.append(f"ВК: {len(vk_todo)}")
+    if ok_todo:
+        parts.append(f"ОК: {len(ok_todo)}")
+    if msg_todo:
+        parts.append(f"ТГ/МАКС: {len(msg_todo)}")
+    busy = runner.busy_reason(project_id, "publish") if (vk_todo or ok_todo) else ""
+    if busy:
+        st.caption(f"Сформировать ({', '.join(parts)}): сейчас нельзя — {busy}.")
+        return
+
+    if st.button(f"📌 Сформировать план ({', '.join(parts)})", type="primary",
+                 key=f"cp-form-all-{project_id}", use_container_width=True):
+        site = ((project_endings(project_id).get("contacts") or {})
+                .get("Россия") or {}).get("site", "")
+        box = st.status("Формирую…", expanded=True)
+        headless = bool(get_settings(project_id)["headless"])
+        ok = bad = 0
+        msg_results = crosspost_form.form_messengers(
+            project_id, upcoming, site, channels, progress=lambda m: box.write(m))
+        ok += len(msg_results)
+        for net_name, todo, former, url_key in (
+                ("ВК", vk_todo, crosspost_form.form_vk_all, "vkGroupUrl"),
+                ("ОК", ok_todo, crosspost_form.form_ok_all, "okGroupUrl")):
+            if not todo:
+                continue
+            results = former(project_id, config[url_key].strip(), upcoming, site,
+                             progress=lambda m: box.write(m), headless=headless)
+            ok += sum(1 for r in results if r["ok"])
+            for r in results:
+                if not r["ok"]:
+                    bad += 1
+                    box.write(f"❌ {net_name} {r['post']['date']}: {r['error']}")
+        box.update(label=(f"Готово: запланировано {ok}"
+                          + (f", с ошибками {bad}" if bad else "")),
+                   state="error" if bad else "complete")
+        time.sleep(1.2)
+        st.rerun()
+
+
+def _crosspost_yb_block(project_id: str, config: dict) -> None:
+    """
+    ЯБ по расписанию. ЯБ живёт не в соцреестре, а в своей очереди задач
+    («Публикация» → «Сохранить очередь в задачи»). Здесь эта очередь
+    ставится на время: в назначенный час планировщик запустит обычный
+    прогон публикации; занято другим прогоном — дождётся и запустит следом.
+    """
+    import scheduler
+
+    with st.expander("🕚 Яндекс.Бизнес по расписанию"):
+        n_files = len(list(runner.p_tasks(project_id).glob("*.json")))
+        yb_tasks = [t for t in scheduler.load_tasks(project_id)
+                    if t.get("network") == "yb" and t.get("state") in ("waiting", "retry")]
+
+        for t in yb_tasks:
+            c1, c2 = st.columns([4, 1])
+            c1.write(f"⏰ Прогон запланирован на "
+                     f"**{apptime.human(t['when'], '%d.%m.%Y %H:%M')}** (Екатеринбург)")
+            if c2.button("Отменить", key=f"yb-cancel-{t['id']}"):
+                scheduler.cancel_task(project_id, t["id"])
+                st.rerun()
+
+        if not n_files:
+            st.caption("Очередь ЯБ пуста. Соберите пост во вкладке «Публикация» → "
+                       "«Сохранить очередь в задачи», потом планируйте время здесь.")
+            return
+        st.caption(f"В очереди ЯБ — {n_files} файл(ов) задач. В назначенный час планировщик "
+                   "запустит обычный прогон публикации со всеми защитами; если будет идти "
+                   "другой прогон — дождётся его и стартует следом. Click в этот момент "
+                   "должен работать.")
+        c1, c2, c3 = st.columns([2, 2, 3])
+        d = c1.date_input("Дата", key=f"yb-when-d-{project_id}",
+                          value=apptime.now().date() + timedelta(days=1))
+        default_t = content_plan.brand_default_time(project_id)
+        t_ = c2.time_input("Время (Екб)", key=f"yb-when-t-{project_id}",
+                           value=datetime.strptime(default_t, "%H:%M").time())
+        if c3.button("⏰ Запланировать прогон ЯБ", type="primary",
+                     key=f"yb-plan-{project_id}", use_container_width=True):
+            when = datetime(d.year, d.month, d.day, t_.hour, t_.minute, tzinfo=apptime.TZ)
+            if when <= apptime.now():
+                st.error("Это время уже прошло — выберите будущее.")
+            else:
+                scheduler.queue_task(project_id, {
+                    "id": f"yb|{project_id}|{when.strftime('%Y-%m-%dT%H:%M')}",
+                    "project": project_id, "brand": project_id, "network": "yb",
+                    "when": when.isoformat(), "date": when.strftime("%Y-%m-%d"),
+                    "headless": bool(get_settings(project_id)["headless"]),
+                    "expectedEmail": (config.get("email") or "").strip(),
+                })
+                scheduler.ensure_running()
+                st.success(f"Запланировано: прогон ЯБ {when.strftime('%d.%m.%Y в %H:%M')} "
+                           "по Екатеринбургу.")
+                time.sleep(1.0)
+                st.rerun()
+
+
+def _crosspost_vk_probe(project_id: str, config: dict) -> None:
+    """
+    Пробная отложка ВК: один тестовый пост в сообщество бренда на +N минут.
+    Это боевой пилот механики (форма поста → календарь → «Добавить в очередь»)
+    под сохранённой сессией. Ничего не публикуется сразу: запись видна в
+    «Отложенных записях» сообщества, там же её можно удалить.
+    """
+    import vk_social
+
+    with st.expander("🧪 Пробная отложка ВК — проверить механику одним постом"):
+        if not vk_social.has_saved_session(project_id):
+            st.caption("Сначала войдите в ВК: «Настройки» → «Вход в ВК (кросспостинг)».")
+            return
+        group_url = (config.get("vkGroupUrl") or "").strip()
+        if not group_url:
+            st.caption("Укажите ссылку на сообщество бренда: «Настройки» → «Вход в ВК (кросспостинг)».")
+            return
+
+        st.caption(f"Сообщество: {group_url}. Запись встанет в «Отложенные записи» — "
+                   "оттуда её можно удалить.")
+        text = st.text_area("Текст пробного поста", key=f"vk-probe-text-{project_id}",
+                            value="Проверка планировщика Click — тестовая отложенная запись, "
+                                  "можно удалить.")
+        minutes = st.number_input("Опубликовать через, минут", 10, 24 * 60, 40, step=5,
+                                  key=f"vk-probe-min-{project_id}",
+                                  help="ВК не даёт планировать ближе чем на несколько минут — "
+                                       "меньше 10 не ставим.")
+        busy = runner.busy_reason(project_id, "publish")
+        if busy:
+            st.caption(f"Сейчас нельзя: {busy}. Дождитесь окончания прогона.")
+            return
+        if st.button("Поставить пробную отложку", type="primary",
+                     key=f"vk-probe-go-{project_id}", disabled=not text.strip()):
+            when = apptime.now() + timedelta(minutes=int(minutes))
+            worker = get_worker()
+            with st.spinner("Открываю ВК и ставлю отложку — обычно меньше минуты…"):
+                res = worker.call(
+                    vk_social.schedule_postponed_post, project_id, group_url,
+                    text.strip(), [], when,
+                    headless=bool(get_settings(project_id)["headless"]))
+            if res.get("ok"):
+                st.success(f"Готово: отложка на {when.strftime('%H:%M')} стоит. Проверьте "
+                           f"«Отложенные записи» сообщества — и удалите тестовую запись.")
+            else:
+                st.error(f"Не получилось: {res.get('error')}")
+
+    with st.expander("Показать весь реестр листа (включая прошлые)"):
+        st.caption("Прошлые посты со ссылкой в колонке «Ссылка» считаются вышедшими.")
+        past = [p for p in posts if (d := content_plan.parse_date(p["date"])) and d < today]
+        html("".join(_crosspost_plan_row(p, state) for p in past[-40:]) or
+             T.empty("—", "Прошлых постов нет", ""))
 
 
 def _last_run_kind(project_id: str) -> str:
@@ -3350,6 +3891,15 @@ def tab_settings(project_id: str, config: dict) -> None:
 
     st.divider()
     _gis_login_block(project_id, config)
+
+    st.divider()
+    _vk_login_block(project_id, config)
+
+    st.divider()
+    _ok_login_block(project_id, config)
+
+    st.divider()
+    _kp_sheet_settings_block(project_id, config)
 
     st.divider()
     _web_keys_block()
@@ -3667,6 +4217,192 @@ def _gis_login_block(project_id: str, config: dict) -> None:
             pass
         st.session_state.pop("gis_flow", None)
         st.session_state.pop("gis_state", None)
+        st.rerun()
+
+
+def _vk_login_block(project_id: str, config: dict) -> None:
+    """
+    Вход в ВК для кросспостинга — тот же порядок, что у Яндекса и 2ГИС:
+    скриншот вместо окна, шаги распознаются, сессия сохраняется в файл.
+    Телефон и пароль в конфиг НЕ пишутся: телефон достаточно ввести при
+    входе, пароль тем более — сессия дальше живёт сама.
+    """
+    import vk_social
+
+    worker = get_worker()
+    html('<div class="card-title">🔐 Вход в ВК (кросспостинг)</div>')
+
+    group_url = st.text_input(
+        "Ссылка на сообщество ВК этого бренда", value=config.get("vkGroupUrl", ""),
+        key=f"vk-group-{project_id}", placeholder="https://vk.com/club… или https://vk.com/stalmetural")
+    if group_url.strip() != (config.get("vkGroupUrl") or ""):
+        config["vkGroupUrl"] = group_url.strip()
+        save_config(project_id)
+
+    if vk_social.has_saved_session(project_id):
+        st.success("Сессия ВК сохранена — отложки будут ставиться без повторного входа.")
+        with st.container(key="danger-reset-vk"):
+            if st.button("Войти заново (сбросить сессию)", key="vk-reset"):
+                vk_social.session_path(project_id).unlink(missing_ok=True)
+                for k in ("vk_flow", "vk_state"):
+                    st.session_state.pop(k, None)
+                st.rerun()
+        return
+
+    flow = st.session_state.get("vk_flow")
+    if flow is None:
+        st.caption("Нужен аккаунт-администратор сообщества — тот, кем постят руками. "
+                   "Click откроет форму входа ВК: телефон, пароль или код из SMS "
+                   "вводятся здесь же, по снимку экрана.")
+        if st.button("🔑 Войти в ВК", type="primary", key="vk-login", use_container_width=True):
+            try:
+                flow = vk_social.VkLoginFlow(project_id,
+                                             headless=bool(get_settings(project_id)["headless"]))
+                with st.spinner("Открываю форму входа ВК…"):
+                    st.session_state["vk_state"] = worker.call(flow.start)
+                st.session_state["vk_flow"] = flow
+                st.rerun()
+            except Exception as e:  # noqa: BLE001
+                _browser_error(e)
+        return
+
+    state = st.session_state.get("vk_state") or {}
+    if state.get("screenshot"):
+        st.image(state["screenshot"], use_container_width=True)
+        st.caption("Это то, что Click видит на странице входа ВК прямо сейчас.")
+
+    step = state.get("step")
+    if step == "done":
+        try:
+            worker.call(flow.save_session)
+        finally:
+            worker.call(flow.close)
+        st.session_state.pop("vk_flow", None)
+        st.session_state.pop("vk_state", None)
+        if vk_social.has_saved_session(project_id):
+            st.success("Вошли в ВК. Сессия сохранена.")
+        else:
+            st.warning("ВК пустил, но сессия не сохранилась — попробуйте ещё раз.")
+        time.sleep(1.0)
+        st.rerun()
+    elif step == "phone":
+        phone = st.text_input("Телефон аккаунта ВК", key="vk-phone", placeholder="+7…")
+        if st.button("Далее", key="vk-phone-go", type="primary") and phone.strip():
+            st.session_state["vk_state"] = worker.call(flow.submit_phone, phone)
+            st.rerun()
+    elif step == "password":
+        pwd = st.text_input("Пароль ВК", type="password", key="vk-pass")
+        if st.button("Войти", key="vk-pass-go", type="primary") and pwd:
+            st.session_state["vk_state"] = worker.call(flow.submit_password, pwd)
+            st.rerun()
+    elif step == "code":
+        st.caption("ВК просит код подтверждения — из SMS или приложения.")
+        code = st.text_input("Код", key="vk-code")
+        if st.button("Подтвердить", key="vk-code-go", type="primary") and code.strip():
+            st.session_state["vk_state"] = worker.call(flow.submit_code, code)
+            st.rerun()
+    else:
+        st.warning("Не разобрал, что за шаг на странице, — смотрите снимок выше. "
+                   "Можно ввести данные на нужном шаге ещё раз или отменить вход.")
+
+    if st.button("Отменить вход", key="vk-cancel"):
+        try:
+            worker.call(flow.close)
+        except Exception:  # noqa: BLE001
+            pass
+        st.session_state.pop("vk_flow", None)
+        st.session_state.pop("vk_state", None)
+        st.rerun()
+
+
+def _ok_login_block(project_id: str, config: dict) -> None:
+    """
+    Вход в ОК для кросспостинга. API-права заказчику не дали (2026-08-10),
+    поэтому ОК — как ВК: вход с сохранением сессии, отложка через интерфейс
+    группы. Логин храним в конфиге (удобно), пароль — нет: вводится при
+    входе, дальше живёт сессия.
+    """
+    import ok_browser
+
+    worker = get_worker()
+    html('<div class="card-title">🔐 Вход в ОК (кросспостинг)</div>')
+
+    c1, c2 = st.columns(2)
+    ok_login = c1.text_input("Логин ОК (телефон/почта админа группы)",
+                             value=config.get("okLogin", ""), key=f"ok-login-{project_id}")
+    group_url = c2.text_input("Ссылка на группу ОК бренда", value=config.get("okGroupUrl", ""),
+                              key=f"ok-group-{project_id}",
+                              placeholder="https://ok.ru/group/…")
+    if ok_login.strip() != (config.get("okLogin") or "") \
+            or group_url.strip() != (config.get("okGroupUrl") or ""):
+        config["okLogin"] = ok_login.strip()
+        config["okGroupUrl"] = group_url.strip()
+        save_config(project_id)
+
+    if ok_browser.has_saved_session(project_id):
+        st.success("Сессия ОК сохранена — отложки будут ставиться без повторного входа.")
+        with st.container(key="danger-reset-ok"):
+            if st.button("Войти заново (сбросить сессию)", key="ok-reset"):
+                ok_browser.session_path(project_id).unlink(missing_ok=True)
+                for k in ("ok_flow", "ok_state"):
+                    st.session_state.pop(k, None)
+                st.rerun()
+        return
+
+    flow = st.session_state.get("ok_flow")
+    if flow is None:
+        password = st.text_input("Пароль ОК", type="password", key=f"ok-pass-{project_id}")
+        if st.button("🔑 Войти в ОК", type="primary", key="ok-go",
+                     use_container_width=True, disabled=not (ok_login.strip() and password)):
+            try:
+                flow = ok_browser.OkLoginFlow(project_id,
+                                              headless=bool(get_settings(project_id)["headless"]))
+                with st.spinner("Открываю ОК…"):
+                    worker.call(flow.start)
+                    st.session_state["ok_state"] = worker.call(
+                        flow.submit_credentials, ok_login.strip(), password)
+                st.session_state["ok_flow"] = flow
+                st.rerun()
+            except Exception as e:  # noqa: BLE001
+                _browser_error(e)
+        return
+
+    state = st.session_state.get("ok_state") or {}
+    if state.get("screenshot"):
+        st.image(state["screenshot"], use_container_width=True)
+        st.caption("Это то, что Click видит в ОК прямо сейчас.")
+
+    step = state.get("step")
+    if step == "done":
+        try:
+            worker.call(flow.save_session)
+        finally:
+            worker.call(flow.close)
+        st.session_state.pop("ok_flow", None)
+        st.session_state.pop("ok_state", None)
+        if ok_browser.has_saved_session(project_id):
+            st.success("Вошли в ОК. Сессия сохранена.")
+        else:
+            st.warning("ОК пустил, но сессия не сохранилась — попробуйте ещё раз.")
+        time.sleep(1.0)
+        st.rerun()
+    elif step == "code":
+        st.caption("ОК просит код подтверждения — из SMS или почты.")
+        code = st.text_input("Код", key="ok-code")
+        if st.button("Подтвердить", key="ok-code-go", type="primary") and code.strip():
+            st.session_state["ok_state"] = worker.call(flow.submit_code, code)
+            st.rerun()
+    else:
+        st.warning("ОК не пустил с этой парой логин/пароль — проверьте и попробуйте "
+                   "снова. На снимке видно, что показывает ОК.")
+
+    if st.button("Отменить вход", key="ok-cancel"):
+        try:
+            worker.call(flow.close)
+        except Exception:  # noqa: BLE001
+            pass
+        st.session_state.pop("ok_flow", None)
+        st.session_state.pop("ok_state", None)
         st.rerun()
 
 
@@ -4065,10 +4801,11 @@ def _kp_card_ids(project_id: str, config: dict) -> list[str]:
     перечитывай, дубль не найдётся. Зато в КП у города записана прямая
     ссылка на карточку: по ней Click откроет её сам.
 
-    Таблицу читаем из кэша вкладки; не вышло – возвращаем пусто и просто
-    собираем как раньше.
+    Лист берём из настроек проекта (тот же, что и «Города») – не вышло
+    (не настроен, таблица недоступна) – возвращаем пусто и просто собираем
+    организации как раньше.
     """
-    title = st.session_state.get("audit-sheet")
+    title = (config.get("kpSheetTitle") or "").strip()
     if not title:
         return []
     try:
@@ -4082,23 +4819,6 @@ def _kp_card_ids(project_id: str, config: dict) -> list[str]:
         return list(dict.fromkeys(out))
     except Exception:  # noqa: BLE001 – без таблицы соберём просто список
         return []
-
-
-def _audit_pick_sheet(titles: list[str], prefer: str) -> str:
-    """Какой лист предлагать: указанный ссылкой, потом «Лист20», потом «кп»."""
-    saved = st.session_state.get("audit-sheet")
-    if saved in titles:
-        return saved
-    for want in ("лист20", "лист 20"):
-        for t in titles:
-            if kp_audit.norm_text(t).replace(" ", "") == want.replace(" ", ""):
-                return t
-    if prefer in titles:
-        return prefer
-    for t in titles:
-        if kp_audit.norm_text(t) in ("кп", "карта присутствия", "карта присутсвия"):
-            return t
-    return titles[0] if titles else ""
 
 
 def tab_audit(project_id: str, config: dict) -> None:
@@ -4148,31 +4868,20 @@ def tab_audit(project_id: str, config: dict) -> None:
             live_panel(project_id, running, "collect")
 
     # ─── Лист КП ───
+    # Источник и лист – общие с «Городами», настраиваются в «⚙️ Настройки»:
+    # раньше у «Сверки» был свой отдельный выбор листа, который жил только
+    # в сессии и мог разойтись с тем, что читают «Города» – два места видели
+    # разные версии одной и той же таблицы.
     saved_url = (config.get("kpSheetUrl") or "").strip()
-    if not kp_sheet.is_configured(project_id, saved_url):
-        st.info("Не настроена таблица КП. Ссылка и ключ доступа задаются во вкладке "
-                "«🏙 Города» → «Источник городов».")
-        return
-
-    try:
-        titles, prefer = _audit_cache(f"titles|{project_id}|{saved_url}",
-                                      lambda: kp_sheet.sheet_titles(project_id, saved_url))
-    except Exception as e:  # noqa: BLE001
-        st.error(str(e))
-        return
-    if not titles:
-        st.error("В таблице КП нет ни одного листа.")
+    title = (config.get("kpSheetTitle") or "").strip()
+    if not kp_sheet.is_configured(project_id, saved_url) or not title:
+        st.info("Не настроен источник городов. Ссылка на таблицу и лист задаются во вкладке "
+                "«⚙️ Настройки» → «Источник городов – Google-таблица КП».")
         return
 
     with st.container(border=True):
         html('<div class="card-title">📄 Лист КП</div>')
-        # Лист из прошлого раза мог пропасть (переименовали, сменили таблицу) –
-        # тогда Streamlit упал бы на значении, которого нет в списке.
-        if st.session_state.get("audit-sheet") not in titles:
-            st.session_state.pop("audit-sheet", None)
-        pick = _audit_pick_sheet(titles, prefer)
-        title = st.selectbox("Лист таблицы", titles, index=titles.index(pick) if pick in titles else 0,
-                             key="audit-sheet", label_visibility="collapsed")
+        st.caption(f"Лист «{title}» – выбран в «⚙️ Настройки».")
         if st.button("↻ Перечитать таблицу", key="audit-reread"):
             _audit_forget()
             st.rerun()
@@ -4182,15 +4891,8 @@ def tab_audit(project_id: str, config: dict) -> None:
             st.error(str(e))
             return
         if not any(any(str(c).strip() for c in r) for r in rows):
-            # «Лист20» заказчик только собирается заполнить – пока он пустой,
-            # предлагаем открыть рабочий лист в один клик, а не искать в списке.
-            st.warning(f"Лист «{title}» пустой – сверять нечего.")
-            others = [t for t in titles
-                      if t != title and kp_audit.norm_text(t) in
-                      ("кп", "карта присутствия", "карта присутсвия", "выгрузка", "целевая")]
-            for n, other in enumerate(others[:3]):
-                st.button(f"Открыть лист «{other}»", key=f"audit-goto-{n}",
-                          on_click=lambda t=other: st.session_state.__setitem__("audit-sheet", t))
+            st.warning(f"Лист «{title}» пустой – сверять нечего. Выберите другой лист "
+                       "во вкладке «⚙️ Настройки» → «Источник городов».")
             return
 
     if not companies:
@@ -4332,9 +5034,9 @@ def show_main(project_id: str) -> None:
     # ВАЖНО: активный раздел держим в СВОЁМ ключе, а не только в ключе виджета.
     # Streamlit удаляет состояние виджетов, которые не успели отрисоваться в прогоне
     # (а кнопка темы выше делает st.rerun() до радио) – и вкладка сбрасывалась на первую.
-    current = st.session_state.get("section_name", SECTIONS[0])
+    current = st.session_state.get("section_name", SEC_RUN)
     if current not in SECTIONS:
-        current = SECTIONS[0]
+        current = SEC_RUN
     # Счётчик на вкладке «Актуализация»: после прогона с отзывами человек
     # иначе не догадается, что где-то ждут готовые ответы. Первый боевой
     # прогон это и показал – черновики были, а найти их было негде.
@@ -4342,7 +5044,7 @@ def show_main(project_id: str) -> None:
                   for pf in (rv.YANDEX, rv.GIS))
 
     def _section_label(name: str) -> str:
-        if name == SECTIONS[2] and waiting:
+        if name == SEC_ACTUALIZE and waiting:
             return f"{name} · 💬 {waiting}"
         return name
 
@@ -4352,17 +5054,19 @@ def show_main(project_id: str) -> None:
                            key=f"main-section-{st.session_state.get('nav-gen', 0)}")
     st.session_state["section_name"] = section
 
-    if section == SECTIONS[0]:
+    if section == SEC_RUN:
         tab_run(project_id, config)
-    elif section == SECTIONS[1]:
+    elif section == SEC_COMPOSE:
         tab_compose(project_id, config)
-    elif section == SECTIONS[2]:
+    elif section == SEC_CROSSPOST:
+        tab_crosspost(project_id, config)
+    elif section == SEC_ACTUALIZE:
         tab_actualize(project_id, config)
-    elif section == SECTIONS[3]:
+    elif section == SEC_CITIES:
         tab_cities(project_id, config)
-    elif section == SECTIONS[4]:
+    elif section == SEC_REPORT:
         tab_report(project_id)
-    elif section == SECTIONS[5]:
+    elif section == SEC_SETTINGS:
         tab_settings(project_id, config)
     else:
         tab_audit(project_id, config)
@@ -4384,32 +5088,99 @@ def show_main(project_id: str) -> None:
 # рисует и ничего не запускает, а сама перерисовывается через секунду.
 # Выселение занимает мгновение: человек видит короткую плашку и работает
 # дальше уже на одной сборке.
-_MIXED_TRIES = "_mixed_build_tries"
-_MIXED_LIMIT = 8
+_REFRESH_LOCK = threading.Lock()
+
+
+def disk_build() -> str:
+    """
+    Метка сборки, прочитанная С ДИСКА, а не из памяти.
+
+    Сравнивать модули с меткой ИЗ ПАМЯТИ бессмысленно, и это стоило заказчику
+    ещё двух пустых постов. Streamlit перечитывает с диска только главный
+    скрипт; `build` он держит в памяти наравне с остальными. Значит после
+    обновления старыми оказываются И модули, И метка – всё «сходится», хотя
+    код разный, и проверка молчит. Правда только на диске.
+    """
+    try:
+        text = (Path(__file__).parent / "build.py").read_text(encoding="utf-8")
+    except OSError:
+        return UI_BUILD
+    found = re.search(r'BUILD\s*=\s*["\']([^"\']+)["\']', text)
+    return found.group(1) if found else UI_BUILD
 
 
 def stale_modules() -> list[str]:
-    """Модули, оставшиеся в памяти от прежней сборки."""
-    return [name for name in _OWN_MODULES
-            if getattr(sys.modules.get(name), "BUILD", UI_BUILD) != UI_BUILD]
+    """Части приложения, оставшиеся в памяти от прежней сборки."""
+    want = disk_build()
+    stale = [name for name in _OWN_MODULES
+             if getattr(sys.modules.get(name), "BUILD", want) != want]
+    if UI_BUILD != want:
+        stale.append("build")
+    return sorted(set(stale))
+
+
+def refresh_stale_modules() -> list[str]:
+    """
+    Перечитать с диска модули, оставшиеся от прежней сборки.
+
+    Зачем. Облако обновляет файлы под работающим приложением. Главный скрипт
+    Streamlit читает с диска на каждой перерисовке, а соседние модули берёт из
+    памяти – и до перезапуска приложения экран новый, а прогон старый. Это не
+    теория: заказчик получила «AttributeError: casual_words», а потом старый
+    прогон принял задания «только фото в 2ГИС» за обычные посты и опубликовал
+    пустые посты в пяти городах. Просить человека нажать «Reboot app» – не
+    решение: он этого не увидит и не должен.
+
+    Почему это безопасно теперь, хотя раньше самодельная перезагрузка роняла
+    приложение целиком. Тогда она шла на КАЖДОЙ перерисовке и из любого потока
+    без оглядки на соседей. Теперь – только когда метки и правда разошлись
+    (раз за сборку), только когда НЕ ИДЁТ ни один прогон (иначе живой прогон
+    остался бы со старым модулем) и под общим замком, чтобы два потока не
+    перезагружали разом. Плюс importlib.reload не выкидывает модуль из
+    sys.modules – читатель в соседнем потоке видит его всё время.
+    """
+    if any(runner.is_running(pid) for pid in PROJECTS):
+        return stale_modules()
+    with _REFRESH_LOCK:
+        stale = stale_modules()
+        if not stale:
+            return []
+        # Сперва метка, потом всё остальное: модули берут BUILD из неё.
+        for name in ["build"] + [n for n in _OWN_MODULES if n != "build"]:
+            module = sys.modules.get(name)
+            if module is None:
+                continue
+            for attempt in range(3):
+                try:
+                    importlib.reload(module)
+                    break
+                except KeyError:            # сосед выселил модуль – подождём
+                    time.sleep(0.2 * (attempt + 1))
+                except Exception:           # noqa: BLE001 – не вышло, скажем человеку
+                    break
+        return stale_modules()
 
 
 def main() -> None:
-    stale = stale_modules()
-    if stale:
-        tries = st.session_state.get(_MIXED_TRIES, 0) + 1
-        st.session_state[_MIXED_TRIES] = tries
-        if tries <= _MIXED_LIMIT:
-            st.info("⏳ Приложение обновляется – секунду. Это бывает после выхода "
-                    "новой версии: страница обновилась раньше, чем остальные части.")
-            time.sleep(1.0)
+    if stale_modules():
+        # Перечитываем сами. Не вышло (идёт прогон или модуль не поддался) –
+        # НИЧЕГО не рисуем и ничего не запускаем: смешанный код опаснее
+        # неудобства. Экран уже умел «только фото в 2ГИС», а прогон из памяти
+        # про них не знал – и посты ушли пустыми.
+        left = refresh_stale_modules()
+        if not left:
             st.rerun()
+        busy = [pid for pid in PROJECTS if runner.is_running(pid)]
+        if busy:
+            st.warning("⏳ Вышла новая версия Click, но сейчас идёт прогон – обновимся, "
+                       "когда он закончится. Пока работает прежняя версия; новые прогоны "
+                       "лучше не запускать.")
+            return
         st.error("Приложение обновилось, но часть его осталась от прежней сборки: "
-                 + ", ".join(stale) + ". Перезагрузите страницу (F5), а если не поможет – "
+                 + ", ".join(left) + ". Перезагрузите страницу (F5), а если не поможет – "
                  "«Reboot app» в меню Streamlit справа внизу. Запускать прогоны сейчас "
                  "нельзя: новый экран и старый прогон понимают задачи по-разному.")
         return
-    st.session_state.pop(_MIXED_TRIES, None)
 
     project_id = st.session_state.get("current_project_id")
     if not project_id:

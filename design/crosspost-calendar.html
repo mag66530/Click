@@ -161,18 +161,26 @@ p{margin:0}
 .dash.warn{background:var(--yel)} .dash.err{background:var(--red)}
 
 /* ─── Календарь ────────────────────────────────────────────────────────── */
-.cal{display:grid; grid-template-columns:repeat(5,minmax(0,1fr)) .62fr .62fr; gap:10px}
+.cal{display:grid; grid-template-columns:repeat(5,minmax(0,1fr)) .58fr; gap:10px}
+/* Выходные держим в одной узкой колонке справа: ячейка появляется только там,
+   где на субботу или воскресенье действительно стоит пост (обычно праздники). */
+.wecol{display:flex; flex-direction:column; gap:8px; min-height:186px}
+.we-none{
+  display:flex; align-items:center; justify-content:center; text-align:center;
+  font-size:11px; line-height:1.45; color:var(--dim); padding:10px 6px;
+  border:1px dashed var(--border-2); border-radius:var(--r-md); flex:1;
+}
 .dow{
   font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
   color:var(--muted); padding:0 4px 2px;
 }
-.dow.we{color:var(--dim)}
+.dow.we{color:var(--dim); font-size:10px}
 .cell{
   background:var(--bg-1); border:1px solid var(--border); border-radius:var(--r-md);
   min-height:186px; padding:11px; display:flex; flex-direction:column; gap:8px;
   transition:border-color .15s var(--ease);
 }
-.cell.we{background:var(--bg-3)}
+.cell.we{background:var(--bg-3); min-height:auto; padding:9px}
 .cell.past{opacity:.6}
 .cell.today{border-color:var(--acc); box-shadow:0 0 0 3px var(--acc-bg)}
 .cell-h{display:flex; align-items:baseline; gap:7px}
@@ -187,7 +195,7 @@ p{margin:0}
   flex:1; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--dim);
   border:1px dashed var(--border-2); border-radius:var(--r-sm); min-height:60px;
 }
-.cell.we .cell-empty{border-color:transparent}
+
 
 .ev{
   border-radius:var(--r-sm); background:var(--bg-2); border:1px solid var(--border);
@@ -380,6 +388,7 @@ details.exp summary .tail{margin-left:auto; font-size:11.5px; font-weight:500; c
             <span><i class="dash set"></i> отложка стоит в соцсети</span>
             <span><i class="dash wait"></i> отправит Click</span>
             <span><i class="dash warn"></i> не выйдет</span>
+            <button class="btn btn-sm" type="button" style="margin-left:6px">Показать выходные</button>
           </div>
         </div>
 
@@ -389,7 +398,7 @@ details.exp summary .tail{margin-left:auto; font-size:11.5px; font-weight:500; c
             <div class="cal" style="margin-bottom:10px">
               <div class="dow">Понедельник</div><div class="dow">Вторник</div><div class="dow">Среда</div>
               <div class="dow">Четверг</div><div class="dow">Пятница</div>
-              <div class="dow we">Суббота</div><div class="dow we">Воскресенье</div>
+              <div class="dow we">Выходные</div>
 
               <!-- Неделя 17–23 -->
               <div class="cell today">
@@ -430,13 +439,8 @@ details.exp summary .tail{margin-left:auto; font-size:11.5px; font-weight:500; c
                 <div class="cell-h"><span class="cell-num">21</span></div>
                 <div class="cell-empty">постов нет</div>
               </div>
-              <div class="cell we">
-                <div class="cell-h"><span class="cell-num">22</span></div>
-                <div class="cell-empty">выходной</div>
-              </div>
-              <div class="cell we">
-                <div class="cell-h"><span class="cell-num">23</span></div>
-                <div class="cell-empty">выходной</div>
+              <div class="wecol">
+                <div class="we-none">22 – 23<br>постов нет</div>
               </div>
 
               <!-- Неделя 24–30 -->
@@ -482,19 +486,30 @@ details.exp summary .tail{margin-left:auto; font-size:11.5px; font-weight:500; c
                 <div class="cell-h"><span class="cell-num">28</span></div>
                 <div class="cell-empty">постов нет</div>
               </div>
-              <div class="cell we">
-                <div class="cell-h"><span class="cell-num">29</span></div>
-                <div class="cell-empty">выходной</div>
-              </div>
-              <div class="cell we">
-                <div class="cell-h"><span class="cell-num">30</span></div>
-                <div class="cell-empty">выходной</div>
+              <div class="wecol">
+                <div class="cell we">
+                  <div class="cell-h"><span class="cell-num">29</span><span class="cell-tag">суббота</span></div>
+                  <div class="ev set">
+                    <div class="ev-top"><span class="ev-time">10:00</span><span class="ev-kind">Спецпредложение</span></div>
+                    <div class="ev-title">Ко Дню знаний: профлист со скидкой всю неделю</div>
+                    <div class="ev-pf">
+                      <span class="p wait" title="Телеграм — отправит Click">ТГ</span>
+                      <span class="p set" title="ВК — отложка стоит">ВК</span>
+                      <span class="p set" title="ОК — отложка стоит">ОК</span>
+                      <span class="p wait" title="МАКС — отправит Click">МАКС</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
             <button class="weekline" type="button">
               ◀ <b>Прошлая неделя, 10 – 16 августа</b> · 2 поста вышли, 1 с ошибкой во ВК — показать
             </button>
+            <p style="margin-top:10px; font-size:11.5px; color:var(--dim)">
+              Суббота и воскресенье в сетку не входят — они появляются справа, только когда на
+              выходной действительно стоит пост. 29 августа такой есть, 22–23 пусто.
+            </p>
           </div>
 
           <!-- Панель поста -->
@@ -579,7 +594,11 @@ details.exp summary .tail{margin-left:auto; font-size:11.5px; font-weight:500; c
           <span>Отдельного блока «требует внимания» нет: жёлтая кнопка наверху и жёлтая плитка в самом дне. Нажали — календарь отфильтровался на проблемные.</span>
         </li>
         <li>
-          <b>Пустые дни видно</b>
+          <b>Неделя — пять дней</b>
+          <span>Выходные не занимают треть сетки: суббота и воскресенье выносятся в узкую колонку справа и показываются, только если на них стоит пост — как перед праздниками. Кнопка «Показать выходные» открывает их целиком, когда нужно.</span>
+        </li>
+        <li>
+          <b>Пустые будни видно</b>
           <span>«Постов нет» — это тоже информация: сразу понятно, где в контент-плане дыра, и можно дописать строку в таблицу.</span>
         </li>
         <li>

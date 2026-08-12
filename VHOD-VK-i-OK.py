@@ -28,6 +28,12 @@ VHOD-VK-i-OK.py – получить файл сессий ВК, ОК и МАК�
 уходил в Google вместо сайта. Теперь вкладку открывает скрипт – ошибиться
 негде.
 
+ПРО ПРОФИЛЬ. Окно открывается со СВОИМ постоянным профилем (папка рядом с
+данными Click, ваш обычный Chrome не трогается). Так надо: одноразовое
+«стерильное» окно МАКС узнаёт и не рисует проверку «вы не робот» вовсе –
+заголовок есть, а галочки под ним нет. Профиль живёт между запусками, так
+что во второй раз входить в ВК и ОК уже не придётся.
+
 БЕЗОПАСНОСТЬ. Файл сессии – это доступ к аккаунту. Передавайте его так же
 бережно, как пароль: не через открытые чаты. В репозиторий он не попадает.
 """
@@ -123,15 +129,52 @@ def _has_ok(cookies: list) -> bool:
     return bool(names & set(OK_AUTH) or names - OK_GUEST)
 
 
-def _open_browser(pw):
-    """Открыть окно браузера, перебрав что есть на компьютере."""
+def _profile_dir() -> Path:
+    """
+    Своя папка профиля браузера – рядом с данными Click, не в проекте.
+
+    Профиль ЖИВЁТ между запусками: второй раз входить уже не придётся, а
+    сайты видят браузер, которым пользуются, а не одноразовый.
+    """
+    import os
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
+        d = base / "Click" / "vhod-profile"
+    elif sys.platform == "darwin":
+        d = Path.home() / "Library" / "Application Support" / "Click" / "vhod-profile"
+    else:
+        d = Path.home() / ".local" / "share" / "click" / "vhod-profile"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _open_context(pw):
+    """
+    Открыть окно с ПОСТОЯННЫМ профилем.
+
+    Почему не обычный запуск. Одноразовое окно Playwright – «стерильное»:
+    без истории, без настроек, без профиля. МАКС такое узнаёт и не рисует
+    виджет проверки «вы не робот» вовсе: заголовок есть, галочки нет,
+    пройти нечего (проверено заказчицей 12.08.2026, и маскировка флага
+    автоматизации тут не помогла). Постоянный профиль выглядит как
+    браузер, которым пользуются.
+
+    Заодно приятное: профиль сохраняется, и во второй раз входить в ВК и
+    ОК уже не придётся.
+    """
+    profile = _profile_dir()
+    common = dict(user_data_dir=str(profile), headless=False, args=ANTIBOT_ARGS,
+                  viewport={"width": 1280, "height": 900},
+                  locale="ru-RU", timezone_id="Asia/Yekaterinburg")
     last = None
     for channel in CHANNELS:
         try:
+            kw = dict(common)
             if channel:
-                return pw.chromium.launch(headless=False, channel=channel,
-                                          args=ANTIBOT_ARGS)
-            return pw.chromium.launch(headless=False, args=ANTIBOT_ARGS)
+                kw["channel"] = channel
+            context = pw.chromium.launch_persistent_context(**kw)
+            context.add_init_script(ANTIBOT_INIT)
+            return context
         except Exception as exc:          # нет такого браузера – пробуем следующий
             last = exc
     raise RuntimeError(
@@ -159,17 +202,15 @@ def main() -> int:
         # ГЛАВНОЕ ОТЛИЧИЕ ОТ CLICK: окно настоящее, видимое. Проверку
         # проходит человек, а не программа – поэтому она и проходится.
         try:
-            browser = _open_browser(pw)
+            context = _open_context(pw)
         except RuntimeError as exc:
             print(f"\n{exc}")
             input("\nНажмите Enter, чтобы закрыть… ")
             return 1
 
-        context = browser.new_context(
-            viewport={"width": 1280, "height": 900},
-            locale="ru-RU", timezone_id="Asia/Yekaterinburg")
-        context.add_init_script(ANTIBOT_INIT)
-        page = context.new_page()
+        # У постоянного профиля вкладка уже есть – берём её, а не заводим
+        # вторую: лишняя пустая вкладка только путает.
+        page = context.pages[0] if context.pages else context.new_page()
         page.goto("https://vk.ru/login", wait_until="domcontentloaded")
 
         input("\nВошли в ВК? Нажмите Enter здесь, в этом окне… ")
@@ -218,7 +259,7 @@ def main() -> int:
                   "Запустите файл ещё раз и не закрывайте окно сами.")
             input("\nНажмите Enter, чтобы закрыть… ")
             return 1
-        browser.close()
+        context.close()
 
     # ОДИН файл на обе сети. Раньше их было два, и вставлять их приходилось
     # в два разных окошка – работа на ровном месте: куки-то снимаются одним

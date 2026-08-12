@@ -685,6 +685,90 @@ def test_scheduler() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_calendar_view() -> None:
+    """
+    Календарь: рабочая неделя из пяти дней, выходные — только с постами.
+
+    Живая просьба заказчика: суббота и воскресенье занимали треть сетки и
+    всегда пустовали. Отложку на выходной ставят редко — обычно перед
+    праздниками, — и вот тогда день и должен появиться.
+    """
+    print("Календарь плана (crosspost_calendar)")
+    import crosspost_calendar as cal
+    import crosspost_state as cps
+
+    monday = date(2025, 8, 18)          # понедельник
+    def post(day: str, text: str = "Текст поста", nets=("vk", "tg-client"),
+             kind: str = "Информационный", link: str = "") -> dict:
+        return {"brand": "SMU", "date": day, "time": "09:00",
+                "when": f"{day}T09:00:00+05:00", "post_type": kind, "format": "Пост",
+                "text": text, "images": ["a.jpg"], "row": 42,
+                "targets": [{"network": n, "raw": n, "published_link": link} for n in nets]}
+
+    posts = [post("2025-08-19"), post("2025-08-22")]      # вторник и пятница
+    view = cal.build(posts, {}, monday)
+    check("две недели", len(view["weeks"]) == 2)
+    check("в неделе пять будних дней", all(len(w["days"]) == 5 for w in view["weeks"]))
+    check("без постов на выходные колонки нет", view["has_weekend"] is False)
+    check("заголовок про будни", view["title"] == "18 – 29 августа", view["title"])
+    check("пост встал во вторник", len(view["weeks"][0]["days"][1]["posts"]) == 1)
+    check("сегодня отмечено", view["weeks"][0]["days"][0]["is_today"] is True)
+    check("подпись «завтра»", view["weeks"][0]["days"][1]["tag"] == "завтра")
+
+    holiday = cal.build(posts + [post("2025-08-23")], {}, monday)   # суббота
+    check("пост на выходной поднимает колонку", holiday["has_weekend"] is True)
+    check("в колонке выходных — только день с постом",
+          [c["num"] for c in holiday["weeks"][0]["weekend"]] == ["23"])
+    check("во второй неделе выходных постов нет", holiday["weeks"][1]["weekend"] == [])
+    check("заглушка знает числа", holiday["weeks"][1]["weekend_empty"] == "30 – 31")
+
+    # Значки площадок: у ВК и ОК отложку держит сама сеть, у ТГ и МАКС — Click.
+    p = post("2025-08-19", nets=("vk", "tg-client"))
+    state = {cps.post_key(p): {"targets": {"vk": {"state": cps.SCHEDULED},
+                                           "tg-client": {"state": cps.SCHEDULED}}}}
+    marks = {n["code"]: n for n in cal.post_view(p, state)["nets"]}
+    check("ВК: отложка стоит в соцсети", marks["vk"]["cls"] == "set" and marks["vk"]["mark"] == "✓")
+    check("ТГ: отправит Click", marks["tg-client"]["cls"] == "wait" and marks["tg-client"]["mark"] == "⏱")
+    check("у знака есть подпись словами", "Click" in marks["tg-client"]["note"])
+
+    failed = {cps.post_key(p): {"targets": {"vk": {"state": cps.FAILED, "error": "сессия слетела"}}}}
+    view_err = cal.post_view(p, failed)
+    check("ошибка красит плитку", view_err["state"] == "err")
+    check("причина ошибки видна", "сессия" in view_err["nets"][0]["note"])
+
+    empty = cal.post_view(post("2025-08-19", text=""), {})
+    check("нет текста — жёлтая плитка", empty["state"] == "warn")
+    check("и сказано словами", "не выйдет" in empty["note"])
+
+    done = cal.post_view(post("2025-08-19", link="https://vk.com/wall-1_2"), {})
+    check("ссылка в реестре = вышло", done["state"] == "live")
+
+    video = cal.post_view({**post("2025-08-19"), "format": "Видео"}, {})
+    check("видео — вручную, не тревога", video["state"] == "manual")
+
+    long_text = cal.post_view(post("2025-08-19", text="о" * 200), {})
+    check("превью подрезано", len(long_text["title"]) <= cal.TITLE_LIMIT + 1)
+
+
+    # Хвост пустых недель не рисуем: горизонт тянется до конца месяца, и в
+    # начале месяца это давало три ряда пустых клеток.
+    far = cal.build(posts, {}, monday, weeks=6)
+    check("пустые недели с конца обрезаны", len(far["weeks"]) == 2, str(len(far["weeks"])))
+    late = cal.build(posts + [post("2025-09-09")], {}, monday, weeks=6)
+    check("неделя с постом остаётся", len(late["weeks"]) == 4, str(len(late["weeks"])))
+    check("минимум две недели", len(cal.build([], {}, monday, weeks=6)["weeks"]) == 2)
+
+    # Ближайший выход для строки состояния.
+    nearest = cal.next_out([p], {cps.post_key(p): {"targets": {"vk": {"state": cps.SCHEDULED}}}},
+                           "2025-08-18T10:00:00+05:00")
+    check("ближайший пост найден", nearest is not None and nearest["when"].startswith("2025-08-19"))
+    check("названы только ждущие площадки",
+          nearest is not None and [n["code"] for n in nearest["pending"]] == ["vk"])
+    check("вышедшее в ближайшие не попадает",
+          cal.next_out([post("2025-08-19", link="https://vk.com/wall-1_2")], {},
+                       "2025-08-18T10:00:00+05:00") is None)
+
+
 def test_vk_time_pickers() -> None:
     """
     Календарь ВК: верим подписи самого ВК, а не чтению полей.
@@ -1309,6 +1393,7 @@ def main() -> int:
     test_dates_and_time()
     test_parse_blocks()
     test_posts_to_form()
+    test_calendar_view()
     test_real_file_optional()
     print("\n" + "═" * 60)
     if FAILED:

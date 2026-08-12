@@ -277,9 +277,7 @@ def rows(posts: list[dict], state: dict, today: date,
             "day": d,
             "head": head,
             "tail": tail,
-            "when_day": f"{d.strftime('%d.%m')}",
-            "when_note": ", ".join(x for x in (relative_day(d, today),
-                                               WEEKDAYS_RU[d.weekday()]) if x),
+            "when_day": d.strftime("%d.%m"),
             "todo": None,
         })
         views.append(view)

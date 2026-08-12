@@ -713,8 +713,8 @@ def test_plan_rows() -> None:
     got = plan.rows([p1, p2], {}, today)
     check("строки идут по времени", [r["day"].day for r in got["rows"]] == [19, 26])
     check("заголовок по диапазону", got["title"] == "19 – 26 августа", got["title"])
-    check("подпись дня словами", got["rows"][0]["when_note"] == "завтра, вт",
-          got["rows"][0]["when_note"])
+    check("в колонке «когда» только дата", got["rows"][0]["when_day"] == "19.08",
+          got["rows"][0]["when_day"])
     check("прошлые в план не попадают",
           plan.rows([post("2025-08-01")], {}, today)["rows"] == [])
     check("горизонт обрезает дальние",

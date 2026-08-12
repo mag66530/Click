@@ -4665,26 +4665,35 @@ def _gis_login_block(project_id: str, config: dict) -> None:
 
 def _both_sessions_block(project_id: str) -> None:
     """
-    Один файл сессий на обе сети – ВК и ОК сразу.
+    Один файл сессий на ВСЕ сети сразу – ВК, ОК и МАКС.
 
     Мысль заказчицы, и правильная: «может, одним входом оба куки собирать,
     в один файлик, и один раз вставлять». Куки-то снимаются ОДНИМ браузером
-    за ОДИН заход – ОК и пускает-то через ВК. Делить их на два файла и
-    заставлять человека вставлять дважды было работой на ровном месте.
-    Click раскладывает по сетям сам и говорит, что нашёл.
+    за ОДИН заход – ОК и пускает-то через ВК. Делить их на файлы и
+    заставлять человека вставлять по нескольку раз было работой на ровном
+    месте. Click раскладывает по сетям сам и говорит, что нашёл.
+
+    Заголовок и подпись перечисляют сети ПОИМЁННО. Когда добавился МАКС,
+    приём файла я сделал, а тут оставил «ВК и ОК» – и заказчица искала,
+    куда грузить МАКС, глядя прямо на нужное поле. Подпись должна называть
+    всё, что блок умеет, иначе она вводит в заблуждение.
     """
+    import max_browser
     import ok_browser
     import social_session
     import vk_social
 
-    html('<div class="card-title">🔑 Файл сессий ВК и ОК</div>')
-    есть_вк = vk_social.has_saved_session(project_id)
-    есть_ок = ok_browser.has_saved_session(project_id)
+    html('<div class="card-title">🔑 Файл сессий: ВК, ОК и МАКС</div>')
+    сети = ((" ВК", vk_social.has_saved_session(project_id)),
+            ("ОК", ok_browser.has_saved_session(project_id)),
+            ("МАКС", max_browser.has_saved_session(project_id)))
     st.caption(
-        f"Сейчас: ВК – {'вход есть' if есть_вк else 'входа нет'} · "
-        f"ОК – {'вход есть' if есть_ок else 'входа нет'}. "
-        "Файл делает VHOD-VK-i-OK.py на вашем компьютере: вошли в обе сети – "
-        "получился один файл. Загрузите его сюда, и обе сети возьмутся сразу.")
+        "Сейчас: "
+        + " · ".join(f"{имя.strip()} – {'вход есть' if есть else 'входа нет'}"
+                     for имя, есть in сети)
+        + ". Файл делает VHOD-VK-i-OK.py на вашем компьютере: вошли в сети – "
+          "получился ОДИН файл. Загрузите его сюда (кнопка «Выбрать файлы» "
+          "ниже), и все три сети возьмутся сразу.")
     # Итог прошлой загрузки. Держим в session_state, а не показываем сразу:
     # после успеха страница перерисовывается (чтобы обновились «вход есть»),
     # и сообщение, написанное до перерисовки, стиралось вместе с ней. Со
@@ -4693,9 +4702,9 @@ def _both_sessions_block(project_id: str) -> None:
     if said_before:
         (st.success if said_before[0] else st.error)(said_before[1])
 
-    up = st.file_uploader("Файл сессий (VK-i-OK-sessii.json)", type=["json"],
-                          key=f"sess-both-up-{project_id}")
-    if up is not None and st.button("Загрузить обе сессии", type="primary",
+    up = st.file_uploader("Файл сессий VK-i-OK-sessii.json – ВК, ОК и МАКС в одном",
+                          type=["json"], key=f"sess-both-up-{project_id}")
+    if up is not None and st.button("Загрузить сессии всех сетей", type="primary",
                                     key=f"sess-both-go-{project_id}"):
         took, said = social_session.import_combined(project_id, up.getvalue())
         st.session_state[f"sess-both-said-{project_id}"] = (

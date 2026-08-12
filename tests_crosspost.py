@@ -867,17 +867,18 @@ def test_probe_networks() -> None:
     """
     Пробная отложка есть у ОБЕИХ сетей и ведёт в правильные модули.
 
-    Раньше проба была только у ВК, и отдельной функцией. Заказчица попросила
-    такую же для ОК – копировать функцию не стали: правка в одной из копий
-    рано или поздно забудется. Вместо этого таблица сетей, и вот проверка,
-    что в ней всё сходится.
+    Раньше проба была только у ВК, и отдельной функцией. Потом понадобилась
+    такая же для ОК, а следом для МАКС – копировать функцию не стали: правка
+    в одной из копий рано или поздно забудется. Вместо этого таблица сетей,
+    и вот проверка, что в ней всё сходится.
     """
     print("\nПробная отложка: обе сети")
     import importlib
 
     import streamlit_app as app
 
-    check("сети описаны обе", set(app.PROBE_NETWORKS) == {"vk", "ok"},
+    check("описаны все три сети с родной отложкой",
+          set(app.PROBE_NETWORKS) == {"vk", "ok", "max"},
           str(sorted(app.PROBE_NETWORKS)))
     for net, meta in app.PROBE_NETWORKS.items():
         mod = importlib.import_module(meta["module"])
@@ -885,8 +886,8 @@ def test_probe_networks() -> None:
         check(f"{net}: модуль знает про сессию", hasattr(mod, "has_saved_session"))
         check(f"{net}: подписи заполнены",
               all(meta.get(k) for k in ("ru", "url_key", "where", "shelf")))
-    check("ключи ссылок у сетей разные",
-          app.PROBE_NETWORKS["vk"]["url_key"] != app.PROBE_NETWORKS["ok"]["url_key"])
+    keys = [m["url_key"] for m in app.PROBE_NETWORKS.values()]
+    check("ключи ссылок у сетей разные", len(set(keys)) == len(keys), str(keys))
 
 
 def test_combined_session_file() -> None:
@@ -912,7 +913,7 @@ def test_combined_session_file() -> None:
         {"name": "_ga", "value": "junk", "domain": ".google-analytics.com"},
     ], "origins": [{"origin": "https://ok.ru"}, {"origin": "https://vk.ru"}]}
 
-    vk, ok = ss.split_state(state)
+    vk, ok, _ = ss.split_state(state)
     vk_names = {c["name"] for c in vk["cookies"]}
     ok_names = {c["name"] for c in ok["cookies"]}
     check("кука ВК ушла в ВК", "remixsid" in vk_names and "remixsid" not in ok_names)
@@ -921,6 +922,24 @@ def test_combined_session_file() -> None:
           "vkid_token" in vk_names and "vkid_token" in ok_names)
     check("посторонние куки отброшены",
           "_ga" not in vk_names and "_ga" not in ok_names)
+
+    # МАКС – третья сеть в том же файле. У него вход живёт в localStorage,
+    # а не только в куках: без раздела origins живая сессия выглядела бы
+    # пустой, и файл бы отвергли.
+    import max_browser
+    max_state = {"cookies": [{"name": "max_token", "value": "m", "domain": ".max.ru"}],
+                 "origins": [{"origin": "https://web.max.ru",
+                              "localStorage": [{"name": "auth", "value": "t"}]}]}
+    _, _, mx = ss.split_state({**state, **{
+        "cookies": state["cookies"] + max_state["cookies"],
+        "origins": state["origins"] + max_state["origins"]}})
+    check("кука МАКС ушла в МАКС",
+          "max_token" in {c["name"] for c in mx["cookies"]})
+    check("localStorage МАКС сохранён", len(mx["origins"]) == 1)
+    check("вход МАКС по localStorage распознан", max_browser.looks_logged_in(mx))
+    check("гостевой МАКС за вход не считаем",
+          not max_browser.looks_logged_in(
+              {"cookies": [{"name": "_ga", "value": "x"}], "origins": []}))
     check("origins разложены по сетям",
           len(ok["origins"]) == 1 and len(vk["origins"]) == 1)
 

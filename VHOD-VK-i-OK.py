@@ -1,5 +1,5 @@
 """
-VHOD-VK-i-OK.py – получить файлы сессии ВК и ОК, войдя руками.
+VHOD-VK-i-OK.py – получить файл сессий ВК, ОК и МАКС, войдя руками.
 
 ЗАЧЕМ ЭТО НУЖНО. Click в облаке работает скрытым браузером, а ВК показывает
 ему проверку «Подтвердите, что вы не робот». Пройти её программой нельзя –
@@ -17,6 +17,8 @@ VHOD-VK-i-OK.py – получить файлы сессии ВК и ОК, во�
   5. Тогда САМ ОТКРОЕТСЯ вторая вкладка с Одноклассниками – войдите и там
      (проще всего кнопкой «Войти через ВК»: вы уже в ВК, он пустит почти
      без вопросов). Не нужны ОК – просто нажмите Enter ещё раз.
+  5а. Третьей вкладкой откроется МАКС – вход по номеру телефона (кнопка
+     под QR-кодом), галочка «я не робот» и код из СМС.
   6. Рядом появится ОДИН файл `VK-i-OK-sessii.json` – в нём обе сети.
      Загрузите его в Click: «Настройки» → «Файл сессий ВК и ОК». Вставлять
      дважды не нужно, Click разложит куки по сетям сам.
@@ -25,6 +27,12 @@ VHOD-VK-i-OK.py – получить файлы сессии ВК и ОК, во�
 это подводило: браузер принимал слово «одноклассники» за поисковый запрос и
 уходил в Google вместо сайта. Теперь вкладку открывает скрипт – ошибиться
 негде.
+
+ПРО ПРОФИЛЬ. Окно открывается со СВОИМ постоянным профилем (папка рядом с
+данными Click, ваш обычный Chrome не трогается). Так надо: одноразовое
+«стерильное» окно МАКС узнаёт и не рисует проверку «вы не робот» вовсе –
+заголовок есть, а галочки под ним нет. Профиль живёт между запусками, так
+что во второй раз входить в ВК и ОК уже не придётся.
 
 БЕЗОПАСНОСТЬ. Файл сессии – это доступ к аккаунту. Передавайте его так же
 бережно, как пароль: не через открытые чаты. В репозиторий он не попадает.
@@ -60,6 +68,13 @@ OK_AUTH = ("AUTH_ID", "auth_id", "AUTH_SIG", "OK_LOGIN", "AUTHCODE")
 # берём тот, что идёт с playwright.
 CHANNELS = ("chrome", "msedge", None)
 
+# Маскировка автоматизации. Без неё сайты видят, что окном управляет
+# программа, и ведут себя иначе: МАКС показал заголовок «Проверяем, что вы
+# не робот», а сам виджет с галочкой не нарисовал вовсе – проверять стало
+# нечего, и вход встал. Те же две строки давно стоят в самом Click.
+ANTIBOT_ARGS = ["--disable-blink-features=AutomationControlled"]
+ANTIBOT_INIT = "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+
 
 def _split(state: dict) -> tuple[dict, dict]:
     """Разделить куки на ВК-шные и ОК-шные: Click хранит сессии отдельно."""
@@ -90,20 +105,76 @@ def _names(cookies: list) -> list[str]:
     return sorted({str(c.get("name", "")) for c in cookies if c.get("value")})
 
 
+def _has_max(state: dict) -> bool:
+    """
+    Есть ли в снимке вход в МАКС.
+
+    У МАКС он живёт не только в куках, но и в localStorage – это
+    одностраничное приложение. Поэтому смотрим и раздел origins, иначе
+    живая сессия выглядела бы пустой.
+    """
+    for c in state.get("cookies") or []:
+        if "max.ru" in str(c.get("domain", "")) and c.get("value"):
+            if str(c.get("name", "")) not in OK_GUEST:
+                return True
+    for o in state.get("origins") or []:
+        if "max.ru" in str(o.get("origin", "")) and o.get("localStorage"):
+            return True
+    return False
+
+
 def _has_ok(cookies: list) -> bool:
     """Та же проверка, что делает Click в ok_browser.looks_logged_in."""
     names = set(_names(cookies))
     return bool(names & set(OK_AUTH) or names - OK_GUEST)
 
 
-def _open_browser(pw):
-    """Открыть окно браузера, перебрав что есть на компьютере."""
+def _profile_dir() -> Path:
+    """
+    Своя папка профиля браузера – рядом с данными Click, не в проекте.
+
+    Профиль ЖИВЁТ между запусками: второй раз входить уже не придётся, а
+    сайты видят браузер, которым пользуются, а не одноразовый.
+    """
+    import os
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
+        d = base / "Click" / "vhod-profile"
+    elif sys.platform == "darwin":
+        d = Path.home() / "Library" / "Application Support" / "Click" / "vhod-profile"
+    else:
+        d = Path.home() / ".local" / "share" / "click" / "vhod-profile"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _open_context(pw):
+    """
+    Открыть окно с ПОСТОЯННЫМ профилем.
+
+    Почему не обычный запуск. Одноразовое окно Playwright – «стерильное»:
+    без истории, без настроек, без профиля. МАКС такое узнаёт и не рисует
+    виджет проверки «вы не робот» вовсе: заголовок есть, галочки нет,
+    пройти нечего (проверено заказчицей 12.08.2026, и маскировка флага
+    автоматизации тут не помогла). Постоянный профиль выглядит как
+    браузер, которым пользуются.
+
+    Заодно приятное: профиль сохраняется, и во второй раз входить в ВК и
+    ОК уже не придётся.
+    """
+    profile = _profile_dir()
+    common = dict(user_data_dir=str(profile), headless=False, args=ANTIBOT_ARGS,
+                  viewport={"width": 1280, "height": 900},
+                  locale="ru-RU", timezone_id="Asia/Yekaterinburg")
     last = None
     for channel in CHANNELS:
         try:
+            kw = dict(common)
             if channel:
-                return pw.chromium.launch(headless=False, channel=channel)
-            return pw.chromium.launch(headless=False)
+                kw["channel"] = channel
+            context = pw.chromium.launch_persistent_context(**kw)
+            context.add_init_script(ANTIBOT_INIT)
+            return context
         except Exception as exc:          # нет такого браузера – пробуем следующий
             last = exc
     raise RuntimeError(
@@ -120,7 +191,7 @@ def main() -> int:
         return 1
 
     print("─" * 62)
-    print("ШАГ 1 из 2. Открываю окно браузера. Войдите в ВК как обычно.")
+    print("ШАГ 1 из 3. Открываю окно браузера. Войдите в ВК как обычно.")
     print("Проверку «я не робот», если появится, пройдите мышкой.")
     print("Одноклассники откроются сами, вторым шагом – набирать ничего")
     print("не надо.")
@@ -131,16 +202,15 @@ def main() -> int:
         # ГЛАВНОЕ ОТЛИЧИЕ ОТ CLICK: окно настоящее, видимое. Проверку
         # проходит человек, а не программа – поэтому она и проходится.
         try:
-            browser = _open_browser(pw)
+            context = _open_context(pw)
         except RuntimeError as exc:
             print(f"\n{exc}")
             input("\nНажмите Enter, чтобы закрыть… ")
             return 1
 
-        context = browser.new_context(
-            viewport={"width": 1280, "height": 900},
-            locale="ru-RU", timezone_id="Asia/Yekaterinburg")
-        page = context.new_page()
+        # У постоянного профиля вкладка уже есть – берём её, а не заводим
+        # вторую: лишняя пустая вкладка только путает.
+        page = context.pages[0] if context.pages else context.new_page()
         page.goto("https://vk.ru/login", wait_until="domcontentloaded")
 
         input("\nВошли в ВК? Нажмите Enter здесь, в этом окне… ")
@@ -149,7 +219,7 @@ def main() -> int:
         # на котором уже спотыкались: браузер принял «одноклассники» за
         # поисковый запрос и ушёл в Google вместо сайта.
         print("\n─" * 1 + "─" * 61)
-        print("ШАГ 2 из 2. Открываю Одноклассники во второй вкладке.")
+        print("ШАГ 2 из 3. Открываю Одноклассники во второй вкладке.")
         print("Проще всего войти кнопкой «Войти через ВК» – вы уже в ВК.")
         print("Не нужны ОК? Просто нажмите Enter, ВК всё равно сохранится.")
         print("─" * 62)
@@ -162,6 +232,26 @@ def main() -> int:
 
         input("\nВошли в ОК (или он не нужен)? Нажмите Enter… ")
 
+        # ШАГ 3 – МАКС. Отложка там родная (у бота её нет вовсе), поэтому
+        # сессия нужна такая же, как у ВК и ОК.
+        print("\n" + "─" * 62)
+        print("ШАГ 3 из 3. Открываю МАКС в третьей вкладке.")
+        print("Войдите по номеру телефона: кнопка под QR-кодом, галочка")
+        print("«я не робот», код из СМС. Не нужен МАКС? Просто Enter.")
+        print()
+        print("Если галочка «я не робот» не появилась и окно пустое –")
+        print("обновите страницу (F5): виджет проверки иногда не успевает")
+        print("нарисоваться с первого раза.")
+        print("─" * 62)
+        try:
+            max_page = context.new_page()
+            max_page.goto("https://web.max.ru/", wait_until="domcontentloaded")
+        except Exception as exc:          # noqa: BLE001 – ВК и ОК уже добыты
+            print(f"\n⚠️  Вкладку с МАКС открыть не вышло ({exc}).")
+            print("   Откройте web.max.ru сами в этом же окне.")
+
+        input("\nВошли в МАКС (или он не нужен)? Нажмите Enter… ")
+
         try:
             state = context.storage_state()
         except Exception:
@@ -169,7 +259,7 @@ def main() -> int:
                   "Запустите файл ещё раз и не закрывайте окно сами.")
             input("\nНажмите Enter, чтобы закрыть… ")
             return 1
-        browser.close()
+        context.close()
 
     # ОДИН файл на обе сети. Раньше их было два, и вставлять их приходилось
     # в два разных окошка – работа на ровном месте: куки-то снимаются одним
@@ -193,6 +283,13 @@ def main() -> int:
         print("   ℹ️  ОК: входа не видно. Что нашлось: " + found)
         print("      Если вы точно вошли и видели свою страницу ОК – пришлите")
         print("      эту строку разработчику: ОК назвал куки по-новому.")
+
+    if _has_max(state):
+        print("   МАКС: вход есть")
+    else:
+        print("   ℹ️  МАКС: входа не видно. Если проверка «я не робот» так и не")
+        print("      показала галочку – обновите страницу МАКС (F5) и повторите:")
+        print("      виджет проверки иногда не рисуется с первого раза.")
 
     print("\nТеперь загрузите ЭТОТ ОДИН файл в Click:")
     print("  «Настройки» → «Файл сессий ВК и ОК» → «Загрузить»")

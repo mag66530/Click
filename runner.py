@@ -749,9 +749,16 @@ def _archive(fp: Path) -> None:
 
 
 def _click_happened(result: dict) -> bool:
-    """Был ли клик «Создать». Если да – повторять НЕЛЬЗЯ ни при каких условиях."""
+    """
+    Был ли клик «Создать». Если да – повторять нельзя: рискуем дублем.
+
+    Единственное исключение – retrySafe: лента перечитана и поста в ней НЕТ.
+    Отсутствие подтверждено, дублировать нечего, повтор безопасен. Проверяют
+    это те, кто зовёт: здесь только факт клика.
+    """
     step = (result.get("steps") or {}).get("publish")
-    return step in ("clicked", "click-error-no-api", "unknown", "api-confirmed", "dom-confirmed", "api-rejected")
+    return step in ("clicked", "click-error-no-api", "unknown", "api-confirmed", "dom-confirmed",
+                    "api-rejected", "feed-confirmed", "feed-absent", "feed-unknown")
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -1353,9 +1360,11 @@ def _publish_one_city(
     """
     Одна попытка + БЕЗОПАСНЫЙ ретрай.
 
-    Ретрай разрешён ТОЛЬКО если первая попытка упала ДО клика «Создать»
-    (кнопка «Добавить пост» не найдена, поле текста не найдено, контекст умер).
-    Если клик был – статус 'unknown', повтор запрещён: дубль хуже, чем ручная проверка.
+    Ретрай разрешён, если первая попытка упала ДО клика «Создать» (кнопка
+    «Добавить пост» не найдена, поле текста не найдено, контекст умер) ЛИБО
+    если лента перечитана и поста в ней нет (retrySafe): дублировать нечего.
+    Клик был, а результат неясен – статус 'unknown', повтор запрещён: дубль
+    хуже, чем ручная проверка.
 
     allow_retry=False зовёт второй проход: там это УЖЕ повтор, и внутренний
     ретрай сделал бы четвёртую попытку по одному городу вместо трёх.
@@ -1385,20 +1394,26 @@ def _publish_one_city(
     if res["status"] == "unknown":
         yb.warn(f"  ⚠️ [{task.get('cityName')}] результат неопределён – ретрай ЗАПРЕЩЁН во избежание дубля")
         return res
-    if _click_happened(res):
+
+    # Клик был, но лента перечитана и поста в ней НЕТ – отсутствие подтверждено.
+    # Дублировать нечего, повторяем как обычную неудачу.
+    safe_absent = bool(res.get("retrySafe"))
+    if _click_happened(res) and not safe_absent:
         yb.warn(f"  ⚠️ [{task.get('cityName')}] клик «Создать» уже был – ретрай ЗАПРЕЩЁН")
         res["status"] = "unknown"
         res["reason"] = ("Клик «Создать» сделан, но публикация не подтверждена. "
                          "Проверьте Яндекс.Бизнес вручную – возможно пост опубликован.")
         return res
-    if not any(x.lower() in (res.get("reason") or "").lower() for x in retryable):
+    if not safe_absent and not any(x.lower() in (res.get("reason") or "").lower() for x in retryable):
         return res
     if not allow_retry:
         return res                       # это уже второй проход – третья попытка последняя
     if should_stop():
         return res
 
-    yb.info(f"  🔄 [{task.get('cityName')}] первая попытка упала ДО клика – безопасный ретрай")
+    yb.info(f"  🔄 [{task.get('cityName')}] "
+            + ("поста в ленте нет – безопасный повтор" if safe_absent
+               else "первая попытка упала ДО клика – безопасный ретрай"))
     if any(x in (res.get("reason") or "") for x in ("Execution context", "Target closed", "has been closed")):
         try:
             browser.new_page()
@@ -1498,7 +1513,7 @@ def _second_pass(
                     f"повтор НЕ делаю (риск дубля). Проверьте вручную.")
             continue
 
-        if _click_happened(failed):
+        if _click_happened(failed) and not failed.get("retrySafe"):
             yb.warn(f"  ⚠️ {city}: клик уже был – повтор запрещён")
             continue
 

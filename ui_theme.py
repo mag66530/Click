@@ -434,7 +434,6 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 }}
 .project-tile-name {{ font-size: 18px; font-weight: 700; margin-top: 4px; color: var(--text); }}
 .project-tile-fullname {{ font-size: 12px; color: var(--muted); }}
-.project-tile-cities {{ font-size: 11px; color: var(--dim); font-family: var(--mono); }}
 
 .auth-wrap {{ max-width: 760px; margin: 6vh auto 0; }}
 .auth-logo {{
@@ -1099,13 +1098,15 @@ def topbar(project: dict | None, pills: list[tuple[str, str]] | None = None) -> 
     )
 
 
-def project_tile(project: dict, cities: int, selected: bool = False) -> str:
+def project_tile(project: dict, selected: bool = False) -> str:
+    # Счётчика городов тут нет намеренно: на экране входа он показывал вшитый
+    # пресет, а не реальный список проекта (у МПИ города приходят из КП – и
+    # плитка честно писала «0 городов»). Число живёт во вкладке «Города».
     return (
         f'<div class="project-tile{" selected" if selected else ""}" style="--proj-color:{esc(project["color"])}">'
         f'<div class="project-tile-icon">{esc(project["icon"])}</div>'
         f'<div class="project-tile-name">{esc(project["name"])}</div>'
         f'<div class="project-tile-fullname">{esc(project["fullName"])}</div>'
-        f'<div class="project-tile-cities">{cities} городов</div>'
         f'</div>'
     )
 

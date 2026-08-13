@@ -1250,7 +1250,7 @@ def show_login() -> None:
     cols = st.columns(len(PROJECTS))
     for col, (pid, p) in zip(cols, PROJECTS.items()):
         with col:
-            html(T.project_tile(p, len(p["presetCities"] or []), selected == pid))
+            html(T.project_tile(p, selected == pid))
             if st.button(f"Выбрать {p['name']}", key=f"pick-{pid}", use_container_width=True,
                          type="primary" if selected == pid else "secondary"):
                 st.session_state.selected_project_id = pid

@@ -1390,17 +1390,87 @@ def crosspost_css() -> str:
 # календарь стоял пустым, а текст в узких плитках рвался по слогам. Здесь
 # строка — это пост, колонки справа — площадки: статус сравнивается по
 # вертикали, а «что сделать» собрано в одну колонку, чтобы взгляд шёл по ней.
+#
+# Высоты строк заданы числом, а не «сколько получится». Причина не в красоте:
+# слева от таблицы стоит полоса галочек – это виджеты Streamlit, они живут
+# СВОИМ блоком и о таблице ничего не знают. Совпадать они могут только по
+# точной высоте, поэтому здесь три константы, и по ним же строится полоса.
+CP_ROW_H = 63        # строка поста: 11 + 40 (две строки текста) + 11 + линия
+CP_HEAD_ROW_H = 41   # шапка колонок: 10 + 20 + 10 + линия
+CP_GROUP_H = 31      # «Впереди — 7 постов»: 7 + 16 + 7 + линия
+CP_HEAD_H = CP_HEAD_ROW_H + CP_GROUP_H   # всё, что стоит над первой строкой
+
+# Полоса галочек слева от таблицы. Галочка – настоящий виджет Streamlit
+# (иначе Click не узнает, что её поставили), поэтому она физически не может
+# лежать внутри <table>: HTML таблицы – просто разметка, обратной связи у неё
+# нет. Полоса стоит вплотную слева и повторяет геометрию таблицы – рамку,
+# линии между строками и высоту каждой строки, – чтобы читалась как её первая
+# колонка. Всё держится на CP_ROW_H и CP_HEAD_H: там числа, и здесь те же.
+_CROSSPOST_TICKS_CSS = (
+    # Колонки Streamlit по умолчанию разъезжаются на 1rem – между полосой и
+    # таблицей это была бы щель посреди таблицы.
+    '[class*="st-key-cp-plan"] [data-testid="stHorizontalBlock"]{gap:0}'
+    '[class*="st-key-cp-plan"] [data-testid="stVerticalBlock"]{gap:0}'
+    '[class*="st-key-cp-plan"] [data-testid="stElementContainer"]{margin:0}'
+    # Полоса – ровно под галочку, а не доля ширины: колонки Streamlit делят
+    # место в долях, и на широком экране полоса разъезжалась в пустое поле.
+    '[class*="st-key-cp-plan"] [data-testid="stColumn"]:first-child{'
+    "flex:0 0 36px;min-width:36px;width:36px}"
+    # У блока markdown свой отрицательный нижний отступ (так Streamlit гасит
+    # поля абзацев). Клетки полосы от него становились на 16px ниже своей
+    # высоты – и полоса уползала вверх, строка за строкой.
+    '[class*="st-key-cp-ticks"] [data-testid="stMarkdown"],'
+    '[class*="st-key-cp-ticks"] [data-testid="stMarkdown"]>div,'
+    '[class*="st-key-cp-ticks"] [data-testid="stMarkdownContainer"]{margin:0;height:auto}'
+    '[class*="st-key-cp-plan"] .cp-wrap{border-radius:0 var(--r-sm) var(--r-sm) 0;'
+    "margin-bottom:0}"
+    '[class*="st-key-cp-ticks"]{border:1px solid var(--border);border-right:none;'
+    "border-radius:var(--r-sm) 0 0 var(--r-sm);background:var(--bg-1);overflow:hidden}"
+    # Шапка полосы – продолжение шапки таблицы и строки «Впереди — N постов».
+    # +1 к высоте: у таблицы сверху своя рамка, и без этого пикселя вся полоса
+    # вставала на 1px выше строк (мерено в браузере по готовой странице).
+    f".cp-ticks-head{{height:{CP_HEAD_H + 1}px;background:var(--bg-3);"
+    "border-bottom:1px solid var(--border);box-sizing:border-box}"
+    # Клетка строки: сама галочка и пустая клетка там, где формировать нечего.
+    f'[class*="st-key-cp-ticks"] [data-testid="stCheckbox"],.cp-tick-off{{'
+    f"height:{CP_ROW_H}px;width:100%;display:flex;align-items:center;justify-content:center;"
+    "border-bottom:1px solid var(--border);box-sizing:border-box}"
+    # Виджет Streamlit шириной «сколько занял» – клетка красилась не во всю
+    # полосу, и подсветка строки обрывалась белым квадратом.
+    '[class*="st-key-cp-ticks"] [data-testid="stElementContainer"]{width:100%}'
+    '[class*="st-key-cp-ticks"] [data-testid="stCheckbox"] label{margin:0;'
+    "justify-content:center}"
+    # Клетка полосы красится вместе со своей строкой: отмеченная – в цвет
+    # выбора, «нет текста» – в жёлтый. Иначе подсветка строки обрывается на
+    # рамке таблицы, и полоса читается как чужая.
+    '[class*="st-key-cp-ticks"] [data-testid="stCheckbox"]:has(input:checked)'
+    "{background:var(--acc-bg)}"
+    ".cp-tick-off.warn{background:var(--yel-bg)}"
+    '[class*="st-key-cp-ticks"] [data-testid="stElementContainer"]:last-child '
+    '[data-testid="stCheckbox"],'
+    '[class*="st-key-cp-ticks"] [data-testid="stElementContainer"]:last-child '
+    ".cp-tick-off{border-bottom:none}"
+    # Подпись под таблицей: сколько отмечено.
+    ".cp-picked-note{font-size:12px;color:var(--muted);padding:10px 2px 0}"
+    ".cp-picked-note b{color:var(--text-2)}"
+)
+
 _CROSSPOST_TABLE_CSS = (
     ".cp-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-sm);"
     "background:var(--bg-1);margin-bottom:24px;box-shadow:none}"
     # Карточки состояния и «требует внимания» – ровные прямоугольники без тени.
     '[data-testid="stVerticalBlockBorderWrapper"]{box-shadow:none!important;'
     "background:var(--bg-1);border-color:var(--border)!important}"
-    "table.cp-plan{border-collapse:collapse;width:100%;min-width:720px;font-size:12.5px;table-layout:fixed}"
+    "table.cp-plan{border-collapse:collapse;width:100%;min-width:760px;font-size:12.5px;table-layout:fixed}"
     "table.cp-plan th{position:sticky;top:0;z-index:2;background:var(--bg-3);text-align:left;"
     "font-size:12.5px;font-weight:700;color:var(--text-2);padding:10px 12px;"
+    # Высота шапки – числом: минус поля 10+10 и линия снизу.
+    f"height:{CP_HEAD_ROW_H - 21}px;line-height:20px;"
     "border-bottom:1px solid var(--border);white-space:nowrap}"
     "table.cp-plan th.c,table.cp-plan td.c{text-align:center}"
+    # Шапки колонок площадок – своим кеглем: «ТГ сотр.» в 12.5px не влезала в
+    # клетку и обрезалась на «ТГ сот|», будто колонка сломана.
+    "table.cp-plan th.n{font-size:11.5px;padding-left:2px;padding-right:2px}"
     # Все ячейки прижаты к верху и имеют одинаковый отступ, а первая строка
     # внутри каждой — один и тот же бокс в 20px (дата, плашка типа, текст,
     # значок площадки, «что сделать»). Только так они лежат на одной линии:
@@ -1411,31 +1481,47 @@ _CROSSPOST_TABLE_CSS = (
     "table.cp-plan tr:last-child td{border-bottom:none}"
     "table.cp-plan tbody tr:hover td{background:var(--bg-3)}"
     "table.cp-plan tr.cp-group td{background:var(--bg-3);color:var(--muted);padding:7px 12px;"
-    "font-size:12px;font-weight:600}"
+    f"height:{CP_GROUP_H - 15}px;line-height:16px;font-size:12px;font-weight:600}}"
     "table.cp-plan tr.cp-group:hover td{background:var(--bg-4)}"
     "table.cp-plan tr.cp-warn td{background:var(--yel-bg)}"
     "table.cp-plan tr.cp-warn:hover td{background:var(--yel-bg)}"
+    # Отмеченная галочкой строка. Видно должно быть сразу и издалека: человек
+    # ставит галочки в одной колонке, а проверяет глазами всю строку.
+    "table.cp-plan tr.cp-pick td{background:var(--acc-bg)}"
+    "table.cp-plan tr.cp-pick:hover td{background:var(--acc-bg-2)}"
     # Левой полоски состояния тут больше нет. Она была шириной 3px и стояла
     # вплотную к рамке таблицы, поэтому читалась как вторая рамка — «тёмная
     # таблица на таблице». Состояние и так видно по значкам площадок, а
     # проблемные строки подсвечены жёлтым фоном целиком.
     # line-height без display:block — это классы на самой <td>, и блочный
     # display развалил бы табличную раскладку.
+    # Дата – по центру своей колонки: числа одной ширины (шрифт моноширинный),
+    # и столбик читается сверху вниз как столбик, а не как рваный левый край.
     ".cp-when{line-height:20px;font-family:var(--mono);font-size:12.5px;"
-    "font-weight:700;color:var(--text);white-space:nowrap}"
-    ".cp-kind-cell{white-space:nowrap}"
+    "font-weight:700;color:var(--text);white-space:nowrap;text-align:center}"
+    # Поля у колонки типа поуже: плашка и так почти во всю колонку, а лишние
+    # 8px – это разница между «Спецпредложение» и «Спецпредложе…». Селектор с
+    # именем таблицы: иначе общее правило td (padding:11px 12px) сильнее.
+    "table.cp-plan td.cp-kind-cell{white-space:nowrap;overflow:hidden;"
+    "padding-left:8px;padding-right:8px}"
     # Текст поста — ровно две строки: начало и продолжение идут одним потоком,
     # лишнее срезает многоточие. min-height держит высоту строк одинаковой даже
     # там, где текста нет совсем, иначе таблица «прыгает».
     ".cp-post{min-width:0}"
+    # Ровно две строки, не «не меньше двух»: высота строки таблицы задана
+    # числом (CP_ROW_H), и по ней слева выставлена полоса галочек.
     ".cp-text{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;"
-    "overflow:hidden;line-height:20px;min-height:40px;word-break:break-word}"
+    "overflow:hidden;line-height:20px;height:40px;word-break:break-word}"
     ".cp-text b{color:var(--text);font-weight:600;font-size:12.5px}"
     ".cp-text b.warn{color:var(--yel)}"
     ".cp-text span{color:var(--text-2);font-size:12px}"
-    ".cp-kind{display:inline-flex;align-items:center;height:20px;font-size:11px;"
-    "padding:0 9px;border-radius:20px;white-space:nowrap;background:var(--bg-4);"
-    "color:var(--muted)}"
+    # Плашка типа. Была inline-flex – и «Спецпредложение» вылезало из своей
+    # колонки прямо на текст поста. Теперь плашка не шире колонки, а слишком
+    # длинное имя типа честно обрезается многоточием (полное – в подсказке).
+    ".cp-kind{display:inline-block;max-width:100%;height:20px;line-height:20px;"
+    "font-size:11px;padding:0 8px;border-radius:20px;white-space:nowrap;"
+    "overflow:hidden;text-overflow:ellipsis;vertical-align:top;"
+    "background:var(--bg-4);color:var(--muted)}"
     ".cp-photo{line-height:20px;font-family:var(--mono);font-size:11.5px;"
     "color:var(--muted);white-space:nowrap}"
     # Ячейка площадки — тот же значок, что и в легенде.
@@ -1448,7 +1534,12 @@ _CROSSPOST_TABLE_CSS = (
     ".cp-mark.off{color:var(--dim);background:transparent}"
     ".cp-mark.err{background:var(--red-bg);color:var(--red)}"
     ".cp-mark.live{background:var(--grn);color:#fff}"
-    ".cp-todo{font-size:11.5px;color:var(--dim);line-height:20px;display:block}"
+    # «Что сделать» – тоже ровно две строки. Строка «Нет текста — строка 11
+    # листа пустая» разворачивалась в три и делала строку выше соседних:
+    # таблица переставала читаться по линейке, а полоса галочек – совпадать.
+    ".cp-todo{font-size:11.5px;color:var(--dim);line-height:20px;"
+    "display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;"
+    "overflow:hidden;height:40px}"
     ".cp-todo.fix{color:var(--yel);font-weight:600}"
     ".cp-todo.err{color:var(--red);font-weight:600}"
     ".cp-todo a{color:var(--acc);text-decoration:none;font-weight:600}"
@@ -1472,6 +1563,7 @@ _CROSSPOST_TABLE_CSS = (
     ".cp-legend span{display:inline-flex;align-items:center;gap:7px}"
     ".cp-legend .cp-mark{width:20px;height:20px;vertical-align:middle}"
     "@media(max-width:900px){table.cp-plan{table-layout:auto}}"
+    + _CROSSPOST_TICKS_CSS
 )
 
 
@@ -1539,29 +1631,38 @@ def crosspost_bar(state_text: str, sub_html: str, meta: list[str],
 def _crosspost_todo_html(todo: dict, sheet_url: str = "") -> str:
     """Колонка «что сделать»: тихая подпись или ссылка в таблицу — по делу."""
     kind = todo.get("kind", "quiet")
-    text = esc(todo.get("text", ""))
+    raw = todo.get("text", "")
+    text = esc(raw)
     if todo.get("sheet") and sheet_url:
         text = f'<a href="{esc(sheet_url)}" target="_blank">{text} ↗</a>'
-    return f'<span class="cp-todo {esc(kind)}">{text}</span>'
+    # Подпись обрезана двумя строками, поэтому полная всегда есть в подсказке.
+    return f'<span class="cp-todo {esc(kind)}" title="{esc(raw)}">{text}</span>'
 
 
-def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> str:
+def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "",
+                    picked: set[str] | None = None) -> str:
     """
     План строками: когда · тип · пост · фото · площадки · что сделать.
 
     Колонки площадок приходят из самого реестра (crosspost_plan.columns) —
     жёсткий набор врал бы: у одного бренда есть Дзен, у другого нет ОК.
+
+    picked — ключи постов, отмеченных галочкой слева: их строки подсвечены.
     """
+    picked = picked or set()
     cols = plan["columns"]
-    widths = ('<colgroup><col style="width:54px">'
-              '<col style="width:118px"><col>'
-              '<col style="width:36px">'
-              + f'<col style="width:{48 if len(cols) < 5 else 40}px">' * len(cols)
-              + '<col style="width:152px"></colgroup>')
+    # Ширины заданы числом – таблица с table-layout:fixed иначе раздаёт их по
+    # содержимому, и колонки пляшут от бренда к бренду. «Тип» шире плашки с
+    # самым длинным именем («Спецпредложение»), иначе она лезет на текст.
+    widths = ('<colgroup><col style="width:58px">'
+              '<col style="width:160px"><col>'
+              '<col style="width:40px">'
+              + f'<col style="width:{56 if len(cols) < 5 else 50}px">' * len(cols)
+              + '<col style="width:150px"></colgroup>')
     head = (
-        '<tr><th>Когда</th><th>Тип</th><th>Пост</th>'
-        '<th class="c">Фото</th>'
-        + "".join(f'<th class="c" title="{esc(c["name"])}">{esc(c.get("short") or c["name"])}</th>'
+        '<tr><th class="c">Когда</th><th>Тип</th><th>Пост</th>'
+        '<th class="c n">Фото</th>'
+        + "".join(f'<th class="c n" title="{esc(c["name"])}">{esc(c.get("short") or c["name"])}</th>'
                   for c in cols)
         + '<th>Что сделать</th></tr>'
     )
@@ -1590,10 +1691,14 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
                      f'{esc(view["head"] or "нет текста")}</b>'
                      + (f' <span>{esc(view["tail"])}</span>' if view["tail"] else "")
                      + '</div>')
+        row_cls = " ".join(c for c in (
+            "cp-warn" if view["state"] == "warn" else "",
+            "cp-pick" if view.get("key") in picked else "") if c)
         body.append(
-            f'<tr class="{"cp-warn" if view["state"] == "warn" else ""}">'
-            f'<td class="cp-when">{esc(view["when_day"])}</td>'
-            f'<td class="cp-kind-cell"><span class="cp-kind">'
+            f'<tr class="{row_cls}">'
+            f'<td class="c cp-when">{esc(view["when_day"])}</td>'
+            f'<td class="cp-kind-cell"><span class="cp-kind" '
+            f'title="{esc(view["kind"] or "")}">'
             f'{esc(view["kind"] or "—")}</span></td>'
             f'<td class="cp-post">{text_html}</td>'
             f'<td class="c cp-photo">{view["photos"] or "—"}</td>'

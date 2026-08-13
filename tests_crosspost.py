@@ -794,6 +794,29 @@ def test_plan_rows() -> None:
     check("группа подписана", "Впереди — 2 поста" in markup)
     check("значок с подсказкой", 'title="ВК —' in markup)
     check("колонки заданы ширинами", "<colgroup>" in markup)
+
+    # Ровность таблицы – не украшательство: слева к ней прижата полоса
+    # галочек, и она выставлена по этим же числам (CP_ROW_H, CP_HEAD_H).
+    css = T.crosspost_css()
+    check("дата стоит по центру своей колонки",
+          '<td class="c cp-when">' in markup and "text-align:center" in css)
+    check("плашка типа не шире колонки",
+          ".cp-kind{" in css and "max-width:100%" in css and "text-overflow:ellipsis" in css)
+    check("у плашки есть подсказка с полным типом", '<span class="cp-kind" title=' in markup)
+    check("шапки площадок своим кеглем", 'th class="c n"' in markup and "th.n{" in css)
+    check("высота строки задана числом", f"height:{T.CP_ROW_H}px" in css)
+    check("шапка и группа тоже", f"height:{T.CP_HEAD_H + 1}px" in css)
+    check("текст поста ровно две строки", "-webkit-line-clamp:2" in css and "height:40px" in css)
+    check("«что сделать» не растягивает строку", ".cp-todo{" in css and "height:40px" in css)
+    check("полоса галочек знает про свои клетки",
+          ".cp-tick-off" in css and ".cp-ticks-head" in css)
+
+    picked_markup = T.crosspost_table(mixed, group_title="x",
+                                      picked={mixed["rows"][0]["key"]})
+    check("отмеченная строка подсвечена", "cp-pick" in picked_markup)
+    check("неотмеченная – нет",
+          picked_markup.count("cp-pick") == 1 and "cp-pick" not in markup)
+
     check("склонение постов",
           [plan.plural(n, "пост", "поста", "постов") for n in (1, 4, 11, 22)]
           == ["1 пост", "4 поста", "11 постов", "22 поста"])
@@ -1208,7 +1231,8 @@ def test_form_selection() -> None:
 
     Жалоба заказчицы (13.08.2026): «хочу просто один пост поставить,
     посмотреть, а не могу – тут либо все, либо ничего». Кнопка «Поставить
-    все» осталась, рядом появился список: отмеченное едет, остальное ждёт.
+    все» осталась, а слева в плане появились галочки: отмеченное едет,
+    остальное ждёт.
     """
     print("\nФормирование: выбор постов")
     import inspect
@@ -1242,31 +1266,32 @@ def test_form_selection() -> None:
           str(choices[0]["nets"]))
     check("площадка не повторяется", len(set(choices[1]["nets"])) == len(choices[1]["nets"]))
 
-    label = app._crosspost_form_label(choices[0])
-    check("в строке видно дату", "13.08" in label, label)
-    check("в строке видно час", "11:00" in label, label)
-    check("в строке видно тип", "Поступление" in label, label)
-    check("в строке видно текст", "НОВАЯ ПОСТАВКА" in label, label)
-    check("и куда поедет", "ВК" in label and "ТГ клиенты" in label, label)
-    check("длинный текст обрезан", len(app._crosspost_form_label(
-        {"post": post("19", "Тип", "слово " * 60), "nets": ["ВК"]})) < 120)
-    check("пустой текст не ломает строку",
-          "без текста" in app._crosspost_form_label(
-              {"post": post("19", "", ""), "nets": ["ВК"]}))
-
-    # Ключ поста – он же значение в списке выбора: по нему выбранное
-    # сходится с постом даже после перечитывания реестра.
+    # Ключ поста – он же ключ галочки: по нему отмеченное сходится с постом
+    # даже после перечитывания реестра (строки в таблице двигаются).
     keys = {cps.post_key(c["post"]) for c in choices}
     check("ключи постов разные", len(keys) == 2, str(keys))
 
     src = inspect.getsource(app._crosspost_form_block)
     check("кнопка «поставить все» на месте", "cp-form-all-" in src)
     check("рядом кнопка выбранных", "cp-form-picked-" in src)
+    check("подпись кнопки – словами заказчицы",
+          "Поставить выбранные посты на отложку" in src)
     check("без выбора кнопка выбранных не жмётся", "disabled=not picked" in src)
     check("в формирование уходят именно выбранные посты", "run(picked, picked_todo)" in src)
     check("выбранное считается тем же счётчиком",
           "_crosspost_form_todo(project_id, config, picked, state)" in src)
-    check("устаревшие отметки чистятся", "if k in by_key" in src)
+
+    table_src = inspect.getsource(app._crosspost_plan_table)
+    check("галочка у каждой строки плана", "st.checkbox(" in table_src)
+    check("ключ галочки – ключ поста", 'f\'cp-tick-{project_id}-{v["key"]}\'' in table_src)
+    check("галочка только там, где есть что формировать",
+          'view["key"] not in formable' in table_src)
+    check("на одном посту галочек нет вовсе", "len(formable) < 2" in table_src)
+    check("отмеченное подсвечивается в таблице", "picked=picked" in table_src)
+
+    tab_src = inspect.getsource(app.tab_crosspost)
+    check("что формировать, считается один раз на вкладку",
+          "formable=formable" in tab_src and "picked_keys=picked_keys" in tab_src)
 
 
 def test_vk_confirm_schedule() -> None:

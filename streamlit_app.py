@@ -3548,7 +3548,8 @@ def _crosspost_attention(upcoming: list[dict], state: dict) -> None:
 
 
 def _crosspost_plan_table(project_id: str, config: dict, posts: list[dict],
-                          state: dict, today: date, horizon: date) -> None:
+                          state: dict, today: date, horizon: date,
+                          formable: set[str] | None = None) -> list[str]:
     """
     План строками: когда · тип · пост · фото · площадки · что сделать.
 
@@ -3557,20 +3558,62 @@ def _crosspost_plan_table(project_id: str, config: dict, posts: list[dict],
     нет», а текст в узких плитках рвался по слогам. Строки плотнее, а колонки
     площадок дают то же, ради чего затевался календарь: статус ВК, ОК, ТГ и
     МАКС виден сразу и сравнивается по вертикали.
+
+    Слева от таблицы – колонка галочек: что отмечено, то и уедет по кнопке
+    «Поставить выбранные». Возвращает ключи отмеченных постов.
     """
     plan = crosspost_plan.rows(posts, state, today, horizon)
     if not plan["rows"]:
         html(T.empty("📭", "Впереди постов нет",
                      "Появятся здесь, как только в реестре будут строки с будущей датой."))
-        return
+        return []
 
     # Час выхода стоит у заголовка: даты меняются каждую неделю, а час – нет.
     html(f'<div class="card-title">🗓 План: {T.esc(plan["title"])}'
          f'<span class="hint"> · час выхода '
          f'{T.esc(content_plan.brand_default_time(project_id))} по Екатеринбургу</span></div>')
     html(T.crosspost_legend())
-    html(T.crosspost_table(plan, sheet_url=(config.get("planSheetUrl") or "").strip(),
-                           group_title=f'Впереди — {crosspost_plan.plural(len(plan["rows"]), "пост", "поста", "постов")}'))
+
+    formable = formable if formable is not None else set()
+    if len(formable) < 2:
+        # Выбирать не из чего: план сформирован или ждёт формирования ровно
+        # один пост. Галочки в этом случае – лишний столбец и лишний щелчок,
+        # под таблицей и так стоит одна кнопка на всё.
+        html(T.crosspost_table(
+            plan, sheet_url=(config.get("planSheetUrl") or "").strip(),
+            group_title=f'Впереди — {crosspost_plan.plural(len(plan["rows"]), "пост", "поста", "постов")}'))
+        return []
+
+    # Что отмечено, известно ДО отрисовки: галочки прошлого прогона лежат в
+    # памяти Streamlit, а нажатие на галочку перезапускает страницу. Поэтому
+    # подсветка строк в таблице всегда совпадает с тем, что реально отмечено.
+    keys = [f'cp-tick-{project_id}-{v["key"]}' for v in plan["rows"]]
+    picked = {v["key"] for v, k in zip(plan["rows"], keys)
+              if v["key"] in formable and st.session_state.get(k)}
+    table = T.crosspost_table(
+        plan, sheet_url=(config.get("planSheetUrl") or "").strip(),
+        group_title=f'Впереди — {crosspost_plan.plural(len(plan["rows"]), "пост", "поста", "постов")}',
+        picked=picked)
+
+    with st.container(key=f"cp-plan-{project_id}"):
+        ticks, table_col = st.columns([1, 32], gap="small", vertical_alignment="top")
+        with ticks:
+            with st.container(key=f"cp-ticks-{project_id}"):
+                html('<div class="cp-ticks-head"></div>')
+                for view, key in zip(plan["rows"], keys):
+                    if view["key"] not in formable:
+                        # Формировать нечего: уже стоит, вышло, публикуется
+                        # вручную или в реестре нет текста. Пустая клетка
+                        # честнее галочки, которая ничего не сделает.
+                        warn = " warn" if view["state"] == "warn" else ""
+                        html(f'<div class="cp-tick-off{warn}"></div>')
+                        continue
+                    st.checkbox(f'{view["date"]} – поставить на отложку', key=key,
+                                label_visibility="collapsed",
+                                help=f'{view["when_day"]} · {view["kind"] or "пост"}')
+        with table_col:
+            html(table)
+    return sorted(picked)
 
 
 def _crosspost_login_hint(project_id: str, config: dict) -> None:
@@ -3665,10 +3708,17 @@ def tab_crosspost(project_id: str, config: dict) -> None:
                 if (d := content_plan.parse_date(p["date"])) and today <= d <= horizon]
     state = cps.load(project_id)
 
+    # Что можно формировать, считаем один раз: по этому же списку в таблице
+    # появляются галочки, а под ней – кнопки с числами по площадкам.
+    todo = _crosspost_form_todo(project_id, config, upcoming, state)
+    formable = {cps.post_key(c["post"]) for c in _crosspost_form_choices(todo)}
+
     _crosspost_bar(project_id, config, posts, upcoming, state, horizon)
     _crosspost_attention(upcoming, state)
-    _crosspost_plan_table(project_id, config, posts, state, today, horizon)
-    _crosspost_form_block(project_id, config, upcoming, state, hints=False)
+    picked_keys = _crosspost_plan_table(project_id, config, posts, state, today, horizon,
+                                        formable=formable)
+    _crosspost_form_block(project_id, config, upcoming, state, hints=False,
+                          todo=todo, picked_keys=picked_keys)
     _crosspost_tools(project_id, config, posts, state, today, upcoming)
 
     # Честно про границы: что работает и при каких условиях.
@@ -3918,31 +3968,22 @@ def _crosspost_form_choices(todo: dict) -> list[dict]:
                   key=lambda i: ((i["post"].get("when") or ""), i["post"].get("date") or ""))
 
 
-def _crosspost_form_label(item: dict) -> str:
-    """Строка поста в списке выбора: «13.08 11:00 · Поступление · НОВАЯ… → ВК, ОК, ТГ»."""
-    post = item["post"]
-    when = apptime.to_local(post.get("when"))
-    day = when.strftime("%d.%m %H:%M") if when else (post.get("date") or "")
-    kind = (post.get("post_type") or "").strip()
-    text = " ".join(post_text.strip_markup(post.get("text") or "").split())
-    head = (text[:60] + "…") if len(text) > 60 else (text or "без текста")
-    return " · ".join(x for x in (day, kind, head) if x) + f' → {", ".join(item["nets"])}'
-
-
 def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
-                          state: dict, hints: bool = True) -> None:
+                          state: dict, hints: bool = True, todo: dict | None = None,
+                          picked_keys: list[str] | None = None) -> None:
     """
     «Сформировать план»: ВК, ОК и МАКС – родные отложки браузером, Телеграм –
     задания планировщику. Каждая площадка независима; исходы пишутся в
     память сразу, повтор кнопки доформирует только несделанное (Д-6).
 
-    Кнопки две: «Поставить выбранные» – отмеченные в списке посты, «Поставить
-    все» – весь план, как было. Формирование у них одно и то же, разница
-    только в том, какие посты в него уходят.
+    Кнопки две: «Поставить выбранные посты на отложку» – те, что отмечены
+    галочками в плане, и «Поставить все» – весь план, как было. Формирование
+    у них одно и то же, разница только в том, какие посты в него уходят.
     """
     import crosspost_form
 
-    todo = _crosspost_form_todo(project_id, config, upcoming, state)
+    todo = todo if todo is not None else _crosspost_form_todo(project_id, config,
+                                                              upcoming, state)
     channels = todo["channels"]
     vk_ready, ok_ready, max_ready = todo["vk_ready"], todo["ok_ready"], todo["max_ready"]
     vk_todo, ok_todo, max_todo, msg_todo = todo["vk"], todo["ok"], todo["max"], todo["msg"]
@@ -3963,25 +4004,11 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
 
     # Выбор постов. Раньше было «либо весь план, либо ничего»: посмотреть, как
     # ляжет один пост, не давая уехать остальным шести, было нельзя вовсе.
-    # Список появляется только когда есть из чего выбирать: на одном
-    # несформированном посту он был бы лишним щелчком перед той же кнопкой.
+    # Галочки стоят в самом плане, слева от строк, – здесь только те посты,
+    # что отмечены (ключи приходят из таблицы, чтобы не считать их дважды).
     choices = _crosspost_form_choices(todo)
-    picked: list[dict] = []
-    if len(choices) > 1:
-        by_key = {cps.post_key(c["post"]): c for c in choices}
-        pick_key = f"cp-pick-{project_id}"
-        # Сформированное из списка уходит – а отметка о нём осталась бы в
-        # памяти виджета и указывала в пустоту. Чистим сами, до отрисовки.
-        if st.session_state.get(pick_key):
-            st.session_state[pick_key] = [k for k in st.session_state[pick_key] if k in by_key]
-        chosen = st.multiselect(
-            "Поставить только выбранные посты", list(by_key),
-            format_func=lambda k: _crosspost_form_label(by_key[k]),
-            key=pick_key,
-            placeholder="Выберите пост – или сразу «Поставить все» справа",
-            help="Отмеченные посты уедут этой кнопкой; остальной план "
-                 "останется несформированным и подождёт.")
-        picked = [by_key[k]["post"] for k in chosen]
+    by_key = {cps.post_key(c["post"]): c["post"] for c in choices}
+    picked = [by_key[k] for k in (picked_keys or []) if k in by_key]
 
     def run(posts: list[dict], what: dict) -> None:
         site = ((project_endings(project_id).get("contacts") or {})
@@ -4011,7 +4038,8 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
         time.sleep(1.2)
         st.rerun()
 
-    # Выбирать не из чего – кнопка одна и во всю ширину, как была.
+    # Выбирать не из чего (один несформированный пост) – кнопка одна и во всю
+    # ширину: галочка перед единственной кнопкой была бы лишним щелчком.
     if len(choices) <= 1:
         if st.button(f"📌 Поставить отложенные посты ({', '.join(parts)})", type="primary",
                      key=f"cp-form-all-{project_id}", use_container_width=True):
@@ -4019,17 +4047,23 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
         return
 
     # Что уедет по выбранным – считаем тем же кодом, что и по всему плану:
-    # у поста может быть готова не всякая площадка, и «выбрал один пост –
+    # у поста может быть готова не всякая площадка, и «отметил один пост –
     # поехало три отложки» человек должен видеть ДО нажатия.
     picked_todo = _crosspost_form_todo(project_id, config, picked, state) if picked else None
     picked_parts = _crosspost_form_parts(picked_todo) if picked_todo else []
+    html('<div class="cp-picked-note">'
+         + (f'Отмечено <b>{crosspost_plan.plural(len(picked), "пост", "поста", "постов")}</b>'
+            f' – уедет {T.esc(", ".join(picked_parts))}'
+            if picked else
+            "Отметьте галочками слева посты, которые нужно поставить сейчас, – "
+            "или ставьте весь план целиком.")
+         + "</div>")
     left, right = st.columns(2)
     with left:
-        label = ("📌 Поставить выбранные"
-                 + (f" ({', '.join(picked_parts)})" if picked_parts else ""))
-        if st.button(label, key=f"cp-form-picked-{project_id}", use_container_width=True,
+        if st.button("📌 Поставить выбранные посты на отложку",
+                     key=f"cp-form-picked-{project_id}", use_container_width=True,
                      disabled=not picked,
-                     help="Отметьте посты в списке выше" if not picked else None):
+                     help="Отметьте посты галочками в плане" if not picked else None):
             run(picked, picked_todo)
     with right:
         if st.button(f"📌 Поставить все ({', '.join(parts)})", type="primary",

@@ -1031,16 +1031,16 @@
       "name": "Казахстан",
       "cities": [
         {
-          "id": "ct-APS-1-0-алматы",
-          "name": "Алматы",
-          "url": "https://yandex.ru/sprav/15350818/edit/main/",
-          "kpStatus": "Активная"
-        },
-        {
-          "id": "ct-APS-1-1-астана",
+          "id": "ct-APS-1-0-астана",
           "name": "Астана",
           "url": "https://yandex.ru/sprav/25279047/edit",
           "kpStatus": "Онлайн"
+        },
+        {
+          "id": "ct-APS-1-1-алматы",
+          "name": "Алматы",
+          "url": "https://yandex.ru/sprav/15350818/edit/main/",
+          "kpStatus": "Активная"
         },
         {
           "id": "ct-APS-1-2-шымкент",
@@ -1387,15 +1387,15 @@
       "name": "Казахстан",
       "cities": [
         {
-          "id": "ct-APS-gis-1-0-алматы",
-          "name": "Алматы",
-          "url": "https://account.2gis.com/orgs/70000001047590727/dashboard",
+          "id": "ct-APS-gis-1-0-астана",
+          "name": "Астана",
+          "url": "https://account.2gis.com/orgs/70000001047605235/dashboard",
           "kpStatus": "Активная"
         },
         {
-          "id": "ct-APS-gis-1-1-астана",
-          "name": "Астана",
-          "url": "https://account.2gis.com/orgs/70000001047605235/dashboard",
+          "id": "ct-APS-gis-1-1-алматы",
+          "name": "Алматы",
+          "url": "https://account.2gis.com/orgs/70000001047590727/dashboard",
           "kpStatus": "Активная"
         },
         {
@@ -1452,5 +1452,11 @@
   "email": "aviastalru@yandex.ru",
   "kpSheetUrl": "https://docs.google.com/spreadsheets/d/17G2YlY7g0LKOV7IBDsrX7uulwqh0wsaFOqKGw9bLVEc/edit?gid=1223548196#gid=1223548196",
   "kpSheetTitle": "КП",
-  "kpSyncedAt": "2026-08-12T11:53:43.056233+00:00"
+  "kpSyncedAt": "2026-08-13T08:28:29.573539+00:00",
+  "vkGroupUrl": "https://vk.ru/public214715361",
+  "okGroupUrl": "https://ok.ru/group/70000048012012",
+  "tgChannelClient": "@aviapromstal_ekb",
+  "maxWebUrl": "https://web.max.ru/-77624664889942",
+  "zenUrl": "https://dzen.ru/aviapromstal",
+  "planSheetUrl": "https://docs.google.com/spreadsheets/d/1GIeO3P43eR9N4xYv5H6vNos7068nwoVLwWwfKKAkvaE/edit"
 }

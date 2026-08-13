@@ -1440,7 +1440,8 @@ _CROSSPOST_TABLE_CSS = (
     # Ячейка площадки — тот же значок, что и в легенде.
     ".cp-mark{width:24px;height:20px;border-radius:5px;display:inline-flex;"
     "align-items:center;justify-content:center;font-size:11px;font-weight:800;"
-    "border:none;vertical-align:top;line-height:20px;font-variant-emoji:text}"
+    "border:none;vertical-align:top;line-height:20px}"
+    ".cp-mark svg{width:14px;height:14px;display:block;flex:none}"
     ".cp-mark.set{background:var(--grn-bg);color:var(--grn)}"
     ".cp-mark.wait{background:var(--acc-bg);color:var(--acc)}"
     ".cp-mark.off{color:var(--dim);background:transparent}"
@@ -1473,23 +1474,49 @@ _CROSSPOST_TABLE_CSS = (
 )
 
 
+# Значки площадок рисуются вектором, а не буквами шрифта. Буквами уже не
+# вышло дважды: ⏱, ⏭ и ⏸ в текстовом шрифте интерфейса отсутствуют, браузер
+# молча подставлял цветной emoji-шрифт — свой кегль, своя базовая линия, и
+# колонка ехала. Потом их заменили на → » ✎, но «·» осталась еле заметной
+# точкой, а «✎» рисовалась закорючкой. У SVG шрифтовых метрик нет вовсе:
+# 14×14 в клетке 24×20, одинаково в любом браузере и при любом шрифте.
+_CP_ICON_PATHS = {
+    "✓": '<path d="M3.5 8.4l3 3 6-6.4"/>',
+    "→": '<path d="M3 8h8.5"/><path d="M8.4 4.6L11.8 8l-3.4 3.4"/>',
+    "·": '<circle cx="8" cy="8" r="2.6"/>',
+    "✕": '<path d="M4.6 4.6l6.8 6.8"/><path d="M11.4 4.6l-6.8 6.8"/>',
+    "»": '<path d="M4 4.6L7.4 8 4 11.4"/><path d="M8.8 4.6L12.2 8l-3.4 3.4"/>',
+    "✎": '<path d="M4 12.2h8"/><path d="M10.1 3.7l2.2 2.2-4.9 4.9-2.9.7.7-2.9z"/>',
+}
+
+
+def _cp_icon(mark: str) -> str:
+    """Значок площадки вектором. Незнакомый знак остаётся буквой, а не пропадает."""
+    path = _CP_ICON_PATHS.get(mark)
+    if not path:
+        return esc(mark)
+    return ('<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" '
+            'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" '
+            f'aria-hidden="true">{path}</svg>')
+
+
 def crosspost_legend() -> str:
     """
     Легенда всегда на виду: без неё галочка и часы читаются одинаково, и
     раздел выглядит шифром. Пять состояний, словами.
     """
-    # Значки только из тех, что есть в текстовом шрифте. Часы, пауза и
-    # перемотка (U+23F1/23F8/23ED) в нём отсутствуют — браузер подставлял
-    # цветной emoji-шрифт со своим кеглем и базовой линией, и колонка ехала.
     items = (
         ("set", "✓", "отложка стоит в соцсети"),
         ("wait", "→", "отправит Click в час выхода"),
         ("off", "·", "ещё не сформировано"),
         ("err", "✕", "ошибка — пост туда не ушёл"),
         ("live", "✓", "уже вышло"),
+        # Дзен и прочее Click не формирует: значок в строке иначе читается
+        # как непонятная закорючка без объяснения.
+        ("off", "✎", "публикуется вручную"),
     )
     body = "".join(
-        f'<span><i class="cp-mark {cls}">{esc(mark)}</i> {esc(text)}</span>'
+        f'<span><i class="cp-mark {cls}">{_cp_icon(mark)}</i> {esc(text)}</span>'
         for cls, mark, text in items
     )
     return f'<div class="cp-legend">{body}</div>'
@@ -1525,11 +1552,11 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
     жёсткий набор врал бы: у одного бренда есть Дзен, у другого нет ОК.
     """
     cols = plan["columns"]
-    widths = ('<colgroup><col style="width:56px">'
-              '<col style="width:124px"><col>'
-              '<col style="width:40px">'
-              + f'<col style="width:{52 if len(cols) < 5 else 44}px">' * len(cols)
-              + '<col style="width:140px"></colgroup>')
+    widths = ('<colgroup><col style="width:54px">'
+              '<col style="width:118px"><col>'
+              '<col style="width:36px">'
+              + f'<col style="width:{48 if len(cols) < 5 else 40}px">' * len(cols)
+              + '<col style="width:152px"></colgroup>')
     head = (
         '<tr><th>Когда</th><th>Тип</th><th>Пост</th>'
         '<th class="c">Фото</th>'
@@ -1553,7 +1580,7 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
                 continue
             cells.append(f'<td class="c"><span class="cp-mark {esc(net["cls"])}" '
                          f'title="{esc(net["name"])} — {esc(net["note"])}">'
-                         f'{esc(net["mark"])}</span></td>')
+                         f'{_cp_icon(net["mark"])}</span></td>')
         head_cls = ' class="warn"' if view["state"] == "warn" else ""
         # Начало и продолжение идут одним потоком внутри .cp-text: это один и
         # тот же текст поста, разорванный по предложению. Так он занимает ровно

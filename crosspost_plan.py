@@ -64,6 +64,23 @@ NETWORK_SHORT = {"tg-client": "ТГ кл.", "tg-staff": "ТГ сотр.", "tg": 
                  "vk": "ВК", "ok": "ОК", "max": "МАКС", "zen": "Дзен", "yb": "ЯБ"}
 
 
+def _clip(text: str, limit: int) -> str:
+    """
+    Обрезка превью по границе слова.
+
+    Резать ровно по счётчику букв — значит оборвать «строительн…» посреди
+    слова: в таблице это читается как поломка, а не как «текст длиннее».
+    Отступаем до последнего пробела; если слово такое длинное, что отступать
+    пришлось бы больше чем на треть строки (ссылка, артикул), режем как есть.
+    """
+    if len(text) <= limit:
+        return text
+    cut = text.rfind(" ", 0, limit)
+    if cut < limit * 0.66:
+        cut = limit
+    return text[:cut].rstrip(" ,;:.–—") + "…"
+
+
 def plural(n: int, one: str, few: str, many: str) -> str:
     """«1 пост», «4 поста», «11 постов» — без этого подписи звучат по-роботски."""
     n = abs(int(n))
@@ -202,7 +219,7 @@ def _split_text(text: str) -> tuple[str, str]:
     if not text:
         return "", ""
     if text.startswith("http"):
-        return text[:TITLE_LIMIT] + ("…" if len(text) > TITLE_LIMIT else ""), ""
+        return _clip(text, TITLE_LIMIT), ""
     # Естественный разрыв: конец предложения, двоеточие или тире. Если его нет,
     # строку не режем посреди мысли – пусть будет одна, CSS обрежет многоточием.
     cut = -1
@@ -211,15 +228,14 @@ def _split_text(text: str) -> tuple[str, str]:
         if pos > 0 and (cut < 0 or pos < cut):
             cut = pos + (1 if mark in (". ", "! ", "? ", ": ") else 0)
     if cut < 0:
-        return (text[:TITLE_LIMIT] + "…" if len(text) > TITLE_LIMIT else text), ""
+        return _clip(text, PREVIEW_LIMIT), ""
     head, tail = text[:cut].strip(" –—"), text[cut:].strip(" –—")
+    head = _clip(head, PREVIEW_LIMIT)
     room = PREVIEW_LIMIT - len(head)
     if room < 16:
         # Начало и так заняло обе строки — хвост только оборвался бы на полуслове.
         return head, ""
-    if len(tail) > room:
-        tail = tail[:room].rstrip(" ,;:.") + "…"
-    return head, tail
+    return head, _clip(tail, room)
 
 
 def columns(views: list[dict]) -> list[dict]:

@@ -1400,9 +1400,13 @@ _CROSSPOST_TABLE_CSS = (
     "font-size:12.5px;font-weight:700;color:var(--text-2);padding:10px 12px;"
     "border-bottom:1px solid var(--border);white-space:nowrap}"
     "table.cp-plan th.c,table.cp-plan td.c{text-align:center}"
-    "table.cp-plan td{padding:9px 12px;border-bottom:1px solid var(--border);"
+    # Все ячейки прижаты к верху и имеют одинаковый отступ, а первая строка
+    # внутри каждой — один и тот же бокс в 20px (дата, плашка типа, текст,
+    # значок площадки, «что сделать»). Только так они лежат на одной линии:
+    # vertical-align:middle разъезжался, как только строка становилась выше.
+    "table.cp-plan td{padding:11px 12px;border-bottom:1px solid var(--border);"
     "vertical-align:top;text-align:left}"
-    "table.cp-plan td.c{vertical-align:middle}"
+    "table.cp-plan th.c,table.cp-plan td.c{padding-left:4px;padding-right:4px}"
     "table.cp-plan tr:last-child td{border-bottom:none}"
     "table.cp-plan tbody tr:hover td{background:var(--bg-3)}"
     "table.cp-plan tr.cp-group td{background:var(--bg-3);color:var(--muted);padding:7px 12px;"
@@ -1417,29 +1421,35 @@ _CROSSPOST_TABLE_CSS = (
     ".cp-flag.warn{background:var(--yel)}"
     ".cp-flag.err{background:var(--red)}"
     ".cp-flag.todo,.cp-flag.manual{background:var(--border-2)}"
-    ".cp-when{font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--text);"
-    "white-space:nowrap}"
+    # line-height без display:block — это классы на самой <td>, и блочный
+    # display развалил бы табличную раскладку.
+    ".cp-when{line-height:20px;font-family:var(--mono);font-size:12.5px;"
+    "font-weight:700;color:var(--text);white-space:nowrap}"
     ".cp-kind-cell{white-space:nowrap}"
+    # Текст поста — ровно две строки: начало и продолжение идут одним потоком,
+    # лишнее срезает многоточие. min-height держит высоту строк одинаковой даже
+    # там, где текста нет совсем, иначе таблица «прыгает».
     ".cp-post{min-width:0}"
-    ".cp-post b{color:var(--text);font-weight:600;font-size:12.5px;line-height:1.4;"
-    "overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}"
-    ".cp-post span{color:var(--text-2);font-size:12px;line-height:1.45;margin-top:2px;"
-    "overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical}"
-    ".cp-post b.warn{color:var(--yel)}"
-    ".cp-kind{display:inline-flex;align-items:center;height:22px;font-size:11px;"
-    "padding:0 10px;border-radius:20px;white-space:nowrap;background:var(--bg-4);"
+    ".cp-text{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;"
+    "overflow:hidden;line-height:20px;min-height:40px;word-break:break-word}"
+    ".cp-text b{color:var(--text);font-weight:600;font-size:12.5px}"
+    ".cp-text b.warn{color:var(--yel)}"
+    ".cp-text span{color:var(--text-2);font-size:12px}"
+    ".cp-kind{display:inline-flex;align-items:center;height:20px;font-size:11px;"
+    "padding:0 9px;border-radius:20px;white-space:nowrap;background:var(--bg-4);"
     "color:var(--muted)}"
-    ".cp-photo{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap}"
+    ".cp-photo{line-height:20px;font-family:var(--mono);font-size:11.5px;"
+    "color:var(--muted);white-space:nowrap}"
     # Ячейка площадки — тот же значок, что и в легенде.
-    ".cp-mark{width:26px;height:22px;border-radius:5px;display:inline-flex;"
+    ".cp-mark{width:24px;height:20px;border-radius:5px;display:inline-flex;"
     "align-items:center;justify-content:center;font-size:11px;font-weight:800;"
-    "border:none;vertical-align:middle;line-height:1}"
+    "border:none;vertical-align:top;line-height:20px}"
     ".cp-mark.set{background:var(--grn-bg);color:var(--grn)}"
     ".cp-mark.wait{background:var(--acc-bg);color:var(--acc)}"
     ".cp-mark.off{color:var(--dim);background:transparent}"
     ".cp-mark.err{background:var(--red-bg);color:var(--red)}"
     ".cp-mark.live{background:var(--grn);color:#fff}"
-    ".cp-todo{font-size:11.5px;color:var(--dim);line-height:1.4;display:block}"
+    ".cp-todo{font-size:11.5px;color:var(--dim);line-height:20px;display:block}"
     ".cp-todo.fix{color:var(--yel);font-weight:600}"
     ".cp-todo.err{color:var(--red);font-weight:600}"
     ".cp-todo a{color:var(--acc);text-decoration:none;font-weight:600}"
@@ -1461,7 +1471,7 @@ _CROSSPOST_TABLE_CSS = (
     ".cp-legend{display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:12px;"
     "color:var(--muted);padding:2px 0 8px}"
     ".cp-legend span{display:inline-flex;align-items:center;gap:7px}"
-    ".cp-legend .cp-mark{width:22px;height:22px}"
+    ".cp-legend .cp-mark{width:20px;height:20px;vertical-align:middle}"
     "@media(max-width:900px){table.cp-plan{table-layout:auto}}"
 )
 
@@ -1515,11 +1525,11 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
     жёсткий набор врал бы: у одного бренда есть Дзен, у другого нет ОК.
     """
     cols = plan["columns"]
-    widths = ('<colgroup><col style="width:3px"><col style="width:66px">'
-              '<col style="width:120px"><col>'
-              '<col style="width:52px">'
-              + f'<col style="width:{62 if len(cols) < 5 else 54}px">' * len(cols)
-              + '<col style="width:160px"></colgroup>')
+    widths = ('<colgroup><col style="width:3px"><col style="width:60px">'
+              '<col style="width:132px"><col>'
+              '<col style="width:44px">'
+              + f'<col style="width:{56 if len(cols) < 5 else 48}px">' * len(cols)
+              + '<col style="width:148px"></colgroup>')
     head = (
         '<tr><th class="cp-flag"></th><th>Когда</th><th>Тип</th><th>Пост</th>'
         '<th class="c">Фото</th>'
@@ -1545,8 +1555,13 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
                          f'title="{esc(net["name"])} — {esc(net["note"])}">'
                          f'{esc(net["mark"])}</span></td>')
         head_cls = ' class="warn"' if view["state"] == "warn" else ""
-        text_html = (f'<b{head_cls}>{esc(view["head"] or "нет текста")}</b>'
-                     + (f'<span>{esc(view["tail"])}</span>' if view["tail"] else ""))
+        # Начало и продолжение идут одним потоком внутри .cp-text: это один и
+        # тот же текст поста, разорванный по предложению. Так он занимает ровно
+        # две строки, а не три, и низ строки не пляшет от поста к посту.
+        text_html = (f'<div class="cp-text"><b{head_cls}>'
+                     f'{esc(view["head"] or "нет текста")}</b>'
+                     + (f' <span>{esc(view["tail"])}</span>' if view["tail"] else "")
+                     + '</div>')
         body.append(
             f'<tr class="{"cp-warn" if view["state"] == "warn" else ""}">'
             f'<td class="cp-flag {esc(view["state"])}"></td>'

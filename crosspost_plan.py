@@ -15,7 +15,7 @@ crosspost_plan.py — план кросспостинга: строки пост
 
 Знаки площадок (по ним же легенда в разделе):
     ✓ зелёный   — отложка стоит в соцсети (ВК, ОК и МАКС держат сами)
-    ⏱ синий     — отправит Click в час выхода (Телеграм)
+    → синий     — отправит Click в час выхода (Телеграм)
     ✓ залитый   — уже вышло
     · серый     — ещё не сформировано
     ✕ красный   — ошибка, пост туда не ушёл
@@ -48,6 +48,11 @@ SELF_HOSTED = ("vk", "ok")
 
 TITLE_LIMIT = 120          # длина превью текста в строке плана
 HEAD_LIMIT = 58            # сколько букв уходит в жирное начало строки
+# Общий бюджет на «начало + хвост»: в строке плана они идут одним потоком и
+# обрезаются ровно на второй строке. Раньше каждый резался по TITLE_LIMIT
+# отдельно, вместе выходило до 240 знаков – вдвое больше, чем влезает, и
+# текст обрывался многоточием прямо в таблице.
+PREVIEW_LIMIT = 128
 
 # Порядок колонок площадок. Реестр может назвать любую — колонки строятся по
 # тому, что в нём реально есть, но в этом порядке: он же в легенде и в справке.
@@ -110,7 +115,7 @@ def net_view(post: dict, target: dict, state: dict) -> dict:
     if net not in content_plan.SUPPORTED:
         # Дзен и прочее Click не формирует. Честно говорим «вручную», а не
         # рисуем пустой кружок, будто просто ещё не дошли руки.
-        return {**view, "mark": "⏸", "cls": "off", "note": "публикуется вручную"}
+        return {**view, "mark": "✎", "cls": "off", "note": "публикуется вручную"}
 
     link = (target.get("published_link") or "").strip()
     if link:
@@ -131,12 +136,12 @@ def net_view(post: dict, target: dict, state: dict) -> dict:
         # МАКС; через бота – держит Click, и он должен быть открыт.
         if net in SELF_HOSTED or saved.get("native"):
             return {**view, "mark": "✓", "cls": "set", "note": "отложка стоит в соцсети"}
-        return {**view, "mark": "⏱", "cls": "wait", "note": "отправит Click в час выхода"}
+        return {**view, "mark": "→", "cls": "wait", "note": "отправит Click в час выхода"}
     if status == cps.FAILED:
         return {**view, "mark": "✕", "cls": "err",
                 "note": saved.get("error") or "ошибка — пост туда не ушёл"}
     if status == cps.MISSED:
-        return {**view, "mark": "⏭", "cls": "err", "note": "пропущено — время вышло"}
+        return {**view, "mark": "»", "cls": "err", "note": "пропущено — время вышло"}
     return {**view, "mark": "·", "cls": "off", "note": "ещё не сформировано"}
 
 
@@ -208,8 +213,12 @@ def _split_text(text: str) -> tuple[str, str]:
     if cut < 0:
         return (text[:TITLE_LIMIT] + "…" if len(text) > TITLE_LIMIT else text), ""
     head, tail = text[:cut].strip(" –—"), text[cut:].strip(" –—")
-    if len(tail) > TITLE_LIMIT:
-        tail = tail[:TITLE_LIMIT].rstrip() + "…"
+    room = PREVIEW_LIMIT - len(head)
+    if room < 16:
+        # Начало и так заняло обе строки — хвост только оборвался бы на полуслове.
+        return head, ""
+    if len(tail) > room:
+        tail = tail[:room].rstrip(" ,;:.") + "…"
     return head, tail
 
 

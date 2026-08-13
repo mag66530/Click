@@ -18,4 +18,4 @@ build.py – метка сборки Click. Одна на всё приложе�
 меняет поведение модулей или вёрстку.
 """
 
-BUILD = "2026-08-13-cp-baseline-grid"
+BUILD = "2026-08-13-cp-glyphs-width-noflag"

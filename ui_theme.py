@@ -1414,13 +1414,10 @@ _CROSSPOST_TABLE_CSS = (
     "table.cp-plan tr.cp-group:hover td{background:var(--bg-4)}"
     "table.cp-plan tr.cp-warn td{background:var(--yel-bg)}"
     "table.cp-plan tr.cp-warn:hover td{background:var(--yel-bg)}"
-    # Левая полоска — состояние строки: она же цвет в легенде.
-    ".cp-flag{width:3px;padding:0 !important}"
-    ".cp-flag.set,.cp-flag.live{background:var(--grn)}"
-    ".cp-flag.wait{background:var(--acc)}"
-    ".cp-flag.warn{background:var(--yel)}"
-    ".cp-flag.err{background:var(--red)}"
-    ".cp-flag.todo,.cp-flag.manual{background:var(--border-2)}"
+    # Левой полоски состояния тут больше нет. Она была шириной 3px и стояла
+    # вплотную к рамке таблицы, поэтому читалась как вторая рамка — «тёмная
+    # таблица на таблице». Состояние и так видно по значкам площадок, а
+    # проблемные строки подсвечены жёлтым фоном целиком.
     # line-height без display:block — это классы на самой <td>, и блочный
     # display развалил бы табличную раскладку.
     ".cp-when{line-height:20px;font-family:var(--mono);font-size:12.5px;"
@@ -1443,7 +1440,7 @@ _CROSSPOST_TABLE_CSS = (
     # Ячейка площадки — тот же значок, что и в легенде.
     ".cp-mark{width:24px;height:20px;border-radius:5px;display:inline-flex;"
     "align-items:center;justify-content:center;font-size:11px;font-weight:800;"
-    "border:none;vertical-align:top;line-height:20px}"
+    "border:none;vertical-align:top;line-height:20px;font-variant-emoji:text}"
     ".cp-mark.set{background:var(--grn-bg);color:var(--grn)}"
     ".cp-mark.wait{background:var(--acc-bg);color:var(--acc)}"
     ".cp-mark.off{color:var(--dim);background:transparent}"
@@ -1481,9 +1478,12 @@ def crosspost_legend() -> str:
     Легенда всегда на виду: без неё галочка и часы читаются одинаково, и
     раздел выглядит шифром. Пять состояний, словами.
     """
+    # Значки только из тех, что есть в текстовом шрифте. Часы, пауза и
+    # перемотка (U+23F1/23F8/23ED) в нём отсутствуют — браузер подставлял
+    # цветной emoji-шрифт со своим кеглем и базовой линией, и колонка ехала.
     items = (
         ("set", "✓", "отложка стоит в соцсети"),
-        ("wait", "⏱", "отправит Click в час выхода"),
+        ("wait", "→", "отправит Click в час выхода"),
         ("off", "·", "ещё не сформировано"),
         ("err", "✕", "ошибка — пост туда не ушёл"),
         ("live", "✓", "уже вышло"),
@@ -1525,13 +1525,13 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
     жёсткий набор врал бы: у одного бренда есть Дзен, у другого нет ОК.
     """
     cols = plan["columns"]
-    widths = ('<colgroup><col style="width:3px"><col style="width:60px">'
-              '<col style="width:132px"><col>'
-              '<col style="width:44px">'
-              + f'<col style="width:{56 if len(cols) < 5 else 48}px">' * len(cols)
-              + '<col style="width:148px"></colgroup>')
+    widths = ('<colgroup><col style="width:56px">'
+              '<col style="width:124px"><col>'
+              '<col style="width:40px">'
+              + f'<col style="width:{52 if len(cols) < 5 else 44}px">' * len(cols)
+              + '<col style="width:140px"></colgroup>')
     head = (
-        '<tr><th class="cp-flag"></th><th>Когда</th><th>Тип</th><th>Пост</th>'
+        '<tr><th>Когда</th><th>Тип</th><th>Пост</th>'
         '<th class="c">Фото</th>'
         + "".join(f'<th class="c" title="{esc(c["name"])}">{esc(c.get("short") or c["name"])}</th>'
                   for c in cols)
@@ -1539,7 +1539,7 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
     )
     body = []
     if group_title:
-        body.append(f'<tr class="cp-group"><td colspan="{5 + len(cols) + 1}">'
+        body.append(f'<tr class="cp-group"><td colspan="{4 + len(cols) + 1}">'
                     f'{esc(group_title)}</td></tr>')
     for view in plan["rows"]:
         marks = {n["code"]: n for n in view["nets"]}
@@ -1564,7 +1564,6 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
                      + '</div>')
         body.append(
             f'<tr class="{"cp-warn" if view["state"] == "warn" else ""}">'
-            f'<td class="cp-flag {esc(view["state"])}"></td>'
             f'<td class="cp-when">{esc(view["when_day"])}</td>'
             f'<td class="cp-kind-cell"><span class="cp-kind">'
             f'{esc(view["kind"] or "—")}</span></td>'

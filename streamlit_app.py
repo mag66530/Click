@@ -3443,7 +3443,7 @@ def _crosspost_targets_html(post: dict, state: dict) -> str:
         net = t.get("network") or ""
         name = cps.network_ru(net)
         if net not in content_plan.SUPPORTED:
-            bits.append(f'<span class="cp-net cp-net-off">{T.esc(name)} ⏸</span>')
+            bits.append(f'<span class="cp-net cp-net-off">{T.esc(name)} ✎</span>')
             continue
         link = (t.get("published_link") or "").strip()
         if link:

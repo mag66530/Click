@@ -770,7 +770,7 @@ def test_plan_rows() -> None:
                                            "tg-client": {"state": cps.SCHEDULED}}}}
     marks = {n["code"]: n for n in plan.post_view(p, state)["nets"]}
     check("ВК: отложка стоит в соцсети", marks["vk"]["cls"] == "set" and marks["vk"]["mark"] == "✓")
-    check("ТГ: отправит Click", marks["tg-client"]["cls"] == "wait" and marks["tg-client"]["mark"] == "⏱")
+    check("ТГ: отправит Click", marks["tg-client"]["cls"] == "wait" and marks["tg-client"]["mark"] == "→")
     check("у знака есть подпись словами", "Click" in marks["tg-client"]["note"])
 
     done = plan.post_view(post("2025-08-19", link="https://vk.com/wall-1_2"), {})

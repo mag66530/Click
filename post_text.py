@@ -151,57 +151,40 @@ def _bold_html(chunk: str) -> str:
     return "".join(parts)
 
 
-def _drop_repeat_address(text: str, bare: str) -> str:
-    """
-    Оставить только ПЕРВЫЙ показ адреса, остальные убрать вместе со скобками.
-
-    Тексты в реестре часто уже несут адрес сайта, а Click добавлял к ним свой
-    автоссылкой – и в ВК выходило «на нашем сайте (inmetprom.ru) (inmetprom.ru/)».
-    Адрес один и тот же, второй раз он не нужен никому.
-    """
-    if not bare:
-        return text
-    rx = re.compile(r"\(?\s*(?:https?://)?" + re.escape(bare) + r"/?\s*\)?", re.I)
-    shown = {"count": 0}
-
-    def keep_first(m: re.Match) -> str:
-        shown["count"] += 1
-        return m.group(0) if shown["count"] == 1 else ""
-
-    text = rx.sub(keep_first, text)
-    text = re.sub(r"[ \t]{2,}", " ", text)
-    return re.sub(r"[ \t]+([.,;:!?])", r"\1", text)
-
-
 def to_plain(markup: str) -> str:
     """
     ВК/ОК/ЯБ: жирный снимается, ссылка превращается в ГОЛЫЙ адрес.
 
     Почему голый, а не «текст (адрес)», как было раньше. Эти площадки не
     умеют зашивать ссылку в слова – адрес в скобках так и читается скобками,
-    как часть предложения. А если адрес стоял ещё и в самом тексте реестра,
-    выходило вовсе неловко: «на нашем сайте (inmetprom.ru) (inmetprom.ru/)».
-    Поэтому пишем адрес один раз, без скобок, протокола и хвостового слэша –
-    площадка сама сделает его кликабельным.
+    как часть предложения. Поэтому пишем адрес без скобок, протокола и
+    хвостового слэша – площадка сама сделает его кликабельным.
+
+    И только если адреса в посте ещё нет. Текст реестра НЕ переписываем:
+    внизу постов стоит блок контактов («🌐 stalmetural.ru», «✉️ info@…»), и
+    адрес из него – тот же самый. Раньше Click дописывал свой адрес, а потом
+    вычищал «повторы» по всему тексту – и вычищал их вместе с переводами
+    строк и хвостом почты: блок контактов схлопывался в одну строку
+    «🌐✉️ info@📞 +7 (903) 086-31-16» (живой случай 13.08.2026, ВК и МАКС).
+    Теперь правило простое: адрес уже написан – значит, дописывать нечего.
 
     Телеграма и МАКС это не касается: там ссылка зашивается в слова
     по-настоящему, и занимается этим to_html.
     """
-    used: list[str] = []
+    # Тело без разметки ссылок – по нему смотрим, есть ли адрес в самом посте.
+    body = ANCHOR_RX.sub(lambda m: m.group(1), markup)
 
     def anchor(m: re.Match) -> str:
         text, url = m.group(1), m.group(2)
         bare = re.sub(r"^https?://", "", url).rstrip("/")
-        used.append(bare)
         if URLISH_RX.match(text.strip()) or text.strip().rstrip("/") in (url, bare):
             return bare
+        if bare and re.search(re.escape(bare), body, re.I):
+            return text
         return f"{text} {bare}"
 
     s = ANCHOR_RX.sub(anchor, markup)
-    s = BOLD_RX.sub(r"\1", s)
-    for bare in used:
-        s = _drop_repeat_address(s, bare)
-    return s
+    return BOLD_RX.sub(r"\1", s)
 
 
 def render(markup: str, mode: str) -> str:

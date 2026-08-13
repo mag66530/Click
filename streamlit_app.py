@@ -3629,6 +3629,84 @@ def _crosspost_login_hint(project_id: str, config: dict) -> None:
                    f"«Настройки» → «Вход в ВК/ОК (кросспостинг)».")
 
 
+def _crosspost_form_log_path(project_id: str):
+    """Лог последнего формирования – на диске, а не в исчезающем st.status."""
+    d = paths.data_root() / project_id / "crosspost"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "form-last.log"
+
+
+def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> None:
+    """
+    Отчёт: что и куда реально ушло – только факты от площадок.
+
+    Каждая строка – пост × площадка: что сделал Click и когда, ссылка на
+    вышедшую запись, текст ошибки. «Вышло» здесь пишется в двух случаях, и
+    оба – факты: ссылка стоит в реестре (публиковали руками) или площадка
+    сама подтвердила выход. Догадок в отчёте нет.
+    """
+    rows: list[str] = []
+    for post in sorted(posts, key=lambda p: p.get("when") or "", reverse=True):
+        for t in post.get("targets", []):
+            net = t.get("network") or ""
+            name = cps.network_ru(net)
+            saved = cps.target(state, post, net)
+            link = (t.get("published_link") or "").strip()
+            at = (saved.get("at") or "")[:16].replace("T", " ")
+            if link:
+                what, cls = f'вышло – <a href="{T.esc(link)}" target="_blank">запись ↗</a>', "ok"
+            elif saved.get("state") == cps.SCHEDULED:
+                what, cls = f"отложка поставлена {T.esc(at)}", "skip"
+            elif saved.get("state") in (cps.SENT, cps.SENT_LATE):
+                tail = f' – <a href="{T.esc(saved.get("link", ""))}" target="_blank">запись ↗</a>' \
+                    if saved.get("link") else ""
+                what, cls = f"вышло {T.esc(at)}{tail}", "ok"
+            elif saved.get("state") == cps.FAILED:
+                what, cls = f'ошибка {T.esc(at)}: {T.esc(saved.get("error", ""))}', "err"
+            elif saved.get("state") == cps.MISSED:
+                what, cls = f"пропущено: {T.esc(saved.get('error', 'время вышло'))}", "warn"
+            elif net not in content_plan.SUPPORTED:
+                what, cls = "Click не публикует – вручную", ""
+            else:
+                what, cls = "не тронуто", ""
+            d = content_plan.parse_date(post.get("date", ""))
+            day = d.strftime("%d.%m") if d else post.get("date", "")
+            head = " ".join(post_text.strip_markup(post.get("text") or "").split())[:60] or "без текста"
+            rows.append(
+                f'<div class="report-row {cls}">'
+                f'<span class="cp-day">{T.esc(day)}</span>'
+                f'<span class="cp-type">{T.esc(name)}</span>'
+                f'<span class="report-row-reason">{T.esc(head)}</span>'
+                f'<span class="report-row-dur">{what}</span></div>')
+            if len(rows) >= 120:
+                break
+        if len(rows) >= 120:
+            break
+    with st.expander("📊 Отчёт: что и куда ушло", expanded=False):
+        st.caption("Только факты: ссылка из реестра или подтверждение самой "
+                   "площадки. Что Click не трогал, так и подписано.")
+        html("".join(rows) or T.empty("–", "Пока пусто", ""))
+
+
+def _crosspost_form_last_log(project_id: str) -> None:
+    """Лог последнего формирования: тот же протокол, что бежал в статусе."""
+    fp = _crosspost_form_log_path(project_id)
+    if not fp.exists():
+        return
+    try:
+        text = fp.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    if not text.strip():
+        return
+    with st.expander("📄 Лог последнего формирования"):
+        st.text_area("Что Click делал по шагам", value=text, height=240,
+                     key=f"cp-form-log-{project_id}")
+        st.download_button("⬇ Скачать (.txt)", data=text.encode("utf-8"),
+                           file_name="formirovanie-poslednee.txt", mime="text/plain",
+                           key=f"cp-form-log-dl-{project_id}")
+
+
 def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
                      state: dict, today: date, upcoming: list[dict]) -> None:
     """
@@ -3637,7 +3715,7 @@ def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
     """
     html('<div class="card-title">🔧 Настройка и проверка'
          '<span class="hint"> – обычно сюда не нужно, всё уже настроено</span></div>')
-    t1, t2, t3 = st.tabs(["🔌 Подключения", "🧪 Проверка отложки", "📜 Журналы и весь реестр"])
+    t1, t2, t3 = st.tabs(["🔌 Подключения", "🧪 Проверка отложки", "📊 Отчёты и журналы"])
 
     with t1:
         _crosspost_login_hint(project_id, config)
@@ -3654,6 +3732,8 @@ def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
             _probe_last_log(project_id, network)
 
     with t3:
+        _crosspost_report_block(project_id, posts, state)
+        _crosspost_form_last_log(project_id)
         _crosspost_scheduler_journal()
         _crosspost_forget_block(project_id, upcoming, state)
         # Прошлые посты – архив, а не рабочий список. Блок живёт ЗДЕСЬ, где
@@ -3718,11 +3798,11 @@ def tab_crosspost(project_id: str, config: dict) -> None:
     _crosspost_tools(project_id, config, posts, state, today, upcoming)
 
     # Честно про границы: что работает и при каких условиях.
-    st.info("Полный цикл собран: ВК, ОК и МАКС – родные отложки после входа "
-            "(держит сама площадка, Click в час выхода не нужен); Телеграм – по "
-            "времени через планировщик (нужен токен бота), и вот для него Click "
-            "в час выхода работать обязан; ЯБ – прогон по расписанию.",
-            icon="ℹ️")
+    st.info("Click формирует ВК, ОК и МАКС – родными отложками после входа: "
+            "запись держит сама площадка, и в час выхода Click не нужен. "
+            "**Телеграм пока не формируется** – в плане он помечен «вручную», "
+            "и сам Click в час выхода больше ничего не публикует. ЯБ – прогон "
+            "по расписанию, как был.", icon="ℹ️")
 
 
 def _crosspost_channels(config: dict) -> dict[str, str]:
@@ -3790,6 +3870,10 @@ def _crosspost_channels_block(project_id: str, config: dict) -> None:
     import tg_social
 
     with st.expander("💬 Каналы Телеграма и МАКС"):
+        st.warning("Телеграм сейчас выключен: Click его не формирует и в час "
+                   "выхода в него ничего не отправляет – в плане он помечен "
+                   "«вручную». Каналы храним, чтобы не вводить заново, когда "
+                   "Телеграм доделаем.", icon="⏸")
         c1, c2, c3 = st.columns(3)
         vals = {
             "tgChannelClient": c1.text_input("ТГ клиенты", value=config.get("tgChannelClient", ""),
@@ -4012,8 +4096,17 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
         box = st.status("Формирую…", expanded=True)
         headless = bool(get_settings(project_id)["headless"])
         ok = bad = 0
+
+        # Протокол пишется и на экран, и в файл: st.status исчезает при первой
+        # же перерисовке, а вопрос «что именно Click делал» встаёт уже после.
+        lines: list[str] = [f"Формирование {apptime.now().strftime('%d.%m.%Y %H:%M')}"]
+
+        def say(m: str) -> None:
+            lines.append(f"[{apptime.now().strftime('%H:%M:%S')}] {m}")
+            box.write(m)
+
         msg_results = crosspost_form.form_messengers(
-            project_id, posts, site, channels, progress=lambda m: box.write(m))
+            project_id, posts, site, channels, progress=say)
         ok += len(msg_results)
         for net_name, net_todo, former, url_key in (
                 ("ВК", what["vk"], crosspost_form.form_vk_all, "vkGroupUrl"),
@@ -4021,13 +4114,20 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
                 ("МАКС", what["max"], crosspost_form.form_max_all, "maxWebUrl")):
             if not net_todo:
                 continue
+            say(f"— {net_name}: постов к формированию {len(net_todo)}")
             results = former(project_id, config[url_key].strip(), posts, site,
-                             progress=lambda m: box.write(m), headless=headless)
+                             progress=say, headless=headless)
             ok += sum(1 for r in results if r["ok"])
             for r in results:
                 if not r["ok"]:
                     bad += 1
-                    box.write(f"❌ {net_name} {r['post']['date']}: {r['error']}")
+                    say(f"❌ {net_name} {r['post']['date']}: {r['error']}")
+        lines.append(f"Итог: запланировано {ok}, с ошибками {bad}")
+        try:
+            _crosspost_form_log_path(project_id).write_text(
+                "\n".join(lines), encoding="utf-8")
+        except OSError:
+            pass   # лог не должен ронять формирование
         box.update(label=(f"Готово: запланировано {ok}"
                           + (f", с ошибками {bad}" if bad else "")),
                    state="error" if bad else "complete")

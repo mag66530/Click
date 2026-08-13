@@ -130,9 +130,12 @@ def net_view(post: dict, target: dict, state: dict) -> dict:
     view = {"code": net, "name": cps.network_ru(net), "link": ""}
 
     if net not in content_plan.SUPPORTED:
-        # Дзен и прочее Click не формирует. Честно говорим «вручную», а не
-        # рисуем пустой кружок, будто просто ещё не дошли руки.
-        return {**view, "mark": "✎", "cls": "off", "note": "публикуется вручную"}
+        # Дзен, Телеграм и прочее, чего Click не формирует. Честно говорим
+        # «вручную», а не рисуем пустой кружок, будто просто ещё не дошли
+        # руки. Пометка manual нужна дальше: такие площадки не считаются ни
+        # несформированными, ни ждущими – их Click просто не касается.
+        return {**view, "mark": "✎", "cls": "off", "manual": True,
+                "note": "публикуется вручную"}
 
     link = (target.get("published_link") or "").strip()
     if link:
@@ -168,12 +171,18 @@ def post_view(post: dict, state: dict) -> dict:
     состояние строки (по нему красится левая полоска плитки).
     """
     nets = [net_view(post, t, state) for t in post.get("targets", [])]
-    classes = [n["cls"] for n in nets]
+    # Ручные площадки (Дзен, пока и Телеграм) в состоянии строки не участвуют:
+    # Click их не формирует, и «ещё не сформировано» про них – неправда.
+    classes = [n["cls"] for n in nets if not n.get("manual")]
     text = " ".join(post_text.strip_markup(post.get("text") or "").split())
     title = text[:TITLE_LIMIT] + "…" if len(text) > TITLE_LIMIT else text
 
     fmt = (post.get("format") or "Пост").strip()
-    if fmt.lower() != "пост":
+    if nets and not classes:
+        # Все площадки поста – ручные (например, только Телеграм): Click тут
+        # не при делах, и строка так и говорит.
+        state_cls, trouble = "manual", "публикуется вручную"
+    elif fmt.lower() != "пост":
         # Видео и статьи Click не формирует – это не поломка, а другой вид
         # контента. Плитка так и говорит, вместо жёлтой тревоги.
         state_cls, trouble = "manual", f"{fmt.lower()} – вручную"
@@ -277,9 +286,14 @@ def todo_of(view: dict) -> dict:
         # Не кричим в каждой строке «нажмите «Сформировать план»»: кнопка одна
         # и она наверху. Строка просто говорит, в каком она состоянии.
         return {"text": "ещё не сформировано", "kind": "quiet"}
-    off = [n["name"] for n in view["nets"] if n["cls"] == "off"]
+    off = [n["name"] for n in view["nets"] if n["cls"] == "off" and not n.get("manual")]
     if off:
         return {"text": f'{", ".join(off)} – не выбрано в таблице', "kind": "quiet"}
+    manual = [n["name"] for n in view["nets"] if n.get("manual")]
+    if manual:
+        # Остальное готово, а эти площадки Click не формирует – так и пишем,
+        # чтобы «всё готово» не значило «и Телеграм тоже».
+        return {"text": f'{", ".join(manual)} – вручную', "kind": "quiet"}
     return {"text": "всё готово", "kind": "quiet"}
 
 

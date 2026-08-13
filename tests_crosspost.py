@@ -107,8 +107,11 @@ def test_posts_to_form() -> None:
     if not to_form:
         return
     nets = sorted(t["network"] for t in to_form[0]["targets"])
-    check("в будущем формируем vk, ok, tg-client", nets == ["ok", "tg-client", "vk"], str(nets))
+    check("в будущем формируем vk и ok", nets == ["ok", "vk"], str(nets))
     check("дзен (вне scope) не формируем", "zen" not in nets)
+    # Телеграм Click пока не формирует вовсе (13.08.2026): отложки у бота
+    # нет, а публиковать в час выхода он больше не должен.
+    check("телеграм не формируем", "tg-client" not in nets, str(nets))
 
     # если у площадки «Ссылка» уже стоит – второй раз не формируем
     already = cp.posts_to_form(
@@ -210,13 +213,28 @@ def test_post_text() -> None:
     # ВК/ОК ссылку в слова не зашивают. Живой случай (11.08.2026): в реестре
     # адрес уже стоял, Click добавлял свой автоссылкой, и в ВК выходило
     # «на нашем сайте (inmetprom.ru) (inmetprom.ru/)» – два адреса подряд.
+    # Теперь текст реестра остаётся как есть, Click просто ничего не дописывает.
     real = pt.autolink(
         "🔹 Полный сортамент нержавеющего металлопроката – на нашем сайте (inmetprom.ru/).",
         "inmetprom.ru")
-    check("ВК: адрес один раз, без скобок",
+    check("ВК: адрес из реестра не трогаем и свой не дописываем",
           pt.render(real, "plain")
-          == "🔹 Полный сортамент нержавеющего металлопроката – на нашем сайте inmetprom.ru.",
+          == "🔹 Полный сортамент нержавеющего металлопроката – на нашем сайте (inmetprom.ru/).",
           pt.render(real, "plain"))
+
+    # Блок контактов внизу поста. Он и есть тот случай, когда «повтор» адреса
+    # – не повтор: почта, сайт и телефон, каждый на своей строке.
+    contacts = pt.autolink(
+        "Оформить заказ можно на нашем сайте:\n\n"
+        "🌐 stalmetural.ru\n✉️ info@stalmetural.ru\n📞 +7 (903) 086-31-16",
+        "stalmetural.ru")
+    plain_contacts = pt.render(contacts, "plain")
+    check("контакты остаются построчно",
+          plain_contacts.endswith("🌐 stalmetural.ru\n✉️ info@stalmetural.ru\n"
+                                  "📞 +7 (903) 086-31-16"), plain_contacts)
+    check("почта не теряет домен", "info@stalmetural.ru" in plain_contacts, plain_contacts)
+    check("адрес не дописан вторым разом",
+          plain_contacts.count("stalmetural.ru") == 2, plain_contacts)
     check("ВК: адреса нет в реестре – ставим свой",
           pt.render(pt.autolink("Заказ – на нашем сайте.", "a.ru"), "plain")
           == "Заказ – на нашем сайте a.ru.")
@@ -608,6 +626,26 @@ def test_scheduler() -> None:
         sent = []
         senders = {"tg": lambda tk: (sent.append(tk["id"]) or {"ok": True, "link": "https://t.me/x/1"}),
                    "max": lambda tk: {"ok": True}}
+
+        # Публикация в час выхода выключена: задание не уходит, а отменяется, и
+        # пост в памяти остаётся несформированным. Это главное правило после
+        # 13.08.2026 – Click не должен публиковать сам и не должен врать.
+        n_off = scheduler.tick(now=when + timedelta(seconds=10), senders=senders)
+        post0 = {"brand": "SMU", "date": "2026-08-13", "when": when.isoformat(), "text": "привет"}
+        check("в час выхода ничего не отправлено", sent == [], str(sent))
+        check("задание отменено, а не выполнено",
+              n_off == 1 and scheduler.load_tasks("SMU")[0]["state"] == "cancelled",
+              scheduler.load_tasks("SMU")[0]["state"])
+        check("память не врёт про «вышло»",
+              cps.status_of(cps.load("SMU"), post0, "tg-client") == cps.WAITING,
+              cps.status_of(cps.load("SMU"), post0, "tg-client"))
+
+        # Дальше – проверка самой машинки отправки: она никуда не делась и
+        # заработает, как только площадку доделают и уберут из PUBLISH_OFF.
+        was_off = scheduler.PUBLISH_OFF
+        scheduler.PUBLISH_OFF = ()
+        scheduler._save_tasks("SMU", [])
+        scheduler.queue_task("SMU", task)
         n = scheduler.tick(now=when + timedelta(seconds=10), senders=senders)
         check("тик отправил задание", n == 1 and sent == [task["id"]])
         check("задание выполнено", scheduler.load_tasks("SMU")[0]["state"] == "done")
@@ -673,6 +711,9 @@ def test_scheduler() -> None:
         check("выключатель останавливает тик",
               scheduler.tick(now=when + timedelta(days=1), senders=senders) == 0)
         scheduler.set_config(enabled=True)
+        scheduler.PUBLISH_OFF = was_off
+        check("по умолчанию ТГ и бот МАКС не публикуются",
+              set(scheduler.PUBLISH_OFF) == {"tg", "max"}, str(scheduler.PUBLISH_OFF))
     finally:
         if was is None:
             os.environ.pop("CLICK_DATA_DIR", None)
@@ -748,7 +789,8 @@ def test_plan_rows() -> None:
     ready = plan.rows([post("2025-08-19")], {cps.post_key(post("2025-08-19")): {
         "targets": {"vk": {"state": cps.SCHEDULED}, "tg-client": {"state": cps.SCHEDULED}}}},
         today)["rows"][0]
-    check("готовому – «всё готово»", ready["todo"]["text"] == "всё готово", ready["todo"]["text"])
+    check("готовому – про ручные площадки", ready["todo"]["text"] == "ТГ клиенты – вручную",
+          ready["todo"]["text"])
     check("и без крика", ready["todo"]["kind"] == "quiet")
 
     empty = plan.rows([post("2025-08-19", text="", row=47)], {}, today)["rows"][0]
@@ -770,8 +812,13 @@ def test_plan_rows() -> None:
                                            "tg-client": {"state": cps.SCHEDULED}}}}
     marks = {n["code"]: n for n in plan.post_view(p, state)["nets"]}
     check("ВК: отложка стоит в соцсети", marks["vk"]["cls"] == "set" and marks["vk"]["mark"] == "✓")
-    check("ТГ: отправит Click", marks["tg-client"]["cls"] == "wait" and marks["tg-client"]["mark"] == "→")
-    check("у знака есть подпись словами", "Click" in marks["tg-client"]["note"])
+    check("ТГ: помечен ручным, а не «отправит Click»",
+          marks["tg-client"].get("manual") and marks["tg-client"]["mark"] == "✎",
+          str(marks["tg-client"]))
+    check("у знака есть подпись словами", "вручную" in marks["tg-client"]["note"])
+    check("ручная площадка не делает пост несформированным",
+          plan.post_view(p, state)["state"] == "set",
+          plan.post_view(p, state)["state"])
 
     done = plan.post_view(post("2025-08-19", link="https://vk.com/wall-1_2"), {})
     check("ссылка в реестре = вышло", done["state"] == "live")
@@ -782,7 +829,8 @@ def test_plan_rows() -> None:
     nearest = plan.next_out([p], state, "2025-08-18T10:00:00+05:00")
     check("ближайший пост найден", nearest is not None and nearest["when"].startswith("2025-08-19"))
     check("названы ждущие площадки",
-          nearest is not None and sorted(n["code"] for n in nearest["pending"]) == ["tg-client", "vk"])
+          nearest is not None and sorted(n["code"] for n in nearest["pending"]) == ["vk"],
+          str(sorted(n["code"] for n in (nearest or {}).get("pending", []))))
     check("вышедшее в ближайшие не попадает",
           plan.next_out([post("2025-08-19", link="https://vk.com/wall-1_2")], {},
                         "2025-08-18T10:00:00+05:00") is None)
@@ -1730,6 +1778,62 @@ def test_social_defaults() -> None:
     check("пароль наружу не уезжает", "password" not in app._KEPT)
 
 
+def test_max_text_entry() -> None:
+    """
+    Ввод текста в МАКС: НИ ОДНОГО Enter и ни одного посимвольного набора.
+
+    Худшая поломка Click (13.08.2026): пост из двенадцати строк ушёл в канал
+    двенадцатью отдельными сообщениями – сразу, до всякой отложки. Поле
+    поста МАКС – поле чата, каждый Enter в нём «отправить», а page.type()
+    печатал текст со всеми переводами строк как клавишами.
+    """
+    print("\nМАКС: ввод текста без отправки")
+    import inspect
+
+    import max_browser as mb
+
+    src = inspect.getsource(mb._fill_post_text)
+    check("посимвольного набора больше нет", "page.type(" not in src)
+    check("текст вставляется событием, не клавишами", "insert_text" in src)
+    check("перенос строки – только Shift+Enter", 'press("Shift+Enter")' in src)
+    check("голого Enter нет", 'press("Enter")' not in src.replace("Shift+Enter", ""))
+    check("после первого переноса – проверка, что поле не опустело",
+          "_editor_text" in src and "i == 1" in src)
+    check("в конце сверяем начало и конец текста", "_probe" in src)
+
+    whole = inspect.getsource(mb.schedule_postponed_post)
+    check("формирование зовёт безопасный ввод", "_fill_post_text(" in whole)
+    check("отказ ввода останавливает отложку", '"bad-text"' in whole)
+    check("перед правым кликом закрываются всплывашки", 'press("Escape")' in whole)
+
+    # Отпечаток строки: эмодзи и пробелы не мешают сверке.
+    check("отпечаток строки игнорирует значки",
+          mb._probe("⚡ СТОИМОСТЬ – 1 400 ₽/кг ⚡") == mb._probe("СТОИМОСТЬ 1400кг"),
+          mb._probe("⚡ СТОИМОСТЬ – 1 400 ₽/кг ⚡"))
+    check("пустая строка – пустой отпечаток", mb._probe("⚡ – ⚡") == "")
+
+
+def test_publish_off() -> None:
+    """
+    Click в час выхода ничего не публикует (13.08.2026, решение заказчицы).
+
+    Телеграм уходил не тем видом, а раздел писал «вышло» – неправда. Пока
+    площадку не доделали: Телеграм в плане – «вручную», задания планировщику
+    не ставятся, а уже стоящие отменяются, не отправляясь.
+    """
+    print("\nПубликация в час выхода выключена")
+    import content_plan as cp
+    import scheduler
+
+    check("Телеграм не формируется",
+          not any(n.startswith("tg") for n in cp.SUPPORTED), str(cp.SUPPORTED))
+    check("ВК, ОК и МАКС остались", set(cp.SUPPORTED) == {"vk", "ok", "max"})
+    check("реестр Телеграм по-прежнему понимает",
+          cp.canonical_network("Телеграм клиенты") == "tg-client")
+    check("планировщик не шлёт ТГ и бот МАКС",
+          set(scheduler.PUBLISH_OFF) == {"tg", "max"}, str(scheduler.PUBLISH_OFF))
+
+
 def test_max_native_scheduling() -> None:
     """
     МАКС переехал с бота на родную отложку – и не должен уйти дважды.
@@ -1810,6 +1914,8 @@ def main() -> int:
     test_max_slow_load()
     test_tg_access_advice()
     test_social_defaults()
+    test_max_text_entry()
+    test_publish_off()
     test_max_native_scheduling()
     test_sessions_in_store()
     test_ok_session_detection()

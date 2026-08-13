@@ -544,6 +544,67 @@ def caption_ok(caption: str, when: datetime, today=None) -> bool:
     return re.search(rf"\b{when.day}\b(?!\s*:)", low) is not None
 
 
+def _editor_text(page, sel: str) -> str:
+    """Что сейчас лежит в поле поста. Пусто – поле пустое или не прочиталось."""
+    try:
+        return page.locator(sel).first.evaluate(
+            "el => (el.innerText != null ? el.innerText : (el.value || ''))") or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _probe(line: str) -> str:
+    """Буквы и цифры строки – по ним сверяем, доехала ли она в поле.
+    Значки и пробелы отбрасываем: МАКС рисует эмодзи картинками, и в тексте
+    поля их может не оказаться вовсе."""
+    import re
+    return re.sub(r"\W", "", line, flags=re.U).lower()[:32]
+
+
+def _fill_post_text(page, sel: str, text: str, log: Callable[[str], None]) -> str:
+    """
+    Вписать текст в поле МАКС, НЕ отправив ни одного сообщения.
+    Возвращает '' при успехе, иначе причину отказа словами.
+
+    Здесь случилась худшая поломка Click (13.08.2026): пост из двенадцати
+    строк ушёл в канал двенадцатью отдельными сообщениями, сразу и без
+    всякой отложки. Причина простая и обидная – текст печатался знак за
+    знаком (page.type), а поле поста в МАКС это поле ЧАТА: каждый перевод
+    строки в нём Enter, то есть «отправить».
+
+    Поэтому здесь: сам текст вставляется событием ввода (insert_text) – ни
+    одной клавиши; перевод строки – только Shift+Enter; и сразу после
+    ПЕРВОГО переноса мы смотрим, не опустело ли поле. Опустело – значит
+    Shift+Enter в этой сборке МАКС тоже отправляет, и мы уходим с ошибкой,
+    потеряв одну строку, а не весь пост.
+    """
+    lines = text.split("\n")
+    page.click(sel)
+    page.keyboard.press("Control+A")
+    page.keyboard.press("Backspace")
+    for i, line in enumerate(lines):
+        if i:
+            page.keyboard.press("Shift+Enter")
+            if i == 1 and not _editor_text(page, sel).strip():
+                return ("МАКС отправил строку вместо переноса: после Shift+Enter "
+                        "поле опустело. Остановились на первой строке – проверьте "
+                        "канал и напишите нам, поле ввода у МАКС изменилось")
+        if line:
+            page.keyboard.insert_text(line)
+    page.wait_for_timeout(400)
+
+    # Сверка по краям: в поле должны быть и первая строка, и последняя. Если
+    # строки всё-таки уходили сообщениями, начала текста в поле уже не будет.
+    got = _probe(" ".join(_editor_text(page, sel).split()))
+    filled = [ln for ln in lines if _probe(ln)]
+    for what, line in (("начало", filled[0] if filled else ""),
+                       ("конец", filled[-1] if filled else "")):
+        if line and _probe(line) not in got:
+            return (f"В поле МАКС не видно {what} текста – возможно, часть строк "
+                    "ушла сообщениями. Ничего не планируем, проверьте канал")
+    return ""
+
+
 def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                             image_paths: list[str], when: datetime,
                             log: Callable[[str], None] | None = None,
@@ -584,10 +645,11 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "error": _why_no_editor(page)}
 
             log(f"Ввожу текст ({len(text)} знаков)")
-            page.click(text_sel)
-            page.keyboard.press("Control+A")
-            page.keyboard.press("Backspace")
-            page.type(text_sel, text, delay=8)
+            why = _fill_post_text(page, text_sel, text, log)
+            if why:
+                return {"ok": False,
+                        "shot": _debug_shot(project_id, page, "bad-text"),
+                        "error": why}
             page.wait_for_timeout(1_000)
 
             if image_paths:
@@ -622,6 +684,15 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
             # правую кнопку трижды, между попытками ждём.
             opened = ""
             for _ in range(3):
+                # Сначала закрываем всё, что могло всплыть (подсказка, меню
+                # смайлов): их подложка ловит клик вместо кнопки, и попытка
+                # уходит в тридцатисекундный таймаут – так и было 13.08.2026
+                # («backdrop … intercepts pointer events»).
+                try:
+                    page.keyboard.press("Escape")
+                    page.wait_for_timeout(300)
+                except Exception:  # noqa: BLE001
+                    pass
                 page.locator(send_sel).first.click(button="right")
                 page.wait_for_timeout(1_500)
                 opened = _click_first(page, SEL["schedule_item"], timeout=6_000)

@@ -1517,7 +1517,7 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
     """
     cols = plan["columns"]
     widths = ('<colgroup><col style="width:3px"><col style="width:66px">'
-              '<col style="width:80px"><col>'
+              '<col style="width:120px"><col>'
               '<col style="width:52px">'
               + f'<col style="width:{62 if len(cols) < 5 else 54}px">' * len(cols)
               + '<col style="width:160px"></colgroup>')

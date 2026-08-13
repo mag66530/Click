@@ -287,16 +287,6 @@
       "sameSite": "None"
     },
     {
-      "name": "sso_status",
-      "value": "sso.passport.yandex.ru:synchronized",
-      "domain": ".ya.ru",
-      "path": "/",
-      "expires": 1786619419,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
       "name": "_ym_isad",
       "value": "2",
       "domain": ".yandex.ru",
@@ -503,16 +493,6 @@
       "sameSite": "None"
     },
     {
-      "name": "_ym_visorc",
-      "value": "b",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1786617865,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "maps_session_id",
       "value": "1786616064770383-17622580699850614243-balancer-l7leveler-kubr-yp-vla-84-BAL",
       "domain": ".yandex.ru",
@@ -694,12 +674,12 @@
           "value": "1551596516845"
         },
         {
-          "name": "_ym_synced",
-          "value": "{}"
-        },
-        {
           "name": "_ym59054437_lsid",
           "value": "932809279914"
+        },
+        {
+          "name": "_ym_synced",
+          "value": "{}"
         },
         {
           "name": "_ym46231566_lastHit",

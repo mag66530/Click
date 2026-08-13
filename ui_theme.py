@@ -1391,7 +1391,7 @@ def crosspost_css() -> str:
 # вертикали, а «что сделать» собрано в одну колонку, чтобы взгляд шёл по ней.
 _CROSSPOST_TABLE_CSS = (
     ".cp-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-sm);"
-    "background:var(--bg-1);margin-bottom:10px;box-shadow:none}"
+    "background:var(--bg-1);margin-bottom:24px;box-shadow:none}"
     # Карточки состояния и «требует внимания» – ровные прямоугольники без тени.
     '[data-testid="stVerticalBlockBorderWrapper"]{box-shadow:none!important;'
     "background:var(--bg-1);border-color:var(--border)!important}"
@@ -1421,9 +1421,11 @@ _CROSSPOST_TABLE_CSS = (
     ".cp-kind-cell{white-space:nowrap}"
     ".cp-post{min-width:0}"
     ".cp-post b{display:block;color:var(--text);font-weight:600;font-size:12.5px;line-height:1.4;"
-    "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
+    "overflow:hidden;white-space:normal;word-break:break-word;"
+    "display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}"
     ".cp-post span{display:block;color:var(--text-2);font-size:12px;line-height:1.45;margin-top:2px;"
-    "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
+    "overflow:hidden;white-space:normal;word-break:break-word;"
+    "display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical}"
     ".cp-post b.warn{color:var(--yel)}"
     ".cp-kind{display:inline-flex;align-items:center;height:22px;font-size:11px;"
     "padding:0 10px;border-radius:20px;white-space:nowrap;background:var(--bg-4);"
@@ -1431,7 +1433,7 @@ _CROSSPOST_TABLE_CSS = (
     ".cp-photo{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap}"
     # Ячейка площадки — тот же значок, что и в легенде.
     ".cp-mark{width:26px;height:22px;border-radius:5px;display:inline-flex;"
-    "align-items:center;justify-content:center;font-size:12.5px;font-weight:800;"
+    "align-items:center;justify-content:center;font-size:11px;font-weight:800;"
     "border:none;vertical-align:middle;line-height:1}"
     ".cp-mark.set{background:var(--grn-bg);color:var(--grn)}"
     ".cp-mark.wait{background:var(--acc-bg);color:var(--acc)}"
@@ -1515,10 +1517,10 @@ def crosspost_table(plan: dict, sheet_url: str = "", group_title: str = "") -> s
     """
     cols = plan["columns"]
     widths = ('<colgroup><col style="width:3px"><col style="width:66px">'
-              '<col style="width:140px"><col>'
+              '<col style="width:80px"><col>'
               '<col style="width:52px">'
               + f'<col style="width:{62 if len(cols) < 5 else 54}px">' * len(cols)
-              + '<col style="width:186px"></colgroup>')
+              + '<col style="width:160px"></colgroup>')
     head = (
         '<tr><th class="cp-flag"></th><th>Когда</th><th>Тип</th><th>Пост</th>'
         '<th class="c">Фото</th>'

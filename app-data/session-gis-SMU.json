@@ -35,7 +35,7 @@
       "value": "ru",
       "domain": "account.2gis.com",
       "path": "/",
-      "expires": 1794577994,
+      "expires": 1794578810,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -45,7 +45,7 @@
       "value": "GA1.3.451700490.1786618015",
       "domain": ".account.2gis.com",
       "path": "/",
-      "expires": 1821189194.740858,
+      "expires": 1821190010.998386,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -55,7 +55,7 @@
       "value": "GA1.3.450034608.1786618015",
       "domain": ".account.2gis.com",
       "path": "/",
-      "expires": 1786715594,
+      "expires": 1786716410,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -1111,51 +1111,11 @@
       "sameSite": "Lax"
     },
     {
-      "name": "dg_country_code",
-      "value": "RU",
-      "domain": "account.2gis.com",
-      "path": "/",
-      "expires": 1786629254.193949,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
       "name": "dg_session_id",
       "value": "d4d3aaa4-5bb2-458f-babf-3e6a212c73ab",
       "domain": "account.2gis.com",
       "path": "/",
-      "expires": 1786630994,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "_gat",
-      "value": "1",
-      "domain": ".account.2gis.com",
-      "path": "/",
-      "expires": 1786629246,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "_gat_gtag_UA_159862647_1",
-      "value": "1",
-      "domain": ".account.2gis.com",
-      "path": "/",
-      "expires": 1786629246,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "_ga_DEN30CPV6D",
-      "value": "GS2.3.s1786629186$o2$g1$t1786629188$j58$l0$h0",
-      "domain": ".account.2gis.com",
-      "path": "/",
-      "expires": 1821189188.485491,
+      "expires": 1786631812,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -1166,6 +1126,46 @@
       "domain": "account.2gis.com",
       "path": "/",
       "expires": 1786715590,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "dg_country_code",
+      "value": "RU",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786630070.408707,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_gat",
+      "value": "1",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1786630065,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_gat_gtag_UA_159862647_1",
+      "value": "1",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1786630065,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga_DEN30CPV6D",
+      "value": "GS2.3.s1786629186$o2$g1$t1786630011$j54$l0$h0",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1821190011.052982,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"

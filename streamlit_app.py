@@ -3553,7 +3553,7 @@ def _crosspost_plan_table(project_id: str, config: dict, posts: list[dict],
     """
     План строками: когда · тип · пост · фото · площадки · что сделать.
 
-    Был календарь недель, и на макете он читался хорошо — но на живом реестре
+    Был календарь недель, и на макете он читался хорошо – но на живом реестре
     постов два-три в неделю, и сетка стояла пустой: две трети экрана «постов
     нет», а текст в узких плитках рвался по слогам. Строки плотнее, а колонки
     площадок дают то же, ради чего затевался календарь: статус ВК, ОК, ТГ и
@@ -3579,9 +3579,7 @@ def _crosspost_plan_table(project_id: str, config: dict, posts: list[dict],
         # Выбирать не из чего: план сформирован или ждёт формирования ровно
         # один пост. Галочки в этом случае – лишний столбец и лишний щелчок,
         # под таблицей и так стоит одна кнопка на всё.
-        html(T.crosspost_table(
-            plan, sheet_url=(config.get("planSheetUrl") or "").strip(),
-            group_title=f'Впереди — {crosspost_plan.plural(len(plan["rows"]), "пост", "поста", "постов")}'))
+        html(T.crosspost_table(plan, sheet_url=(config.get("planSheetUrl") or "").strip()))
         return []
 
     # Что отмечено, известно ДО отрисовки: галочки прошлого прогона лежат в
@@ -3590,10 +3588,8 @@ def _crosspost_plan_table(project_id: str, config: dict, posts: list[dict],
     keys = [f'cp-tick-{project_id}-{v["key"]}' for v in plan["rows"]]
     picked = {v["key"] for v, k in zip(plan["rows"], keys)
               if v["key"] in formable and st.session_state.get(k)}
-    table = T.crosspost_table(
-        plan, sheet_url=(config.get("planSheetUrl") or "").strip(),
-        group_title=f'Впереди — {crosspost_plan.plural(len(plan["rows"]), "пост", "поста", "постов")}',
-        picked=picked)
+    table = T.crosspost_table(plan, sheet_url=(config.get("planSheetUrl") or "").strip(),
+                              picked=picked)
 
     with st.container(key=f"cp-plan-{project_id}"):
         ticks, table_col = st.columns([1, 32], gap="small", vertical_alignment="top")
@@ -3906,7 +3902,7 @@ def _crosspost_scheduler_journal() -> None:
 
 def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
                          state: dict) -> dict:
-    """Что осталось сформировать по площадкам — и готовы ли к этому входы."""
+    """Что осталось сформировать по площадкам – и готовы ли к этому входы."""
     import crosspost_form
     import max_browser
     import ok_browser

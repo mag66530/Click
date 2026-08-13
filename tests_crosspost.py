@@ -721,7 +721,7 @@ def test_plan_rows() -> None:
           plan.rows([p1, p2], {}, today, date(2025, 8, 20))["rows"] and
           len(plan.rows([p1, p2], {}, today, date(2025, 8, 20))["rows"]) == 1)
 
-    # Колонки — из самого реестра: у одного бренда Дзен, у другого нет ОК.
+    # Колонки – из самого реестра: у одного бренда Дзен, у другого нет ОК.
     mixed = plan.rows([post("2025-08-19", nets=("vk", "ok")),
                        post("2025-08-20", nets=("tg-client", "zen"))], {}, today)
     check("колонки собраны по реестру",
@@ -744,15 +744,15 @@ def test_plan_rows() -> None:
     only_link, empty_tail = plan._split_text("https://docs.google.com/document/d/1Q97")
     check("ссылка не рвётся", only_link.startswith("https://") and empty_tail == "")
 
-    # «Что сделать» — тихо там, где делать нечего.
+    # «Что сделать» – тихо там, где делать нечего.
     ready = plan.rows([post("2025-08-19")], {cps.post_key(post("2025-08-19")): {
         "targets": {"vk": {"state": cps.SCHEDULED}, "tg-client": {"state": cps.SCHEDULED}}}},
         today)["rows"][0]
-    check("готовому — «всё готово»", ready["todo"]["text"] == "всё готово", ready["todo"]["text"])
+    check("готовому – «всё готово»", ready["todo"]["text"] == "всё готово", ready["todo"]["text"])
     check("и без крика", ready["todo"]["kind"] == "quiet")
 
     empty = plan.rows([post("2025-08-19", text="", row=47)], {}, today)["rows"][0]
-    check("нет текста — жёлтая строка", empty["state"] == "warn")
+    check("нет текста – жёлтая строка", empty["state"] == "warn")
     check("сказано, какая строка листа", "47" in empty["todo"]["text"], empty["todo"]["text"])
     check("и ведёт в таблицу", empty["todo"].get("sheet") is True)
 
@@ -764,7 +764,7 @@ def test_plan_rows() -> None:
           broken["todo"]["text"].startswith("ВК:") and "сессия" in broken["todo"]["text"],
           broken["todo"]["text"])
 
-    # Знаки площадок: у ВК и ОК отложку держит сама сеть, у ТГ и МАКС — Click.
+    # Знаки площадок: у ВК и ОК отложку держит сама сеть, у ТГ и МАКС – Click.
     p = post("2025-08-19", nets=("vk", "tg-client"))
     state = {cps.post_key(p): {"targets": {"vk": {"state": cps.SCHEDULED},
                                            "tg-client": {"state": cps.SCHEDULED}}}}
@@ -776,7 +776,7 @@ def test_plan_rows() -> None:
     done = plan.post_view(post("2025-08-19", link="https://vk.com/wall-1_2"), {})
     check("ссылка в реестре = вышло", done["state"] == "live")
     video = plan.post_view({**post("2025-08-19"), "format": "Видео"}, {})
-    check("видео — вручную, не тревога", video["state"] == "manual")
+    check("видео – вручную, не тревога", video["state"] == "manual")
 
     # Ближайший выход для строки состояния.
     nearest = plan.next_out([p], state, "2025-08-18T10:00:00+05:00")
@@ -789,10 +789,10 @@ def test_plan_rows() -> None:
 
     # Разметка таблицы: колонки, значки и «что сделать» доезжают до HTML.
     import ui_theme as T
-    markup = T.crosspost_table(mixed, sheet_url="https://sheet", group_title="Впереди — 2 поста")
+    markup = T.crosspost_table(mixed, sheet_url="https://sheet")
     check("шапка с площадками", ">Дзен</th>" in markup and 'title="Дзен"' in markup)
-    check("группа подписана", "Впереди — 2 поста" in markup)
-    check("значок с подсказкой", 'title="ВК —' in markup)
+    check("строки-заголовка над планом нет", "cp-group" not in markup)
+    check("значок с подсказкой", 'title="ВК –' in markup)
     check("колонки заданы ширинами", "<colgroup>" in markup)
 
     # Ровность таблицы – не украшательство: слева к ней прижата полоса
@@ -805,13 +805,17 @@ def test_plan_rows() -> None:
     check("у плашки есть подсказка с полным типом", '<span class="cp-kind" title=' in markup)
     check("шапки площадок своим кеглем", 'th class="c n"' in markup and "th.n{" in css)
     check("высота строки задана числом", f"height:{T.CP_ROW_H}px" in css)
-    check("шапка и группа тоже", f"height:{T.CP_HEAD_H + 1}px" in css)
+    check("шапка таблицы тоже", f"height:{T.CP_HEAD_H + 1}px" in css)
+    check("галочка стоит на первой строке, а не по центру клетки",
+          "align-items:flex-start" in css and "padding-top:10px" in css)
+    check("у таблицы нет своего нижнего отступа",
+          "table-layout:fixed;margin:0" in css)
     check("текст поста ровно две строки", "-webkit-line-clamp:2" in css and "height:40px" in css)
     check("«что сделать» не растягивает строку", ".cp-todo{" in css and "height:40px" in css)
     check("полоса галочек знает про свои клетки",
           ".cp-tick-off" in css and ".cp-ticks-head" in css)
 
-    picked_markup = T.crosspost_table(mixed, group_title="x",
+    picked_markup = T.crosspost_table(mixed,
                                       picked={mixed["rows"][0]["key"]})
     check("отмеченная строка подсвечена", "cp-pick" in picked_markup)
     check("неотмеченная – нет",

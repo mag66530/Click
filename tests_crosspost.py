@@ -1202,6 +1202,73 @@ def test_plan_horizon_and_past() -> None:
     check("завтрашний – формируем", not skipped(now + timedelta(days=1)))
 
 
+def test_form_selection() -> None:
+    """
+    Выбор постов для формирования: «поставить один, а не весь план».
+
+    Жалоба заказчицы (13.08.2026): «хочу просто один пост поставить,
+    посмотреть, а не могу – тут либо все, либо ничего». Кнопка «Поставить
+    все» осталась, рядом появился список: отмеченное едет, остальное ждёт.
+    """
+    print("\nФормирование: выбор постов")
+    import inspect
+
+    import crosspost_state as cps
+    import streamlit_app as app
+
+    def post(day, kind, text):
+        return {"brand": "smu", "date": f"2026-08-{day}", "time": "11:00",
+                "when": f"2026-08-{day}T11:00:00+05:00", "post_type": kind,
+                "text": text, "images": [], "targets": []}
+
+    first = post("13", "Поступление", "НОВАЯ ПОСТАВКА сетка рабица на склад")
+    second = post("17", "Спецпредложение", "СПЕЦПРЕДЛОЖЕНИЕ на микрофибру")
+    todo = {"vk": [first, second], "ok": [first], "max": [],
+            "msg_by_net": {"tg-client": [first], "tg-staff": [first, second]},
+            "msg": [first, first, second]}
+
+    check("счётчик кнопки – по площадкам",
+          app._crosspost_form_parts(todo) == ["ВК: 2", "ОК: 1", "ТГ: 3"],
+          str(app._crosspost_form_parts(todo)))
+    check("пустому плану – пустой счётчик",
+          app._crosspost_form_parts({"vk": [], "ok": [], "max": [], "msg": []}) == [])
+
+    choices = app._crosspost_form_choices(todo)
+    check("каждый пост в списке один раз", len(choices) == 2, str(len(choices)))
+    check("порядок – как в плане, по времени",
+          [c["post"]["date"] for c in choices] == ["2026-08-13", "2026-08-17"])
+    check("у поста собраны все его площадки",
+          choices[0]["nets"] == ["ВК", "ОК", "ТГ клиенты", "ТГ сотрудники"],
+          str(choices[0]["nets"]))
+    check("площадка не повторяется", len(set(choices[1]["nets"])) == len(choices[1]["nets"]))
+
+    label = app._crosspost_form_label(choices[0])
+    check("в строке видно дату", "13.08" in label, label)
+    check("в строке видно час", "11:00" in label, label)
+    check("в строке видно тип", "Поступление" in label, label)
+    check("в строке видно текст", "НОВАЯ ПОСТАВКА" in label, label)
+    check("и куда поедет", "ВК" in label and "ТГ клиенты" in label, label)
+    check("длинный текст обрезан", len(app._crosspost_form_label(
+        {"post": post("19", "Тип", "слово " * 60), "nets": ["ВК"]})) < 120)
+    check("пустой текст не ломает строку",
+          "без текста" in app._crosspost_form_label(
+              {"post": post("19", "", ""), "nets": ["ВК"]}))
+
+    # Ключ поста – он же значение в списке выбора: по нему выбранное
+    # сходится с постом даже после перечитывания реестра.
+    keys = {cps.post_key(c["post"]) for c in choices}
+    check("ключи постов разные", len(keys) == 2, str(keys))
+
+    src = inspect.getsource(app._crosspost_form_block)
+    check("кнопка «поставить все» на месте", "cp-form-all-" in src)
+    check("рядом кнопка выбранных", "cp-form-picked-" in src)
+    check("без выбора кнопка выбранных не жмётся", "disabled=not picked" in src)
+    check("в формирование уходят именно выбранные посты", "run(picked, picked_todo)" in src)
+    check("выбранное считается тем же счётчиком",
+          "_crosspost_form_todo(project_id, config, picked, state)" in src)
+    check("устаревшие отметки чистятся", "if k in by_key" in src)
+
+
 def test_vk_confirm_schedule() -> None:
     """
     «Добавить в очередь» иногда требует двух нажатий – и ровно одного.
@@ -1719,6 +1786,7 @@ def main() -> int:
     test_ok_session_detection()
     test_ok_schedule_flow()
     test_plan_horizon_and_past()
+    test_form_selection()
     test_vk_confirm_schedule()
     test_vk_captcha_on_posting()
     test_playwright_worker()

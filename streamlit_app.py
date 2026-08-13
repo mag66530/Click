@@ -3871,6 +3871,8 @@ def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
     # считается одинаково: есть сессия И есть ссылка на сообщество.
     max_ready = bool(max_browser.has_saved_session(project_id)
                      and (config.get("maxWebUrl") or "").strip())
+    msg_by_net = {net: crosspost_form.pending_for(upcoming, state, net)
+                  for net, chat in channels.items() if chat}
     return {
         "channels": channels,
         "vk_ready": vk_ready,
@@ -3879,9 +3881,52 @@ def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
         "vk": crosspost_form.pending_for(upcoming, state, "vk") if vk_ready else [],
         "ok": crosspost_form.pending_for(upcoming, state, "ok") if ok_ready else [],
         "max": crosspost_form.pending_for(upcoming, state, "max") if max_ready else [],
-        "msg": [p for net, chat in channels.items() if chat
-                for p in crosspost_form.pending_for(upcoming, state, net)],
+        # Плоским списком – для счётчика «ТГ: 6» (пост×площадка), по сетям –
+        # чтобы у выбора постов было видно, куда именно поедет этот пост.
+        "msg_by_net": msg_by_net,
+        "msg": [p for posts in msg_by_net.values() for p in posts],
     }
+
+
+def _crosspost_form_parts(todo: dict) -> list[str]:
+    """Счётчик для подписи кнопки: [«ВК: 4», «ОК: 4», «МАКС: 4», «ТГ: 6»]."""
+    parts = []
+    for name, key in (("ВК", "vk"), ("ОК", "ok"), ("МАКС", "max"), ("ТГ", "msg")):
+        if todo[key]:
+            parts.append(f"{name}: {len(todo[key])}")
+    return parts
+
+
+def _crosspost_form_choices(todo: dict) -> list[dict]:
+    """
+    Посты, которым есть что формировать: [{post, nets}] в порядке плана.
+
+    Один пост обычно ждёт сразу нескольких площадок, поэтому собираем его
+    один раз и запоминаем, куда он поедет: в списке выбора это важнее, чем
+    сам факт «не сформирован».
+    """
+    picked: dict[str, dict] = {}
+    per_net = [("vk", todo["vk"]), ("ok", todo["ok"]), ("max", todo["max"])]
+    per_net += list(todo["msg_by_net"].items())
+    for net, posts in per_net:
+        for post in posts:
+            item = picked.setdefault(cps.post_key(post), {"post": post, "nets": []})
+            name = cps.network_ru(net)
+            if name not in item["nets"]:
+                item["nets"].append(name)
+    return sorted(picked.values(),
+                  key=lambda i: ((i["post"].get("when") or ""), i["post"].get("date") or ""))
+
+
+def _crosspost_form_label(item: dict) -> str:
+    """Строка поста в списке выбора: «13.08 11:00 · Поступление · НОВАЯ… → ВК, ОК, ТГ»."""
+    post = item["post"]
+    when = apptime.to_local(post.get("when"))
+    day = when.strftime("%d.%m %H:%M") if when else (post.get("date") or "")
+    kind = (post.get("post_type") or "").strip()
+    text = " ".join(post_text.strip_markup(post.get("text") or "").split())
+    head = (text[:60] + "…") if len(text) > 60 else (text or "без текста")
+    return " · ".join(x for x in (day, kind, head) if x) + f' → {", ".join(item["nets"])}'
 
 
 def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
@@ -3890,6 +3935,10 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
     «Сформировать план»: ВК, ОК и МАКС – родные отложки браузером, Телеграм –
     задания планировщику. Каждая площадка независима; исходы пишутся в
     память сразу, повтор кнопки доформирует только несделанное (Д-6).
+
+    Кнопки две: «Поставить выбранные» – отмеченные в списке посты, «Поставить
+    все» – весь план, как было. Формирование у них одно и то же, разница
+    только в том, какие посты в него уходят.
     """
     import crosspost_form
 
@@ -3906,37 +3955,50 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
                        "«Настройки» → блоки входа в соцсети.")
         return
 
-    parts = []
-    if vk_todo:
-        parts.append(f"ВК: {len(vk_todo)}")
-    if ok_todo:
-        parts.append(f"ОК: {len(ok_todo)}")
-    if max_todo:
-        parts.append(f"МАКС: {len(max_todo)}")
-    if msg_todo:
-        parts.append(f"ТГ: {len(msg_todo)}")
+    parts = _crosspost_form_parts(todo)
     busy = runner.busy_reason(project_id, "publish") if (vk_todo or ok_todo or max_todo) else ""
     if busy:
         st.caption(f"Поставить отложенные посты ({', '.join(parts)}): сейчас нельзя – {busy}.")
         return
 
-    if st.button(f"📌 Поставить отложенные посты ({', '.join(parts)})", type="primary",
-                 key=f"cp-form-all-{project_id}", use_container_width=True):
+    # Выбор постов. Раньше было «либо весь план, либо ничего»: посмотреть, как
+    # ляжет один пост, не давая уехать остальным шести, было нельзя вовсе.
+    # Список появляется только когда есть из чего выбирать: на одном
+    # несформированном посту он был бы лишним щелчком перед той же кнопкой.
+    choices = _crosspost_form_choices(todo)
+    picked: list[dict] = []
+    if len(choices) > 1:
+        by_key = {cps.post_key(c["post"]): c for c in choices}
+        pick_key = f"cp-pick-{project_id}"
+        # Сформированное из списка уходит – а отметка о нём осталась бы в
+        # памяти виджета и указывала в пустоту. Чистим сами, до отрисовки.
+        if st.session_state.get(pick_key):
+            st.session_state[pick_key] = [k for k in st.session_state[pick_key] if k in by_key]
+        chosen = st.multiselect(
+            "Поставить только выбранные посты", list(by_key),
+            format_func=lambda k: _crosspost_form_label(by_key[k]),
+            key=pick_key,
+            placeholder="Выберите пост – или сразу «Поставить все» справа",
+            help="Отмеченные посты уедут этой кнопкой; остальной план "
+                 "останется несформированным и подождёт.")
+        picked = [by_key[k]["post"] for k in chosen]
+
+    def run(posts: list[dict], what: dict) -> None:
         site = ((project_endings(project_id).get("contacts") or {})
                 .get("Россия") or {}).get("site", "")
         box = st.status("Формирую…", expanded=True)
         headless = bool(get_settings(project_id)["headless"])
         ok = bad = 0
         msg_results = crosspost_form.form_messengers(
-            project_id, upcoming, site, channels, progress=lambda m: box.write(m))
+            project_id, posts, site, channels, progress=lambda m: box.write(m))
         ok += len(msg_results)
-        for net_name, todo, former, url_key in (
-                ("ВК", vk_todo, crosspost_form.form_vk_all, "vkGroupUrl"),
-                ("ОК", ok_todo, crosspost_form.form_ok_all, "okGroupUrl"),
-                ("МАКС", max_todo, crosspost_form.form_max_all, "maxWebUrl")):
-            if not todo:
+        for net_name, net_todo, former, url_key in (
+                ("ВК", what["vk"], crosspost_form.form_vk_all, "vkGroupUrl"),
+                ("ОК", what["ok"], crosspost_form.form_ok_all, "okGroupUrl"),
+                ("МАКС", what["max"], crosspost_form.form_max_all, "maxWebUrl")):
+            if not net_todo:
                 continue
-            results = former(project_id, config[url_key].strip(), upcoming, site,
+            results = former(project_id, config[url_key].strip(), posts, site,
                              progress=lambda m: box.write(m), headless=headless)
             ok += sum(1 for r in results if r["ok"])
             for r in results:
@@ -3948,6 +4010,31 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
                    state="error" if bad else "complete")
         time.sleep(1.2)
         st.rerun()
+
+    # Выбирать не из чего – кнопка одна и во всю ширину, как была.
+    if len(choices) <= 1:
+        if st.button(f"📌 Поставить отложенные посты ({', '.join(parts)})", type="primary",
+                     key=f"cp-form-all-{project_id}", use_container_width=True):
+            run(upcoming, todo)
+        return
+
+    # Что уедет по выбранным – считаем тем же кодом, что и по всему плану:
+    # у поста может быть готова не всякая площадка, и «выбрал один пост –
+    # поехало три отложки» человек должен видеть ДО нажатия.
+    picked_todo = _crosspost_form_todo(project_id, config, picked, state) if picked else None
+    picked_parts = _crosspost_form_parts(picked_todo) if picked_todo else []
+    left, right = st.columns(2)
+    with left:
+        label = ("📌 Поставить выбранные"
+                 + (f" ({', '.join(picked_parts)})" if picked_parts else ""))
+        if st.button(label, key=f"cp-form-picked-{project_id}", use_container_width=True,
+                     disabled=not picked,
+                     help="Отметьте посты в списке выше" if not picked else None):
+            run(picked, picked_todo)
+    with right:
+        if st.button(f"📌 Поставить все ({', '.join(parts)})", type="primary",
+                     key=f"cp-form-all-{project_id}", use_container_width=True):
+            run(upcoming, todo)
 
 
 def _crosspost_yb_block(project_id: str, config: dict) -> None:

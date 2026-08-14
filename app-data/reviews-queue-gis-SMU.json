@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "reviewId": "gis-55187078931bb371",
+      "projectId": "SMU",
+      "platform": "gis",
+      "city": "Ош",
+      "companyUrl": "https://account.2gis.com/orgs/70000001079192862/company",
+      "reviewsUrl": "https://account.2gis.com/orgs/70000001079192862/reviews?withoutAnswer=true",
+      "author": "Вера Орловская",
+      "rating": 5,
+      "text": "Наша фирма заказывала в СМУ профильные трубы. Качество отличное, сотрудничать с компанией в удовольствие. Заказ выполнен точно в срок. Благодарим!",
+      "createdAt": "2024-07-05T00:00:00+00:00",
+      "status": "no-draft",
+      "draft": "",
+      "finalText": "",
+      "note": "Google не принял ключ Gemini. Проверьте секрет gemini_api_key и что для проекта включён Generative Language API.",
+      "collectedAt": "2026-08-14T11:05:41.355235+00:00",
+      "runId": "act-1786705522762"
+    }
+  ]
+}

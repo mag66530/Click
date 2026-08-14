@@ -1194,121 +1194,6 @@ def _select_closest(page, selector: str, want: str) -> str:
     return target
 
 
-# ── Карточка сайта, которую ОК подставляет сам ──────────────────────
-#
-# Стоит вписать в тему ссылку – ОК прикрепляет к посту карточку сайта:
-# заголовок страницы, описание, картинка. Заказчица (14.08.2026): «надо
-# нажимать на крестик, когда при вводе ссылки предлагает сайт» – в посте
-# должна остаться ЕЁ картинка, а не превью сайта, иначе в ленте выходит
-# два изображения и чужая обложка.
-#
-# Крестик она же и показала: это svg с вот таким путём (значок «×» из
-# набора ОК). По нему и ищем – класс у кнопки свой у каждой сборки, а
-# рисунок значка живёт годами.
-CLOSE_ICON_D = "M9.414 8l3.294 3.294"
-
-_DROP_PREVIEW_JS = r"""
-(payload) => {
-  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
-  document.querySelectorAll('[data-click-x]').forEach(n => n.removeAttribute('data-click-x'));
-  const hosts = (payload.hosts || []).map(h => h.toLowerCase()).filter(Boolean);
-  const icons = Array.from(document.querySelectorAll('svg path'))
-    .filter(p => (p.getAttribute('d') || '').startsWith(payload.icon));
-
-  for (const path of icons) {
-    const btn = path.closest('button, a, [role="button"], [title], [aria-label]')
-             || path.closest('svg');
-    if (!btn) continue;
-    const r = btn.getBoundingClientRect();
-    if (r.width < 6 || r.height < 6) continue;
-
-    // Крестик крестику рознь, и ошибиться тут дорого: крестик формы
-    // закроет всю тему вместе с набранным текстом. Поэтому карточка должна
-    // отвечать двум условиям сразу:
-    //   • в ней есть ССЫЛКА на наш сайт (не просто его имя в тексте –
-    //     имя есть и в самом посте, а пост лежит в форме);
-    //   • в ней НЕТ поля ввода: карточка стоит рядом с полем, а не вокруг
-    //     него. Это и отсекает крестик всей формы.
-    let block = btn, card = null;
-    for (let i = 0; i < 8 && block; i++, block = block.parentElement) {
-      if (block.querySelector('[contenteditable], textarea')) break;
-      const linked = hosts.some(h => !!block.querySelector(`a[href*="${h}"]`));
-      if (linked && norm(block.innerText || '').length > 30) { card = block; break; }
-    }
-    if (!card) continue;
-    btn.setAttribute('data-click-x', '1');
-    return { card: norm(card.innerText).slice(0, 80) };
-  }
-  return null;
-}
-"""
-
-
-def _post_hosts(text: str) -> list[str]:
-    """Адреса сайтов, встреченные в тексте поста – по ним узнаём карточку."""
-    import re
-    found = re.findall(r"(?:https?://)?(?:www\.)?([a-z0-9-]+\.[a-z]{2,})(?:/|\b)",
-                       (text or "").lower())
-    out: list[str] = []
-    for host in found:
-        if host not in out:
-            out.append(host)
-    return out[:5]
-
-
-def _field_text(page, text_sel: str) -> str | None:
-    """Текст поля. None – поля на странице больше нет (форма закрылась)."""
-    try:
-        return page.eval_on_selector(text_sel, "el => el.textContent || ''") or ""
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def _drop_link_preview(page, text_sel: str, text: str,
-                       log: Callable[[str], None] | None = None) -> str:
-    """
-    Убрать карточку сайта, которую ОК подставил на ссылку из текста.
-
-    Возвращает '' – всё хорошо (карточку убрали или её не было), иначе
-    причину отказа: значит, крестик задел не то, и планировать в такой
-    форме нельзя.
-
-    Не нашли карточку – молчим: ОК подставляет её не всегда. Нажали –
-    убеждаемся, что форма на месте и текст цел. Крестик, закрывший всю
-    тему вместе с набранным постом, был бы куда хуже лишней картинки.
-    """
-    log = log or (lambda m: None)
-    hosts = _post_hosts(text)
-    if not hosts:
-        return ""
-    for _ in range(3):          # карточек может быть несколько
-        try:
-            found = page.evaluate(_DROP_PREVIEW_JS,
-                                  {"icon": CLOSE_ICON_D, "hosts": hosts})
-        except Exception:  # noqa: BLE001
-            return ""
-        if not found:
-            return ""
-        before = _field_text(page, text_sel)
-        if before is None:
-            return ""
-        try:
-            page.locator('[data-click-x="1"]').first.click(timeout=4_000)
-        except Exception:  # noqa: BLE001
-            return ""
-        page.wait_for_timeout(700)
-        after = _field_text(page, text_sel)
-        if after is None:
-            return ("Крестик карточки сайта закрыл всю форму темы. Пост НЕ "
-                    "запланирован – откройте ОК и посмотрите, что изменилось "
-                    "в форме")
-        if _letters(after) != _letters(before):
-            return ("Убирая карточку сайта, задели текст поста: он изменился. "
-                    "Ничего не планируем – проверьте форму в ОК")
-        log("  карточку сайта убрал (в посте остаётся своя картинка)")
-    return ""
-
-
 def _letters(s: str) -> str:
     """
     Только буквы и цифры, в нижнем регистре.
@@ -1321,67 +1206,151 @@ def _letters(s: str) -> str:
     return re.sub(r"\W", "", s or "", flags=re.U).lower()
 
 
-# Что в поле НА САМОМ ДЕЛЕ нарисовано жирным. Смотрим и на теги (b,
-# strong), и на вычисленный стиль: редакторы ставят жирный то так, то так.
-_BOLD_TEXTS_JS = r"""
-(payload) => {
-  const el = document.querySelector(payload.sel);
-  if (!el) return [];
-  const out = [];
-  for (const node of el.querySelectorAll('*')) {
-    if (node.children.length) continue;             // только листья
-    const text = (node.textContent || '').trim();
-    if (!text) continue;
-    const tag = node.tagName.toLowerCase();
-    let weight = '';
-    try { weight = window.getComputedStyle(node).fontWeight || ''; } catch (e) {}
-    const heavy = tag === 'b' || tag === 'strong'
-               || weight === 'bold' || parseInt(weight, 10) >= 600;
-    if (heavy) out.push(text);
+def _diag_dir(project_id: str) -> Path:
+    """Куда складывать разметку для разбора – рядом с логом формирования."""
+    d = paths.data_root() / project_id / "crosspost"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _save_editor_markup(page, text_sel: str, project_id: str,
+                        log: Callable[[str], None]) -> None:
+    """
+    Сохранить разметку поля темы и панели над ним.
+
+    Затем, что жирный в ОК Click так и не выставил, а вслепую его чинить
+    больше нельзя: у площадки своя вёрстка, и угадывать её по классам –
+    это те самые круги, на которые ушёл день. По этому файлу видно всё:
+    есть ли у поля панель форматирования, какая у неё кнопка «Ж» и что
+    редактор сделал с нашим текстом.
+    """
+    try:
+        html = page.eval_on_selector(
+            text_sel,
+            """(el) => {
+                 let box = el;
+                 for (let i = 0; i < 3 && box.parentElement; i++) box = box.parentElement;
+                 return (box.outerHTML || '').slice(0, 12000);
+               }""") or ""
+        if html:
+            (_diag_dir(project_id) / "ok-editor.html").write_text(html, encoding="utf-8")
+            log("  разметку поля ОК сохранил рядом с логом (ok-editor.html) – "
+                "пришлите её, и жирный будет сделан точно")
+    except Exception:  # noqa: BLE001 – диагностика не должна ронять прогон
+        pass
+
+
+def _lines(s: str) -> list[str]:
+    """
+    Непустые строки текста, по буквам каждой – «форма» поста.
+
+    По ней видно то, чего не видно по буквам целиком: разъехавшиеся строки.
+    Редактор ОК на вставленной разметке <b> разносит жирные куски по своим
+    абзацам, и пост из «Диаметр: 0,25 мм;» превращается в «Диаметр» и
+    «: 0,25 мм;Длина волокна:» – буквы те же, читать невозможно.
+    """
+    return [_letters(ln) for ln in (s or "").split("\n") if _letters(ln)]
+
+
+# Разметка НАКЛАДЫВАЕТСЯ НА ГОТОВЫЙ ТЕКСТ, а не вводится вместе с ним.
+#
+# Так это делает человек: пишет пост, потом выделяет мышью кусок и жмёт «Ж»
+# или «вставить ссылку». И только так текст не может пострадать: он уже в
+# поле, целый, а разметка ложится поверх. Оба прежних способа – набор с
+# Ctrl+B и вставка готового <b> – текст ПЕРЕПИСЫВАЛИ, и один из них развалил
+# пост по строкам (14.08.2026), а второй тихо не сработал вовсе, но Click
+# отрапортовал «жирный сохранён»: он сверял только буквы, а форматирование
+# не проверял ни разу.
+_MARK_JS = """
+(args) => {
+  const el = document.querySelector(args.sel);
+  if (!el) return {error: 'нет поля'};
+  const build = () => {
+    const nodes = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let full = '';
+    while (w.nextNode()) { nodes.push([w.currentNode, full.length]); full += w.currentNode.nodeValue; }
+    return {nodes, full};
+  };
+  const rangeFor = (map, from, to) => {
+    const at = (pos, end) => {
+      for (const [node, start] of map.nodes) {
+        const len = node.nodeValue.length;
+        if (pos >= start && pos <= start + len) {
+          if (pos === start + len && !end) continue;
+          return [node, pos - start];
+        }
+      }
+      return null;
+    };
+    const a = at(from, false), b = at(to, true);
+    if (!a || !b) return null;
+    const r = document.createRange();
+    r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]);
+    return r;
+  };
+  let done = 0, missed = 0;
+  for (const span of args.spans) {
+    const map = build();
+    const idx = map.full.indexOf(span.text);
+    if (idx < 0) { missed++; continue; }
+    const r = rangeFor(map, idx, idx + span.text.length);
+    if (!r) { missed++; continue; }
+    const sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(r);
+    el.focus();
+    try {
+      if (span.kind === 'link') document.execCommand('createLink', false, span.url);
+      else document.execCommand('bold', false, null);
+      done++;
+    } catch (e) { missed++; }
   }
-  return out;
+  const sel = window.getSelection();
+  if (sel) sel.removeAllRanges();
+  el.dispatchEvent(new Event('input', {bubbles: true}));
+  return {done, missed,
+          bold: el.querySelectorAll('b, strong').length,
+          links: el.querySelectorAll('a[href]').length,
+          text: el.innerText || el.textContent || ''};
 }
 """
 
 
-def _bold_applied(page, text_sel: str, want: list[str]) -> bool:
-    """Правда ли жирные куски нарисованы жирными. Нечего проверять – True."""
-    if not want:
-        return True
+def _apply_marks(page, text_sel: str, spans: list[dict]) -> dict:
+    """Наложить жирный и ссылки на уже введённый текст. Возвращает отчёт."""
     try:
-        heavy = page.evaluate(_BOLD_TEXTS_JS, {"sel": text_sel}) or []
-    except Exception:  # noqa: BLE001
-        return False
-    seen = _letters(" ".join(heavy))
-    return all(_letters(part)[:24] in seen for part in want)
+        return page.evaluate(_MARK_JS, {"sel": text_sel, "spans": spans}) or {}
+    except Exception as e:  # noqa: BLE001 – разметка не должна ронять прогон
+        return {"error": str(e)}
 
 
 def _type_post_text(page, text_sel: str, text: str,
-                    log: Callable[[str], None] | None = None) -> str:
+                    log: Callable[[str], None] | None = None,
+                    project_id: str = "") -> str:
     """
-    Ввести текст темы, сохранив жирный из реестра.
+    Ввести текст темы и наложить на него разметку реестра: жирный и ссылки.
 
-    Заказчица (14.08.2026): «в ОК контакты норм, но жирного шрифта нет, а
-    в реестре он есть». Редактор темы ОК – обычное поле с форматированием,
-    жирный в нём включается Ctrl+B, как в любом текстовом редакторе. Поэтому
-    текст набирается кусками: перед жирным куском жмём Ctrl+B, после –
-    отпускаем.
+    Порядок ровно тот, каким это делает человек, и он же самый безопасный:
+      1. набрать ОБЫЧНЫЙ текст – он ложится целым, без переносов не по
+         месту и без чужих абзацев;
+      2. выделить нужные куски прямо в поле и включить им жирный, а словам
+         вроде «на нашем сайте» – ссылку;
+      3. ПРОВЕРИТЬ, что получилось: жирные узлы и ссылки в поле правда
+         появились, а текст при этом не изменился ни на букву.
 
-    Возвращает 'bold', если удалось с жирным, и 'plain', если жирного в
-    тексте не было или он не дался. Проверка простая и жёсткая: буквы в поле
-    должны совпасть с буквами текста. Не совпали – чистим поле и набираем
-    обычным способом, как раньше. Хуже прежнего не станет никогда.
+    Третий шаг здесь – главный. Раньше Click сверял только текст, а про
+    форматирование верил на слово: 14.08.2026 в логе стояло «жирный из
+    реестра сохранён», а в опубликованной теме жирного не было вовсе.
+    Теперь в лог идёт то, что реально в поле: сколько жирных кусков и
+    ссылок, и если ноль – так и написано.
+
+    Возвращает 'bold' (разметка легла), 'plain' (текст без разметки).
     """
-    import re
-
     import post_text
 
     log = log or (lambda m: None)
     chunks = post_text.plain_chunks(text)
     plain = "".join(t for t, _ in chunks)
-
-    def letters(s: str) -> str:
-        return re.sub(r"\W", "", s or "", flags=re.U).lower()
+    letters = _letters          # общая сверка по буквам – одна на модуль
 
     def in_field() -> str:
         try:
@@ -1389,36 +1358,46 @@ def _type_post_text(page, text_sel: str, text: str,
         except Exception:  # noqa: BLE001
             return ""
 
-    if any(bold for _, bold in chunks):
-        try:
-            for part, bold in chunks:
-                if bold:
-                    page.keyboard.press("Control+B")
-                page.keyboard.type(part, delay=6)
-                if bold:
-                    page.keyboard.press("Control+B")
-            page.wait_for_timeout(600)
-            # Букв совпало – это ещё не «жирный получился»: буквы совпадут и
-            # у плоского текста. Заказчица так и написала 14.08.2026:
-            # «форматирование в ОК не сделал», а в логе стояло «жирный из
-            # реестра сохранён». Поэтому спрашиваем разметку: лежат ли
-            # жирные куски внутри жирных узлов.
-            if letters(in_field()) == letters(plain):
-                want = [t for t, b in chunks if b and letters(t)]
-                if _bold_applied(page, text_sel, want):
-                    log("  жирный из реестра сохранён")
-                    return "bold"
-                log("  Ctrl+B не сработал – ОК оставил текст обычным, "
-                    "набираю заново без жирного")
-            else:
-                log("  жирный не дался – набираю обычным текстом")
-        except Exception as e:  # noqa: BLE001 – ввод не должен ронять прогон
-            log(f"  жирный не дался ({e}) – набираю обычным текстом")
+    # 1. Обычный текст. Всегда, при любом исходе разметки.
+    page.type(text_sel, plain, delay=8)
+    page.wait_for_timeout(500)
+
+    spans = [{"kind": "bold", "text": t.strip()} for t, bold in chunks
+             if bold and len(t.strip()) > 1]
+    spans += [{"kind": "link", "text": t, "url": u}
+              for t, u in post_text.anchor_spans(text)]
+    if not spans:
+        return "plain"
+
+    # 2. Разметка поверх готового текста.
+    res = _apply_marks(page, text_sel, spans)
+    if res.get("error"):
+        log(f"  разметку наложить не вышло ({res['error']}) – остаётся обычный текст")
+        if project_id:
+            _save_editor_markup(page, text_sel, project_id, log)
+        return "plain"
+
+    # 3. Проверка по факту: и текст цел, и разметка на месте.
+    got = in_field()
+    if letters(got) != letters(plain) or _lines(got) != _lines(plain):
+        log("  разметка изменила текст – убираю её, оставляю обычный текст")
         _clear_editor(page, text_sel)
         page.click(text_sel)
+        page.type(text_sel, plain, delay=8)
+        if project_id:
+            _save_editor_markup(page, text_sel, project_id, log)
+        return "plain"
 
-    page.type(text_sel, plain, delay=8)
-    return "plain"
+    want_bold = sum(1 for s in spans if s["kind"] == "bold")
+    want_links = sum(1 for s in spans if s["kind"] == "link")
+    log(f"  разметка: жирных кусков {res.get('bold', 0)} из {want_bold}, "
+        f"ссылок {res.get('links', 0)} из {want_links}")
+    if not res.get("bold") and want_bold:
+        log("  жирный редактор ОК не принял – текст ушёл обычным")
+        if project_id:
+            _save_editor_markup(page, text_sel, project_id, log)
+        return "plain"
+    return "bold"
 
 
 def _clear_editor(page, text_sel: str) -> int:
@@ -1861,8 +1840,11 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
 
             log(f"Ввожу текст ({len(text)} знаков)")
             page.click(text_sel)
-            _type_post_text(page, text_sel, text, log)
+            _type_post_text(page, text_sel, text, log, project_id=project_id)
             page.wait_for_timeout(1_200)
+            # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
+            yb.drop_link_card(page, yb.text_domains(text), log,
+                              diag_dir=_diag_dir(project_id))
             typed = (page.eval_on_selector(text_sel, "el => el.textContent || ''") or "")
             if text.strip() and not typed.strip():
                 return {"ok": False, "error": "Текст не попал в поле поста ОК",
@@ -1894,14 +1876,6 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                     shot = _debug_shot(project_id, page, "no-photo")
                     return {"ok": False, "error": trouble, "shot": shot}
 
-            # Ссылка в тексте – и ОК сам прикрепляет карточку сайта. В посте
-            # должна остаться СВОЯ картинка, а не чужая обложка: убираем
-            # карточку крестиком, как это делает человек.
-            trouble = _drop_link_preview(page, text_sel, text, log)
-            if trouble:
-                return {"ok": False, "error": trouble,
-                        "shot": _debug_shot(project_id, page, "preview-x")}
-
             # Отложка: галочка «Время публикации», под ней поле даты и два
             # выпадающих списка – часы и минуты. Кнопка внизу при этом
             # меняется с «Поделиться» на «Сохранить».
@@ -1910,6 +1884,12 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             # принципе – округляем ВВЕРХ, чтобы пост не вышел раньше, чем
             # просили. Для реальных постов (11:00, 09:30) это ничего не меняет.
             when = _round_to_five(when)
+            # Ещё один заход на карточку сайта – последний перед сохранением.
+            # Она приходит с сервера с задержкой и запросто появляется уже
+            # после ввода текста, пока Click прикрепляет фото: 14.08.2026 так
+            # и вышло – отложка в ОК встала вместе с чужой карточкой.
+            yb.drop_link_card(page, yb.text_domains(text), log, tries=1,
+                              diag_dir=_diag_dir(project_id))
             log(f"Ставлю время публикации {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
 
             if not _turn_on_schedule(page, log):

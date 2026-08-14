@@ -1778,6 +1778,75 @@ def test_social_defaults() -> None:
     check("пароль наружу не уезжает", "password" not in app._KEPT)
 
 
+def test_link_card_and_report() -> None:
+    """
+    Карточка сайта и отчёт – две правки 14.08 по замечаниям заказчицы.
+
+    Карточка. Увидев адрес в тексте, ВК цепляет к посту сниппет сайта и
+    оттесняет нашу картинку; человек жмёт крестик на карточке. Click теперь
+    тоже – но только на ЕЁ крестик: тем же значком нарисован крестик самого
+    окна создания поста, и промах стоил бы всего поста.
+
+    Отчёт. Показывал все посты реестра со ссылками – «вышло 439»: пять лет
+    чужой работы, среди которой не найти свои две отложки.
+    """
+    print("\nКарточка сайта и отчёт")
+    import inspect
+
+    import streamlit_app as app
+    import yb_playwright as yb
+
+    doms = yb.text_domains("Заказ на нашем сайте stalmetural.ru, почта info@stalmetural.ru, "
+                           "группа https://ok.ru/group/1")
+    check("домены из текста собраны", doms == ["stalmetural.ru", "ok.ru"], str(doms))
+    check("повторы не дублируются", len(doms) == len(set(doms)))
+    check("без адресов – пусто", yb.text_domains("просто текст") == [])
+
+    src = inspect.getsource(yb.drop_link_card)
+    check("крестик ищется по значку со страницы", "M9.414 8l3.294" in yb._CLOSE_ICON_D)
+    check("окно создания поста защищено полем ввода",
+          "[contenteditable], textarea" in src)
+    check("без домена не жмём ничего", "if not doms" in src)
+    check("карточка есть, а крестика нет – говорим словами",
+          "Закройте её вручную" in src)
+    # Ищем крестик ПО МЕСТУ, а не по классам: три захода по разметке (контур
+    # значка, подпись кнопки) на живом ОК не сработали – вёрстку не угадать.
+    check("крестик ищется по прямоугольнику карточки", "inZone" in src and "pad = 44" in src)
+    check("наводим мышь – крестик бывает только по наведению", "page.mouse.move" in src)
+    check("клик тремя способами", "клик силой" in src and "клик из страницы" in src)
+    check("успех – по исчезновению карточки, а не по клику", "if not card_box():" in src)
+    check("карточку ждём несколько подходов", "for attempt in range(max(1, tries))" in src)
+    check("не вышло – сохраняем разметку для разбора", "link-card.html" in src)
+
+    # Разметка ОК: жирный и ссылки НАКЛАДЫВАЮТСЯ на готовый текст.
+    import ok_browser
+    ok_src = inspect.getsource(ok_browser._type_post_text)
+    check("сначала обычный текст, потом разметка",
+          ok_src.index("page.type(text_sel, plain") < ok_src.index("_apply_marks"))
+    check("жирный и ссылки идут вместе",
+          '"kind": "bold"' in ok_src and '"kind": "link"' in ok_src)
+    mark_src = inspect.getsource(ok_browser._apply_marks) + ok_browser._MARK_JS
+    check("выделяем кусок и включаем формат, как человек",
+          "createRange" in mark_src and "execCommand" in mark_src)
+    check("ссылка вшивается в слова", "createLink" in mark_src)
+    check("считаем, что РЕАЛЬНО легло в поле",
+          "querySelectorAll('b, strong')" in mark_src and "a[href]" in mark_src)
+    # Главное правило после 14.08.2026: жирный не стоит поломанного текста.
+    check("сверяются и буквы, и разбивка по строкам",
+          "_lines(got) != _lines(plain)" in ok_src)
+    check("разметка, изменившая текст, откатывается",
+          "разметка изменила текст" in ok_src)
+    ok_lines = ok_browser._lines("Диаметр\n: 0,25 мм;Длина волокна:")
+    check("строки считаются по буквам", ok_lines == ["диаметр", "025ммдлинаволокна"], str(ok_lines))
+    check("поломанная разбивка не равна целой",
+          ok_browser._lines("Диаметр: 0,25 мм;") != ok_lines)
+
+    # Отчёт: только работа Click.
+    rep = inspect.getsource(app._crosspost_report_block)
+    check("нет записи Click – нет строки в отчёте", "if not saved:" in rep)
+    check("заголовок отчёта про работу Click", "Отчёт: что сделал Click" in rep)
+
+
 def test_ok_bold_and_probe() -> None:
     """
     Две правки 14.08: жирный в ОК и починенная сверка текста в МАКС.
@@ -1807,11 +1876,16 @@ def test_ok_bold_and_probe() -> None:
     check("маркеров ** в кусках нет", "**" not in "".join(t for t, _ in chunks))
     check("текста без жирного это не касается",
           [b for _, b in pt.plain_chunks("просто текст")] == [False])
+    spans = pt.anchor_spans(pt.autolink("Заказ на нашем сайте:", "a.ru"))
+    check("ссылка в словах видна отдельно", spans == [("нашем сайте", "https://a.ru")], str(spans))
+    check("голый адрес ссылкой не считаем",
+          pt.anchor_spans("[a.ru](https://a.ru)") == [])
 
     src = inspect.getsource(ok_browser._type_post_text)
-    check("жирный включается Ctrl+B", 'press("Control+B")' in src)
-    check("есть откат на обычный текст", "_clear_editor" in src and "plain" in src)
-    check("сверка по буквам поля", "letters(in_field())" in src)
+    check("текст цел при любом исходе разметки",
+          "разметка изменила текст" in src and "_clear_editor" in src)
+    check("про жирный больше не врём",
+          "жирный редактор ОК не принял" in src and "жирных кусков" in src)
     check("ОК получает разметку, а не плоский текст",
           'network == "ok"' in inspect.getsource(
               __import__("crosspost_form")._form_browser_all))
@@ -2003,112 +2077,6 @@ def test_max_feed_redraw_is_not_a_send() -> None:
                   "1,2-5 мм" in page.eval_on_selector("#editor", "el => el.innerText"))
         finally:
             browser.close()
-
-
-def test_ok_link_preview_and_bold() -> None:
-    """
-    ОК: карточку сайта убрать крестиком, а про жирный не врать.
-
-    Заказчица (14.08.2026), два замечания к одному посту:
-      • «надо нажимать на крестик, когда при вводе ссылки предлагает сайт» –
-        ОК цепляет к теме карточку сайта, и в ленте выходит две картинки:
-        своя и чужая обложка;
-      • «форматирование в ОК не сделал (но на отложку поставил)» – а в логе
-        стояло «жирный из реестра сохранён». Проверка сверяла БУКВЫ, а буквы
-        совпадают и у плоского текста.
-    """
-    import ok_browser as ok
-    print("\nОК: карточка сайта и честный жирный")
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        check("playwright доступен", False, "не установлен")
-        return
-
-    check("адрес сайта достаём из текста поста",
-          ok._post_hosts("Заказ на нашем сайте:\n🌐 stalmetural.ru\n"  # noqa: SLF001
-                         "✉ info@stalmetural.ru") == ["stalmetural.ru"],
-          str(ok._post_hosts("stalmetural.ru")))  # noqa: SLF001
-
-    # Форма темы ОК: поле, картинка поста, карточка сайта с крестиком
-    # (значок – тот самый, что прислала заказчица) и крестик закрытия всей
-    # формы, который трогать НЕЛЬЗЯ.
-    X = ('<svg width="16" height="16"><path d="M9.414 8l3.294 3.294a1 1 0 1 1-1.415 '
-         '1.413L8 9.414l-3.293 3.293a1 1 0 0 1-1.415-1.413L6.586 8 3.274 4.689a.974.974 '
-         '0 0 1 0-1.378h.001a1.025 1.025 0 0 1 1.45 0L8 6.586l3.293-3.293a1 1 0 0 1 '
-         '1.414 1.414L9.414 8z" fill-rule="evenodd" class="svg-fill"></path></svg>')
-    form = f"""
-    <html><head><meta charset="utf-8"></head><body style="margin:0">
-      <div id="form">
-        <button id="close-form" onclick="document.getElementById('form').remove()">{X}</button>
-        <div id="editor" contenteditable>ТЕКСТ ПОСТА про микрофибру
-          Оформить заказ можно на нашем сайте: stalmetural.ru</div>
-        <div id="photo">своя картинка поста</div>
-        <div id="card">
-          <a href="https://stalmetural.ru/">Металлопрокат купить в Москве – металл
-             оптом от Стальметурал | доставка металлопроката по России</a>
-          <div>Купить металлопрокат в Москве. Продажа металла оптом и в розницу.</div>
-          <button id="close-card" onclick="document.getElementById('card').remove()">{X}</button>
-        </div>
-      </div>
-    </body></html>
-    """
-
-    with sync_playwright() as pw:
-        try:
-            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
-                                         args=["--no-sandbox"])
-        except Exception:  # noqa: BLE001
-            browser = pw.chromium.launch()
-        try:
-            page = browser.new_context(viewport={"width": 900, "height": 700}).new_page()
-            page.set_content(form)
-            said: list[str] = []
-            text = ("ТЕКСТ ПОСТА про микрофибру\nОформить заказ можно на нашем сайте: "
-                    "stalmetural.ru")
-            trouble = ok._drop_link_preview(page, "#editor", text, said.append)  # noqa: SLF001
-
-            check("крестик карточки нажат без беды", trouble == "", trouble)
-            check("карточка сайта убрана", page.locator("#card").count() == 0)
-            check("форма при этом на месте – чужой крестик не нажали",
-                  page.locator("#form").count() == 1)
-            check("текст поста цел",
-                  "микрофибру" in page.eval_on_selector("#editor", "el => el.innerText"))
-            check("и об этом сказано в логе",
-                  any("карточку сайта" in m for m in said), str(said))
-
-            # Карточки нет – ничего не жмём вовсе.
-            page.set_content(form.replace('<div id="card">', '<div id="card" hidden>'))
-            said.clear()
-            ok._drop_link_preview(page, "#editor", "текст без ссылок", said.append)  # noqa: SLF001  # noqa: E501
-            check("без ссылки в тексте крестики не трогаем", said == [], str(said))
-            check("и форма цела", page.locator("#form").count() == 1)
-
-            # ── Жирный: не на слово, а по разметке ──────────────────
-            page.set_content("""<html><body><div id="e" contenteditable>
-                <b>СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ</b><span> обычный текст</span></div></body></html>""")
-            check("жирный кусок опознан",
-                  ok._bold_applied(page, "#e", ["СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ"]))  # noqa: SLF001
-            check("не жирный за жирный не выдаём",
-                  not ok._bold_applied(page, "#e", ["обычный текст"]))  # noqa: SLF001
-
-            page.set_content("""<html><body><div id="e" contenteditable>
-                <span>СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ обычный текст</span></div></body></html>""")
-            check("плоский текст жирным не считается (вот это и врало)",
-                  not ok._bold_applied(page, "#e", ["СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ"]))  # noqa: SLF001
-
-            page.set_content("""<html><body><div id="e" contenteditable>
-                <span style="font-weight:700">Диаметр</span>: 0,25 мм</div></body></html>""")
-            check("жирный стилем тоже считается",
-                  ok._bold_applied(page, "#e", ["Диаметр"]))  # noqa: SLF001
-        finally:
-            browser.close()
-
-    import inspect
-    src = inspect.getsource(ok._type_post_text)  # noqa: SLF001
-    check("успех жирного доказывается разметкой", "_bold_applied(" in src)
-    whole = inspect.getsource(ok.schedule_postponed_post)
-    check("карточку сайта убираем в самом прогоне", "_drop_link_preview(" in whole)
 
 
 def test_report_only_click_work() -> None:
@@ -2576,6 +2544,7 @@ def main() -> int:
     test_max_slow_load()
     test_tg_access_advice()
     test_social_defaults()
+    test_link_card_and_report()
     test_ok_bold_and_probe()
     test_forget_target()
     test_build_bumped()
@@ -2585,7 +2554,6 @@ def main() -> int:
     test_max_photo_proof()
     test_form_log_is_fresh()
     test_max_feed_redraw_is_not_a_send()
-    test_ok_link_preview_and_bold()
     test_report_only_click_work()
     test_publish_off()
     test_max_native_scheduling()

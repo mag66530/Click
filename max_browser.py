@@ -728,13 +728,43 @@ def _looks_emptied(page, sel: str) -> bool:
 # МАКС его не принял.
 _THUMBS_JS = r"""
 () => {
-  let n = 0;
-  for (const el of document.querySelectorAll('img, video, canvas')) {
-    const src = el.getAttribute('src') || el.currentSrc || '';
-    if (!/^(blob:|data:)/.test(src)) continue;
+  // Считаем ВСЁ, что похоже на прикреплённый файл, и заглядываем в теневые
+  // корни: МАКС – одностраничное приложение, часть его разметки живёт там.
+  //
+  // Раньше признак был один: картинка по адресу blob:/data:. На живом
+  // прогоне 14.08.2026 файл ушёл, а миниатюра «не появилась» – и отложка
+  // не встала на пустом месте. Признаков должно быть много: миниатюру
+  // рисуют и фоном (background-image), и уже загруженной ссылкой с
+  // сервера, и отдельным окном предпросмотра.
+  const roots = [document], seen = new Set();
+  const collect = (root) => {
+    if (!root || seen.has(root)) return;
+    seen.add(root);
+    let all = [];
+    try { all = root.querySelectorAll('*'); } catch (e) { return; }
+    for (const el of all) if (el.shadowRoot) { roots.push(el.shadowRoot); collect(el.shadowRoot); }
+  };
+  collect(document);
+
+  const big = (el) => {
     const r = el.getBoundingClientRect();
     const w = r.width || el.offsetWidth, h = r.height || el.offsetHeight;
-    if (w >= 24 && h >= 24) n++;
+    return w >= 24 && h >= 24;
+  };
+  let n = 0;
+  for (const root of roots) {
+    let nodes = [];
+    try { nodes = root.querySelectorAll('img, video, canvas, [style*="background-image"]'); }
+    catch (e) { continue; }
+    for (const el of nodes) {
+      const src = el.getAttribute('src') || el.currentSrc || '';
+      const bg = (el.style && el.style.backgroundImage) || '';
+      const local = /^(blob:|data:)/.test(src) || /(blob:|data:)/.test(bg);
+      const uploaded = /^https?:/.test(src) && /(attach|upload|photo|image|preview|thumb)/i.test(src);
+      if (!local && !uploaded) continue;
+      if (!big(el)) continue;
+      n++;
+    }
   }
   return n;
 }
@@ -907,6 +937,9 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "shot": _debug_shot(project_id, page, "bad-text"),
                         "error": why}
             page.wait_for_timeout(1_000)
+            # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
+            yb.drop_link_card(page, yb.text_domains(text), log,
+                              diag_dir=paths.data_root() / project_id / "crosspost")
 
             if image_paths:
                 log(f"Прикрепляю фото: {len(image_paths)}")
@@ -935,6 +968,19 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                 # просили, поэтому теперь ждём миниатюру в самой форме и без
                 # неё отложку не ставим.
                 if not _wait_thumbs(page, had, len(image_paths)):
+                    # Разметку области сохраняем рядом с логом: без неё
+                    # «миниатюра не появилась» не разобрать – может, МАКС её
+                    # рисует так, как мы ещё не умеем узнавать.
+                    try:
+                        d = paths.data_root() / project_id / "crosspost"
+                        d.mkdir(parents=True, exist_ok=True)
+                        (d / "max-attach.html").write_text(
+                            page.evaluate("() => document.body.innerHTML.slice(0, 60000)") or "",
+                            encoding="utf-8")
+                        log("  разметку области вложений сохранил (max-attach.html) – "
+                            "пришлите её, и миниатюра будет узнаваться точно")
+                    except Exception:  # noqa: BLE001
+                        pass
                     return {"ok": False,
                             "shot": _debug_shot(project_id, page, "no-thumb"),
                             "error": ("Файл фото передали, но в поле поста МАКС "

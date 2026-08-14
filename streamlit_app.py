@@ -3739,6 +3739,13 @@ def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> 
         for t in post.get("targets", []):
             net = t.get("network") or ""
             saved = cps.target(state, post, net)
+            # Отчёт – про работу CLICK, а не про весь реестр. Без этой строки
+            # в него попадали все прошлые посты со ссылками из таблицы, и
+            # заголовок писал «вышло 439»: пять лет чужой работы, среди
+            # которой не найти свои две отложки. Нет записи в памяти Click –
+            # значит Click этого не делал, и в отчёте этому места нет.
+            if not saved:
+                continue
             link = (t.get("published_link") or "").strip()
             at = (saved.get("at") or "")[:16].replace("T", " ")
             # В отчёт попадает только сделанное. «Не тронуто» и «публикуется
@@ -3787,10 +3794,10 @@ def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> 
         f'отложек {counts["set"]}' if counts["set"] else "",
         f'вышло {counts["live"]}' if counts["live"] else "",
         f'ошибок {counts["bad"]}' if counts["bad"] else "") if x) or "пока пусто"
-    with st.expander(f"📊 Отчёт: что и куда ушло – {title}", expanded=False):
-        st.caption("Только то, что сделал сам Click: отложка поставлена, пост вышел, "
-                   "ошибка. Ни постов, которых он не касался, ни ссылок, набитых в "
-                   "реестре руками, здесь нет – это история, а не отчёт о работе.")
+    with st.expander(f"📊 Отчёт: что сделал Click – {title}", expanded=False):
+        st.caption("Только работа Click: поставленные отложки, вышедшие посты и "
+                   "ошибки. Постов, которых Click не касался, и старых записей "
+                   "реестра здесь нет – они видны в плане и в самой таблице.")
         html("".join(rows[:120])
              or T.empty("–", "Click пока ничего не делал",
                         "Здесь появятся поставленные отложки, вышедшие посты и ошибки."))
@@ -3822,6 +3829,35 @@ def _crosspost_form_last_log(project_id: str) -> None:
                            key=f"cp-form-log-dl-{project_id}")
 
 
+def _crosspost_diag_block(project_id: str) -> None:
+    """
+    Разметка площадки для разбора – кнопкой, а не поиском по папкам.
+
+    Зачем это вообще есть. Крестик карточки сайта и жирный в ОК Click
+    чинил трижды и трижды мимо: вёрстку площадки приходилось угадывать по
+    снимкам экрана. Теперь, когда что-то не вышло, прогон сохраняет кусок
+    настоящей разметки рядом с логом – а этот блок даёт его скачать и
+    прислать. Один прогон вместо трёх кругов догадок.
+    """
+    d = paths.data_root() / project_id / "crosspost"
+    files = [(f, d / f) for f in ("link-card.html", "ok-editor.html",
+                                  "max-attach.html")]
+    have = [(name, fp) for name, fp in files if fp.exists()]
+    if not have:
+        return
+    with st.expander("🧩 Разметка площадки для разбора"):
+        st.caption("Click сохранил кусок настоящей разметки в тот момент, когда "
+                   "не смог убрать карточку сайта или выставить жирный. "
+                   "Скачайте и пришлите – по ней правка делается точно.")
+        for name, fp in have:
+            when = apptime.to_local(
+                datetime.fromtimestamp(fp.stat().st_mtime, tz=timezone.utc).isoformat())
+            st.download_button(
+                f"⬇ {name}" + (f" – от {when.strftime('%d.%m %H:%M')}" if when else ""),
+                data=fp.read_bytes(), file_name=name, mime="text/html",
+                key=f"cp-diag-{name}-{project_id}")
+
+
 def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
                      state: dict, today: date, upcoming: list[dict]) -> None:
     """
@@ -3849,6 +3885,7 @@ def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
     with t3:
         _crosspost_report_block(project_id, posts, state)
         _crosspost_form_last_log(project_id)
+        _crosspost_diag_block(project_id)
         _crosspost_scheduler_journal()
         # Прошлые посты – архив, а не рабочий список. Блок живёт ЗДЕСЬ, где
         # есть posts/today/state: в отдельной функции их нет (на этом раздел

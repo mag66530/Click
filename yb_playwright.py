@@ -2030,6 +2030,186 @@ _GOODS_COUNT_JS = """
 """
 
 
+# Крестик закрытия у соцсетей – один и тот же значок: 16×16, две палочки.
+# Заказчица прислала его разметку прямо со страницы ВК (14.08.2026), по ней
+# и держимся: класс кнопки у каждой сборки свой, а контур значка не меняется.
+_CLOSE_ICON_D = "M9.414 8l3.294 3.294"
+
+
+def drop_link_card(page, domains: list[str],
+                   log: Callable[[str], None] | None = None,
+                   tries: int = 3, diag_dir: "Path | None" = None) -> str:
+    """
+    Убрать карточку сайта, которую площадка подтянула по ссылке в тексте.
+
+    Зачем. В тексте поста есть адрес сайта, и площадка цепляет к посту
+    сниппет: картинка с сайта, заголовок, описание. Нашу собственную
+    картинку он оттесняет, и пост выходит не тем, что в реестре. Человек в
+    этом месте жмёт крестик на карточке.
+
+    Как ищем – и почему именно так. Два прежних захода (по контуру значка,
+    потом по подписи кнопки) не сработали на живом ОК: у каждой площадки
+    своя вёрстка, и угадывать её по классам бессмысленно. Поэтому ищем не
+    по разметке, а ПО МЕСТУ – так же, как ищет человек глазами:
+
+      1. находим саму карточку: ссылка на наш домен вне поля ввода;
+      2. поднимаемся от неё вверх, пока блок не начнёт включать поле ввода, –
+         это и есть прямоугольник карточки;
+      3. наводим на него мышь: у ВК и ОК крестик появляется по наведению;
+      4. берём маленькие кликабельные элементы внутри этого прямоугольника
+         и у его верхней кромки (крестик всегда там) – и жмём ближайший к
+         правому верхнему углу.
+
+    Промахнуться по крестику ОКНА нельзя: он далеко от карточки и в её
+    прямоугольник не попадает. Не нашли ничего – не делаем НИЧЕГО, пишем в
+    лог и (если дали diag_dir) сохраняем разметку карточки: по ней правка
+    делается точно, а не на ощупь.
+
+    Возвращает: 'closed' – карточку убрали, '' – её не было или не нашли.
+    """
+    log = log or (lambda m: None)
+    doms = [d.lower() for d in domains if d]
+    if not doms:
+        return ""
+
+    find_card = """
+    (doms) => {
+      const link = [...document.querySelectorAll('a[href]')].find(a => {
+        const h = (a.href || '').toLowerCase();
+        return doms.some(d => h.includes(d)) && !a.closest('[contenteditable], textarea');
+      });
+      if (!link) return null;
+      let card = link, p = link.parentElement;
+      for (let i = 0; i < 8 && p; i++, p = p.parentElement) {
+        if (p.querySelector('[contenteditable], textarea, input[type="text"]')) break;
+        card = p;
+      }
+      card.setAttribute('data-click-card', '1');
+      const r = card.getBoundingClientRect();
+      return {x: r.x, y: r.y, w: r.width, h: r.height};
+    }
+    """
+    mark_x = """
+    (box) => {
+      const card = document.querySelector('[data-click-card="1"]');
+      if (!card) return null;
+      // Крестик может лежать и вне карточки – у её верхней кромки. Берём
+      // всё, что рисуется в этой полосе: сама карточка плюс 44px сверху и
+      // справа. Дальше отбираем маленькое и кликабельное.
+      const pad = 44;
+      const inZone = (r) => r.width > 0 && r.height > 0 && r.width <= 64 && r.height <= 64
+        && r.left >= box.x - pad && r.right <= box.x + box.w + pad
+        && r.top >= box.y - pad && r.top <= box.y + Math.min(box.h, 120);
+      const clickable = (el) => {
+        if (el.closest('[contenteditable], textarea')) return false;
+        const tag = el.tagName.toLowerCase();
+        if (tag === 'button' || el.getAttribute('role') === 'button') return true;
+        if (tag === 'a' && !el.getAttribute('href')) return true;
+        return getComputedStyle(el).cursor === 'pointer' && el.children.length <= 2;
+      };
+      let best = null, bestScore = 1e9;
+      for (const el of document.querySelectorAll('button, [role="button"], a, i, span, div')) {
+        const r = el.getBoundingClientRect();
+        if (!inZone(r) || !clickable(el)) continue;
+        if ((el.innerText || '').trim().length > 3) continue;   // это не крестик, а подпись
+        // Ближе к правому верхнему углу карточки – вероятнее крестик. А
+        // появившийся только что (после наведения) – вероятнее вдвойне.
+        let score = Math.abs(r.right - (box.x + box.w)) + Math.abs(r.top - box.y);
+        if (!el.hasAttribute('data-cc-seen')) score -= 1000;
+        if (score < bestScore) { best = el; bestScore = score; }
+      }
+      if (!best) return null;
+      best.setAttribute('data-click-card-x', '1');
+      const r = best.getBoundingClientRect();
+      return {tag: best.tagName.toLowerCase(),
+              label: (best.getAttribute('aria-label') || best.getAttribute('title') || ''),
+              cls: String(best.className || '').slice(0, 60),
+              x: r.x + r.width / 2, y: r.y + r.height / 2};
+    }
+    """
+
+    def card_box():
+        try:
+            return page.evaluate(find_card, doms)
+        except Exception:  # noqa: BLE001 – поиск карточки не должен ронять прогон
+            return None
+
+    for attempt in range(max(1, tries)):
+        if attempt:
+            page.wait_for_timeout(1_500 * attempt)
+        box = card_box()
+        if not box:
+            continue                      # карточки ещё (или уже) нет
+        # Наведение: у обеих площадок крестик появляется по наведению мыши.
+        # Перед этим помечаем всё, что на странице уже есть, – тогда после
+        # наведения видно, что ПОЯВИЛОСЬ. Появившийся у карточки элемент и
+        # есть её крестик: вернее признака нет, и он не зависит от вёрстки.
+        try:
+            page.evaluate("""() => document.querySelectorAll('*')
+                                     .forEach(e => e.setAttribute('data-cc-seen', '1'))""")
+            page.mouse.move(box["x"] + box["w"] / 2, box["y"] + 12)
+            page.wait_for_timeout(500)
+            page.mouse.move(box["x"] + box["w"] - 14, box["y"] + 14)
+            page.wait_for_timeout(400)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            found = page.evaluate(mark_x, box)
+        except Exception:  # noqa: BLE001
+            found = None
+        if not found:
+            continue
+        for how in ("клик", "клик силой", "клик из страницы"):
+            try:
+                loc = page.locator('[data-click-card-x="1"]').first
+                if how == "клик":
+                    loc.click(timeout=3_000)
+                elif how == "клик силой":
+                    loc.click(timeout=3_000, force=True)
+                else:
+                    page.evaluate("() => document.querySelector('[data-click-card-x=\"1\"]').click()")
+                page.wait_for_timeout(800)
+                if not card_box():
+                    log(f"  убрал карточку сайта ({how}"
+                        + (f", кнопка «{found['label']}»" if found.get("label") else "") + ")")
+                    return "closed"
+            except Exception:  # noqa: BLE001 – пробуем следующий способ
+                continue
+
+    if not card_box():
+        return ""                          # карточки нет – и хорошо
+    log("  внимание: карточка сайта осталась – крестик не нашёлся или не нажался. "
+        "Закройте её вручную")
+    if diag_dir is not None:
+        try:
+            html = page.evaluate(
+                """() => {
+                     const c = document.querySelector('[data-click-card]');
+                     if (!c) return '';
+                     const p = c.parentElement || c;
+                     return (p.outerHTML || '').slice(0, 8000);
+                   }""") or ""
+            if html:
+                Path(diag_dir).mkdir(parents=True, exist_ok=True)
+                (Path(diag_dir) / "link-card.html").write_text(html, encoding="utf-8")
+                log("  разметку карточки сохранил рядом с логом (link-card.html) – "
+                    "пришлите её, и крестик будет найден точно")
+        except Exception:  # noqa: BLE001
+            pass
+    return ""
+
+
+def text_domains(text: str) -> list[str]:
+    """Домены, встреченные в тексте поста: по ним и ищем карточку сайта."""
+    import re as _re
+    out: list[str] = []
+    for m in _re.finditer(r"\b((?:[\w-]+\.)+(?:ru|com|рф|net|org|io|su))\b", text or "", _re.U):
+        d = m.group(1).lower()
+        if d not in out:
+            out.append(d)
+    return out
+
+
 def fetch_photos(photo_urls: list[str], temp_dir: Path) -> tuple[list[str], list[str]]:
     """
     Ссылки и пути → файлы на диске. Возвращает (что получилось, что нет).

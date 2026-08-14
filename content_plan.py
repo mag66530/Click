@@ -71,7 +71,14 @@ SHEET_TO_BRAND = {
 # по-прежнему понимает (canonical_network ниже) – он виден в плане, просто
 # не формируется.
 TELEGRAM = ("tg-staff", "tg-client", "tg")
-SUPPORTED = ("vk", "ok", "max")
+SUPPORTED = ("vk", "ok", "max", "zen")
+
+# Площадки, которые берут СТАТЬИ, а не посты. Дзен – единственная такая:
+# туда уходит лонгрид, а текст его лежит не в ячейке реестра, а по ссылке на
+# документ (см. zen_doc). Поэтому строка формата «Статья» – это работа для
+# Дзена и НЕ работа для ВК с МАКСом: им статья не нужна, у них свой короткий
+# пост в той же таблице.
+ARTICLE_NETWORKS = ("zen",)
 
 
 def canonical_network(raw: str) -> str:
@@ -92,7 +99,7 @@ def canonical_network(raw: str) -> str:
     if "max" in s or "макс" in s:
         return "max"
     if "дзен" in s or "zen" in s:
-        return "zen"                            # площадка вне scope – распознаём, но не постим
+        return "zen"
     return ""
 
 
@@ -221,13 +228,26 @@ def parse_sheet(rows: list[list[str]], brand: str) -> list[dict]:
 
 
 # ─── Что формировать ────────────────────────────────────────────────
+def is_article(post: dict) -> bool:
+    """Строка реестра – статья (лонгрид), а не пост в ленту."""
+    return (post.get("format") or "Пост").strip().lower() != "пост"
+
+
 def posts_to_form(posts: list[dict], today: date | None = None) -> list[dict]:
     """
     Отобрать посты и цели, которые ещё надо сформировать:
       • дата сегодня или впереди;
-      • формат «Пост» (видео/статьи – вне scope);
-      • есть текст;
-      • цель – наша площадка (SUPPORTED) и «Ссылка» по ней пуста.
+      • есть текст (у статьи – ссылка на документ, это тоже текст ячейки);
+      • цель – наша площадка (SUPPORTED) и «Ссылка» по ней пуста;
+      • формат и площадка друг другу подходят.
+
+    Про формат подробнее. Раньше строка формата «Статья» отбрасывалась
+    целиком – Click умел только посты. Теперь у статей есть адресат: Дзен.
+    Поэтому формат отсекает не пост, а ЦЕЛИ внутри него: статья уходит
+    только в Дзен, обычный пост – во все площадки, включая Дзен (короткая
+    публикация там тоже возможна). Видео так и остаётся вне работы: ни одна
+    подключённая площадка его не примет.
+
     Возвращает копии постов с урезанным targets (только несформированные цели).
     """
     if today is None:
@@ -237,12 +257,16 @@ def posts_to_form(posts: list[dict], today: date | None = None) -> list[dict]:
         d = parse_date(p["date"])
         if d is None or d < today:
             continue
-        if (p.get("format") or "Пост").strip().lower() != "пост":
-            continue
         if not (p.get("text") or "").strip():
             continue
+        fmt = (p.get("format") or "Пост").strip().lower()
+        if fmt.startswith("видео"):
+            continue
+        article = is_article(p)
         pending = [t for t in p["targets"]
-                   if t["network"] in SUPPORTED and not (t.get("published_link") or "").strip()]
+                   if t["network"] in SUPPORTED
+                   and not (t.get("published_link") or "").strip()
+                   and (not article or t["network"] in ARTICLE_NETWORKS)]
         if pending:
             out.append({**p, "targets": pending})
     return out

@@ -44,7 +44,9 @@ MONTHS_RU = ("января", "февраля", "марта", "апреля", "м
 # отложкой через веб – держит сам МАКС; заданием боту (запасной путь, если
 # нет ссылки на канал) – держит Click. Что именно вышло, помечает само
 # формирование признаком «native» в памяти поста.
-SELF_HOSTED = ("vk", "ok")
+# Дзен здесь же: его «Опубликовать позже» — родная отложка площадки, и после
+# формирования Click в час выхода не нужен.
+SELF_HOSTED = ("vk", "ok", "zen")
 
 TITLE_LIMIT = 120          # длина превью текста в строке плана
 HEAD_LIMIT = 58            # сколько букв уходит в жирное начало строки
@@ -178,13 +180,17 @@ def post_view(post: dict, state: dict) -> dict:
     title = text[:TITLE_LIMIT] + "…" if len(text) > TITLE_LIMIT else text
 
     fmt = (post.get("format") or "Пост").strip()
+    # Статья – работа Дзена, и «вручную» про неё писать больше нельзя. А вот
+    # видео Click не формирует по-прежнему: ни одна подключённая площадка его
+    # не примет. Это не поломка, а другой вид контента, и плитка так и
+    # говорит – вместо жёлтой тревоги.
+    article_handled = (content_plan.is_article(post) and not fmt.lower().startswith("видео")
+                       and any(n["code"] in content_plan.ARTICLE_NETWORKS for n in nets))
     if nets and not classes:
         # Все площадки поста – ручные (например, только Телеграм): Click тут
         # не при делах, и строка так и говорит.
         state_cls, trouble = "manual", "публикуется вручную"
-    elif fmt.lower() != "пост":
-        # Видео и статьи Click не формирует – это не поломка, а другой вид
-        # контента. Плитка так и говорит, вместо жёлтой тревоги.
+    elif fmt.lower() != "пост" and not article_handled:
         state_cls, trouble = "manual", f"{fmt.lower()} – вручную"
     elif not text:
         state_cls, trouble = "warn", "нет текста – пост не выйдет"

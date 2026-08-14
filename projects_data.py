@@ -2920,8 +2920,14 @@ REVIEW_ASSORTMENT = {
 # max.ru/join/…: по приглашению в канал вступают, публиковать по нему
 # нельзя. Заказчица прислала сначала приглашения, потом веб-адреса.
 #
-# zen пока никуда не публикуется: Дзен в кросспостинге не подключён.
-# Ссылка хранится, чтобы она была под рукой и не терялась.
+# У Дзена ДВА адреса, и путать их нельзя. zenUrl – публичный канал (его
+# читают люди), zenStudioUrl – студия автора dzen.ru/profile/editor/…, где
+# статьи и пишутся. Публиковать Click ходит в студию; публичный адрес
+# остаётся для ссылок и сверки.
+#
+# Студии прислал заказчик 14.08.2026 – по трём брендам. У МПИ и АПС адреса
+# студии пока нет: как только он появится, вписывается в «Настройках» и с
+# этого мгновения главнее кода.
 SOCIAL = {
     "SMU": {
         "vkGroupUrl": "https://vk.ru/stalmetural",
@@ -2930,6 +2936,7 @@ SOCIAL = {
         "tgChannelStaff": "@SMUdaily",
         "maxWebUrl": "https://web.max.ru/-70916890460398",
         "zenUrl": "https://dzen.ru/stalmetural",
+        "zenStudioUrl": "https://dzen.ru/profile/editor/stalmetural",
     },
     "IMP": {
         "vkGroupUrl": "https://vk.ru/inmetprom",
@@ -2937,6 +2944,7 @@ SOCIAL = {
         "tgChannelClient": "@inmetprom",
         "maxWebUrl": "https://web.max.ru/-70917002032627",
         "zenUrl": "https://dzen.ru/inmetprom",
+        "zenStudioUrl": "https://dzen.ru/profile/editor/inmetprom",
     },
     "MPE": {
         "vkGroupUrl": "https://vk.ru/metpromenergo",
@@ -2944,6 +2952,7 @@ SOCIAL = {
         "tgChannelClient": "@metpromenergo",
         "maxWebUrl": "https://web.max.ru/-71839887647351",
         "zenUrl": "https://dzen.ru/mepen.ru",
+        "zenStudioUrl": "https://dzen.ru/profile/editor/mepen.ru",
     },
     "MPI": {
         "vkGroupUrl": "https://vk.ru/metpromintexcompany",

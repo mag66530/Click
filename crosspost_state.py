@@ -196,15 +196,23 @@ def problems(state: dict, posts: list[dict]) -> list[dict]:
     """
     out: list[dict] = []
     for post in posts:
-        # Видео и статьи Click не формирует (вне scope) – и жаловаться на
-        # отсутствие у них текста и картинки нечестно: это не поломка, а
-        # другой вид контента. Иначе список «требует внимания» забивается шумом.
-        if (post.get("format") or "Пост").strip().lower() != "пост":
-            continue
-        if not (post.get("text") or "").strip():
-            out.append({"post": post, "what": "нет текста поста", "network": ""})
-        if not post.get("images"):
-            out.append({"post": post, "what": "нет картинки", "network": ""})
+        # Видео Click не формирует (вне scope) – и жаловаться на отсутствие у
+        # него текста и картинки нечестно: это не поломка, а другой вид
+        # контента. Иначе список «требует внимания» забивается шумом.
+        fmt = (post.get("format") or "Пост").strip().lower()
+        if fmt != "пост":
+            # Статья – работа Дзена. Требование к ней одно: чтобы было откуда
+            # взять текст. Картинка ей не нужна (иллюстрации внутри документа),
+            # и требовать её – значит выдумывать поломку на ровном месте.
+            if fmt.startswith("видео"):
+                continue
+            if not (post.get("text") or "").strip():
+                out.append({"post": post, "what": "нет ссылки на текст статьи", "network": ""})
+        else:
+            if not (post.get("text") or "").strip():
+                out.append({"post": post, "what": "нет текста поста", "network": ""})
+            if not post.get("images"):
+                out.append({"post": post, "what": "нет картинки", "network": ""})
         for t in post.get("targets", []):
             if (t.get("published_link") or "").strip():
                 continue

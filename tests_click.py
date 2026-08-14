@@ -1208,6 +1208,34 @@ def test_kp_sheet() -> None:
     gis_ids = {ct["id"] for c in gis_countries for ct in c["cities"]}
     check("id городов 2ГИС не путаются с яндексовыми", not (gis_ids & set(ids)))
 
+    # ── Почему города НЕТ в списке 2ГИС ─────────────────────────────
+    # Заказчица поставила Шымкенту статус «Активная» и не нашла его в 2ГИС.
+    # Приложению нечем было ответить: в диагностике лежали одни числа.
+    # Теперь у каждого непопавшего города есть имя и причина.
+    why = [
+        ["", "", "", "Яндекс Бизнес", "", "", "2ГИС", "", ""],
+        ["Страна", "Город", "url", "Аккаунт", "Карта", "Статус", "Аккаунт", "Карта", "Статус"],
+        ["Казахстан", "Шымкент", "https://shymkent.ru",
+         "https://yandex.ru/sprav/444444/edit/main", "", "Активная",
+         "https://account.2gis.com/orgs/70000001077855520/", "", "Удалена"],
+        ["Казахстан", "Актобе", "https://aktobe.ru",
+         "https://yandex.ru/sprav/555555/edit/main", "", "Активная",
+         "нет карточки", "", "Активная"],
+        ["Казахстан", "Тараз", "https://taraz.ru",
+         "https://yandex.ru/sprav/666666/edit/main", "", "Активная",
+         "https://account.2gis.com/profile", "", "Активная"],
+    ]
+    _, wd = kp_sheet.parse_rows(why)
+    reasons = {r["name"]: r["why"] for r in wd.get("gisSkippedRows") or []}
+    check("Шымкент назван по имени, а не спрятан в счётчике",
+          "Шымкент" in reasons, str(reasons))
+    check("и сказано, что дело в статусе КП",
+          "Удалена" in reasons.get("Шымкент", ""), str(reasons))
+    check("город без ссылки на кабинет тоже объяснён",
+          "не ссылка" in reasons.get("Актобе", ""), str(reasons))
+    check("и ссылка без номера организации",
+          "номера организации" in reasons.get("Тараз", ""), str(reasons))
+
     # Пустая и битая таблица не должны валить приложение
     empty, d2 = kp_sheet.parse_rows([])
     check("пустая таблица – пустой результат без исключения", empty == [])
@@ -1908,6 +1936,257 @@ def test_gis_media_upload() -> None:
                 browser.close()
 
 
+# Каркас кабинета 2ГИС: слева меню, справа пусто. Меню – это и есть ловушка:
+# в нём написано и «Отзывы», и «Данные о компании», поэтому проверка
+# готовности «встретилось нужное слово» истинна ещё до того, как React
+# что-либо нарисует. Содержимое приезжает отдельным запросом – здесь его
+# заменяет setTimeout.
+GIS_SHELL = """
+<html><head><meta charset="utf-8"><title>Личный кабинет 2ГИС</title></head>
+<body style="margin:0;font:14px sans-serif">
+  <nav style="float:left;width:200px">
+    <div>Обзор</div><div>Данные о компании</div><div>Отзывы</div><div>Фото и видео</div>
+  </nav>
+  <div id="root" style="margin-left:220px"></div>
+  <script>
+    setTimeout(function () {
+      document.getElementById('root').innerHTML = LATE;
+      document.title = TITLE;
+    }, DELAY);
+  </script>
+</body></html>
+"""
+
+# Карточка отзыва: два ряда звёзд с ширинами (по ним считается оценка),
+# автор, площадка, дата, текст и кнопка «Ответить».
+GIS_REVIEW_CARD = """
+  <div class="card">
+    <div class="rating__back-x" style="width:90px;height:16px">
+      <div class="Stars__star-x"></div></div>
+    <div class="rating__front-x" style="width:90px;height:16px">
+      <div class="Stars__star-x"></div></div>
+    <div class="who">Ольга Петрова</div><div class="badge">2GIS</div>
+    <div class="date">3 августа 2026</div>
+    <div class="text">Заказывали профлист, привезли вовремя и без пересорта</div>
+    <div class="actions"><button class="button__basic-x">Ответить</button></div>
+  </div>
+"""
+
+
+def _gis_shell(late: str, delay: int, title: str = "Личный кабинет 2ГИС") -> str:
+    """Каркас кабинета, в который содержимое приезжает через delay миллисекунд."""
+    return (GIS_SHELL.replace("LATE", json.dumps(late, ensure_ascii=False))
+                     .replace("TITLE", json.dumps(title, ensure_ascii=False))
+                     .replace("DELAY", str(delay)))
+
+
+def test_gis_late_content() -> None:
+    """
+    Содержимое кабинета приезжает ПОЗЖЕ страницы – и это нормально.
+
+    Живой прогон по Ошу: отзыв на карточке висел, а Click закрывал страницу
+    через две секунды и писал в отчёт «отзывов пока нет». Там же каждый город
+    получал «Плашки „Данные верны“ нет». Корень у обоих один: готовность
+    страницы определялась по словам, которые написаны в МЕНЮ кабинета
+    («Отзывы», «Данные о компании»), – проверка была истинной всегда, ещё до
+    того, как React успевал что-нибудь нарисовать.
+
+    Поэтому здесь – страница, устроенная как настоящая: меню сразу,
+    содержимое через несколько секунд.
+    """
+    import gis_playwright as gis
+    print("\n▸ 2ГИС: содержимое приезжает позже страницы")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    # Сроки в бою должны быть щедрыми: две секунды – это не «пусто», это «ещё
+    # не приехало». Проверяем сами константы, а не только логику вокруг них.
+    check("«отзывов нет» не говорим раньше пяти секунд",
+          gis.REVIEWS_MIN_WAIT_MS >= 5_000, str(gis.REVIEWS_MIN_WAIT_MS))
+    check("«плашки нет» не говорим раньше шести секунд",
+          gis.ACTUALIZE_MIN_WAIT_MS >= 6_000, str(gis.ACTUALIZE_MIN_WAIT_MS))
+    check("альбом перепроверяем не один раз",
+          len(gis.MEDIA_RECHECK_S) >= 2 and gis.MEDIA_RECHECK_S[0] >= 2,
+          str(gis.MEDIA_RECHECK_S))
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 1200, "height": 900}).new_page()
+            box = {"html": "", "hits": 0}
+
+            def handle(route):
+                if route.request.resource_type == "document":
+                    box["hits"] += 1
+                route.fulfill(status=200, content_type="text/html; charset=utf-8",
+                              body=box["html"])
+
+            page.route("**/*", handle)
+            reviews_url = "https://account.2gis.com/orgs/70000001079192862/reviews?withoutAnswer=true"
+
+            # Тесту незачем ждать боевые сроки – берём их из тех же констант.
+            was = (gis.REVIEWS_WAIT_MS, gis.REVIEWS_MIN_WAIT_MS,
+                   gis.ACTUALIZE_WAIT_MS, gis.ACTUALIZE_MIN_WAIT_MS, gis.ACTUALIZE_PROOF_MS)
+            gis.REVIEWS_WAIT_MS, gis.REVIEWS_MIN_WAIT_MS = 12_000, 3_000
+            gis.ACTUALIZE_WAIT_MS, gis.ACTUALIZE_MIN_WAIT_MS = 14_000, 6_000
+            gis.ACTUALIZE_PROOF_MS = 3_000
+            try:
+                # ── Голый каркас: слово «Отзывы» в меню – это НЕ список ──
+                box["html"] = _gis_shell("", 60_000)
+                page.goto(reviews_url)
+                page.wait_for_timeout(300)
+                check("слово «Отзывы» в меню за готовность не принимаем",
+                      not gis._reviews_ready(page),  # noqa: SLF001
+                      str(gis._reviews_look(page)))  # noqa: SLF001
+
+                # ── Отзыв приезжает через четыре секунды ────────────────
+                box["html"] = _gis_shell(
+                    '<div class="chips">Все · Без ответа</div>' + GIS_REVIEW_CARD,
+                    4_000, "Личный кабинет 2ГИС: Отзывы")
+                late = gis.read_reviews(page, reviews_url, org_id="70000001079192862")
+                check("список дождались, а не объявили пустым", late["ok"], late["reason"])
+                eq("отзыв найден", late["shown"], 1)
+                eq("и прочитан", (late["items"][0]["author"] if late["items"] else ""),
+                   "Ольга Петрова")
+
+                # ── Отзывов правда нет – так и говорим, но не сразу ─────
+                box["html"] = _gis_shell(
+                    '<div class="chips">Все · Без ответа</div><div>Нет отзывов</div>',
+                    2_000, "Личный кабинет 2ГИС: Отзывы")
+                started = time.time()
+                empty = gis.read_reviews(page, reviews_url, org_id="70000001079192862")
+                waited = time.time() - started
+                check("пустой список – это ok, а не поломка", empty["ok"], empty["reason"])
+                eq("отзывов ноль", empty["shown"], 0)
+                check("и решение принято не за две секунды",
+                      waited >= gis.REVIEWS_MIN_WAIT_MS / 1000, f"{waited:.1f} сек")
+
+                # ── Страница так и не дорисовалась: молчать нельзя ──────
+                box["html"], box["hits"] = _gis_shell("", 60_000), 0
+                nothing = gis.read_reviews(page, reviews_url, org_id="70000001079192862")
+                check("не дорисовалась – честный отказ, а не «отзывов нет»",
+                      not nothing["ok"], str(nothing))
+                check("и человека предупредили, что отзывы могли остаться незамеченными",
+                      "незамечен" in nothing["reason"], nothing["reason"])
+                check("перед отказом страницу перезагрузили", box["hits"] >= 2,
+                      f"заходов {box['hits']}")
+
+                # ── Кабинет увёл не туда – это отдельный разговор ───────
+                box["html"] = (
+                    "<html><head><meta charset='utf-8'>"
+                    "<title>Личный кабинет 2ГИС: Обзор</title></head><body>"
+                    "<div>Обзор организации, показатели за последний месяц</div>"
+                    "<script>history.replaceState({}, '', "
+                    "'/orgs/70000001079192862/dashboard')</script></body></html>")
+                away = gis.read_reviews(page, reviews_url, org_id="70000001079192862")
+                check("увели – не молчим", not away["ok"], str(away))
+                check("и написано куда", "Обзор" in away["reason"], away["reason"])
+
+                # ── Плашка «Данные верны» тоже приезжает позже ──────────
+                box["html"] = _gis_shell(
+                    '<h1>Данные о компании</h1>'
+                    '<div class="CQydym6f" style="padding:12px" onclick="done()">'
+                    'Данные о компании не обновлялись достаточно давно, '
+                    'они не изменились? Данные верны</div>',
+                    3_000, "Личный кабинет 2ГИС: Данные о компании")
+                box["html"] = box["html"].replace(
+                    "</script>",
+                    "</script><script>function done() { window.__ok = 1; "
+                    "document.body.insertAdjacentHTML('beforeend', "
+                    "'<div>Спасибо за подтверждение данных</div>'); }</script>")
+                task = {"cityName": "Ош",
+                        "gisUrl": "https://account.2gis.com/orgs/70000001079192862/"}
+                res = gis.actualize_city(page, task)
+                eq("опоздавшую плашку дождались и нажали", res["status"], "actualized")
+                eq("нажали ровно один раз", page.evaluate("() => window.__ok"), 1)
+            finally:
+                (gis.REVIEWS_WAIT_MS, gis.REVIEWS_MIN_WAIT_MS, gis.ACTUALIZE_WAIT_MS,
+                 gis.ACTUALIZE_MIN_WAIT_MS, gis.ACTUALIZE_PROOF_MS) = was
+                page.unroute("**/*")
+        finally:
+            browser.close()
+
+
+def test_gis_photo_appears_late() -> None:
+    """
+    2ГИС принимает снимок не мгновенно – и это не повод писать «не появилось».
+
+    Со слов заказчицы: «фото не успевает загрузиться, а прога уже закрывает
+    файл – прямо до прогрузки, и потом фотка теряется среди существующих».
+    В отчёте у неё стояло «Файлы переданы, но в альбоме они не появились»,
+    а снимок в кабинете лежал.
+
+    Здесь «сервер» подтверждает файл только через несколько секунд после
+    отправки. Прежняя проверка – одна, сразу после перезагрузки – этого не
+    видела; новая перепроверяет альбом заходами с растущей паузой.
+    """
+    import gis_playwright as gis
+    print("\n▸ 2ГИС: снимок появляется в альбоме не сразу")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    page_html = (Path(__file__).parent / "tests_fixtures" / "gis-media-page.html") \
+        .read_text(encoding="utf-8")
+    TILE = ('<div class="tile"><img alt="Фотография от владельца" width="220" '
+            'height="220" src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5'
+            'BAEAAAAALAAAAAABAAEAAAICRAEAOw=="></div>')
+    LAG_S = 5.0            # столько «сервер» держит файл у себя
+
+    with tempfile.TemporaryDirectory() as tmp:
+        shot = Path(tmp) / "отгрузка.jpg"
+        shot.write_bytes(b"\xff\xd8\xff" + b"\x01" * 64)
+
+        with sync_playwright() as pw:
+            try:
+                browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                             args=["--no-sandbox"])
+            except Exception:  # noqa: BLE001
+                browser = pw.chromium.launch()
+            try:
+                page = browser.new_context(viewport={"width": 1100, "height": 800}).new_page()
+                box = {"sent_at": None, "checks": 0}
+
+                def handle(route):
+                    req = route.request
+                    if req.method == "POST" and "__gis_upload__" in req.url:
+                        box["sent_at"] = time.time()
+                        route.fulfill(status=200, content_type="application/json", body="{}")
+                        return
+                    html = page_html
+                    # Снимок виден в альбоме только после того, как «сервер»
+                    # его действительно принял, – а на это ему нужно время.
+                    ready = box["sent_at"] is not None and time.time() - box["sent_at"] >= LAG_S
+                    if req.resource_type == "document":
+                        box["checks"] += 1
+                    if ready:
+                        html = html.replace('<div class="grid" id="grid">',
+                                            '<div class="grid" id="grid">' + TILE, 1)
+                        html = re.sub(r"Все\s+фото\s+и\s+видео\s+\d+",
+                                      "Все фото и видео 2", html)
+                    route.fulfill(status=200, content_type="text/html; charset=utf-8", body=html)
+
+                page.route("**/*", handle)
+                res = gis.upload_media(page, "https://account.2gis.com/orgs/70000001081103893/",
+                                       [str(shot)], label="Ош: ")
+                eq("снимок дождались, а не объявили потерянным", res["uploaded"], 1)
+                eq("и это не ошибка", res["reason"], "")
+                check("альбом перепроверяли не один раз", box["checks"] >= 3,
+                      f"заходов на страницу {box['checks']}")
+                page.unroute("**/*")
+            finally:
+                browser.close()
+
+
 def test_gis_answer_and_actualize() -> None:
     """
     Ответ на отзыв и подтверждение данных – в настоящем браузере.
@@ -2458,6 +2737,21 @@ def test_actualize_selection() -> None:
     eq("после загрузки из КП выбраны ВСЕ новые города",
        fresh, {"new-1", "new-2", "new-3"})
     st.session_state.clear()
+
+    # ── Обновление списка живёт там, где на список смотрят ───────────
+    # «Поставила Шымкент активным и не нашла функционала, который обновляет
+    # список 2ГИС»: кнопка была только в «Настройках», а человек ищет её там,
+    # где выбирает города. Проверяем, что она есть на обеих страницах и что
+    # список 2ГИС она берёт свой, а не яндексовый.
+    import inspect
+    check("обновление списка вызывается на актуализации",
+          "kp_refresh_row(" in inspect.getsource(app.tab_actualize))
+    check("и на вкладке «Города»",
+          "kp_refresh_row(" in inspect.getsource(app.tab_cities))
+    row = inspect.getsource(app.kp_refresh_row)
+    check("кнопка перечитывает КП", "kp_pull(" in row, row[:200])
+    check("а счёт городов берётся по площадке, а не общий",
+          "platform_countries(" in row, row[:200])
 
 
 def test_add_post_click_on_real_page() -> None:
@@ -5281,7 +5575,9 @@ def main() -> int:
         test_skipped_comes_back()
         test_gis_reviews_on_real_page()
         test_gis_answer_and_actualize()
+        test_gis_late_content()
         test_gis_media_upload()
+        test_gis_photo_appears_late()
         test_gis_photos_wiring()
         test_actualize_task_kp_status()
     finally:

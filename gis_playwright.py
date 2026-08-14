@@ -69,6 +69,24 @@ KNOWN_PLATFORMS = ("2GIS", "Flamp", "Otello", "Booking", "НетМонет", "Т
 REVIEWS_WAIT_MS = 20_000        # React рисует список не мгновенно
 ANSWER_TEXT_LIMIT = 2000        # столько разрешает поле ответа в кабинете
 
+# Сколько ждём «тишины в сети» после открытия страницы кабинета.
+#
+# Кабинет 2ГИС – React-приложение: в HTML приезжает пустой каркас, а всё
+# содержимое (список отзывов, плашка «Данные верны», плитки альбома) – уже
+# отдельными запросами. Дождаться, пока запросы кончатся, куда честнее, чем
+# гадать по разметке. Срок небольшой и намеренно: у кабинета есть фоновые
+# опросы, при которых «полная тишина» не наступает никогда, и ждать её до
+# упора значило бы платить эти секунды на каждом городе.
+QUIET_NETWORK_MS = 6_000
+
+
+def _wait_quiet_network(page: Page, timeout_ms: int = QUIET_NETWORK_MS) -> None:
+    """Подождать, пока страница перестанет ходить в сеть. Не дождались – не беда."""
+    try:
+        page.wait_for_load_state("networkidle", timeout=timeout_ms)
+    except Exception:  # noqa: BLE001 – значит, кабинет опрашивает сервер постоянно
+        pass
+
 
 # ════════════════════════════════════════════════════════════════════
 #  Адреса
@@ -403,22 +421,110 @@ def _reviews_on_page(page: Page, org_id: str | None = None) -> dict | None:
             "skipped": int(data.get("skipped") or 0)}
 
 
-# Пустой список и «список ещё не нарисован» – разные вещи. Отличаем по
-# признакам готовой страницы: заголовок «Отзывы» и кнопка «Без ответа».
-_PAGE_READY_JS = r"""
+# Пустой список и «список ещё не нарисован» – разные вещи, и путать их
+# дорого: во втором случае мы пишем в отчёт «отзывов нет», а они есть.
+#
+# Именно так и вышло в Оше: страница закрывалась через две секунды после
+# открытия, отзыв на карточке висел, а в отчёте стояло «отзывов пока нет».
+# Виновата была проверка готовности – она считала страницу дорисованной,
+# если где-нибудь на ней встречается слово «отзыв». А оно встречается
+# ВСЕГДА: «Отзывы» написано в меню слева, на любой странице кабинета.
+# Проверка была истинной ещё до того, как React успевал что-либо нарисовать.
+# Тот же самый корень, что и у прежней беды с «Данными о компании».
+#
+# Теперь готовность – это следы САМОГО раздела отзывов, которых в меню нет:
+#   • фильтр «Без ответа» (он же кнопка/вкладка в шапке списка);
+#   • хоть одна звезда оценки в разметке – значит, карточки поехали;
+#   • прямая надпись кабинета, что отзывов нет.
+# Плюс отдельно смотрим, туда ли вообще попали: заголовок вкладки и адрес.
+_REVIEWS_LOOK_JS = r"""
 () => {
-  const t = (document.body.innerText || '');
-  return /без\s+ответа/i.test(t) || /отзыв/i.test(t);
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  const body = norm(document.body.innerText || '');
+  const title = norm(document.title || '');
+  const where = (location.pathname || '') + (location.search || '');
+  return {
+    // «Без ответа» – это фильтр раздела отзывов. В меню кабинета таких слов нет.
+    filter: /без\s+ответа/i.test(body),
+    // Кабинет сам сказал, что показывать нечего. Формулировку он волен
+    // сменить, поэтому это подсказка, а не единственная опора.
+    empty: /(нет\s+отзывов|отзывов\s+нет|отзывы\s+не\s+найдены|ничего\s+не\s+найдено|пока\s+никто\s+не\s+оставил)/i
+             .test(body),
+    // Звёзды оценки рисуются только в карточках отзывов.
+    stars: document.querySelectorAll('[class*="rating__front"], [class*="Stars__star"]').length,
+    onReviews: /отзыв/i.test(title) || /\/reviews(\/|$|\?)/.test(where),
+    title: title.slice(0, 120),
+    path: where,
+    size: body.length,
+  };
 }
 """
 
-# Кабинет может написать «нет отзывов» по-разному, и угадывать формулировку –
-# то же самое, что угадывать классы. Поэтому это подсказка, а не приговор:
-# главный признак пустого списка – страница устоялась, а карточек нет.
-_EMPTY_LIST_JS = r"""
-() => /(нет\s+отзывов|отзывов\s+нет|ничего\s+не\s+найдено|пока\s+нет|все\s+отзывы)/i
-       .test(document.body.innerText || '')
-"""
+# Раньше этого срока «отзывов нет» не говорим. Список кабинет забирает
+# отдельным запросом, и в облаке он приходит заметно позже страницы: две
+# секунды – это не «пусто», это «ещё не приехало».
+REVIEWS_MIN_WAIT_MS = 9_000
+REVIEWS_QUIET = 2               # столько одинаковых чтений подряд = список устоялся
+
+
+def _reviews_look(page: Page) -> dict:
+    """Что за страница перед нами и есть ли на ней следы раздела отзывов."""
+    try:
+        return page.evaluate(_REVIEWS_LOOK_JS) or {}
+    except Exception:  # noqa: BLE001 – React перерисовывает, прочитаем в следующий заход
+        return {}
+
+
+def _reviews_ready(page: Page) -> bool:
+    """Раздел отзывов действительно дорисован (а не просто открыт кабинет)."""
+    look = _reviews_look(page)
+    return bool(look.get("empty") or look.get("filter") or look.get("stars"))
+
+
+def _wait_reviews(page: Page, org_id: str | None, budget_s: float,
+                  min_wait_s: float, since: float | None = None) -> tuple[dict | None, dict]:
+    """
+    Дождаться списка отзывов. Возвращает (данные или None, последний снимок).
+
+    Правил три, и каждое стоило отдельной поломки:
+
+      • карточки есть – ждём, пока их число перестанет меняться. Кабинет
+        сначала рисует ВСЕ отзывы и только потом применяет фильтр из адреса,
+        и первый заход хватал предварительный список;
+
+      • карточек нет – мало того, что страница устоялась: нужны следы самого
+        раздела отзывов И выдержанный min_wait_s. Иначе «пусто» означает
+        всего лишь «React ещё не начал»;
+
+      • разметку карточек не разобрали (skipped) – пустотой это не считаем
+        ни при каких условиях.
+
+    since – когда страницу открыли; от этого мгновения и считается min_wait_s.
+    Ожидание тишины в сети – это те же самые секунды, и платить за них дважды
+    на каждом городе незачем.
+    """
+    look: dict = {}
+    same, was = 0, -1
+    started = since or time.time()
+    deadline = time.time() + budget_s
+    while time.time() < deadline:
+        fresh = _reviews_on_page(page, org_id)
+        look = _reviews_look(page) or look
+        count = len(fresh["items"]) if fresh else -1
+        same = same + 1 if count == was and count >= 0 else 0
+        was = count
+        if fresh and fresh["items"]:
+            if same >= 1:
+                return fresh, look
+            page.wait_for_timeout(700)
+            continue
+        if (count == 0 and same >= REVIEWS_QUIET
+                and not (fresh or {}).get("skipped")
+                and (look.get("empty") or look.get("filter") or look.get("stars"))
+                and time.time() - started >= min_wait_s):
+            return {"items": [], "skipped": 0}, look
+        page.wait_for_timeout(700)
+    return None, look
 
 
 def read_reviews(page: Page, url: str, navigate: bool = True,
@@ -434,70 +540,63 @@ def read_reviews(page: Page, url: str, navigate: bool = True,
         out["reason"] = "Не удалось определить адрес раздела «Отзывы» (нет ссылки на кабинет 2ГИС)"
         return out
 
+    opened = time.time()
     if navigate:
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=40_000)
         except Exception as e:  # noqa: BLE001
             out["reason"] = f"Не удалось открыть страницу отзывов: {yb._short_error(e)}"
             return out
+        opened = time.time()
         if looks_like_login_page(page):
             out["reason"] = "2ГИС увёл на страницу входа – сессия не действует"
             # Прогону это знак остановиться, а не идти дальше: остальные города
             # упрутся в ту же страницу входа. У Яндекса ровно так же.
             out["noSession"] = True
             return out
+        # Список кабинет забирает отдельным запросом – ждём, пока страница
+        # перестанет ходить в сеть, и только потом разбираем карточки.
+        _wait_quiet_network(page)
 
-    # Ждём, пока список УСТОИТСЯ, а не первую попавшуюся отрисовку.
-    #
-    # Кабинет сначала рисует все отзывы и только потом применяет фильтр из
-    # адреса. Первый заход хватал предварительный список – и в очередь
-    # попадали отзывы, на которые давно ответили. Считаем список готовым,
-    # когда два чтения подряд дают одно и то же число карточек.
-    #
-    # Пустой список узнаём так же – по устоявшейся странице, а не по словам
-    # «нет отзывов». Формулировку кабинет волен сменить, и тогда города, где
-    # всё отвечено, получали пугающее «кабинет не отдал список»: прогон ждал
-    # двадцать секунд знакомой надписи, не дожидался и объявлял поломку.
-    data, same, was = None, 0, -1
-    deadline = time.time() + (REVIEWS_WAIT_MS / 1000 if navigate else 5)
-    while time.time() < deadline:
-        fresh = _reviews_on_page(page, org_id)
-        count = len(fresh["items"]) if fresh else -1
-        same = same + 1 if count == was and count >= 0 else 0
-        was = count
-        if fresh and fresh["items"]:
-            data = fresh                    # пригодится, если время выйдет
-            if same >= 1:
-                break
-        # Карточек нет, страница устоялась и раздел отзывов на месте – значит,
-        # отвечать действительно нечего. Но если разметку карточек мы просто
-        # не разобрали (skipped), пустотой это считать нельзя.
-        if count == 0 and same >= 2 and not (fresh or {}).get("skipped") and _reviews_ready(page):
-            data = {"items": [], "skipped": 0}
-            break
-        page.wait_for_timeout(700)
+    budget = REVIEWS_WAIT_MS / 1000 if navigate else 5
+    min_wait = min(REVIEWS_MIN_WAIT_MS / 1000, budget) if navigate else 0
+    data, look = _wait_reviews(page, org_id, budget, min_wait, since=opened)
+
+    # Ничего не дождались. Живой случай: страница вообще не прогрузилась –
+    # кабинет отдал пустой каркас, а список так и не приехал. Один
+    # перезаход дешевле, чем ложное «отзывов нет» в отчёте.
+    if data is None and navigate:
+        warn(f"  🔄 Отзывы не дорисовались с первого раза "
+             f"(«{look.get('title') or 'без заголовка'}») – перезагружаем страницу")
+        try:
+            page.reload(wait_until="domcontentloaded", timeout=40_000)
+            again = time.time()
+            _wait_quiet_network(page)
+            data, look = _wait_reviews(page, org_id, budget, min_wait, since=again)
+        except Exception as e:  # noqa: BLE001
+            warn(f"  🔄 Перезагрузка не удалась: {yb._short_error(e)}")
 
     if data is None:
-        where = ""
+        where = look.get("path") or ""
         try:
-            where = f" (открыт адрес {page.url})"
+            where = where or page.url
         except Exception:  # noqa: BLE001
-            where = ""
-        out["reason"] = ("Страница отзывов не открылась – кабинет 2ГИС не отдал список"
-                         f"{where}. Проверьте вход в 2ГИС в «Настройках»")
+            pass
+        # Отдельный случай: кабинет увёл не туда. Это не «список не приехал»,
+        # и разбираться с этим человеку иначе – по заголовку сразу видно.
+        if look and not look.get("onReviews"):
+            out["reason"] = (f"Открылась не страница отзывов, а «{look.get('title') or '?'}» "
+                             f"({where or 'адрес неизвестен'}) – отзывы прочитать не смогли")
+            return out
+        out["reason"] = ("Страница отзывов не дорисовалась – кабинет 2ГИС не отдал список"
+                         f"{f' (открыт адрес {where})' if where else ''}. "
+                         "Отзывы этого города могли остаться незамеченными: "
+                         "проверьте раздел вручную или запустите прогон ещё раз")
         return out
 
     out.update(ok=True, items=data["items"], shown=len(data["items"]),
                skipped=data.get("skipped", 0))
     return out
-
-
-def _reviews_ready(page: Page) -> bool:
-    """Раздел отзывов на месте: либо кабинет сам сказал «пусто», либо виден список."""
-    try:
-        return bool(page.evaluate(_EMPTY_LIST_JS)) or bool(page.evaluate(_PAGE_READY_JS))
-    except Exception:  # noqa: BLE001
-        return False
 
 
 def looks_like_login_page(page: Page) -> bool:
@@ -1059,6 +1158,20 @@ ACTUALIZE_WAIT_MS = 30_000       # плашка приходит отдельн�
 ACTUALIZE_QUIET = 3              # столько одинаковых чтений подряд = страница устоялась
 ACTUALIZE_PROOF_MS = 12_000      # столько ждём ответа кабинета после нажатия
 
+# Раньше этого срока «плашки нет» не говорим – даже если страница выглядит
+# устоявшейся.
+#
+# Третий заход на те же грабли. Страница «Данные о компании» устаканивается
+# за пару секунд: меню, заголовок, поля карточки – всё это приезжает сразу.
+# А ПЛАШКУ кабинет забирает отдельным запросом и рисует позже, иногда сильно
+# позже. Прогон видел «текст не меняется, мы на нужном разделе, плашки нет» и
+# уходил через 2–3 секунды – в логе заказчицы каждый город получал «Плашки
+# «Данные верны» нет», хотя в кабинете руками она её видела.
+#
+# Поэтому тишина сама по себе больше не приговор: сначала выдерживаем срок,
+# и только потом «плашки нет» становится ответом.
+ACTUALIZE_MIN_WAIT_MS = 9_000
+
 
 def look_at_page(page: Page) -> dict:
     """Снимок страницы «Данные о компании» глазами человека. Сбой – пустой снимок."""
@@ -1068,26 +1181,41 @@ def look_at_page(page: Page) -> dict:
         return {}
 
 
-def _settle(page: Page) -> dict:
+def _settle(page: Page, since: float | None = None) -> dict:
     """
     Дождаться, пока страница перестанет меняться, – и только потом судить.
 
     Не «нашли слово – значит готово»: слово «Данные о компании» написано в
     меню слева и на пустой странице тоже. Готовность – это когда текст
-    несколько чтений подряд один и тот же.
+    несколько чтений подряд один и тот же И выдержан ACTUALIZE_MIN_WAIT_MS:
+    сама страница успокаивается заметно раньше, чем приезжает плашка.
+
+    since – когда страницу открыли. Срок считаем от этого мгновения, а не от
+    входа сюда: ожидание тишины в сети – это уже часть тех же секунд, и
+    платить за них дважды на каждом городе незачем.
+
+    Найденная надпись прерывает ожидание сразу – ждать больше нечего.
     """
     look, same, was = {}, 0, -1
+    started = since or time.time()
     deadline = time.time() + ACTUALIZE_WAIT_MS / 1000
+    hold = min(ACTUALIZE_MIN_WAIT_MS, ACTUALIZE_WAIT_MS) / 1000
     while time.time() < deadline:
         fresh = look_at_page(page)
         look = fresh or look
         if look.get("spot"):
             return look
+        # Карточки нет в справочнике – это ответ, а не полуфабрикат: плашке
+        # взяться неоткуда, и досиживать срок незачем.
+        if look.get("deleted"):
+            return look
         size = int(look.get("size") or 0)
         same = same + 1 if size == was and size > 200 else 0
         was = size
-        # Страница устоялась, мы на нужном разделе, плашки нет – ждать нечего.
-        if same >= ACTUALIZE_QUIET and look.get("onCompany") and not look.get("banner"):
+        # Страница устоялась, мы на нужном разделе, плашки нет – и срок
+        # выдержан. Только теперь «плашки нет» можно считать ответом.
+        if (same >= ACTUALIZE_QUIET and look.get("onCompany") and not look.get("banner")
+                and time.time() - started >= hold):
             break
         page.wait_for_timeout(700)
     return look
@@ -1182,11 +1310,15 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
         page.goto(url, wait_until="domcontentloaded", timeout=40_000)
     except Exception as e:  # noqa: BLE001
         return finish("failed", f"Не удалось открыть страницу: {yb._short_error(e)}")
+    opened = time.time()
 
     if looks_like_login_page(page):
         return finish("no-session", "Сессия 2ГИС не активна: открылась страница входа")
 
-    look = _settle(page)
+    # Плашку кабинет забирает отдельным запросом – ждём, пока страница
+    # перестанет ходить в сеть, и только потом смотрим, что на ней.
+    _wait_quiet_network(page)
+    look = _settle(page, since=opened)
     spot = look.get("spot")
     had_banner = bool(look.get("banner"))
 
@@ -1279,6 +1411,14 @@ def actualize_city(page: Page, task: dict, idx: int = 0, total: int = 1) -> dict
 # 2ГИС принимает не всё: gif не примет, и молча – просто ничего не произойдёт.
 MEDIA_TYPES = (".jpg", ".jpeg", ".png", ".webp")
 MEDIA_WAIT_MS = 60_000           # столько ждём, пока снимок появится в альбоме
+MEDIA_QUIET = 2                  # столько одинаковых чтений подряд = альбом дорисован
+
+# Через сколько секунд перепроверять альбом после загрузки. Заходов
+# несколько: 2ГИС принимает файл не мгновенно, и первая же перепроверка,
+# сделанная сразу, регулярно врала «фото не появилось». Сначала смотрим
+# через две секунды, потом через четыре, потом через восемь – ровно так
+# заказчица и просила: «проверить через 2, если не найдём – через 4».
+MEDIA_RECHECK_S = (2, 4, 8)
 
 # Требования 2ГИС к фото (из подсказки в интерфейсе кабинета).
 GIS_MIN_PX   = 600               # минимальный размер стороны, px
@@ -1490,6 +1630,102 @@ def _media_settle(page: Page, want_field: bool = True) -> dict:
     return look
 
 
+def _album_count(page: Page) -> dict:
+    """
+    Сколько снимков в альбоме СЕЙЧАС – после прокрутки до низа.
+
+    Плитки альбома подгружаются по мере прокрутки: у картинки ниже экрана
+    может не быть ни src, ни размера, пока до неё не домотали. В headless
+    страница не прокручивается сама, поэтому мотаем сами – иначе длинный
+    альбом всегда выглядит одинаково, сколько в него ни добавляй.
+    """
+    try:
+        page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
+        page.wait_for_timeout(400)
+    except Exception:  # noqa: BLE001
+        pass
+    return _media_look(page)
+
+
+def _album_settle(page: Page, budget_s: float | None = None) -> dict:
+    """
+    Дождаться, пока альбом дорисуется, и только потом считать плитки.
+
+    Зачем отдельно от _media_settle. Тот возвращается, как только увидит то,
+    за чем шёл (поле загрузки или ссылку в меню), – а плитки к этому моменту
+    ещё не нарисованы. На перепроверке после загрузки это давало ровно ту
+    беду, о которой писала заказчица: Click перезагружал раздел, мгновенно
+    считал плитки на пустой ещё странице, не находил роста и писал «файлы
+    переданы, но в альбоме они не появились», хотя снимок уже лежал в
+    кабинете – просто среди прочих и чуть позже.
+
+    Готовым считаем альбом, когда счётчик и число плиток не меняются
+    MEDIA_QUIET чтений подряд.
+    """
+    budget = MEDIA_WAIT_MS / 1000 if budget_s is None else budget_s
+    look, same, was = {}, 0, None
+    deadline = time.time() + budget
+    while time.time() < deadline:
+        look = _album_count(page) or look
+        now = (int(look.get("tiles") or 0), look.get("counter"))
+        # Пустой альбом – тоже ответ, но только на дорисованной странице:
+        # ноль плиток на пустом каркасе значит «ещё не приехало».
+        drawn = now[0] or now[1] or int(look.get("size") or 0) > 200
+        same = same + 1 if now == was and drawn else 0
+        was = now
+        if same >= MEDIA_QUIET:
+            break
+        page.wait_for_timeout(600)
+    return look
+
+
+def _album_grown(look: dict, before: int, was_counter: int | None) -> int:
+    """На сколько снимков вырос альбом против того, что было до загрузки."""
+    grown = int(look.get("tiles") or 0) - before
+    if was_counter is not None and look.get("counter") is not None:
+        grown = max(grown, int(look["counter"]) - int(was_counter))
+    return grown
+
+
+def _album_after_upload(page: Page, media_url: str, before: int, was_counter: int | None,
+                        need: int, pauses: tuple[int, ...] = MEDIA_RECHECK_S
+                        ) -> tuple[int, str, list[int]]:
+    """
+    Сколько снимков РЕАЛЬНО легло в альбом – по тому, что отдаёт сервер.
+
+    Перепроверяем не один раз, а несколькими заходами с растущей паузой
+    (MEDIA_RECHECK_S). Причина простая и живая: 2ГИС принимает файл не
+    мгновенно. Click перезагружал раздел сразу, снимка ещё не видел и писал
+    в отчёт, что фото не появилось, – а через несколько секунд оно там уже
+    было. Заказчица так и описала: «прога закрывает страницу прямо до
+    прогрузки». Поэтому: не нашли через две секунды – смотрим через четыре,
+    потом через восемь, и только тогда сдаёмся.
+
+    Возвращает (насколько вырос альбом, текст ошибки или пусто, какие паузы
+    успели выдержать – это уходит в отчёт, чтобы «не появилось» не выглядело
+    как «даже не смотрели»).
+    """
+    grown, done = 0, []
+    deadline = time.time() + MEDIA_WAIT_MS / 1000
+    for pause in pauses:
+        left = deadline - time.time()
+        if left <= 0:
+            break
+        waited = min(pause, left)
+        page.wait_for_timeout(int(waited * 1000))
+        done.append(round(waited))
+        try:
+            page.goto(media_url, wait_until="domcontentloaded", timeout=40_000)
+            _wait_quiet_network(page)
+        except Exception as e:  # noqa: BLE001
+            return grown, f"Не удалось перепроверить альбом после загрузки: {yb._short_error(e)}", done
+        look = _album_settle(page, budget_s=max(1.0, deadline - time.time()))
+        grown = max(grown, _album_grown(look, before, was_counter))
+        if grown >= need:
+            break
+    return grown, "", done
+
+
 def suitable_photos(paths: list[str]) -> tuple[list[str], list[str]]:
     """Что 2ГИС примет и что отбросит. Отброшенное называем по имени файла."""
     good, bad = [], []
@@ -1575,6 +1811,9 @@ def upload_media(page: Page, gis_url: str | None, files: list[str], label: str =
         out["reason"] = "В разделе «Фото и видео» не нашлось поле загрузки"
         return out
 
+    # Считать «сколько было» тоже нужно по дорисованному альбому: посчитаешь
+    # рано – и потом любой рост покажется больше настоящего.
+    look = _album_settle(page, budget_s=min(15.0, MEDIA_WAIT_MS / 1000)) or look
     before = int(look.get("tiles") or 0)
     was_counter = look.get("counter")
     media_url = page.url          # вернуться сюда же после перепроверки
@@ -1603,24 +1842,22 @@ def upload_media(page: Page, gis_url: str | None, files: list[str], label: str =
         if now.get("uploadError"):
             upload_rejected = True
             break
-        seen = int(now.get("tiles") or 0) - before
-        if was_counter is not None and now.get("counter") is not None:
-            seen = max(seen, int(now["counter"]) - int(was_counter))
-        if seen >= len(good):
+        if _album_grown(now, before, was_counter) >= len(good):
             break
 
     # Доказательство только одно – то, что страница покажет ПОСЛЕ перезагрузки
     # с сервера, а не то, что успел нарисовать браузер по своей инициативе.
-    try:
-        page.goto(media_url, wait_until="domcontentloaded", timeout=40_000)
-        confirmed = _media_settle(page, want_field=False)
-    except Exception as e:  # noqa: BLE001
-        out["reason"] = f"Не удалось перепроверить альбом после загрузки: {yb._short_error(e)}"
+    # Но и торопиться с приговором нельзя: заходов несколько, с растущей
+    # паузой, и альбом каждый раз ждём дорисованным (см. _album_after_upload).
+    # Кабинет уже сказал, что файл не годится, – тогда достаточно одного
+    # захода: ждать нечего, а время прогона не резиновое.
+    pauses = MEDIA_RECHECK_S[:1] if upload_rejected else MEDIA_RECHECK_S
+    grown, failure, checked = _album_after_upload(page, media_url, before, was_counter,
+                                                  len(good), pauses)
+    if failure:
+        out["reason"] = failure
         return out
 
-    grown = int(confirmed.get("tiles") or 0) - before
-    if was_counter is not None and confirmed.get("counter") is not None:
-        grown = max(grown, int(confirmed["counter"]) - int(was_counter))
     out["uploaded"] = min(grown, len(good)) if grown > 0 else 0
     if out["uploaded"] >= len(good):
         info(f"  📸 {label}2ГИС: снимков добавлено {out['uploaded']} из {len(good)}")
@@ -1633,8 +1870,10 @@ def upload_media(page: Page, gis_url: str | None, files: list[str], label: str =
                          "(мин. 600×600 пкс, макс. 7000×7000, соотношение ≤ 1:5, до 10 МБ)")
         warn(f"  📸 {label}2ГИС: {out['reason']}")
     else:
-        out["reason"] = ("Файлы переданы, но в альбоме они не появились – "
-                         "проверьте раздел «Фото и видео» вручную")
+        tries = ", ".join(str(p) for p in checked) or "0"
+        out["reason"] = ("Файлы переданы, но в альбоме они не появились: перепроверяли "
+                         f"альбом {len(checked) or 1} раз(а) с паузами {tries} сек. "
+                         "Проверьте раздел «Фото и видео» вручную")
         warn(f"  📸 {label}2ГИС: {out['reason']}")
     return out
 

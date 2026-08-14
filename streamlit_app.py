@@ -644,10 +644,17 @@ def kp_pull(project_id: str, config: dict) -> tuple[bool, str]:
         config["kpSheetTitle"] = diag["usedSheet"]
     save_config(project_id)
     note = f'Загружено: {cities_word(len(cities))} в {diag.get("countries", 0)} странах.'
-    if diag.get("gisCities"):
-        note += f' В 2ГИС карточек: {diag["gisCities"]}.'
+    note += f' В 2ГИС карточек: {diag.get("gisCities", 0)}.'
     if diag.get("skippedDeleted"):
         note += f' Пропущено удалённых карточек: {diag["skippedDeleted"]}.'
+    # Почему город не попал в 2ГИС – по имени и по причине. Без этого
+    # «поставила Шымкент активным, а его нет» разбиралось перепиской: в
+    # приложении не было ни числа, ни имени, ни причины.
+    skipped = diag.get("gisSkippedRows") or []
+    if skipped:
+        names = "; ".join(f'{r["name"]} – {r["why"]}' for r in skipped[:6])
+        tail = " и ещё…" if len(skipped) > 6 else ""
+        note += f" В список 2ГИС не попали: {names}{tail}."
     return True, note
 
 
@@ -2764,6 +2771,53 @@ def reviews_queue_block(project_id: str, platform: str = rv.YANDEX) -> None:
         _sent_report_block(project_id, done, pending, platform)
 
 
+def kp_refresh_row(project_id: str, config: dict, platform: str = rv.YANDEX) -> None:
+    """
+    «Обновить города из КП» – прямо там, где на города и смотрят.
+
+    Кнопка была и раньше, но жила только в «⚙️ Настройках», рядом с выбором
+    таблицы и листа. А человек, поправивший статус города в КП, идёт не в
+    настройки: он идёт туда, где выбирает города для прогона. Так и вышло с
+    Шымкентом – статус в таблице поставили «Активная», в списке 2ГИС города
+    нет, и позвать его туда нечем: «не нашла функционала, который обновляет
+    список 2ГИС».
+
+    Теперь список городов обновляется с той же страницы, где он показан, и
+    рядом написано, когда он обновлялся в прошлый раз и сколько в нём
+    городов ИМЕННО ЭТОЙ площадки.
+    """
+    where = "2ГИС" if platform == rv.GIS else "Яндекса"
+    if not kp_sheet.is_configured(project_id, (config.get("kpSheetUrl") or "").strip()):
+        st.caption("Города ведутся вручную: таблица КП у проекта не задана – "
+                   "«⚙️ Настройки» → «Источник городов».")
+        return
+
+    total = sum(len(c.get("cities") or []) for c in platform_countries(config, platform))
+    c1, c2 = st.columns([2, 3], vertical_alignment="center")
+    if c1.button("⟳ Обновить города из КП", key=f"kp-refresh-{platform}",
+                 use_container_width=True,
+                 help="Перечитать таблицу КП и заменить список городов. Город попадает "
+                      "в список 2ГИС, если в его строке есть ссылка на кабинет "
+                      "account.2gis.com и статус не «Удалена»."):
+        try:
+            with st.spinner("Читаю таблицу КП…"):
+                ok, note = kp_pull(project_id, config)
+        except Exception as e:  # noqa: BLE001 – текст ошибки уже человеческий
+            ok, note = False, str(e)
+        if ok:
+            st.success(note)
+            time.sleep(1.6)
+        else:
+            st.error(note)
+            time.sleep(2.5)
+        st.rerun()
+
+    synced = local_time(config.get("kpSyncedAt"))
+    c2.caption(f"Городов {where}: {total}. "
+               + (f"Список из КП обновлён: {synced}." if synced
+                  else "Из таблицы ещё не загружали."))
+
+
 def tab_actualize(project_id: str, config: dict) -> None:
     """
     Актуализация и отзывы. Площадок две – Яндекс.Бизнес и 2ГИС; выбор наверху.
@@ -2786,11 +2840,12 @@ def tab_actualize(project_id: str, config: dict) -> None:
     if not countries:
         if platform == rv.GIS:
             html(T.empty("📍", "Городов 2ГИС нет",
-                         "Загрузите города из КП во вкладке «Города»: они берутся из "
-                         "блока «2ГИС» той же таблицы. Город попадает сюда, если у него "
-                         "есть ссылка на кабинет и статус не «Удалена»."))
+                         "Города берутся из блока «2ГИС» таблицы КП. Город попадает "
+                         "сюда, если у него есть ссылка на кабинет и статус не "
+                         "«Удалена». Кнопка ниже перечитает таблицу прямо сейчас."))
         else:
             html(T.empty("🏙", "Нет городов", "Добавьте страны и города во вкладке «Города»."))
+        kp_refresh_row(project_id, config, platform)
         reviews_queue_block(project_id, platform)
         return
 
@@ -2819,6 +2874,10 @@ def tab_actualize(project_id: str, config: dict) -> None:
                  'и нажмёт кнопку <b>«Данные актуальны»</b>, если она там есть. Кнопка появляется на странице '
                  'периодически – Яндекс просит подтверждать, что данные не изменились. '
                  'Если кнопки нет – актуализация не требуется.</div>')
+
+        # Обновление списка – здесь же, над самим списком: искать его в
+        # «Настройках» человеку неоткуда (см. kp_refresh_row).
+        kp_refresh_row(project_id, config, platform)
 
         head, act = st.columns([3, 1])
         head.markdown(
@@ -3073,10 +3132,13 @@ def tab_cities(project_id: str, config: dict) -> None:
     if total:
         st.caption(f"Всего {cities_word(total)} в "
                    f"{plural(countries, 'стране', 'странах', 'странах')}. "
-                   "Для обновления списка перейдите в «Настройки» → «Источник городов»")
+                   "Списки Яндекса и 2ГИС – из одной таблицы КП, но города в них разные: "
+                   "карточка 2ГИС заведена не везде.")
     else:
-        st.info("Городов пока нет. Для обновления списка перейдите в "
-                "«Настройки» → «Источник городов»")
+        st.info("Городов пока нет – загрузите их из таблицы КП.")
+    # Кнопка загрузки – и здесь тоже, а не только в «Настройках»: список
+    # городов смотрят на этой странице, обновлять его логично отсюда же.
+    kp_refresh_row(project_id, config, rv.YANDEX)
 
     with st.expander("➕ Добавить страну"):
         c1, c2 = st.columns([3, 1])

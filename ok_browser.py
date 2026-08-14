@@ -1194,6 +1194,18 @@ def _select_closest(page, selector: str, want: str) -> str:
     return target
 
 
+def _letters(s: str) -> str:
+    """
+    Только буквы и цифры, в нижнем регистре.
+
+    Сверять набранное по ним надёжнее, чем посимвольно: в поле не попадают
+    ни звёздочки разметки, ни переносы строк (textContent склеивает абзацы
+    без них), а эмодзи ОК рисует картинками.
+    """
+    import re
+    return re.sub(r"\W", "", s or "", flags=re.U).lower()
+
+
 def _type_post_text(page, text_sel: str, text: str,
                     log: Callable[[str], None] | None = None) -> str:
     """
@@ -1696,7 +1708,19 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                 return {"ok": False, "error": "Текст не попал в поле поста ОК",
                         "shot": _debug_shot(project_id, page, "no-text")}
             # Лишнее спереди – верный признак, что черновик всё-таки остался.
-            if text.strip() and not typed.strip().startswith(text.strip()[:20]):
+            #
+            # Сверяем с тем, что РЕАЛЬНО набирается, и по одним буквам. Оба
+            # уточнения – из живого отказа 14.08.2026: «В поле поста осталось
+            # лишнее от прошлого черновика: «СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ НА
+            # АРМИРУЮЩУЮ МИКРОФИБРУ…»». В поле лежал ровно наш текст – а
+            # сравнивали его с РАЗМЕТКОЙ, в которой заголовок стоит жирным
+            # (`**…**`): звёздочки в поле, разумеется, не появляются, и
+            # проверка не сходилась никогда, стоило посту начинаться с
+            # жирной строки. Заодно: textContent склеивает строки без
+            # переносов, поэтому короткий первый абзац тоже ломал сверку.
+            import post_text
+            plain = "".join(part for part, _ in post_text.plain_chunks(text))
+            if _letters(plain) and not _letters(typed).startswith(_letters(plain)[:20]):
                 return {"ok": False,
                         "error": "В поле поста осталось лишнее от прошлого черновика: "
                                  f"«{typed.strip()[:60]}…». Откройте форму в ОК и "

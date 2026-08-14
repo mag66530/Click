@@ -27,6 +27,7 @@ Click в это время может быть выключен. Ради это
 
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -706,6 +707,46 @@ def _lines_in(got: str) -> int:
     return len([ln for ln in (got or "").split("\n") if ln.strip()])
 
 
+# Миниатюры прикреплённых файлов. Веб-приложения показывают выбранный файл
+# из памяти браузера, а такая картинка всегда живёт по адресу blob: или
+# data: – в отличие от аватарок и значков, которые приходят с сервера.
+# Считаем их до и после выбора файла: выросло – фото в форме, не выросло –
+# МАКС его не принял.
+_THUMBS_JS = r"""
+() => {
+  let n = 0;
+  for (const el of document.querySelectorAll('img, video, canvas')) {
+    const src = el.getAttribute('src') || el.currentSrc || '';
+    if (!/^(blob:|data:)/.test(src)) continue;
+    const r = el.getBoundingClientRect();
+    const w = r.width || el.offsetWidth, h = r.height || el.offsetHeight;
+    if (w >= 24 && h >= 24) n++;
+  }
+  return n;
+}
+"""
+
+THUMB_WAIT_S = 20               # столько ждём миниатюру: файл ещё грузится
+
+
+def _thumbs(page) -> int:
+    """Сколько миниатюр прикреплённых файлов сейчас в форме."""
+    try:
+        return int(page.evaluate(_THUMBS_JS) or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _wait_thumbs(page, before: int, want: int) -> bool:
+    """Дождаться, пока миниатюры появятся. False – так и не появились."""
+    deadline = time.time() + THUMB_WAIT_S
+    while time.time() < deadline:
+        page.wait_for_timeout(600)
+        if _thumbs(page) - before >= want:
+            return True
+    return _thumbs(page) > before
+
+
 def _fill_post_text(page, sel: str, text: str, log: Callable[[str], None]) -> str:
     """
     Вписать текст в поле МАКС, НЕ отправив ни одного сообщения.
@@ -844,6 +885,7 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
 
             if image_paths:
                 log(f"Прикрепляю фото: {len(image_paths)}")
+                had = _thumbs(page)
                 if not _click_first(page, SEL["attach"], timeout=6_000):
                     return {"ok": False,
                             "shot": _debug_shot(project_id, page, "no-attach"),
@@ -860,7 +902,20 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                                 "shot": _debug_shot(project_id, page, "no-file-input"),
                                 "error": "Не нашли, куда отдать файлы фото в МАКС"}
                     inp.first.set_input_files(image_paths)
-                page.wait_for_timeout(3_500)
+
+                # Файл ПЕРЕДАН – это ещё не «фото в посте». 14.08.2026 МАКС
+                # поставил отложку без картинки, а Click отчитался успехом:
+                # после set_files он просто ждал три с половиной секунды и
+                # шёл дальше. Пост без картинки – это не тот пост, который
+                # просили, поэтому теперь ждём миниатюру в самой форме и без
+                # неё отложку не ставим.
+                if not _wait_thumbs(page, had, len(image_paths)):
+                    return {"ok": False,
+                            "shot": _debug_shot(project_id, page, "no-thumb"),
+                            "error": ("Файл фото передали, но в поле поста МАКС "
+                                      "миниатюра так и не появилась. Отложку не "
+                                      "ставим: пост без картинки – не тот пост. "
+                                      "Проверьте канал и попробуйте ещё раз")}
 
             # ПРАВОЙ кнопкой: левая отправит пост сейчас же. Это главное
             # место всей механики, и ошибиться тут нельзя.

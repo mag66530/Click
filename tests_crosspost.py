@@ -1827,6 +1827,143 @@ def test_ok_bold_and_probe() -> None:
     check("отпечаток строки по-прежнему короткий", len(mb._probe("а" * 100)) == 32)
 
 
+def test_ok_bold_first_line() -> None:
+    """
+    Пост с ЖИРНЫМ заголовком не должен считаться чужим черновиком.
+
+    Живой отказ 14.08.2026: «ОК: В поле поста осталось лишнее от прошлого
+    черновика: «СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ НА АРМИРУЮЩУЮ МИКРОФИБРУ…»». В поле
+    лежал ровно наш текст – а сверяли его с РАЗМЕТКОЙ, где заголовок стоит
+    жирным (`**…**`). Звёздочки в поле, разумеется, не появляются: ОК вместо
+    них включает жирный. Проверка не сходилась никогда, стоило посту
+    начинаться с жирной строки, – а начинаются так все спецпредложения.
+
+    Второй край того же: textContent склеивает абзацы без переносов, поэтому
+    короткая первая строка ломала сверку так же надёжно.
+    """
+    print("\nОК: жирный заголовок – это не чужой черновик")
+    import ok_browser as ok
+    import post_text as pt
+
+    markup = ("**СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ НА АРМИРУЮЩУЮ МИКРОФИБРУ**\n\n"
+              "⚡ СТОИМОСТЬ – 1 400 ₽/кг ⚡\n\nТехнические характеристики:")
+    plain = "".join(part for part, _ in pt.plain_chunks(markup))
+    # Что реально оказывается в поле: без звёздочек и без переносов строк.
+    in_field = plain.replace("\n", "")
+
+    check("прежняя сверка – с разметкой – не сходится",
+          not in_field.strip().startswith(markup.strip()[:20]),
+          f"{markup[:20]!r} vs {in_field[:20]!r}")
+    check("новая сверка – по буквам набранного – сходится",
+          ok._letters(in_field).startswith(ok._letters(plain)[:20]),  # noqa: SLF001
+          f"{ok._letters(in_field)[:30]!r}")  # noqa: SLF001
+
+    # А настоящий чужой черновик по-прежнему ловится.
+    left = "Тест" + in_field
+    check("остаток чужого черновика впереди – всё ещё отказ",
+          not ok._letters(left).startswith(ok._letters(plain)[:20]),  # noqa: SLF001
+          left[:40])
+
+    import inspect
+    src = inspect.getsource(ok.schedule_postponed_post)
+    check("сверяем с тем, что набирается, а не с разметкой",
+          "plain_chunks(text)" in src, "нет разбора разметки перед сверкой")
+    check("и по буквам", "_letters(typed)" in src)
+
+
+def test_max_photo_proof() -> None:
+    """
+    Отложка МАКС без картинки – это не успех.
+
+    14.08.2026 МАКС поставил пост на 17.08 без фото, а Click отчитался
+    успехом: после передачи файла он ждал три с половиной секунды и шёл
+    дальше, ни разу не проверив, появилась ли картинка в форме. Пост без
+    картинки – не тот пост, который просили.
+    """
+    print("\nМАКС: фото должно быть видно в форме")
+    import max_browser as mb
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    PIX = ("data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==")
+    page_html = f"""
+    <html><body style="margin:0">
+      <img id="avatar" src="https://example.com/ava.png" width="40" height="40">
+      <div id="composer"></div>
+      <script>
+        window.attach = () => document.getElementById('composer').innerHTML =
+          '<img id="thumb" width="80" height="80" src="{PIX}">';
+      </script>
+    </body></html>
+    """
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 800, "height": 600}).new_page()
+            page.set_content(page_html)
+
+            check("аватарки и значки с сервера за прикреплённое фото не считаем",
+                  mb._thumbs(page) == 0, str(mb._thumbs(page)))  # noqa: SLF001
+
+            was = mb._thumbs(page)  # noqa: SLF001
+            page.evaluate("() => window.attach()")
+            check("а картинка из памяти браузера – считается",
+                  mb._thumbs(page) - was == 1, str(mb._thumbs(page)))  # noqa: SLF001
+
+            # Ждать миниатюру, которой не будет, бесконечно нельзя.
+            page.set_content(page_html)
+            was_wait = mb.THUMB_WAIT_S
+            mb.THUMB_WAIT_S = 2
+            try:
+                check("миниатюра не появилась – так и говорим",
+                      not mb._wait_thumbs(page, mb._thumbs(page), 1))  # noqa: SLF001
+                page.evaluate("() => setTimeout(window.attach, 700)")
+                check("а появившуюся с задержкой – дожидаемся",
+                      mb._wait_thumbs(page, 0, 1))  # noqa: SLF001
+            finally:
+                mb.THUMB_WAIT_S = was_wait
+
+            import inspect
+            src = inspect.getsource(mb.schedule_postponed_post)
+            check("без миниатюры отложку не ставим", "_wait_thumbs(" in src)
+            check("и человеку сказано, почему", "не тот пост" in src)
+        finally:
+            browser.close()
+
+
+def test_form_log_is_fresh() -> None:
+    """
+    Лог формирования пишется по ходу, а не одной строчкой в конце.
+
+    Заказчица (14.08.2026): «лог вообще старый висит, нового нет». Так и
+    было: файл лога переписывался ПОСЛЕДНИМ действием прогона. Пока прогон
+    шёл, в разделе висел лог прошлого раза, а если прогон обрывался –
+    новый не появлялся вовсе, и разбирать было нечего.
+    """
+    print("\nКросспостинг: лог пишется по ходу прогона")
+    import inspect
+
+    import streamlit_app as app
+
+    src = inspect.getsource(app._crosspost_form_block)  # noqa: SLF001
+    check("файл лога переписывается на каждой строке",
+          src.count("flush()") >= 3, f"вызовов flush: {src.count('flush()')}")
+    check("и в самом начале, до первого шага",
+          "flush()        # старый лог уступает место новому сразу" in src)
+    check("сама запись – в одном месте", "def flush()" in src)
+
+    head = inspect.getsource(app._crosspost_form_last_log)  # noqa: SLF001
+    check("в заголовке лога видно его время", 'f" – {when}"' in head)
+
+
 def test_forget_target() -> None:
     """
     Сброс одной площадки: ошибка убирается, соседние отложки не трогаются.

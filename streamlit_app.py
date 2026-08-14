@@ -3800,7 +3800,12 @@ def _crosspost_form_last_log(project_id: str) -> None:
         return
     if not text.strip():
         return
-    with st.expander("📄 Лог последнего формирования"):
+    # Время – прямо в заголовке. Иначе непонятно, этого прогона лог или
+    # позавчерашнего: оба выглядят одинаково, и разбирают по ошибке чужой.
+    head = text.strip().splitlines()[0].strip()
+    when = head.replace("Формирование", "").strip()
+    with st.expander("📄 Лог последнего формирования"
+                     + (f" – {when}" if when else "")):
         st.text_area("Что Click делал по шагам", value=text, height=240,
                      key=f"cp-form-log-{project_id}")
         st.download_button("⬇ Скачать (.txt)", data=text.encode("utf-8"),
@@ -4224,10 +4229,27 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
 
         # Протокол пишется и на экран, и в файл: st.status исчезает при первой
         # же перерисовке, а вопрос «что именно Click делал» встаёт уже после.
+        #
+        # В файл – СРАЗУ и на каждой строке, а не одним куском в конце.
+        # Раньше запись шла последней строчкой прогона, и пока прогон идёт,
+        # в разделе висел лог ПРОШЛОГО формирования: заказчица так и
+        # написала – «лог вообще старый висит, нового нет». А если прогон
+        # обрывался (перерисовка страницы, перезапуск облака), новый лог не
+        # появлялся вовсе, и разбирать было нечего.
         lines: list[str] = [f"Формирование {apptime.now().strftime('%d.%m.%Y %H:%M')}"]
+
+        def flush() -> None:
+            try:
+                _crosspost_form_log_path(project_id).write_text(
+                    "\n".join(lines), encoding="utf-8")
+            except OSError:
+                pass   # лог не должен ронять формирование
+
+        flush()        # старый лог уступает место новому сразу, а не в конце
 
         def say(m: str) -> None:
             lines.append(f"[{apptime.now().strftime('%H:%M:%S')}] {m}")
+            flush()
             box.write(m)
             # Короткие вехи – в заголовок свёрнутого статуса, чтобы было
             # видно, что происходит, не разворачивая.
@@ -4252,11 +4274,7 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
                     bad += 1
                     say(f"❌ {net_name} {r['post']['date']}: {r['error']}")
         lines.append(f"Итог: запланировано {ok}, с ошибками {bad}")
-        try:
-            _crosspost_form_log_path(project_id).write_text(
-                "\n".join(lines), encoding="utf-8")
-        except OSError:
-            pass   # лог не должен ронять формирование
+        flush()
         box.update(label=(f"Готово: запланировано {ok}"
                           + (f", с ошибками {bad}" if bad else "")),
                    state="error" if bad else "complete")

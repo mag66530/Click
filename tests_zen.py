@@ -232,6 +232,9 @@ class FakeLocator:
     def locator(self, _sel: str):
         return self
 
+    def input_value(self) -> str:
+        return self.page.values.get("date", "")
+
 
 class FakePage:
     """
@@ -246,6 +249,7 @@ class FakePage:
         self.url = url
         self.clicks: list[str] = []
         self.pending = ""
+        self.values: dict[str, str] = {}
         # После нажатия на аккаунт экран выбора уходит – как в жизни.
         self.text_after_click = None
 
@@ -495,6 +499,36 @@ def test_calendar() -> None:
           len(zb.MONTHS_RU) == 12 and len(zb.MONTHS_NOM) == 12)
 
 
+def test_date_already_set() -> None:
+    print("Дата уже стоит нужная – календарь не трогаем")
+    try:
+        import zen_browser as zb
+    except ImportError as e:
+        print(f"  ⏭ пропускаю: {e}")
+        return
+
+    when = datetime(2026, 8, 14, 19, 58, tzinfo=timezone(timedelta(hours=5)))
+
+    # Дзен подставляет в поле сегодняшнюю дату, и для статьи «на сегодня»
+    # она сразу правильная. Открывать календарь незачем: не нажали – нечему
+    # и сломаться. Заказчик это и заметил: «она изначально выбрана».
+    ready = FakePage(text="Опубликовать позже GMT+5", has=("input__control",))
+    ready.values["date"] = "14 августа 2026"
+    why = zb._open_calendar_and_pick(ready, when, lambda m: None)
+    check("нужная дата принимается как есть", why == "", why)
+    check("календарь при этом не открывали", not ready.clicks, str(ready.clicks))
+
+    # А вот чужую дату так оставлять нельзя – придётся открыть календарь.
+    other = FakePage(text="Опубликовать позже", has=("input__control",))
+    other.values["date"] = "14 июля 2027"
+    zb._open_calendar_and_pick(other, when, lambda m: None)
+    check("чужая дата – календарь открываем", bool(other.clicks), str(other.clicks))
+
+    missing = FakePage(text="Опубликовать позже")
+    check("нет поля даты – говорим прямо",
+          "не нашли поле даты" in zb._open_calendar_and_pick(missing, when, lambda m: None))
+
+
 def test_session_source(tmp: Path | None = None) -> None:
     print("Вход в Дзен берётся от Яндекс.Бизнеса")
     try:
@@ -587,6 +621,7 @@ def main() -> int:
     test_popups_and_fields()
     test_paste_detection()
     test_calendar()
+    test_date_already_set()
     test_session_source()
     test_registry_wiring()
     print("\n" + "═" * 60)

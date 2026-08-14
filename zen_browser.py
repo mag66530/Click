@@ -753,31 +753,53 @@ def _click_day_in_month(page, when: datetime) -> bool:
     """
     Нажать число внутри блока НУЖНОГО месяца.
 
-    Почему не просто «нажать 14»: месяцев на экране два, и четырнадцатое
-    есть в обоих. Поэтому находим заголовок «Август 2026», поднимаемся от
-    него до блока, где лежат числа, и жмём нужное уже внутри этого блока.
+    Почему так сложно. Месяцев на экране два, и четырнадцатое есть в обоих –
+    значит просто «нажать 14» нельзя. Заголовок месяца при этом не
+    обязательно цельный: «Август 2026» вполне может быть собран из двух
+    кусочков, и поиск «элемента, чей текст ровно такой» его не находит –
+    на этом и встал прогон 19:18.
+
+    Поэтому ищем иначе и надёжнее: находим заголовок как САМЫЙ МЕЛКИЙ
+    элемент, внутри которого есть «Август 2026», а потом берём первую
+    ячейку с нужным числом, идущую ПОСЛЕ него в порядке страницы. Всё, что
+    идёт после сентябрьского заголовка, до нас уже не относится.
     """
     title = f"{MONTHS_NOM[when.month - 1]} {when.year}"
     try:
         handle = page.evaluate_handle(
             """([title, day]) => {
-                const leaf = (e) => e.children.length === 0;
-                const heads = [...document.querySelectorAll('*')]
-                    .filter(e => leaf(e) && e.textContent.trim() === title);
+                const nodes = [...document.querySelectorAll('*')];
+                const shown = (e) => !!(e.offsetParent || e.getClientRects().length);
+
+                // Заголовок месяца: самый мелкий элемент, содержащий «Август 2026».
+                const heads = nodes.filter(e =>
+                    shown(e) && (e.textContent || '').includes(title));
                 if (!heads.length) return null;
-                let box = heads[0].parentElement;
-                for (let i = 0; i < 6 && box; i++) {
-                    const cells = [...box.querySelectorAll('*')]
-                        .filter(e => leaf(e) && e.textContent.trim() === day);
-                    if (cells.length) return cells[cells.length - 1];
-                    box = box.parentElement;
+                heads.sort((a, b) =>
+                    a.querySelectorAll('*').length - b.querySelectorAll('*').length);
+                const head = heads[0];
+                const from = nodes.indexOf(head);
+
+                // Первая ячейка с нужным числом ПОСЛЕ заголовка: она и есть
+                // день этого месяца, а не соседнего.
+                for (let i = from; i < nodes.length; i++) {
+                    const e = nodes[i];
+                    if (e.children.length === 0 && shown(e)
+                        && e.textContent.trim() === day) {
+                        // Нажимать надо по ячейке целиком: сам текст может
+                        // лежать в неактивном span внутри кнопки дня.
+                        return e.closest('td,button,[role="button"],[class*="day"]') || e;
+                    }
                 }
                 return null;
             }""", [title, str(when.day)])
         el = handle.as_element() if handle else None
         if el is None:
             return False
-        el.click()
+        try:
+            el.click(timeout=5_000)
+        except Exception:  # noqa: BLE001 – ячейку могло перекрыть подсказкой
+            el.evaluate("e => e.click()")
         return True
     except Exception:  # noqa: BLE001
         return False
@@ -800,6 +822,18 @@ def _open_calendar_and_pick(page, when: datetime, log: Callable[[str], None]) ->
     date_sel = _first_visible(page, SEL["date_input"], timeout=6_000)
     if not date_sel:
         return "не нашли поле даты в окне отложки"
+
+    # Дзен подставляет в поле СЕГОДНЯШНЮЮ дату, и для статьи «на сегодня»
+    # она уже правильная – заказчик это и заметил: «она изначально выбрана».
+    # Тогда календарь не открываем вовсе: не нажали – нечему и сломаться.
+    try:
+        already = page.locator(date_sel).first.input_value()
+    except Exception:  # noqa: BLE001
+        already = ""
+    if date_caption_ok(already, when):
+        log(f"Дата уже стоит нужная: {already}")
+        return ""
+
     page.locator(date_sel).first.click()
     page.wait_for_timeout(900)
 

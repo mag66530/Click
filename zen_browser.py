@@ -90,13 +90,32 @@ SEL = {
     "account_row": ['[class*="account"]', '[class*="Account"]', 'li', 'a'],
     "write_article": ['label[aria-label="Написать статью"]',
                       '[class*="new-publication-dropdown"] [class*="buttonTitle"]'],
+    # Поля редактора. Явных примет у них почти нет: заголовок и текст – это
+    # два contenteditable подряд, с серым плейсхолдером вместо подписи.
+    # Поэтому сначала пробуем приметы, а не найдя – берём их по порядку
+    # (см. find_editor_fields): первый редактируемый блок – заголовок,
+    # второй – тело статьи.
     "title_field": ['[data-testid="article-title"]',
+                    '[data-testid*="title"][contenteditable]',
                     '[placeholder*="Заголовок"]',
+                    '[data-placeholder*="Заголовок"]',
+                    '[aria-label*="Заголовок"]',
                     '[contenteditable="true"][class*="title"]',
                     'textarea[class*="title"]'],
     "body_field": ['[data-testid="article-body"]',
+                   '[data-testid*="body"][contenteditable]',
+                   '[data-placeholder*="Текст"]',
                    '[contenteditable="true"][class*="body"]',
                    '[contenteditable="true"][class*="content"]'],
+    "editable": ['[contenteditable="true"]'],
+    # Всплывающие окна Дзена: реклама донатов в студии и обучение «Статья»
+    # поверх нового редактора. Оба перекрывают работу и оба закрываются
+    # крестиком – либо нажатием по пустому месту, как и делает заказчик.
+    "popup_close": ['[class*="modal"] [class*="close"]',
+                    '[class*="popup"] [class*="close"]',
+                    '[class*="onboarding"] [class*="close"]',
+                    'button[aria-label*="Закрыть"]',
+                    '[aria-label="Закрыть"]'],
     "publish_button": ['[class*="base-button"]:has-text("Опубликовать")',
                        'button:has-text("Опубликовать")'],
     "later_checkbox_title": ['[class*="checkbox-input__title"]:has-text("Опубликовать позже")',
@@ -214,6 +233,99 @@ def _body_text(page) -> str:
 # ════════════════════════════════════════════════════════════════════
 #  ВХОД
 # ════════════════════════════════════════════════════════════════════
+
+def dismiss_popups(page, log: Callable[[str], None] | None = None) -> int:
+    """
+    Закрыть всё, что Дзен показывает поверх работы. Сколько закрыли.
+
+    Их два вида, и оба встретились на первом же прогоне (14.08.2026):
+    реклама «У нас появились донаты!» в студии и обучение «Статья» поверх
+    нового редактора. Пока они висят, до полей не добраться, а Click видит
+    пустую страницу и говорит «не нашёл поле заголовка».
+
+    Порядок как у человека: сначала крестик, потом Esc, потом нажатие по
+    пустому месту («чтобы закрыть надо на пустое место нажать» – заказчик).
+    Пустое место берём в ЛЕВОМ поле страницы: там нет ни кнопок, ни текста
+    статьи, промахнуться нечем.
+    """
+    log = log or (lambda m: None)
+    closed = 0
+    for _ in range(3):                        # окон бывает несколько подряд
+        if not _has_popup(page):
+            break
+        if _click_first(page, SEL["popup_close"], timeout=2_500):
+            closed += 1
+            page.wait_for_timeout(800)
+            continue
+        try:
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(600)
+        except Exception:  # noqa: BLE001
+            pass
+        if not _has_popup(page):
+            closed += 1
+            break
+        try:
+            page.mouse.click(40, 320)
+            page.wait_for_timeout(800)
+            closed += 1
+        except Exception:  # noqa: BLE001
+            break
+    if closed:
+        log(f"Закрыл всплывающие окна Дзена: {closed}")
+    return closed
+
+
+def _has_popup(page) -> bool:
+    """Висит ли поверх страницы окно, которого мы не звали."""
+    body = _body_text(page)
+    marks = ("У нас появились донаты", "Статья — это в первую очередь текст",
+             "Примеры статей", "Руководство")
+    if any(m in body for m in marks):
+        return True
+    return bool(_first_visible(page, SEL["popup_close"], timeout=1_200))
+
+
+def find_editor_fields(page, log: Callable[[str], None] | None = None,
+                       timeout_ms: int = 25_000):
+    """
+    Найти поля заголовка и текста в редакторе статьи. (заголовок, тело).
+
+    Приметы у полей слабые: серый плейсхолдер «Заголовок» и «Текст» – это не
+    подпись и не placeholder в привычном смысле, а рисунок редактора. Зато
+    порядок железный: первый редактируемый блок на странице – заголовок,
+    второй – тело статьи. По нему и берём, если явные селекторы не сработали.
+
+    Возвращает (None, None), если редактор так и не появился.
+    """
+    log = log or (lambda m: None)
+    left = timeout_ms
+    while left > 0:
+        # Окно обучения могло всплыть уже после открытия редактора.
+        dismiss_popups(page, log)
+
+        title_sel = _first_visible(page, SEL["title_field"], timeout=1_500)
+        body_sel = _first_visible(page, SEL["body_field"], timeout=1_000)
+        if title_sel and body_sel:
+            log("Поля редактора нашлись по приметам")
+            return page.locator(title_sel).first, page.locator(body_sel).first
+
+        try:
+            fields = page.locator(SEL["editable"][0])
+            visible = [fields.nth(i) for i in range(min(fields.count(), 6))
+                       if fields.nth(i).is_visible()]
+        except Exception:  # noqa: BLE001
+            visible = []
+        if len(visible) >= 2:
+            log("Поля редактора взяты по порядку: первое – заголовок, второе – текст")
+            return visible[0], visible[1]
+        if len(visible) == 1 and title_sel:
+            return page.locator(title_sel).first, visible[0]
+
+        page.wait_for_timeout(1_000)
+        left -= 2_500
+    return None, None
+
 
 def in_studio(page) -> bool:
     """
@@ -480,7 +592,7 @@ def render_table_png(context, rows: list[list[str]], out_path: Path) -> str:
             pass
 
 
-def _paste_html(page, selector: str, html: str) -> bool:
+def _paste_html_into(page, field, html: str) -> bool:
     """
     Вставить HTML в поле редактора – ровно так, как это делает Ctrl+V.
 
@@ -488,14 +600,17 @@ def _paste_html(page, selector: str, html: str) -> bool:
     подзаголовки и списки встают на места. Пишем в буфер через DataTransfer
     и шлём настоящее событие paste – к системному буферу в облаке доступа
     нет, да он там и не нужен.
+
+    Работаем с локатором, а не с селектором: у полей Дзена своих примет нет,
+    и найдены они по порядку (см. find_editor_fields) – селектора, который
+    указывал бы именно на них, попросту не существует.
     """
     try:
-        page.locator(selector).first.click()
-        page.wait_for_timeout(400)
-        return bool(page.evaluate(
-            """([sel, html]) => {
-                const el = document.querySelector(sel);
-                if (!el) return false;
+        handle = field.element_handle()
+        if handle is None:
+            return False
+        return bool(handle.evaluate(
+            """(el, html) => {
                 el.focus();
                 const dt = new DataTransfer();
                 dt.setData('text/html', html);
@@ -503,12 +618,12 @@ def _paste_html(page, selector: str, html: str) -> bool:
                 const ev = new ClipboardEvent('paste', {
                     bubbles: true, cancelable: true, clipboardData: dt });
                 return el.dispatchEvent(ev);
-            }""", [selector, html]))
+            }""", html))
     except Exception:  # noqa: BLE001
         return False
 
 
-def _type_blocks(page, selector: str, blocks: list[dict]) -> None:
+def _type_blocks_into(page, field, blocks: list[dict]) -> None:
     """
     Запасной путь: набрать статью построчно.
 
@@ -516,7 +631,10 @@ def _type_blocks(page, selector: str, blocks: list[dict]) -> None:
     абзацами) – зато текст доедет целиком. Лучше статья без подзаголовков,
     чем пустой черновик.
     """
-    page.locator(selector).first.click()
+    try:
+        field.click()
+    except Exception:  # noqa: BLE001
+        pass
     for b in blocks:
         if b["kind"] == "para":
             text = post_text.strip_markup(b["markup"])
@@ -753,7 +871,19 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
                 return {"ok": False, "error": why,
                         "shot": _debug_shot(project_id, page, "no-login")}
 
+            # Сессию сохраняем СРАЗУ после входа, не дожидаясь конца работы.
+            # Иначе выходило обидно: вошли, споткнулись на редакторе – и куки
+            # пропали вместе с неудачным прогоном, а в следующий раз Дзен
+            # снова просит «Войти» → «Яндекс ID» → аккаунт. Теперь вход
+            # делается один раз, а дальше студия открывается сразу.
+            try:
+                yb._save_storage_state(context, session_path(project_id))
+                log("Вход сохранён – в следующий раз входить не придётся")
+            except Exception as e:  # noqa: BLE001 – не повод бросать работу
+                log(f"Вход сохранить не удалось: {e}")
+
             # ─── Новая статья ───
+            dismiss_popups(page, log)
             log("Нажимаю «＋» → «Написать статью»")
             if not _click_first(page, SEL["add_publication"], timeout=15_000):
                 return {"ok": False, "error": "Не нашли кнопку «＋» в студии Дзена",
@@ -763,28 +893,33 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
                 return {"ok": False, "error": "В меню не нашлось «Написать статью»",
                         "shot": _debug_shot(project_id, page, "no-article-item")}
 
-            # Редактор открывается отдельной страницей и грузится не мгновенно.
+            # Редактор открывается отдельной страницей и грузится не мгновенно,
+            # а поверх него Дзен показывает обучение «Статья» – его закрываем.
             page.wait_for_timeout(6_000)
-            title_sel = _first_visible(page, SEL["title_field"], timeout=25_000)
-            if not title_sel:
-                return {"ok": False, "error": "Редактор статьи не открылся: не нашли поле заголовка",
+            title, body = find_editor_fields(page, log, timeout_ms=30_000)
+            if title is None:
+                return {"ok": False,
+                        "error": ("Редактор статьи открылся, но полей в нём не нашлось. "
+                                  "Если поверх редактора висит окно обучения – закройте "
+                                  "его и попробуйте ещё раз; статья уже сохранена "
+                                  "черновиком."),
                         "shot": _debug_shot(project_id, page, "no-editor")}
 
             # ─── Заголовок ───
             log(f"Заголовок: {article['title'][:80]}")
-            page.locator(title_sel).first.click()
+            title.click()
+            page.wait_for_timeout(400)
             page.keyboard.type(article["title"], delay=4)
             page.wait_for_timeout(800)
 
             # ─── Тело ───
-            body_sel = _first_visible(page, SEL["body_field"], timeout=10_000)
-            if not body_sel:
-                # У «чистого листа» тело – следующий редактируемый блок;
-                # добраться до него можно просто Enter'ом из заголовка.
+            if body is None:
+                # У «чистого листа» тело – следующий блок: Enter из заголовка
+                # переводит курсор именно туда.
                 page.keyboard.press("Enter")
-                page.wait_for_timeout(600)
-                body_sel = _first_visible(page, SEL["body_field"], timeout=6_000)
-            if not body_sel:
+                page.wait_for_timeout(800)
+                _, body = find_editor_fields(page, log, timeout_ms=8_000)
+            if body is None:
                 return {"ok": False, "error": "Не нашли поле для текста статьи",
                         "shot": _debug_shot(project_id, page, "no-body")}
 
@@ -793,10 +928,12 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
             info = zen_doc.counts(article)
             log(f"Вставляю текст: {info['chars']} знаков, {info['para']} абзацев, "
                 f"{info['head']} подзаголовков, {info['list']} списков")
-            if not _paste_html(page, body_sel, html):
+            body.click()
+            page.wait_for_timeout(400)
+            if not _paste_html_into(page, body, html):
                 log("Вставка не прошла – набираю текст построчно")
                 warnings.append("Текст набран построчно: подзаголовки могли стать обычными абзацами.")
-                _type_blocks(page, body_sel, blocks)
+                _type_blocks_into(page, body, blocks)
             page.wait_for_timeout(2_500)
 
             # ─── Таблицы картинками ───
@@ -813,6 +950,10 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
             page.wait_for_timeout(1_500)
 
             # ─── Публикация с отложкой ───
+            # Окно обучения Дзен показывает не только на входе в редактор:
+            # оно всплывает и позже. Перед публикацией убираем всё лишнее –
+            # иначе нажатие уйдёт в его подложку.
+            dismiss_popups(page, log)
             log("Открываю окно публикации")
             if not _click_first(page, SEL["publish_button"], timeout=15_000):
                 return {"ok": False, "error": "Не нашли кнопку «Опубликовать»",

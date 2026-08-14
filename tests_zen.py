@@ -264,6 +264,64 @@ class FakePage:
         if self.text_after_click is not None and self.clicks:
             self.text = self.text_after_click
 
+    # ─ то, что нужно закрытию окон и поиску полей ─
+    @property
+    def keyboard(self):
+        return _FakeKeys(self)
+
+    @property
+    def mouse(self):
+        return _FakeKeys(self)
+
+
+class _FakeKeys:
+    def __init__(self, page):
+        self.page = page
+
+    def press(self, key: str) -> None:
+        self.page.clicks.append(f"key:{key}")
+
+    def click(self, x: int, y: int, **kw) -> None:
+        self.page.clicks.append(f"click:{x},{y}")
+
+    def type(self, text: str, **kw) -> None:
+        self.page.clicks.append(f"type:{text[:20]}")
+
+
+class FakeEditor(FakePage):
+    """Редактор статьи: сколько-то редактируемых блоков и окно обучения."""
+
+    def __init__(self, editable: int = 2, **kw):
+        super().__init__(**kw)
+        self.editable = editable
+
+    def locator(self, sel: str):
+        self.pending = sel
+        # Только общий перебор редактируемых блоков; приметы вроде
+        # [data-testid*="title"] у настоящего Дзена не срабатывают – ради
+        # этого случая всё и написано.
+        if sel == '[contenteditable="true"]':
+            return _FakeFields(self, self.editable)
+        return FakeLocator(self, 1 if any(h in sel for h in self.has) else 0)
+
+
+class _FakeFields:
+    def __init__(self, page, n: int):
+        self.page = page
+        self.n = n
+
+    def count(self) -> int:
+        return self.n
+
+    def nth(self, i: int):
+        loc = FakeLocator(self.page, 1 if i < self.n else 0)
+        loc.index = i
+        return loc
+
+    @property
+    def first(self):
+        return self.nth(0)
+
 
 def test_login_flow() -> None:
     print("Вход в Дзен: три нажатия и выбор аккаунта")
@@ -316,6 +374,47 @@ def test_login_flow() -> None:
     # Все три нажатия описаны селекторами – их и правят, когда Дзен обновится.
     for key in ("login_button", "login_yandex", "add_publication"):
         check(f"селекторы «{key}» на месте", bool(zb.SEL.get(key)))
+
+
+def test_popups_and_fields() -> None:
+    print("Всплывающие окна и поля редактора")
+    try:
+        import zen_browser as zb
+    except ImportError as e:
+        print(f"  ⏭ пропускаю: {e}")
+        return
+
+    # Реклама донатов в студии и обучение «Статья» поверх редактора – оба
+    # встретились на живом прогоне и оба закрывали собой работу.
+    donate = FakePage(text="У нас появились донаты! Разовые денежные переводы")
+    check("реклама донатов замечена", zb._has_popup(donate))
+    lesson = FakePage(text="Статья — это в первую очередь текст, Примеры статей")
+    check("обучение «Статья» замечено", zb._has_popup(lesson))
+    check("на чистой странице окон нет", not zb._has_popup(FakePage(text="Главное")))
+
+    # Закрываем как человек: крестик, потом Esc, потом нажатие по пустому месту.
+    with_cross = FakePage(text="У нас появились донаты!", has=("close",))
+    with_cross.text_after_click = "Главное"
+    check("окно с крестиком закрывается им", zb.dismiss_popups(with_cross) >= 1)
+    check("нажали именно крестик",
+          any("close" in c for c in with_cross.clicks), str(with_cross.clicks))
+
+    stubborn = FakePage(text="Примеры статей")
+    stubborn.text_after_click = "Заголовок Текст"
+    zb.dismiss_popups(stubborn)
+    check("без крестика идёт Esc и пустое место",
+          any(c.startswith("key:Escape") for c in stubborn.clicks), str(stubborn.clicks))
+
+    # Поля редактора: примет нет, зато порядок железный.
+    editor = FakeEditor(editable=2, text="Заголовок Текст")
+    title, body = zb.find_editor_fields(editor, timeout_ms=3_000)
+    check("заголовок – первый редактируемый блок",
+          title is not None and getattr(title, "index", None) == 0)
+    check("тело – второй", body is not None and getattr(body, "index", None) == 1)
+
+    empty = FakeEditor(editable=0, text="Пусто")
+    t2, b2 = zb.find_editor_fields(empty, timeout_ms=2_000)
+    check("редактора нет – честно говорим об этом", t2 is None and b2 is None)
 
 
 def test_session_source(tmp: Path | None = None) -> None:
@@ -407,6 +506,7 @@ def main() -> int:
     test_long_title()
     test_browser_logic()
     test_login_flow()
+    test_popups_and_fields()
     test_session_source()
     test_registry_wiring()
     print("\n" + "═" * 60)

@@ -1809,6 +1809,8 @@ def test_link_card_and_report() -> None:
     check("без домена не жмём ничего", "if not doms" in src)
     check("карточка есть, а крестика нет – говорим словами",
           "закройте карточку вручную" in src)
+    check("крестик ищется и по подписи кнопки (вёрстка ОК)", "'удал', 'убра'" in src)
+    check("карточку ждём несколько подходов", "for attempt in range(max(1, tries))" in src)
 
     # Жирный для ОК: сборка разметки для вставки.
     import ok_browser
@@ -1820,7 +1822,16 @@ def test_link_card_and_report() -> None:
     ok_src = inspect.getsource(ok_browser._type_post_text)
     check("два способа и откат на обычный текст",
           "_paste_bold_html" in ok_src and "_type_bold_keys" in ok_src
-          and "как раньше" in ok_src)
+          and "целый текст важнее" in ok_src)
+    # Главное правило после 14.08.2026: жирный не стоит поломанного текста.
+    check("сверяются и буквы, и разбивка по строкам",
+          "_lines(got) == want_lines" in ok_src)
+    check("человеческий способ идёт первым", ok_src.index("клавишами") < ok_src.index("разметкой"))
+    check("разъехавшиеся строки названы словами", "строки разъехались" in ok_src)
+    ok_lines = ok_browser._lines("Диаметр\n: 0,25 мм;Длина волокна:")
+    check("строки считаются по буквам", ok_lines == ["диаметр", "025ммдлинаволокна"], str(ok_lines))
+    check("поломанная разбивка не равна целой",
+          ok_browser._lines("Диаметр: 0,25 мм;") != ok_lines)
 
     # Отчёт: только работа Click.
     rep = inspect.getsource(app._crosspost_report_block)

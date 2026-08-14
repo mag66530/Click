@@ -2037,7 +2037,8 @@ _CLOSE_ICON_D = "M9.414 8l3.294 3.294"
 
 
 def drop_link_card(page, domains: list[str],
-                   log: Callable[[str], None] | None = None) -> str:
+                   log: Callable[[str], None] | None = None,
+                   tries: int = 3) -> str:
     """
     Убрать карточку сайта, которую площадка подтянула по ссылке в тексте.
 
@@ -2062,9 +2063,20 @@ def drop_link_card(page, domains: list[str],
     js = """
     (args) => {
       const [needle, doms] = args;
+      // Крестик карточки у каждой площадки нарисован по-своему: у ВК это
+      // тот самый значок из разметки, у ОК – кнопка с подписью «Удалить».
+      // Берём и то, и другое: сузит выбор всё равно проверка ниже.
+      const words = ['удал', 'убра', 'закр', 'открепить', 'remove', 'delete', 'close'];
+      const named = (el) => {
+        const t = ((el.getAttribute('aria-label') || '') + ' ' +
+                   (el.getAttribute('title') || '') + ' ' +
+                   (el.className && typeof el.className === 'string' ? el.className : '')
+                  ).toLowerCase();
+        return words.some(w => t.includes(w));
+      };
       const btns = [...document.querySelectorAll('button, [role="button"], a, i, span')];
       for (const b of btns) {
-        if (!b.querySelector(`path[d^="${needle}"]`)) continue;
+        if (!b.querySelector(`path[d^="${needle}"]`) && !named(b)) continue;
         // Поднимаемся от крестика вверх, пока не найдём его карточку. Признак
         // карточки: в ней есть ссылка на наш сайт И НЕТ поля ввода. Второе
         // важнее первого: без него «карточкой» оказывалось всё окно создания
@@ -2083,35 +2095,47 @@ def drop_link_card(page, domains: list[str],
       return false;
     }
     """
-    try:
-        found = page.evaluate(js, [_CLOSE_ICON_D, doms])
-    except Exception:  # noqa: BLE001 – поиск карточки не должен ронять прогон
-        return ""
-    if not found:
-        # Карточка есть, а её крестика не нашли – говорим об этом словами.
-        # Молча оставлять нельзя: человек должен знать, что пост уйдёт с
-        # карточкой, и мы должны знать, что вёрстка у площадки изменилась.
+    has_card_js = """(doms) => [...document.querySelectorAll('a[href]')].some(a => {
+           const h = a.href.toLowerCase();
+           return doms.some(d => h.includes(d))
+                  && !a.closest('[contenteditable], textarea');
+       })"""
+
+    def has_card() -> bool:
         try:
-            has_card = page.evaluate(
-                """(doms) => [...document.querySelectorAll('a[href]')].some(a => {
-                       const h = a.href.toLowerCase();
-                       return doms.some(d => h.includes(d))
-                              && !a.closest('[contenteditable], textarea');
-                   })""", doms)
+            return bool(page.evaluate(has_card_js, doms))
         except Exception:  # noqa: BLE001
-            has_card = False
-        if has_card:
-            log("  внимание: площадка подтянула карточку сайта, а её крестик "
-                "не нашёлся – закройте карточку вручную")
-        return ""
-    try:
-        page.locator('[data-click-card-x="1"]').first.click(timeout=4_000)
-        page.wait_for_timeout(600)
-        log("  убрал карточку сайта, которую площадка подтянула по ссылке")
-        return "closed"
-    except Exception as e:  # noqa: BLE001
-        log(f"  карточку сайта убрать не вышло ({e}) – оставляю как есть")
-        return ""
+            return False
+
+    # Карточку площадка подтягивает не мгновенно: сначала уходит запрос за
+    # заголовком и картинкой сайта, и только потом она появляется в форме.
+    # Поэтому не «заглянули один раз и ушли», а несколько подходов с паузами –
+    # ровно как ждёт человек, прежде чем нажать крестик.
+    for attempt in range(max(1, tries)):
+        if attempt:
+            page.wait_for_timeout(1_500 * attempt)
+        try:
+            found = page.evaluate(js, [_CLOSE_ICON_D, doms])
+        except Exception:  # noqa: BLE001 – поиск карточки не должен ронять прогон
+            return ""
+        if not found:
+            continue
+        try:
+            page.locator('[data-click-card-x="1"]').first.click(timeout=4_000)
+            page.wait_for_timeout(700)
+            log("  убрал карточку сайта, которую площадка подтянула по ссылке")
+            return "closed"
+        except Exception as e:  # noqa: BLE001
+            log(f"  карточку сайта убрать не вышло ({e}) – оставляю как есть")
+            return ""
+
+    # Карточка есть, а её крестика не нашли – говорим об этом словами.
+    # Молча оставлять нельзя: человек должен знать, что пост уйдёт с
+    # карточкой, и мы должны знать, что вёрстка у площадки изменилась.
+    if has_card():
+        log("  внимание: площадка подтянула карточку сайта, а её крестик "
+            "не нашёлся – закройте карточку вручную")
+    return ""
 
 
 def text_domains(text: str) -> list[str]:

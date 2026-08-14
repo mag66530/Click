@@ -1297,6 +1297,10 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             page.click(f'{dlg} >> text="Далее"', timeout=15_000)
             page.wait_for_timeout(1000)
 
+            # Последний заход на карточку сайта: ВК подтягивает её с задержкой
+            # и мог успеть, пока Click жал «Далее».
+            yb.drop_link_card(page, yb.text_domains(text), log, tries=1)
+
             log(f"Ставлю таймер на {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
             _set_schedule(page, when, log)
 

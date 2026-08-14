@@ -1206,6 +1206,18 @@ def _letters(s: str) -> str:
     return re.sub(r"\W", "", s or "", flags=re.U).lower()
 
 
+def _lines(s: str) -> list[str]:
+    """
+    Непустые строки текста, по буквам каждой – «форма» поста.
+
+    По ней видно то, чего не видно по буквам целиком: разъехавшиеся строки.
+    Редактор ОК на вставленной разметке <b> разносит жирные куски по своим
+    абзацам, и пост из «Диаметр: 0,25 мм;» превращается в «Диаметр» и
+    «: 0,25 мм;Длина волокна:» – буквы те же, читать невозможно.
+    """
+    return [_letters(ln) for ln in (s or "").split("\n") if _letters(ln)]
+
+
 def _bold_html(chunks: list[tuple[str, bool]]) -> str:
     """Куски (текст, жирный) → HTML для вставки в поле: <b> и переводы строк."""
     out = []
@@ -1275,26 +1287,34 @@ def _type_post_text(page, text_sel: str, text: str,
 
     if any(bold for _, bold in chunks):
         n_bold = sum(1 for _, b in chunks if b)
-        # Два способа, от точного к грубому. Первый – вставить готовую
-        # разметку <b> одним куском (execCommand отдаёт её редактору как
-        # вставку из буфера, и ОК её разбирает). Второй – набирать текст
+        want_lines = _lines(plain)
+        # Два способа, от человеческого к грубому. Первый – набрать текст
         # кусками, включая жирный горячей клавишей, как это делает человек.
-        for way, run in (("разметкой", lambda: _paste_bold_html(page, text_sel, chunks)),
-                         ("клавишами", lambda: _type_bold_keys(page, chunks))):
+        # Второй – отдать редактору готовую разметку <b> одной вставкой.
+        for way, run in (("клавишами", lambda: _type_bold_keys(page, chunks)),
+                         ("разметкой", lambda: _paste_bold_html(page, text_sel, chunks))):
             try:
                 run()
                 page.wait_for_timeout(700)
                 got = in_field()
-                if letters(got) == letters(plain):
+                # Сверяем И буквы, И РАЗБИВКУ ПО СТРОКАМ. Одних букв мало:
+                # 14.08.2026 вставка разметки дала в ОК жирный, но развалила
+                # текст – «Диаметр» уехал на свою строку, а перенос после
+                # «0,25 мм;» пропал. Буквы при этом совпадали до единой, и
+                # проверка пропустила поломанный пост в отложку. Текст важнее
+                # жирного: не сошлись строки – способ не годится.
+                if letters(got) == letters(plain) and _lines(got) == want_lines:
                     log(f"  жирный из реестра сохранён ({way}, кусков {n_bold})")
                     return "bold"
-                log(f"  {way}: в поле легло не то "
-                    f"({len(letters(got))} знаков вместо {len(letters(plain))}) – пробую дальше")
+                why = ("строки разъехались"
+                       if letters(got) == letters(plain) else
+                       f"легло {len(letters(got))} знаков вместо {len(letters(plain))}")
+                log(f"  {way}: {why} – так не годится, пробую дальше")
             except Exception as e:  # noqa: BLE001 – ввод не должен ронять прогон
                 log(f"  {way}: не вышло ({e}) – пробую дальше")
             _clear_editor(page, text_sel)
             page.click(text_sel)
-        log("  жирный не дался – набираю обычным текстом, как раньше")
+        log("  жирный не дался – набираю обычным текстом: целый текст важнее")
 
     page.type(text_sel, plain, delay=8)
     return "plain"
@@ -1783,6 +1803,11 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             # принципе – округляем ВВЕРХ, чтобы пост не вышел раньше, чем
             # просили. Для реальных постов (11:00, 09:30) это ничего не меняет.
             when = _round_to_five(when)
+            # Ещё один заход на карточку сайта – последний перед сохранением.
+            # Она приходит с сервера с задержкой и запросто появляется уже
+            # после ввода текста, пока Click прикрепляет фото: 14.08.2026 так
+            # и вышло – отложка в ОК встала вместе с чужой карточкой.
+            yb.drop_link_card(page, yb.text_domains(text), log, tries=1)
             log(f"Ставлю время публикации {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
 
             if not _turn_on_schedule(page, log):

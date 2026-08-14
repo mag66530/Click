@@ -1252,60 +1252,98 @@ def _lines(s: str) -> list[str]:
     return [_letters(ln) for ln in (s or "").split("\n") if _letters(ln)]
 
 
-def _bold_html(chunks: list[tuple[str, bool]]) -> str:
-    """Куски (текст, жирный) → HTML для вставки в поле: <b> и переводы строк."""
-    out = []
-    for part, bold in chunks:
-        esc = (part.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-               .replace("\n", "<br>"))
-        out.append(f"<b>{esc}</b>" if bold else esc)
-    return "".join(out)
+# Разметка НАКЛАДЫВАЕТСЯ НА ГОТОВЫЙ ТЕКСТ, а не вводится вместе с ним.
+#
+# Так это делает человек: пишет пост, потом выделяет мышью кусок и жмёт «Ж»
+# или «вставить ссылку». И только так текст не может пострадать: он уже в
+# поле, целый, а разметка ложится поверх. Оба прежних способа – набор с
+# Ctrl+B и вставка готового <b> – текст ПЕРЕПИСЫВАЛИ, и один из них развалил
+# пост по строкам (14.08.2026), а второй тихо не сработал вовсе, но Click
+# отрапортовал «жирный сохранён»: он сверял только буквы, а форматирование
+# не проверял ни разу.
+_MARK_JS = """
+(args) => {
+  const el = document.querySelector(args.sel);
+  if (!el) return {error: 'нет поля'};
+  const build = () => {
+    const nodes = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let full = '';
+    while (w.nextNode()) { nodes.push([w.currentNode, full.length]); full += w.currentNode.nodeValue; }
+    return {nodes, full};
+  };
+  const rangeFor = (map, from, to) => {
+    const at = (pos, end) => {
+      for (const [node, start] of map.nodes) {
+        const len = node.nodeValue.length;
+        if (pos >= start && pos <= start + len) {
+          if (pos === start + len && !end) continue;
+          return [node, pos - start];
+        }
+      }
+      return null;
+    };
+    const a = at(from, false), b = at(to, true);
+    if (!a || !b) return null;
+    const r = document.createRange();
+    r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]);
+    return r;
+  };
+  let done = 0, missed = 0;
+  for (const span of args.spans) {
+    const map = build();
+    const idx = map.full.indexOf(span.text);
+    if (idx < 0) { missed++; continue; }
+    const r = rangeFor(map, idx, idx + span.text.length);
+    if (!r) { missed++; continue; }
+    const sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(r);
+    el.focus();
+    try {
+      if (span.kind === 'link') document.execCommand('createLink', false, span.url);
+      else document.execCommand('bold', false, null);
+      done++;
+    } catch (e) { missed++; }
+  }
+  const sel = window.getSelection();
+  if (sel) sel.removeAllRanges();
+  el.dispatchEvent(new Event('input', {bubbles: true}));
+  return {done, missed,
+          bold: el.querySelectorAll('b, strong').length,
+          links: el.querySelectorAll('a[href]').length,
+          text: el.innerText || el.textContent || ''};
+}
+"""
 
 
-def _paste_bold_html(page, text_sel: str, chunks: list[tuple[str, bool]]) -> None:
-    """Способ первый: отдать редактору готовую разметку одной вставкой."""
-    page.eval_on_selector(
-        text_sel,
-        """(el, html) => {
-             el.focus();
-             const sel = window.getSelection();
-             const r = document.createRange();
-             r.selectNodeContents(el);
-             sel.removeAllRanges();
-             sel.addRange(r);
-             document.execCommand('insertHTML', false, html);
-             el.dispatchEvent(new Event('input', {bubbles: true}));
-             el.dispatchEvent(new Event('change', {bubbles: true}));
-           }""",
-        _bold_html(chunks))
-
-
-def _type_bold_keys(page, chunks: list[tuple[str, bool]]) -> None:
-    """Способ второй: набрать кусками, включая жирный Ctrl+B, как человек."""
-    for part, bold in chunks:
-        if bold:
-            page.keyboard.press("Control+B")
-        page.keyboard.type(part, delay=6)
-        if bold:
-            page.keyboard.press("Control+B")
+def _apply_marks(page, text_sel: str, spans: list[dict]) -> dict:
+    """Наложить жирный и ссылки на уже введённый текст. Возвращает отчёт."""
+    try:
+        return page.evaluate(_MARK_JS, {"sel": text_sel, "spans": spans}) or {}
+    except Exception as e:  # noqa: BLE001 – разметка не должна ронять прогон
+        return {"error": str(e)}
 
 
 def _type_post_text(page, text_sel: str, text: str,
                     log: Callable[[str], None] | None = None,
                     project_id: str = "") -> str:
     """
-    Ввести текст темы, сохранив жирный из реестра.
+    Ввести текст темы и наложить на него разметку реестра: жирный и ссылки.
 
-    Заказчица (14.08.2026): «в ОК контакты норм, но жирного шрифта нет, а
-    в реестре он есть». Редактор темы ОК – обычное поле с форматированием.
-    Способа два, от точного к грубому: отдать редактору готовую разметку
-    <b> одной вставкой, а если не примет – набрать кусками, включая жирный
-    Ctrl+B, как это делает человек.
+    Порядок ровно тот, каким это делает человек, и он же самый безопасный:
+      1. набрать ОБЫЧНЫЙ текст – он ложится целым, без переносов не по
+         месту и без чужих абзацев;
+      2. выделить нужные куски прямо в поле и включить им жирный, а словам
+         вроде «на нашем сайте» – ссылку;
+      3. ПРОВЕРИТЬ, что получилось: жирные узлы и ссылки в поле правда
+         появились, а текст при этом не изменился ни на букву.
 
-    Возвращает 'bold', если удалось с жирным, и 'plain', если жирного в
-    тексте не было или он не дался. Проверка простая и жёсткая: буквы в поле
-    должны совпасть с буквами текста. Не совпали – чистим поле и набираем
-    обычным способом, как раньше. Хуже прежнего не станет никогда.
+    Третий шаг здесь – главный. Раньше Click сверял только текст, а про
+    форматирование верил на слово: 14.08.2026 в логе стояло «жирный из
+    реестра сохранён», а в опубликованной теме жирного не было вовсе.
+    Теперь в лог идёт то, что реально в поле: сколько жирных кусков и
+    ссылок, и если ноль – так и написано.
+
+    Возвращает 'bold' (разметка легла), 'plain' (текст без разметки).
     """
     import post_text
 
@@ -1320,41 +1358,46 @@ def _type_post_text(page, text_sel: str, text: str,
         except Exception:  # noqa: BLE001
             return ""
 
-    if any(bold for _, bold in chunks):
-        n_bold = sum(1 for _, b in chunks if b)
-        want_lines = _lines(plain)
-        # Два способа, от человеческого к грубому. Первый – набрать текст
-        # кусками, включая жирный горячей клавишей, как это делает человек.
-        # Второй – отдать редактору готовую разметку <b> одной вставкой.
-        for way, run in (("клавишами", lambda: _type_bold_keys(page, chunks)),
-                         ("разметкой", lambda: _paste_bold_html(page, text_sel, chunks))):
-            try:
-                run()
-                page.wait_for_timeout(700)
-                got = in_field()
-                # Сверяем И буквы, И РАЗБИВКУ ПО СТРОКАМ. Одних букв мало:
-                # 14.08.2026 вставка разметки дала в ОК жирный, но развалила
-                # текст – «Диаметр» уехал на свою строку, а перенос после
-                # «0,25 мм;» пропал. Буквы при этом совпадали до единой, и
-                # проверка пропустила поломанный пост в отложку. Текст важнее
-                # жирного: не сошлись строки – способ не годится.
-                if letters(got) == letters(plain) and _lines(got) == want_lines:
-                    log(f"  жирный из реестра сохранён ({way}, кусков {n_bold})")
-                    return "bold"
-                why = ("строки разъехались"
-                       if letters(got) == letters(plain) else
-                       f"легло {len(letters(got))} знаков вместо {len(letters(plain))}")
-                log(f"  {way}: {why} – так не годится, пробую дальше")
-            except Exception as e:  # noqa: BLE001 – ввод не должен ронять прогон
-                log(f"  {way}: не вышло ({e}) – пробую дальше")
-            _clear_editor(page, text_sel)
-            page.click(text_sel)
-        log("  жирный не дался – набираю обычным текстом: целый текст важнее")
+    # 1. Обычный текст. Всегда, при любом исходе разметки.
+    page.type(text_sel, plain, delay=8)
+    page.wait_for_timeout(500)
+
+    spans = [{"kind": "bold", "text": t.strip()} for t, bold in chunks
+             if bold and len(t.strip()) > 1]
+    spans += [{"kind": "link", "text": t, "url": u}
+              for t, u in post_text.anchor_spans(text)]
+    if not spans:
+        return "plain"
+
+    # 2. Разметка поверх готового текста.
+    res = _apply_marks(page, text_sel, spans)
+    if res.get("error"):
+        log(f"  разметку наложить не вышло ({res['error']}) – остаётся обычный текст")
         if project_id:
             _save_editor_markup(page, text_sel, project_id, log)
+        return "plain"
 
-    page.type(text_sel, plain, delay=8)
-    return "plain"
+    # 3. Проверка по факту: и текст цел, и разметка на месте.
+    got = in_field()
+    if letters(got) != letters(plain) or _lines(got) != _lines(plain):
+        log("  разметка изменила текст – убираю её, оставляю обычный текст")
+        _clear_editor(page, text_sel)
+        page.click(text_sel)
+        page.type(text_sel, plain, delay=8)
+        if project_id:
+            _save_editor_markup(page, text_sel, project_id, log)
+        return "plain"
+
+    want_bold = sum(1 for s in spans if s["kind"] == "bold")
+    want_links = sum(1 for s in spans if s["kind"] == "link")
+    log(f"  разметка: жирных кусков {res.get('bold', 0)} из {want_bold}, "
+        f"ссылок {res.get('links', 0)} из {want_links}")
+    if not res.get("bold") and want_bold:
+        log("  жирный редактор ОК не принял – текст ушёл обычным")
+        if project_id:
+            _save_editor_markup(page, text_sel, project_id, log)
+        return "plain"
+    return "bold"
 
 
 def _clear_editor(page, text_sel: str) -> int:

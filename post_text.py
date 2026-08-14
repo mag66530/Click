@@ -191,6 +191,22 @@ def _links_to_words(markup: str) -> str:
     return ANCHOR_RX.sub(anchor, markup)
 
 
+def anchor_spans(markup: str) -> list[tuple[str, str]]:
+    """
+    Ссылки, зашитые в слова: [(текст ссылки, адрес)].
+
+    Для площадок, которые умеют ссылку внутри слов (ОК – умеет, это её
+    родная возможность редактора). Текст берём тот же, что виден человеку,
+    поэтому по нему ссылку и находим в готовом поле.
+    """
+    out: list[tuple[str, str]] = []
+    for m in ANCHOR_RX.finditer(markup):
+        text = BOLD_RX.sub(r"\1", m.group(1)).strip()
+        if text and not URLISH_RX.match(text):
+            out.append((text, m.group(2)))
+    return out
+
+
 def plain_chunks(markup: str) -> list[tuple[str, bool]]:
     """
     Текст для площадки кусками: [(текст, жирный?), …].

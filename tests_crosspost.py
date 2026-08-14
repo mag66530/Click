@@ -1818,22 +1818,24 @@ def test_link_card_and_report() -> None:
     check("карточку ждём несколько подходов", "for attempt in range(max(1, tries))" in src)
     check("не вышло – сохраняем разметку для разбора", "link-card.html" in src)
 
-    # Жирный для ОК: сборка разметки для вставки.
+    # Разметка ОК: жирный и ссылки НАКЛАДЫВАЮТСЯ на готовый текст.
     import ok_browser
-    html = ok_browser._bold_html([("Диаметр", True), (": 0,25\nмм", False)])
-    check("жирный кусок обёрнут <b>", html.startswith("<b>Диаметр</b>"), html)
-    check("перевод строки стал <br>", "<br>" in html, html)
-    check("угловые скобки экранированы",
-          "&lt;" in ok_browser._bold_html([("<b>чужое", False)]))
     ok_src = inspect.getsource(ok_browser._type_post_text)
-    check("два способа и откат на обычный текст",
-          "_paste_bold_html" in ok_src and "_type_bold_keys" in ok_src
-          and "целый текст важнее" in ok_src)
+    check("сначала обычный текст, потом разметка",
+          ok_src.index("page.type(text_sel, plain") < ok_src.index("_apply_marks"))
+    check("жирный и ссылки идут вместе",
+          '"kind": "bold"' in ok_src and '"kind": "link"' in ok_src)
+    mark_src = inspect.getsource(ok_browser._apply_marks) + ok_browser._MARK_JS
+    check("выделяем кусок и включаем формат, как человек",
+          "createRange" in mark_src and "execCommand" in mark_src)
+    check("ссылка вшивается в слова", "createLink" in mark_src)
+    check("считаем, что РЕАЛЬНО легло в поле",
+          "querySelectorAll('b, strong')" in mark_src and "a[href]" in mark_src)
     # Главное правило после 14.08.2026: жирный не стоит поломанного текста.
     check("сверяются и буквы, и разбивка по строкам",
-          "_lines(got) == want_lines" in ok_src)
-    check("человеческий способ идёт первым", ok_src.index("клавишами") < ok_src.index("разметкой"))
-    check("разъехавшиеся строки названы словами", "строки разъехались" in ok_src)
+          "_lines(got) != _lines(plain)" in ok_src)
+    check("разметка, изменившая текст, откатывается",
+          "разметка изменила текст" in ok_src)
     ok_lines = ok_browser._lines("Диаметр\n: 0,25 мм;Длина волокна:")
     check("строки считаются по буквам", ok_lines == ["диаметр", "025ммдлинаволокна"], str(ok_lines))
     check("поломанная разбивка не равна целой",
@@ -1874,14 +1876,16 @@ def test_ok_bold_and_probe() -> None:
     check("маркеров ** в кусках нет", "**" not in "".join(t for t, _ in chunks))
     check("текста без жирного это не касается",
           [b for _, b in pt.plain_chunks("просто текст")] == [False])
+    spans = pt.anchor_spans(pt.autolink("Заказ на нашем сайте:", "a.ru"))
+    check("ссылка в словах видна отдельно", spans == [("нашем сайте", "https://a.ru")], str(spans))
+    check("голый адрес ссылкой не считаем",
+          pt.anchor_spans("[a.ru](https://a.ru)") == [])
 
-    src = (inspect.getsource(ok_browser._type_post_text)
-           + inspect.getsource(ok_browser._type_bold_keys)
-           + inspect.getsource(ok_browser._paste_bold_html))
-    check("жирный включается Ctrl+B", 'press("Control+B")' in src)
-    check("и вставкой готовой разметки", "insertHTML" in src)
-    check("есть откат на обычный текст", "_clear_editor" in src and "plain" in src)
-    check("сверка по буквам поля", "letters(got) == letters(plain)" in src)
+    src = inspect.getsource(ok_browser._type_post_text)
+    check("текст цел при любом исходе разметки",
+          "разметка изменила текст" in src and "_clear_editor" in src)
+    check("про жирный больше не врём",
+          "жирный редактор ОК не принял" in src and "жирных кусков" in src)
     check("ОК получает разметку, а не плоский текст",
           'network == "ok"' in inspect.getsource(
               __import__("crosspost_form")._form_browser_all))

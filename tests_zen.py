@@ -207,6 +207,117 @@ def test_browser_logic() -> None:
     check("картинка таблицы: данные на месте", "<td>100%</td>" in page)
 
 
+class FakeLocator:
+    """Локатор-заглушка: считает нажатия и умеет говорить, сколько нашлось."""
+
+    def __init__(self, page, found: int = 1):
+        self.page = page
+        self.found = found
+
+    @property
+    def first(self):
+        return self
+
+    def count(self) -> int:
+        return self.found
+
+    def is_visible(self) -> bool:
+        return bool(self.found)
+
+    def click(self, **kw) -> None:
+        if not self.found:
+            raise RuntimeError("нечего нажимать")
+        self.page.clicks.append(self.page.pending)
+
+    def locator(self, _sel: str):
+        return self
+
+
+class FakePage:
+    """
+    Страница Дзена на бумаге: текст, набор найденных селекторов и журнал
+    нажатий. Этого хватает, чтобы проверить логику входа без браузера –
+    ровно ту, на которой первый живой прогон и споткнулся.
+    """
+
+    def __init__(self, text: str = "", has: tuple[str, ...] = (), url: str = "https://dzen.ru/x"):
+        self.text = text
+        self.has = has
+        self.url = url
+        self.clicks: list[str] = []
+        self.pending = ""
+        # После нажатия на аккаунт экран выбора уходит – как в жизни.
+        self.text_after_click = None
+
+    def evaluate(self, _js: str):
+        return self.text
+
+    def locator(self, sel: str):
+        self.pending = sel
+        return FakeLocator(self, 1 if any(h in sel for h in self.has) else 0)
+
+    def get_by_text(self, text: str, exact: bool = False):
+        self.pending = f"text:{text}"
+        return FakeLocator(self, 1)
+
+    def wait_for_timeout(self, _ms: int) -> None:
+        if self.text_after_click is not None and self.clicks:
+            self.text = self.text_after_click
+
+
+def test_login_flow() -> None:
+    print("Вход в Дзен: три нажатия и выбор аккаунта")
+    try:
+        import zen_browser as zb
+    except ImportError as e:
+        print(f"  ⏭ пропускаю: {e}")
+        return
+
+    # Главный урок живого прогона: со студии Дзен уводит незалогиненного на
+    # публичный канал молча. Ни слова про вход – а студии нет.
+    channel = FakePage(text="СТАЛЬМЕТУРАЛ | Металлопрокат\nПодписаться\nВойти",
+                       has=("login-button",))
+    check("публичный канал – это не студия", not zb.in_studio(channel))
+    check("и Click понимает, что не вошёл", zb._looks_logged_out(channel))
+
+    studio = FakePage(text="Главное Статистика Публикации", has=("add-publication-button",))
+    check("студия узнаётся по кнопке «＋»", zb.in_studio(studio))
+    check("в студии вход не требуется", not zb._looks_logged_out(studio))
+
+    # Выбор аккаунта: нужный есть среди нескольких.
+    many = FakePage(text=("Выберите аккаунт для входа stalmetural19@yandex.ru СМУ "
+                          "mepen88@yandex.ru МПЭ aviastalru@yandex.ru"))
+    many.text_after_click = "Главное Статистика"
+    why = zb.pick_account(many, "stalmetural19@yandex.ru", lambda m: None)
+    check("нужный аккаунт выбран", why == "", why)
+    check("нажали именно по нему",
+          many.clicks and "stalmetural19@yandex.ru" in many.clicks[0], str(many.clicks))
+
+    # Чужой аккаунт – останавливаемся: не тот бренд не отменить.
+    alien = FakePage(text="Выберите аккаунт для входа mepen88@yandex.ru МПЭ")
+    why = zb.pick_account(alien, "stalmetural19@yandex.ru", lambda m: None)
+    check("чужого аккаунта не выбираем", "не нашёлся" in why, why)
+    check("и говорим, что предложено", "mepen88@yandex.ru" in why, why)
+
+    # Аккаунт один, почта проекта не заполнена – жмём его, не упираясь.
+    lone = FakePage(text="Выберите аккаунт для входа stalmetural19@yandex.ru СМУ")
+    lone.text_after_click = "Главное"
+    check("единственный аккаунт выбирается без почты",
+          zb.pick_account(lone, "", lambda m: None) == "")
+
+    # Несколько аккаунтов и пустая почта – это уже опасно.
+    risky = FakePage(text="Выберите аккаунт для входа a@yandex.ru b@yandex.ru")
+    check("несколько аккаунтов без почты – стоп",
+          "не указан email" in zb.pick_account(risky, "", lambda m: None))
+
+    check("экрана выбора нет – делать нечего",
+          zb.pick_account(FakePage(text="Главное"), "x@yandex.ru", lambda m: None) == "")
+
+    # Все три нажатия описаны селекторами – их и правят, когда Дзен обновится.
+    for key in ("login_button", "login_yandex", "add_publication"):
+        check(f"селекторы «{key}» на месте", bool(zb.SEL.get(key)))
+
+
 def test_session_source(tmp: Path | None = None) -> None:
     print("Вход в Дзен берётся от Яндекс.Бизнеса")
     try:
@@ -295,6 +406,7 @@ def main() -> int:
     test_doc_links()
     test_long_title()
     test_browser_logic()
+    test_login_flow()
     test_session_source()
     test_registry_wiring()
     print("\n" + "═" * 60)

@@ -78,6 +78,16 @@ MONTHS_RU = ("января", "февраля", "марта", "апреля", "м
 SEL = {
     "add_publication": ['[data-testid="add-publication-button"]',
                         '[class*="author-studio-header__addButton"]'],
+    # Вход – три нажатия подряд, и все три обязательны (проверено вживую
+    # 14.08.2026). Кнопка «Войти» в шапке публичного канала; в выпавшем окне
+    # «Войти через Яндекс ID»; и уже в паспорте – плитка нужного аккаунта.
+    "login_button": ['[class*="login-button"]',
+                     '[class*="loginButton"]:not([class*="content"])',
+                     'button:has-text("Войти")'],
+    "login_yandex": ['[class*="login-content_ya"]',
+                     'a:has-text("Войти через Яндекс ID")',
+                     'text="Войти через Яндекс ID"'],
+    "account_row": ['[class*="account"]', '[class*="Account"]', 'li', 'a'],
     "write_article": ['label[aria-label="Написать статью"]',
                       '[class*="new-publication-dropdown"] [class*="buttonTitle"]'],
     "title_field": ['[data-testid="article-title"]',
@@ -205,87 +215,191 @@ def _body_text(page) -> str:
 #  ВХОД
 # ════════════════════════════════════════════════════════════════════
 
+def in_studio(page) -> bool:
+    """
+    Мы в студии автора? Признак прямой: кнопка «＋» есть только у хозяина
+    канала. Всё остальное (адрес, заголовки) врёт – Дзен показывает
+    незалогиненному человеку публичный канал по тому же адресу.
+    """
+    for sel in SEL["add_publication"]:
+        try:
+            if page.locator(sel).first.count():
+                return True
+        except Exception:  # noqa: BLE001
+            continue
+    return False
+
+
 def _looks_logged_out(page) -> bool:
-    """Дзен показывает вход, а не студию автора."""
+    """
+    Дзен показывает вход, а не студию.
+
+    Первая живая проверка (14.08.2026) обожглась именно здесь. Считалось,
+    что незалогиненного видно по тексту «Войдите удобным способом» – а он
+    появляется ТОЛЬКО после нажатия «Войти». Со студии же Дзен молча
+    уводит на публичный канал: адрес похожий, статьи на месте, никаких слов
+    про вход. Click решал, что вошёл, шёл искать «＋» и не находил.
+
+    Поэтому признак теперь обратный и честный: нет кнопки «＋» – мы не в
+    студии, чего бы страница про себя ни писала.
+    """
+    if in_studio(page):
+        return False
     url = (page.url or "").lower()
     if "passport.yandex" in url or "/auth" in url:
         return True
     body = _body_text(page)
-    return ("Войдите удобным способом" in body
-            or "Войти через Яндекс ID" in body
-            or "Введите номер телефона" in body)
+    if any(m in body for m in ("Войдите удобным способом", "Войти через Яндекс ID",
+                               "Введите номер телефона", "Выберите аккаунт")):
+        return True
+    # Кнопка «Войти» в шапке – самый надёжный признак чужого канала.
+    return bool(_first_visible(page, SEL["login_button"], timeout=2_000))
+
+
+def do_login(page, email: str, log: Callable[[str], None]) -> str:
+    """
+    Пройти вход: «Войти» → «Войти через Яндекс ID» → плитка аккаунта.
+
+    Все три нажатия обязательны, даже когда сессия Яндекса уже есть:
+    заказчик проверил вживую – «вход всё равно надо нажать, потом через
+    айди, а потом нажать на акк». Куки лишь избавляют от телефона и пароля,
+    а сами нажатия Дзен ждёт от человека.
+
+    Пусто – вошли, иначе причина словами.
+    """
+    body = _body_text(page)
+
+    # 1. «Войти» в шапке – если окно входа ещё не открыто.
+    if "Войдите удобным способом" not in body and "Выберите аккаунт" not in body:
+        log("Нажимаю «Войти»")
+        if not _click_first(page, SEL["login_button"], timeout=10_000):
+            return "не нашли кнопку «Войти» в Дзене"
+        page.wait_for_timeout(2_000)
+
+    # 2. «Войти через Яндекс ID» в выпавшем окне.
+    if "Выберите аккаунт" not in _body_text(page):
+        log("Нажимаю «Войти через Яндекс ID»")
+        if not _click_first(page, SEL["login_yandex"], timeout=10_000):
+            return "в окне входа не нашлась кнопка «Войти через Яндекс ID»"
+        # Паспорт открывается своей страницей – ждём её не торопясь.
+        for _ in range(20):
+            if "Выберите аккаунт" in _body_text(page) or in_studio(page):
+                break
+            page.wait_for_timeout(1_000)
+
+    # 3. Плитка аккаунта в паспорте.
+    return pick_account(page, email, log)
 
 
 def pick_account(page, email: str, log: Callable[[str], None]) -> str:
     """
-    Экран «Выберите аккаунт для входа» – выбрать аккаунт проекта.
+    Экран «Выберите аккаунт для входа» – нажать плитку аккаунта проекта.
 
     Сравниваем по логину (часть до «@»), как это делает проверка аккаунта в
     ЯБ: паспорт рядом с адресом показывает и имя, и привязанные почты, и
     точное совпадение целой строки подводит.
 
-    Возвращает пустую строку, если всё хорошо (аккаунт выбран либо экрана
-    выбора не было), иначе – причину словами.
+    Если почта проекта не задана, а аккаунт на экране РОВНО ОДИН – жмём его:
+    выбирать не из чего, и упираться тут значило бы застрять на ровном месте.
+    А вот когда аккаунтов несколько и непонятно, чей канал, – останавливаемся:
+    статья, вышедшая не под тем брендом, не отменяется.
+
+    Возвращает пустую строку, если всё хорошо, иначе – причину словами.
     """
     body = _body_text(page)
     if "Выберите аккаунт" not in body:
         return ""
 
+    emails = re.findall(r"[\w.+-]+@[\w.-]+", body)
     login = (email or "").strip().lower().split("@")[0]
-    if not login:
-        return ("Дзен просит выбрать аккаунт, а в «Настройках» не указан email "
-                "проекта – Click не знает, какой из них ваш.")
+
+    if login and any(login in e.lower() for e in emails):
+        target = next(e for e in emails if login in e.lower())
+    elif not login and len(set(emails)) == 1:
+        target = emails[0]
+        log(f"Почта проекта не задана, но аккаунт один – вхожу как {target}")
+    elif login:
+        return (f"В Яндексе не нашёлся аккаунт {email}. Что предложено: "
+                f"{', '.join(emails[:6]) or 'ни одного'}. Войдите нужным аккаунтом "
+                "руками или поправьте email в «Настройках».")
+    else:
+        return ("Яндекс просит выбрать аккаунт, а в «Настройках» не указан email "
+                f"проекта. Предложено: {', '.join(emails[:6]) or 'ни одного'}.")
+
+    log(f"Выбираю аккаунт {target}")
     try:
-        # Ищем строку аккаунта по видимому тексту почты и жмём по ней.
-        item = page.locator(f'text=/{re.escape(login)}@/i').first
-        if not item.count():
-            found = ", ".join(re.findall(r"[\w.+-]+@[\w.-]+", body)[:6]) or "ни одного"
-            return (f"В Яндексе не нашёлся аккаунт {email}. Что предложено: {found}. "
-                    "Войдите нужным аккаунтом руками или поправьте email в «Настройках».")
-        log(f"Выбираю аккаунт {email}")
-        item.click()
-        page.wait_for_timeout(4_000)
-        return ""
+        page.get_by_text(target, exact=False).first.click()
     except Exception as e:  # noqa: BLE001
-        return f"Не получилось выбрать аккаунт {email}: {e}"
+        return f"не получилось нажать на аккаунт {target}: {e}"
+
+    # Ждём ухода экрана выбора. Плитка – это вложенный текст, и клик по нему
+    # не всегда доходит до самой кнопки; тогда жмём по её ближайшему предку.
+    for attempt in range(2):
+        for _ in range(15):
+            if "Выберите аккаунт" not in _body_text(page):
+                return ""
+            page.wait_for_timeout(1_000)
+        if attempt == 0:
+            log("Экран выбора не ушёл – жму плитку целиком")
+            try:
+                page.get_by_text(target, exact=False).first.locator(
+                    "xpath=ancestor::*[self::a or self::button or self::li or self::div][1]"
+                ).click()
+            except Exception:  # noqa: BLE001
+                break
+    return ("Яндекс так и не принял выбор аккаунта: экран «Выберите аккаунт» "
+            "остался на месте.")
+
+
+def wait_studio(page, timeout_ms: int = 25_000) -> bool:
+    """Дождаться студии: кнопка «＋» появляется не сразу – Дзен это SPA."""
+    left = timeout_ms
+    while left > 0:
+        if in_studio(page):
+            return True
+        page.wait_for_timeout(700)
+        left -= 700
+    return False
 
 
 def ensure_studio(page, editor_url: str, email: str, log: Callable[[str], None]) -> str:
     """
-    Открыть студию автора и убедиться, что мы вошли. Пусто – всё хорошо,
+    Открыть студию автора и убедиться, что мы в ней. Пусто – всё хорошо,
     иначе причина словами.
+
+    Порядок выстроен по живому прогону 14.08.2026. Со студии Дзен уводит
+    незалогиненного на публичный канал – молча, без единого слова про вход.
+    Поэтому «вошли ли мы» решается не по тексту страницы, а по кнопке «＋»:
+    она есть только у хозяина канала. Нет её – идём входить, а после входа
+    возвращаемся на адрес студии сами: Дзен после паспорта высаживает туда,
+    откуда начинали, то есть опять на публичный канал.
     """
     log(f"Открываю студию Дзена: {editor_url}")
     page.goto(editor_url, wait_until="domcontentloaded", timeout=60_000)
     page.wait_for_timeout(3_000)
 
-    if not _looks_logged_out(page):
+    if wait_studio(page, timeout_ms=8_000):
         return ""
 
-    # Дзен предлагает войти. Куки Яндекса у нас есть, поэтому чаще всего
-    # достаточно нажать «Войти через Яндекс ID» и выбрать аккаунт.
-    log("Дзен показывает вход – пробую войти сохранённой сессией Яндекса")
-    _click_first(page, ['text="Войти через Яндекс ID"', 'text="Войти"'], timeout=6_000)
-    page.wait_for_timeout(4_000)
-
-    why = pick_account(page, email, log)
+    log("Студии не видно – значит не вошли. Вхожу через Яндекс ID")
+    why = do_login(page, email, log)
     if why:
         return why
 
-    # После выбора аккаунта Дзен возвращает в студию сам, но не мгновенно.
-    for _ in range(20):
-        if not _looks_logged_out(page):
-            break
-        page.wait_for_timeout(1_000)
-
-    if _looks_logged_out(page):
-        return ("Дзен не пустил сохранённой сессией Яндекса: он просит вход "
-                "заново (телефон или пароль). Войдите в Яндекс в «Настройках» – "
-                "тем же входом, что для Яндекс.Бизнеса.")
-
-    if editor_url not in (page.url or ""):
+    # После паспорта Дзен возвращает на прежнюю страницу – чаще всего на
+    # публичный канал. В студию заходим ещё раз, уже с входом.
+    page.wait_for_timeout(3_000)
+    if not in_studio(page):
+        log("Возвращаюсь в студию после входа")
         page.goto(editor_url, wait_until="domcontentloaded", timeout=60_000)
         page.wait_for_timeout(2_500)
+
+    if not wait_studio(page, timeout_ms=25_000):
+        return ("Вошли, но студия автора так и не открылась: кнопки «＋» на "
+                f"странице нет. Проверьте адрес студии ({editor_url}) – он должен "
+                "быть вида dzen.ru/profile/editor/…, и этот аккаунт должен быть "
+                "автором канала.")
+    log("Студия открыта, вход есть")
     return ""
 
 

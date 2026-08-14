@@ -250,6 +250,7 @@ class FakePage:
         self.clicks: list[str] = []
         self.pending = ""
         self.values: dict[str, str] = {}
+        self.buttons: tuple[str, ...] = ()
         # После нажатия на аккаунт экран выбора уходит – как в жизни.
         self.text_after_click = None
 
@@ -264,6 +265,11 @@ class FakePage:
         self.pending = f"text:{text}"
         return FakeLocator(self, 1)
 
+    def evaluate_handle(self, _js: str, arg):
+        """Ищем кнопку по точной надписи – так же, как настоящий поиск."""
+        title = arg if isinstance(arg, str) else (arg[0] if arg else "")
+        return _FakeHandle(self, title if title in self.buttons else "")
+
     def wait_for_timeout(self, _ms: int) -> None:
         if self.text_after_click is not None and self.clicks:
             self.text = self.text_after_click
@@ -276,6 +282,27 @@ class FakePage:
     @property
     def mouse(self):
         return _FakeKeys(self)
+
+
+class _FakeHandle:
+    def __init__(self, page, title: str):
+        self.page = page
+        self.title = title
+
+    def as_element(self):
+        return _FakeButton(self.page, self.title) if self.title else None
+
+
+class _FakeButton:
+    def __init__(self, page, title: str):
+        self.page = page
+        self.title = title
+
+    def click(self, **kw) -> None:
+        self.page.clicks.append(f"button:{self.title}")
+
+    def evaluate(self, _js: str) -> None:
+        self.page.clicks.append(f"js-button:{self.title}")
 
 
 class _FakeKeys:
@@ -499,6 +526,40 @@ def test_calendar() -> None:
           len(zb.MONTHS_RU) == 12 and len(zb.MONTHS_NOM) == 12)
 
 
+def test_confirm_button() -> None:
+    print("Подтверждение отложки: кнопка «Опубликовать позже»")
+    try:
+        import zen_browser as zb
+    except ImportError as e:
+        print(f"  ⏭ пропускаю: {e}")
+        return
+
+    # На экране две кнопки со словом «Опубликовать»: в шапке редактора и
+    # внизу окна публикации. С включённой отложкой нижняя называется иначе,
+    # и жать надо именно её – верхняя в этот момент накрыта окном.
+    both = FakePage()
+    both.buttons = ("Опубликовать", "Опубликовать позже")
+    check("подтверждаем точной надписью", zb.click_button_titled(both, "Опубликовать позже"))
+    check("нажали нижнюю, а не шапку",
+          both.clicks == ["button:Опубликовать позже"], str(both.clicks))
+
+    only_header = FakePage()
+    only_header.buttons = ("Опубликовать",)
+    check("нижней кнопки нет – честно говорим",
+          not zb.click_button_titled(only_header, "Опубликовать позже"))
+    check("и ничего не нажимаем", not only_header.clicks, str(only_header.clicks))
+
+    # Окно открывается кнопкой шапки – она называется ровно «Опубликовать».
+    check("окно открываем кнопкой шапки", zb.click_button_titled(both, "Опубликовать"))
+
+    import inspect
+    src = inspect.getsource(zb.schedule_article)
+    check("в подтверждении ищется «Опубликовать позже»",
+          'click_button_titled(page, "Опубликовать позже")' in src)
+    check("успехом считается и закрытие окна",
+          '"Опубликовать позже" not in body' in src)
+
+
 def test_date_already_set() -> None:
     print("Дата уже стоит нужная – календарь не трогаем")
     try:
@@ -622,6 +683,7 @@ def main() -> int:
     test_paste_detection()
     test_calendar()
     test_date_already_set()
+    test_confirm_button()
     test_session_source()
     test_registry_wiring()
     print("\n" + "═" * 60)

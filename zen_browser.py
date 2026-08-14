@@ -122,6 +122,11 @@ SEL = {
                     '[class*="onboarding"] [class*="close"]',
                     'button[aria-label*="Закрыть"]',
                     '[aria-label="Закрыть"]'],
+    # Кнопок «Опубликовать» на экране ДВЕ, и путать их нельзя. Одна в шапке
+    # редактора – ею окно публикации открывается. Вторая внизу окна – ею
+    # подтверждается, и при включённой отложке она называется иначе:
+    # «Опубликовать позже». Поиск по вхождению текста цеплял верхнюю,
+    # перекрытую окном, и нажатие уходило в никуда (прогон 19:48).
     "publish_button": ['[class*="base-button"]:has-text("Опубликовать")',
                        'button:has-text("Опубликовать")'],
     "later_checkbox_title": ['[class*="checkbox-input__title"]:has-text("Опубликовать позже")',
@@ -903,6 +908,42 @@ def _set_time(page, when: datetime, log: Callable[[str], None]) -> str:
     return ""
 
 
+def click_button_titled(page, title: str) -> bool:
+    """
+    Нажать кнопку с ТОЧНО такой надписью. Берём НИЖНЮЮ из подходящих.
+
+    Зачем точность. На экране две кнопки со словом «Опубликовать»: одна в
+    шапке редактора (ею окно и открывается), другая внизу окна публикации –
+    ею подтверждают. Поиск «кнопка, в тексте которой есть „Опубликовать“»
+    находил верхнюю, а она в этот момент накрыта окном: нажатие уходило в
+    подложку, и прогон 19:48 закончился «не нашли кнопку подтверждения».
+
+    Точное сравнение решает и вторую половину задачи. При включённой
+    отложке нижняя кнопка называется «Опубликовать позже» – совсем другая
+    надпись, и перепутать её с «Опубликовать» уже нельзя. Из нескольких
+    подходящих берём последнюю по странице: окно всегда ниже шапки.
+    """
+    try:
+        handle = page.evaluate_handle(
+            """(title) => {
+                const shown = (e) => !!(e.offsetParent || e.getClientRects().length);
+                const buttons = [...document.querySelectorAll(
+                    'button,[role="button"],[class*="base-button"],[class*="Button"]')]
+                    .filter(e => shown(e) && (e.innerText || '').trim() === title);
+                return buttons.length ? buttons[buttons.length - 1] : null;
+            }""", title)
+        el = handle.as_element() if handle else None
+        if el is None:
+            return False
+        try:
+            el.click(timeout=5_000)
+        except Exception:  # noqa: BLE001 – кнопку могло накрыть подсказкой
+            el.evaluate("e => e.click()")
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _turn_on_later(page, log: Callable[[str], None]) -> str:
     """Включить «Опубликовать позже». Пусто – включено, иначе причина."""
     # Окно прокручиваем вниз: галочка живёт под текстом настроек публикации.
@@ -1072,7 +1113,8 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
             # иначе нажатие уйдёт в его подложку.
             dismiss_popups(page, log)
             log("Открываю окно публикации")
-            if not _click_first(page, SEL["publish_button"], timeout=15_000):
+            if not (click_button_titled(page, "Опубликовать")
+                    or _click_first(page, SEL["publish_button"], timeout=8_000)):
                 return {"ok": False, "error": "Не нашли кнопку «Опубликовать»",
                         "shot": _debug_shot(project_id, page, "no-publish")}
             page.wait_for_timeout(2_500)
@@ -1117,28 +1159,40 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
                         "shot": _debug_shot(project_id, page, "wrong-when")}
 
             log(f"Подтверждаю отложку на {local.strftime('%d.%m.%Y %H:%M')}")
-            if not _click_first(page, SEL["publish_button"], timeout=8_000):
-                return {"ok": False, "error": "Не нашли кнопку подтверждения в окне публикации",
+            # Кнопка внизу окна называется по тому, что мы выбрали: с
+            # галочкой – «Опубликовать позже». Жмём именно её, точной
+            # надписью, а не «что-нибудь со словом опубликовать».
+            if not (click_button_titled(page, "Опубликовать позже")
+                    or click_button_titled(page, "Запланировать")):
+                return {"ok": False,
+                        "error": ("Не нашли кнопку «Опубликовать позже» внизу окна "
+                                  "публикации. Дата и время выставлены – можно нажать "
+                                  "её руками, статья лежит черновиком"),
                         "shot": _debug_shot(project_id, page, "no-confirm")}
 
-            # Ответ площадки. Дзен уводит в студию и показывает статью в
-            # отложенных; ждём не торопясь – в облаке всё медленнее.
-            for _ in range(30):
+            # Ответ площадки. Главный признак – окно публикации закрылось:
+            # Дзен принял отложку и вернул в редактор или студию. Слова
+            # («Отложенные», «запланирована») бывают не всегда, ждать только
+            # их – значит пугать человека ложной неудачей после удачи.
+            for _ in range(40):
+                page.wait_for_timeout(500)
                 body = _body_text(page)
                 if any(mark in body for mark in ("Отложенные", "запланирована",
                                                  "Публикация запланирована", "Черновики")):
                     log("Дзен подтвердил: статья в отложенных")
                     yb._save_storage_state(context, session_path(project_id))
                     return {"ok": True, "warnings": warnings}
-                page.wait_for_timeout(500)
+                if "Опубликовать позже" not in body:
+                    log("Окно публикации закрылось – Дзен принял отложку")
+                    yb._save_storage_state(context, session_path(project_id))
+                    return {"ok": True, "warnings": warnings}
 
-            # Подтверждения не дождались. Это не обязательно провал – могло
-            # просто не смениться содержимое, – поэтому говорим прямо, куда
-            # заглянуть, вместо бодрого «готово».
+            # Окно так и висит – значит Дзен отложку не принял.
             yb._save_storage_state(context, session_path(project_id))
             return {"ok": False,
-                    "error": "Дзен не подтвердил отложку словами. Загляните в студию: "
-                             "если статья в «Отложенных» – формировать заново не нужно",
+                    "error": ("Нажали «Опубликовать позже», но окно публикации не "
+                              "закрылось. Загляните в студию: если статья в "
+                              "«Отложенных» – формировать заново не нужно"),
                     "shot": _debug_shot(project_id, page, "no-confirmation")}
 
         except Exception as e:  # noqa: BLE001

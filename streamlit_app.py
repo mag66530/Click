@@ -13,6 +13,7 @@ streamlit_app.py – Click на Streamlit. Интерфейс повторяет
 from __future__ import annotations
 
 import copy
+import functools
 import hashlib
 import importlib
 import json
@@ -57,7 +58,9 @@ _OWN_MODULES = ("build", "apptime", "paths", "projects_data", "repo_store", "ui_
                 "content_plan", "crosspost_plan", "crosspost_state",
                 "crosspost_form", "post_text",
                 "scheduler", "social_session", "vk_social", "ok_browser",
-                "ok_social", "tg_social", "max_social", "max_browser")
+                "ok_social", "tg_social", "max_social", "max_browser",
+                # Дзен: студия автора (браузер) и разбор статьи из документа.
+                "zen_browser", "zen_doc")
 
 
 def _settle_imports() -> None:
@@ -273,7 +276,7 @@ _KEPT = ("countries", "countriesGis", "email", "kpSheetUrl", "kpSheetTitle",
         # система временная, а наружу уезжали только города. Заказчица
         # вбивала два десятка ссылок заново.
         "vkGroupUrl", "okGroupUrl", "tgChannelClient", "tgChannelStaff",
-        "maxWebUrl", "maxChatId", "zenUrl", "planSheetUrl")
+        "maxWebUrl", "maxChatId", "zenUrl", "zenStudioUrl", "planSheetUrl")
 
 
 def _fill_social(project_id: str, sub: dict) -> dict:
@@ -3580,6 +3583,7 @@ def _crosspost_login_hint(project_id: str, config: dict) -> None:
     """
     import ok_browser
     import vk_social
+    import zen_browser
 
     not_ready = [name for name, ready in (
         ("ВК", vk_social.has_saved_session(project_id) and (config.get("vkGroupUrl") or "").strip()),
@@ -3588,6 +3592,19 @@ def _crosspost_login_hint(project_id: str, config: dict) -> None:
     if not_ready:
         st.caption(f"Формирование {' и '.join(not_ready)} появится после входа: "
                    f"«Настройки» → «Вход в ВК/ОК (кросспостинг)».")
+
+    # Дзен объясняем отдельно: у него нет своего входа, и это стоит сказать
+    # прямо – иначе человек будет искать «Вход в Дзен», которого нет и не будет.
+    studio = (config.get("zenStudioUrl") or "").strip()
+    if zen_browser.has_saved_session(project_id) and studio:
+        st.caption(f"Дзен готов: статьи уходят в студию {studio}. "
+                   f"Вход отдельный не нужен – {zen_browser.session_note(project_id)}.")
+    elif not studio:
+        st.caption("Дзен: укажите студию автора (dzen.ru/profile/editor/…) в блоке "
+                   "«Каналы и адреса» – в неё Click и публикует статьи.")
+    else:
+        st.caption("Дзен ждёт входа в Яндекс – того же, которым публикуется "
+                   "Яндекс.Бизнес: «Настройки» → «Вход в Яндекс».")
 
 
 def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
@@ -3607,9 +3624,9 @@ def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
         _crosspost_yb_block(project_id, config)
 
     with t2:
-        # Обе сети – своей пробной отложкой. Логи зовём ОТСЮДА, а не из конца
-        # самой пробы: у той три ранних выхода (нет сессии, нет сообщества, идёт
-        # прогон), и лог прошлого раза на них молча пропадал бы.
+        # Каждая сеть с родной отложкой – своей пробой. Логи зовём ОТСЮДА, а не
+        # из конца самой пробы: у той три ранних выхода (нет сессии, нет
+        # сообщества, идёт прогон), и лог прошлого раза на них молча пропадал бы.
         for network in PROBE_NETWORKS:
             _crosspost_probe(project_id, config, network)
             _probe_last_log(project_id, network)
@@ -3753,14 +3770,20 @@ def _crosspost_channels_block(project_id: str, config: dict) -> None:
             "maxChatId": c3.text_input("МАКС: id канала для бота (не обязательно)",
                                        value=config.get("maxChatId", ""),
                                        key=f"cp-max-{project_id}"),
-            # Дзен Click пока не публикует. Ссылку храним, чтобы она была под
-            # рукой и не терялась при перезапуске облака, – и подписываем
-            # честно, чтобы поле не выглядело обещанием.
-            "zenUrl": st.text_input("Дзен: канал (пока только для справки)",
+            # У Дзена два адреса, и публикует Click во ВТОРОЙ. Первый –
+            # публичный канал, он остаётся для ссылок и сверки.
+            "zenUrl": st.text_input("Дзен: публичный канал",
                                     value=config.get("zenUrl", ""),
                                     key=f"cp-zen-{project_id}",
-                                    help="Дзен в кросспостинге не подключён – "
-                                         "Click туда ничего не отправляет."),
+                                    placeholder="https://dzen.ru/stalmetural",
+                                    help="Адрес канала для читателей. Публикация "
+                                         "идёт не сюда, а в студию автора – поле рядом."),
+            "zenStudioUrl": st.text_input("Дзен: студия автора (сюда публикуем)",
+                                          value=config.get("zenStudioUrl", ""),
+                                          key=f"cp-zen-studio-{project_id}",
+                                          placeholder="https://dzen.ru/profile/editor/stalmetural",
+                                          help="Страница, где пишутся статьи. Открывается "
+                                               "тем же входом в Яндекс, что и Яндекс.Бизнес."),
         }
         st.caption("МАКС можно вести двумя путями, и id канала нужен только "
                    "первому. **Бот** шлёт «сейчас», а время держит планировщик – "
@@ -3861,6 +3884,7 @@ def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
     import max_browser
     import ok_browser
     import vk_social
+    import zen_browser
 
     channels = _crosspost_channels(config)
     vk_ready = bool(vk_social.has_saved_session(project_id)
@@ -3871,14 +3895,20 @@ def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
     # считается одинаково: есть сессия И есть ссылка на сообщество.
     max_ready = bool(max_browser.has_saved_session(project_id)
                      and (config.get("maxWebUrl") or "").strip())
+    # Дзен – четвёртая площадка с родной отложкой. Отдельного входа у неё нет:
+    # пускает сессия Яндекса, та же, что публикует Яндекс.Бизнес.
+    zen_ready = bool(zen_browser.has_saved_session(project_id)
+                     and (config.get("zenStudioUrl") or "").strip())
     return {
         "channels": channels,
         "vk_ready": vk_ready,
         "ok_ready": ok_ready,
         "max_ready": max_ready,
+        "zen_ready": zen_ready,
         "vk": crosspost_form.pending_for(upcoming, state, "vk") if vk_ready else [],
         "ok": crosspost_form.pending_for(upcoming, state, "ok") if ok_ready else [],
         "max": crosspost_form.pending_for(upcoming, state, "max") if max_ready else [],
+        "zen": crosspost_form.pending_for(upcoming, state, "zen") if zen_ready else [],
         "msg": [p for net, chat in channels.items() if chat
                 for p in crosspost_form.pending_for(upcoming, state, net)],
     }
@@ -3887,22 +3917,28 @@ def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
 def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
                           state: dict, hints: bool = True) -> None:
     """
-    «Сформировать план»: ВК, ОК и МАКС – родные отложки браузером, Телеграм –
-    задания планировщику. Каждая площадка независима; исходы пишутся в
-    память сразу, повтор кнопки доформирует только несделанное (Д-6).
+    «Сформировать план»: ВК, ОК, МАКС и Дзен – родные отложки браузером,
+    Телеграм – задания планировщику. Каждая площадка независима; исходы
+    пишутся в память сразу, повтор кнопки доформирует только несделанное (Д-6).
+
+    Дзен стоит в том же ряду, хотя материал у него другой: не пост из ячейки,
+    а статья по ссылке на документ. Для человека это одна кнопка – разбираться,
+    где пост, а где лонгрид, должен Click, а не заказчик.
     """
     import crosspost_form
 
     todo = _crosspost_form_todo(project_id, config, upcoming, state)
     channels = todo["channels"]
     vk_ready, ok_ready, max_ready = todo["vk_ready"], todo["ok_ready"], todo["max_ready"]
+    zen_ready = todo["zen_ready"]
     vk_todo, ok_todo, max_todo, msg_todo = todo["vk"], todo["ok"], todo["max"], todo["msg"]
-    if not vk_todo and not ok_todo and not max_todo and not msg_todo:
+    zen_todo = todo["zen"]
+    if not vk_todo and not ok_todo and not max_todo and not zen_todo and not msg_todo:
         # Рядом с кнопками объяснение не живёт: hints=False зовут из строки
         # состояния, где нужна одна кнопка и ничего больше. Подсказка про вход
         # показывается в «Подключениях», где её и ищут.
-        if hints and not (vk_ready or ok_ready or max_ready):
-            st.caption("Формирование ВК, ОК и МАКС появится после входа: "
+        if hints and not (vk_ready or ok_ready or max_ready or zen_ready):
+            st.caption("Формирование ВК, ОК, МАКС и Дзена появится после входа: "
                        "«Настройки» → блоки входа в соцсети.")
         return
 
@@ -3913,9 +3949,11 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
         parts.append(f"ОК: {len(ok_todo)}")
     if max_todo:
         parts.append(f"МАКС: {len(max_todo)}")
+    if zen_todo:
+        parts.append(f"Дзен: {len(zen_todo)}")
     if msg_todo:
         parts.append(f"ТГ: {len(msg_todo)}")
-    busy = runner.busy_reason(project_id, "publish") if (vk_todo or ok_todo or max_todo) else ""
+    busy = runner.busy_reason(project_id, "publish") if (vk_todo or ok_todo or max_todo or zen_todo) else ""
     if busy:
         st.caption(f"Поставить отложенные посты ({', '.join(parts)}): сейчас нельзя – {busy}.")
         return
@@ -3930,19 +3968,26 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
         msg_results = crosspost_form.form_messengers(
             project_id, upcoming, site, channels, progress=lambda m: box.write(m))
         ok += len(msg_results)
+        # Дзену дополнительно нужна почта проекта: у человека в Яндексе
+        # несколько аккаунтов, и паспорт спрашивает, каким входить.
+        zen_former = functools.partial(crosspost_form.form_zen_all,
+                                       email=(config.get("email") or "").strip())
         for net_name, todo, former, url_key in (
                 ("ВК", vk_todo, crosspost_form.form_vk_all, "vkGroupUrl"),
                 ("ОК", ok_todo, crosspost_form.form_ok_all, "okGroupUrl"),
-                ("МАКС", max_todo, crosspost_form.form_max_all, "maxWebUrl")):
+                ("МАКС", max_todo, crosspost_form.form_max_all, "maxWebUrl"),
+                ("Дзен", zen_todo, zen_former, "zenStudioUrl")):
             if not todo:
                 continue
-            results = former(project_id, config[url_key].strip(), upcoming, site,
+            results = former(project_id, (config.get(url_key) or "").strip(), upcoming, site,
                              progress=lambda m: box.write(m), headless=headless)
             ok += sum(1 for r in results if r["ok"])
             for r in results:
                 if not r["ok"]:
                     bad += 1
                     box.write(f"❌ {net_name} {r['post']['date']}: {r['error']}")
+                for w in r.get("warnings") or []:
+                    box.write(f"⚠️ {net_name} {r['post']['date']}: {w}")
         box.update(label=(f"Готово: запланировано {ok}"
                           + (f", с ошибками {bad}" if bad else "")),
                    state="error" if bad else "complete")
@@ -4020,6 +4065,19 @@ PROBE_NETWORKS = {
     "max": {"ru": "МАКС", "module": "max_browser", "url_key": "maxWebUrl",
             "where": "«Настройки» → «Файл сессий» и поле «МАКС: ссылка на канал»",
             "shelf": "«Запланированные посты» канала"},
+    # Дзен отличается двумя вещами, и обе учтены здесь, а не особым случаем в
+    # коде пробы: входа своего у него нет (пускает сессия Яндекса от ЯБ), и
+    # вместо текста поста он ждёт СТАТЬЮ – ссылку на документ или готовый
+    # текст, первая строка которого станет заголовком.
+    "zen": {"ru": "Дзен", "module": "zen_browser", "url_key": "zenStudioUrl",
+            "where": "«Настройки» → вход в Яндекс (тот же, что у Яндекс.Бизнеса) "
+                     "и поле «Дзен: студия автора»",
+            "shelf": "«Отложенные» в студии автора",
+            "needs_email": True,
+            "probe_text": "Проверка Click\nЭто пробная статья Click – можно удалить.",
+            "probe_hint": "Можно вставить ссылку на Google Документ – Click разберёт "
+                          "его на заголовок, абзацы, списки и таблицы. Или оставить "
+                          "текст: первая строка станет заголовком статьи."},
 }
 
 
@@ -4045,9 +4103,14 @@ def _crosspost_probe(project_id: str, config: dict, network: str) -> None:
 
         st.caption(f"Сообщество: {group_url}. Запись встанет в {meta['shelf']} – "
                    "оттуда её можно удалить.")
-        text = st.text_area("Текст пробного поста", key=f"{network}-probe-text-{project_id}",
-                            value="Проверка планировщика Click – тестовая отложенная запись, "
-                                  "можно удалить.")
+        text = st.text_area("Текст пробного поста" if network != "zen" else
+                            "Статья: ссылка на документ или текст",
+                            key=f"{network}-probe-text-{project_id}",
+                            value=meta.get("probe_text",
+                                           "Проверка планировщика Click – тестовая "
+                                           "отложенная запись, можно удалить."))
+        if meta.get("probe_hint"):
+            st.caption(meta["probe_hint"])
         minutes = st.number_input("Опубликовать через, минут", 10, 24 * 60, 40, step=5,
                                   key=f"{network}-probe-min-{project_id}",
                                   help=f"{ru} не даёт планировать ближе чем на несколько "
@@ -4094,10 +4157,12 @@ def _crosspost_probe(project_id: str, config: dict, network: str) -> None:
             # приложения. У нового потока свои локальные данные – отравить
             # его прошлому нечем.
             with st.spinner(f"Открываю {ru} и ставлю отложку – обычно меньше минуты…"):
+                extra = ({"email": (config.get("email") or "").strip()}
+                         if meta.get("needs_email") else {})
                 res = playwright_worker.run_once(
                     social.schedule_postponed_post, project_id, group_url,
                     text.strip(), [], when, log=note,
-                    headless=bool(get_settings(project_id)["headless"]))
+                    headless=bool(get_settings(project_id)["headless"]), **extra)
             note("ИТОГ: отложка поставлена" if res.get("ok")
                  else f"ИТОГ: не получилось – {res.get('error')}")
             log_text = "\n".join(steps)

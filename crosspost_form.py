@@ -192,6 +192,76 @@ def form_ok_all(project_id: str, group_url: str, posts: list[dict], site: str,
                              group_url, posts, site, progress, headless)
 
 
+def form_zen_all(project_id: str, studio_url: str, posts: list[dict], site: str,
+                 progress: Callable[[str], None] | None = None,
+                 headless: bool = True, email: str = "") -> list[dict]:
+    """
+    Дзен – статьи с родной отложкой «Опубликовать позже».
+
+    Почему не через общий `_form_browser_all`. У Дзена другой материал: не
+    пост из ячейки, а СТАТЬЯ, текст которой лежит по ссылке на документ.
+    Картинки реестра ему тоже не нужны – в статье свои иллюстрации, а
+    таблицы Click рисует сам. Общий цикл пришлось бы обвешивать
+    исключениями на каждом шаге, поэтому у Дзена свой – короткий и честный.
+
+    Заголовок и разбор статьи делает zen_doc; ошибку разбора (документ не
+    расшарен, ссылка битая) записываем в память поста словами, чтобы она
+    попала в «Что требует внимания», а не потерялась в логе.
+    """
+    import zen_browser
+    import zen_doc
+
+    progress = progress or (lambda m: None)
+    ru = cps.network_ru("zen")
+    state = cps.load(project_id)
+    todo = pending_for(posts, state, "zen")
+    results: list[dict] = []
+
+    for n, post in enumerate(todo, 1):
+        label = f"{post['date']} ({n}/{len(todo)})"
+
+        late_by = apptime.now() - when_local(post)
+        if late_by > timedelta(minutes=-MIN_LEAD_MINUTES):
+            err = (f"время выхода уже прошло ({post['date']} {post.get('time', '')}) – "
+                   f"{ru} отложку в прошлое не примет. Перенесите дату в реестре "
+                   "или опубликуйте статью вручную")
+            cps.set_status(project_id, post, "zen", cps.MISSED, error=err)
+            progress(f"{label}: пропускаю – {err}")
+            results.append({"post": post, "ok": False, "error": err})
+            continue
+
+        progress(f"{label}: беру текст статьи")
+        try:
+            article = zen_doc.article_for(post)
+        except Exception as e:  # noqa: BLE001 – один битый документ не валит прогон
+            err = f"текст статьи не прочитался: {e}"
+            cps.set_status(project_id, post, "zen", cps.FAILED, error=err)
+            progress(f"{label}: {err}")
+            results.append({"post": post, "ok": False, "error": err})
+            continue
+
+        info = zen_doc.counts(article)
+        progress(f"{label}: «{article['title'][:60]}» – {info['chars']} знаков, "
+                 f"{info['head']} подзаголовков, {info['table']} таблиц")
+        progress(f"{label}: ставлю отложку в {ru}")
+        res = zen_browser.schedule_article(project_id, studio_url, article,
+                                           when_local(post), email=email,
+                                           log=progress, headless=headless)
+        if res.get("ok"):
+            cps.set_status(project_id, post, "zen", cps.SCHEDULED,
+                           extra={"textHash": cps.text_fingerprint(post.get("text", "")),
+                                  "native": True,
+                                  "title": article.get("title", ""),
+                                  "warnings": res.get("warnings") or []})
+            for w in res.get("warnings") or []:
+                progress(f"{label}: ⚠️ {w}")
+            results.append({"post": post, "ok": True, "warnings": res.get("warnings") or []})
+        else:
+            cps.set_status(project_id, post, "zen", cps.FAILED, error=res.get("error", ""))
+            results.append({"post": post, "ok": False, "error": res.get("error", "")})
+    return results
+
+
 def form_max_all(project_id: str, chat_url: str, posts: list[dict], site: str,
                  progress: Callable[[str], None] | None = None,
                  headless: bool = True) -> list[dict]:

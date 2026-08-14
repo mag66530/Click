@@ -50,7 +50,12 @@ SAMPLE = [
      "Скидка на арматуру", "https://i.ibb.co/bbb/2.jpg https://i.ibb.co/ccc/3.jpg", "", ""],
     ["", "", "Однокласники", "", "", "Пост", "", "", "", "", ""],
     ["", "", "Telegram (клиент)", "", "", "Пост", "", "", "", "", ""],
-    ["", "", "Дзен", "", "", "Пост", "", "", "", "", ""],   # вне scope
+    ["", "", "Дзен", "", "", "Пост", "", "", "", "", ""],
+    # Статья: текста в ячейке нет, вместо него ССЫЛКА на документ. Такую
+    # строку берёт только Дзен – ВК с Телеграмом лонгрид не нужен.
+    ["", "2099-02-11 00:00:00", "Дзен", "СМУ", "", "Статья", "Лонгрид",
+     "https://docs.google.com/document/d/1QaBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789/edit", "", "", ""],
+    ["", "", "Вконтакте", "", "", "Статья", "", "", "", "", ""],
 ]
 
 
@@ -62,7 +67,7 @@ def test_network_mapping() -> None:
     check("Telegram (сотрудники) → tg-staff", cp.canonical_network("Telegram (сотрудники)") == "tg-staff")
     check("Telegram (клиент) → tg-client", cp.canonical_network("Telegram (клиент)") == "tg-client")
     check("Max (клиент) → max", cp.canonical_network("Max (клиент)") == "max")
-    check("Дзен → zen (вне scope)", cp.canonical_network("Дзен") == "zen")
+    check("Дзен → zen", cp.canonical_network("Дзен") == "zen")
     check("пусто → ''", cp.canonical_network("") == "")
 
 
@@ -81,10 +86,10 @@ def test_dates_and_time() -> None:
 def test_parse_blocks() -> None:
     print("Разбор блочной структуры")
     posts = cp.parse_sheet(SAMPLE, "SMU")
-    check("нашли два поста", len(posts) == 2, f"получили {len(posts)}")
-    if len(posts) != 2:
+    check("нашли три поста", len(posts) == 3, f"получили {len(posts)}")
+    if len(posts) != 3:
         return
-    p1, p2 = posts
+    p1, p2 = posts[0], posts[1]
     check("дата первого", p1["date"] == "2025-06-02")
     check("текст с первой строки блока", p1["text"] == "Отгрузили трубы")
     check("тип с первой строки блока", p1["post_type"] == "Отгрузка")
@@ -103,12 +108,22 @@ def test_posts_to_form() -> None:
     print("Отбор «что формировать»")
     posts = cp.parse_sheet(SAMPLE, "SMU")
     to_form = cp.posts_to_form(posts, today=date(2026, 8, 7))
-    check("прошлый пост отсеян, остался один будущий", len(to_form) == 1, f"{len(to_form)}")
+    check("прошлый пост отсеян, остались два будущих", len(to_form) == 2, f"{len(to_form)}")
     if not to_form:
         return
     nets = sorted(t["network"] for t in to_form[0]["targets"])
-    check("в будущем формируем vk, ok, tg-client", nets == ["ok", "tg-client", "vk"], str(nets))
-    check("дзен (вне scope) не формируем", "zen" not in nets)
+    check("в будущем формируем vk, ok, tg-client и дзен",
+          nets == ["ok", "tg-client", "vk", "zen"], str(nets))
+
+    # Статья – материал Дзена, и только его. ВК с Телеграмом лонгрид не берут:
+    # у них в той же таблице свой короткий пост.
+    article = [p for p in to_form if p["date"] == "2099-02-11"]
+    check("статья попала в работу", len(article) == 1, str(len(article)))
+    if article:
+        art_nets = sorted(t["network"] for t in article[0]["targets"])
+        check("у статьи адресат один – Дзен", art_nets == ["zen"], str(art_nets))
+        check("текст статьи – ссылка на документ",
+              cp.is_article(article[0]) and article[0]["text"].startswith("https://docs.google.com/"))
 
     # если у площадки «Ссылка» уже стоит – второй раз не формируем
     already = cp.posts_to_form(
@@ -777,6 +792,15 @@ def test_plan_rows() -> None:
     check("ссылка в реестре = вышло", done["state"] == "live")
     video = plan.post_view({**post("2025-08-19"), "format": "Видео"}, {})
     check("видео — вручную, не тревога", video["state"] == "manual")
+    # А статья с Дзеном — обычная работа Click, и «вручную» про неё писать
+    # больше нельзя: раньше строка так и висела, хотя формировать её умеем.
+    art = plan.post_view({**post("2025-08-19", nets=("zen",)), "format": "Статья"}, {})
+    check("статья в Дзен — не «вручную»", art["state"] != "manual", art["state"])
+    check("Дзен держит отложку сам",
+          plan.net_view({**post("2025-08-19", nets=("zen",)), "format": "Статья"},
+                        {"network": "zen"},
+                        {cps.post_key(post("2025-08-19", nets=("zen",))):
+                         {"targets": {"zen": {"state": cps.SCHEDULED}}}})["cls"] == "set")
 
     # Ближайший выход для строки состояния.
     nearest = plan.next_out([p], state, "2025-08-18T10:00:00+05:00")
@@ -895,21 +919,28 @@ def test_vk_time_pickers() -> None:
 
 def test_probe_networks() -> None:
     """
-    Пробная отложка есть у ОБЕИХ сетей и ведёт в правильные модули.
+    Пробная отложка есть у КАЖДОЙ сети с родной отложкой и ведёт в свой модуль.
 
     Раньше проба была только у ВК, и отдельной функцией. Потом понадобилась
-    такая же для ОК, а следом для МАКС – копировать функцию не стали: правка
-    в одной из копий рано или поздно забудется. Вместо этого таблица сетей,
-    и вот проверка, что в ней всё сходится.
+    такая же для ОК, следом для МАКС, а теперь и для Дзена – копировать
+    функцию не стали: правка в одной из копий рано или поздно забудется.
+    Вместо этого таблица сетей, и вот проверка, что в ней всё сходится.
     """
-    print("\nПробная отложка: обе сети")
+    print("\nПробная отложка: сети с родной отложкой")
     import importlib
 
     import streamlit_app as app
 
-    check("описаны все три сети с родной отложкой",
-          set(app.PROBE_NETWORKS) == {"vk", "ok", "max"},
+    check("описаны все четыре сети с родной отложкой",
+          set(app.PROBE_NETWORKS) == {"vk", "ok", "max", "zen"},
           str(sorted(app.PROBE_NETWORKS)))
+    # У Дзена вход не свой, а яндексовый, и почту проекта пробе надо передать
+    # отдельно – иначе паспорт с несколькими аккаунтами не поймёт, чей он.
+    check("Дзену проба передаёт почту проекта",
+          app.PROBE_NETWORKS["zen"].get("needs_email") is True)
+    import inspect
+    check("проба умеет передавать почту",
+          "needs_email" in inspect.getsource(app._crosspost_probe))
     for net, meta in app.PROBE_NETWORKS.items():
         mod = importlib.import_module(meta["module"])
         check(f"{net}: модуль умеет отложку", hasattr(mod, "schedule_postponed_post"))

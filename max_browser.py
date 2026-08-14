@@ -553,12 +553,23 @@ def _editor_text(page, sel: str) -> str:
         return ""
 
 
-def _probe(line: str) -> str:
-    """Буквы и цифры строки – по ним сверяем, доехала ли она в поле.
-    Значки и пробелы отбрасываем: МАКС рисует эмодзи картинками, и в тексте
-    поля их может не оказаться вовсе."""
+def _letters(s: str) -> str:
+    """Только буквы и цифры. Значки и пробелы отбрасываем: МАКС рисует
+    эмодзи картинками, и в тексте поля их может не оказаться вовсе."""
     import re
-    return re.sub(r"\W", "", line, flags=re.U).lower()[:32]
+    return re.sub(r"\W", "", s, flags=re.U).lower()
+
+
+def _probe(line: str) -> str:
+    """
+    Короткий отпечаток ОДНОЙ строки – по нему ищем её в поле.
+
+    Обрезка здесь только для искомой строки. Обрезать заодно и текст поля –
+    ровно та ошибка, которая 14.08.2026 сорвала отложку МАКС на ровном
+    месте: в «поле» оставались первые 32 буквы, конец текста в них не
+    находился никогда, и Click отказывался планировать уже введённый пост.
+    """
+    return _letters(line)[:32]
 
 
 def _fill_post_text(page, sel: str, text: str, log: Callable[[str], None]) -> str:
@@ -595,7 +606,7 @@ def _fill_post_text(page, sel: str, text: str, log: Callable[[str], None]) -> st
 
     # Сверка по краям: в поле должны быть и первая строка, и последняя. Если
     # строки всё-таки уходили сообщениями, начала текста в поле уже не будет.
-    got = _probe(" ".join(_editor_text(page, sel).split()))
+    got = _letters(_editor_text(page, sel))
     filled = [ln for ln in lines if _probe(ln)]
     for what, line in (("начало", filled[0] if filled else ""),
                        ("конец", filled[-1] if filled else "")):

@@ -171,6 +171,11 @@ def to_plain(markup: str) -> str:
     Телеграма и МАКС это не касается: там ссылка зашивается в слова
     по-настоящему, и занимается этим to_html.
     """
+    return BOLD_RX.sub(r"\1", _links_to_words(markup))
+
+
+def _links_to_words(markup: str) -> str:
+    """Ссылки → слова с адресом, жирный (**) остаётся на месте."""
     # Тело без разметки ссылок – по нему смотрим, есть ли адрес в самом посте.
     body = ANCHOR_RX.sub(lambda m: m.group(1), markup)
 
@@ -183,8 +188,29 @@ def to_plain(markup: str) -> str:
             return text
         return f"{text} {bare}"
 
-    s = ANCHOR_RX.sub(anchor, markup)
-    return BOLD_RX.sub(r"\1", s)
+    return ANCHOR_RX.sub(anchor, markup)
+
+
+def plain_chunks(markup: str) -> list[tuple[str, bool]]:
+    """
+    Текст для площадки кусками: [(текст, жирный?), …].
+
+    Для площадок, где жирный есть, а ссылку в слова зашить нельзя (ОК –
+    редактор темы). Склейка кусков подряд даёт ровно to_plain: что видит
+    человек, то и уходит, разница только в том, что жирные куски набираются
+    с Ctrl+B, а не теряются по дороге.
+    """
+    s = _links_to_words(markup)
+    out: list[tuple[str, bool]] = []
+    pos = 0
+    for m in BOLD_RX.finditer(s):
+        if m.start() > pos:
+            out.append((s[pos:m.start()], False))
+        out.append((m.group(1), True))
+        pos = m.end()
+    if pos < len(s):
+        out.append((s[pos:], False))
+    return [c for c in out if c[0]]
 
 
 def render(markup: str, mode: str) -> str:

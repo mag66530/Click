@@ -2112,8 +2112,10 @@ def drop_link_card(page, domains: list[str],
         const r = el.getBoundingClientRect();
         if (!inZone(r) || !clickable(el)) continue;
         if ((el.innerText || '').trim().length > 3) continue;   // это не крестик, а подпись
-        // Ближе к правому верхнему углу карточки – вероятнее крестик.
-        const score = Math.abs(r.right - (box.x + box.w)) + Math.abs(r.top - box.y);
+        // Ближе к правому верхнему углу карточки – вероятнее крестик. А
+        // появившийся только что (после наведения) – вероятнее вдвойне.
+        let score = Math.abs(r.right - (box.x + box.w)) + Math.abs(r.top - box.y);
+        if (!el.hasAttribute('data-cc-seen')) score -= 1000;
         if (score < bestScore) { best = el; bestScore = score; }
       }
       if (!best) return null;
@@ -2139,8 +2141,15 @@ def drop_link_card(page, domains: list[str],
         if not box:
             continue                      # карточки ещё (или уже) нет
         # Наведение: у обеих площадок крестик появляется по наведению мыши.
+        # Перед этим помечаем всё, что на странице уже есть, – тогда после
+        # наведения видно, что ПОЯВИЛОСЬ. Появившийся у карточки элемент и
+        # есть её крестик: вернее признака нет, и он не зависит от вёрстки.
         try:
+            page.evaluate("""() => document.querySelectorAll('*')
+                                     .forEach(e => e.setAttribute('data-cc-seen', '1'))""")
             page.mouse.move(box["x"] + box["w"] / 2, box["y"] + 12)
+            page.wait_for_timeout(500)
+            page.mouse.move(box["x"] + box["w"] - 14, box["y"] + 14)
             page.wait_for_timeout(400)
         except Exception:  # noqa: BLE001
             pass

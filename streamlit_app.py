@@ -3849,7 +3849,8 @@ def _crosspost_diag_block(project_id: str) -> None:
     прислать. Один прогон вместо трёх кругов догадок.
     """
     d = paths.data_root() / project_id / "crosspost"
-    files = [(f, d / f) for f in ("link-card.html", "ok-editor.html")]
+    files = [(f, d / f) for f in ("link-card.html", "ok-editor.html",
+                                  "max-attach.html")]
     have = [(name, fp) for name, fp in files if fp.exists()]
     if not have:
         return

@@ -4005,6 +4005,193 @@ def test_gemini_keys() -> None:
     reset()
 
 
+# Ответы Google, снятые с живого API запросами с заведомо негодными
+# значениями. Не выдуманы: коды и формулировки ровно те, что он отдаёт.
+GOOGLE_ANSWERS = {
+    "oauth": (401, '{"error":{"code":401,"message":"Request had invalid authentication '
+                   'credentials. Expected OAuth 2 access token, login cookie or other valid '
+                   'authentication credential.","status":"UNAUTHENTICATED","details":'
+                   '[{"reason":"ACCESS_TOKEN_TYPE_UNSUPPORTED"}]}}'),
+    "bad-key": (400, '{"error":{"code":400,"message":"API key not valid. Please pass a valid '
+                     'API key.","status":"INVALID_ARGUMENT","details":'
+                     '[{"reason":"API_KEY_INVALID"}]}}'),
+    "disabled": (403, '{"error":{"code":403,"message":"Generative Language API has not been '
+                      'used in project 12345 before or it is disabled.","status":'
+                      '"PERMISSION_DENIED","details":[{"reason":"SERVICE_DISABLED"}]}}'),
+    "referrer": (403, '{"error":{"code":403,"message":"Requests from referer are blocked.",'
+                      '"status":"PERMISSION_DENIED","details":'
+                      '[{"reason":"API_KEY_HTTP_REFERRER_BLOCKED"}]}}'),
+    "quota": (429, '{"error":{"code":429,"message":"Quota exceeded","status":'
+                   '"RESOURCE_EXHAUSTED","details":[{"reason":"RATE_LIMIT_EXCEEDED"}]}}'),
+    "shape": (400, '{"error":{"code":400,"message":"Invalid JSON payload received. Unknown '
+                   'name \\"thinkingLevel\\"","status":"INVALID_ARGUMENT"}}'),
+}
+
+
+def test_gemini_key_diagnosis() -> None:
+    """
+    Почему черновика нет – словами, по которым понятно, что делать.
+
+    Живой случай: заказчица вписала ключ, нажала «Переписать» и получила
+    «Google не принял ключ Gemini. Проверьте секрет gemini_api_key». Ключи
+    при этом были заданы, и что чинить – непонятно. А в поле лежало значение
+    вида «AQ.Ab8RN6…»: это не ключ API, а учётные данные OAuth, и Google на
+    них отвечает 401 «Expected OAuth 2 access token» – хоть в заголовке
+    x-goog-api-key, хоть в ?key=, хоть в Bearer (проверено запросами).
+
+    Прежний разбор был догадкой: ЛЮБОЙ ответ 400 и 403 объявлялся «ключ не
+    принят», а 401 не разбирался вовсе. Здесь проверяется, что теперь по
+    каждому ответу Google Click говорит своё и по делу.
+    """
+    import llm
+    print("\n▸ Gemini: разбор отказа по ключу")
+
+    # ── Что вообще ключ, а что нет ───────────────────────────────────
+    check("ключ AI Studio опознан", llm.looks_like_api_key("AIzaSy" + "a" * 33))
+    check("токен OAuth ключом не считается",
+          not llm.looks_like_api_key("AQ.Ab8RN6l3IWdzKFoo3UAyFOO" + "b" * 29))
+    check("пустое значение – не ключ", not llm.looks_like_api_key(""))
+    note = llm.key_note("AQ.Ab8RN6l3IWdzKFoo3UAyFOO" + "b" * 29)
+    check("и человеку сказано, что это OAuth", "OAuth" in note, note)
+    check("и куда идти за настоящим ключом", "AI Studio" in note, note)
+    eq("нормальный ключ замечаний не вызывает", llm.key_note("AIzaSy" + "a" * 33), "")
+
+    # Ключ целиком на экран не выводим – только начало, конец и длину.
+    masked = llm.mask("AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ0123456")
+    check("ключ показан обрезанным", "…" in masked and "GHIJKLMN" not in masked, masked)
+    check("и с длиной – по ней видно обрезанный при копировании ключ",
+          "39 знаков" in masked, masked)
+
+    # ── Каждый ответ Google – своими словами ─────────────────────────
+    code, body = GOOGLE_ANSWERS["oauth"]
+    text = llm._explain(code, body, "AQ.Ab8RN6l3IWdzKFoo")  # noqa: SLF001
+    check("401: сказано, что это не ключ API", "не ключ API" in text, text)
+    check("401: и что Google ответил дословно", "OAuth 2 access token" in text, text)
+
+    code, body = GOOGLE_ANSWERS["bad-key"]
+    text = llm._explain(code, body, "AIzaSy" + "a" * 33)  # noqa: SLF001
+    check("400 API_KEY_INVALID: ключ недействителен", "недействителен" in text, text)
+
+    code, body = GOOGLE_ANSWERS["disabled"]
+    text = llm._explain(code, body)  # noqa: SLF001
+    check("403 SERVICE_DISABLED: дело не в ключе, а в API проекта",
+          "Generative Language API" in text and "включ" in text, text)
+
+    code, body = GOOGLE_ANSWERS["referrer"]
+    text = llm._explain(code, body)  # noqa: SLF001
+    check("403 ограничение по адресу названо своим именем",
+          "ограничен по адресу" in text, text)
+
+    code, body = GOOGLE_ANSWERS["shape"]
+    text = llm._explain(code, body)  # noqa: SLF001
+    check("400 не про ключ – так и написано", "ключ тут" in text.lower(), text)
+    check("и показано, чем именно недоволен Google", "thinkingLevel" in text, text)
+
+    code, body = GOOGLE_ANSWERS["quota"]
+    check("429 остаётся про лимит", "лимит" in llm._explain(code, body).lower())  # noqa: SLF001
+
+    # ── Какой ответ выводит ключ из круга ────────────────────────────
+    for name in ("oauth", "bad-key", "disabled", "referrer"):
+        code, body = GOOGLE_ANSWERS[name]
+        check(f"«{name}» – ключом больше не пользуемся",
+              llm._key_is_dead(code, body), name)  # noqa: SLF001
+    for name in ("quota", "shape"):
+        code, body = GOOGLE_ANSWERS[name]
+        check(f"«{name}» – ключ ни при чём, из круга не выводим",
+              not llm._key_is_dead(code, body), name)  # noqa: SLF001
+
+
+def test_gemini_bad_key_ring() -> None:
+    """
+    Плохой ключ не должен мешать хорошему – и не должен молчать о себе.
+
+    Раньше отвергнутый ключ оставался в круге до конца бюджета: попытки
+    уходили на него, а человек в итоге видел ошибку от плохого ключа, хотя
+    рядом лежал рабочий. И ни в одной строке не было сказано, КАКОЙ ключ
+    плохой – при трёх ключах это главное, что нужно знать.
+    """
+    import llm
+    print("\n▸ Gemini: плохой ключ не мешает хорошему")
+
+    class Answer:
+        def __init__(self, code: int, body: str):
+            self.status_code = code
+            self.text = body
+
+        def json(self) -> dict:
+            return json.loads(self.text)
+
+    good = "AIzaSy" + "g" * 33
+    bad = "AQ.Ab8RN6l3IWdzKFoo3UAyFOO" + "b" * 29
+    ok_body = json.dumps({"candidates": [{"content": {"parts": [{"text": "Спасибо за отзыв!"}]},
+                                          "finishReason": "STOP"}]})
+    used: list[str] = []
+
+    saved = (llm.api_keys, llm.key_names, llm._post, llm._working_model)
+
+    def fake_post(model, prompt, key, thinking=True, wait=0.0):
+        used.append(key)
+        # Плохой ключ узнаём так же, как Google: по началу значения.
+        if key.startswith("AQ."):
+            return Answer(*GOOGLE_ANSWERS["oauth"])
+        return Answer(200, ok_body)
+
+    llm.api_keys = lambda: [bad, good]
+    llm.key_names = lambda: ["gemini_api_key", "gemini_api_key_2"]
+    llm._post = fake_post
+    llm._working_model = None
+    llm._next_key = 0
+    try:
+        text = llm.generate("промпт")
+        eq("черновик всё равно получен – рабочим ключом", text, "Спасибо за отзыв!")
+        eq("плохим ключом попробовали ровно один раз", used.count(bad), 1)
+
+        # А теперь плохие оба: тогда молчать нельзя – называем каждый.
+        used.clear()
+        llm.api_keys = lambda: [bad, bad + "2"]
+        llm._working_model = None
+        try:
+            llm.generate("промпт")
+            check("на двух плохих ключах черновика быть не должно", False)
+        except llm.LlmError as e:
+            text = str(e)
+            check("сказано, что не принят ни один ключ", "Ни один ключ" in text, text)
+            check("ключи названы по именам секретов",
+                  "gemini_api_key" in text and "gemini_api_key_2" in text, text)
+            check("и показано, чем они плохи", "OAuth" in text, text)
+            check("и куда нажать, чтобы проверить", "Проверить ключи" in text, text)
+            check("это не «лимит» – ждать бессмысленно", not e.is_limit)
+            check("прогону сказано прекратить попытки", e.bad_keys)
+    finally:
+        (llm.api_keys, llm.key_names, llm._post, llm._working_model) = saved
+        llm._next_key = 0
+
+    # Прогон, получив такую ошибку, не идёт с ней по всем городам.
+    import inspect
+    import runner
+    src = inspect.getsource(runner._reviews_for_city)  # noqa: SLF001
+    check("прогон бросает черновики сразу, а не после серии отказов",
+          'getattr(e, "bad_keys", False)' in src and 'budget["giveUp"] = True' in src)
+
+    # И кнопка проверки ключей в «Настройках» действительно есть.
+    import streamlit_app as app
+    check("в «Настройках» есть кнопка проверки ключей",
+          "Проверить ключи" in inspect.getsource(app._gemini_keys_check))  # noqa: SLF001
+    check("она спрашивает Google про каждый ключ",
+          "check_keys()" in inspect.getsource(app._gemini_keys_check))  # noqa: SLF001
+
+    # Пустое поле ответа – это «черновика нет», а не «черновик испорчен».
+    # На экране заказчицы под пустым полем висело «оборван или в нём
+    # остались служебные заметки модели»: она искала в пустоте заметки.
+    import reviews as rv
+    check("пустой черновик и правда считается неудачным", rv.looks_broken(""))
+    card = inspect.getsource(app.reviews_queue_block)
+    check("но на экране пустое поле называется своим именем",
+          "Черновика нет" in card, "нет строки про пустой черновик")
+    check("и «оборван» остаётся только для непустого текста",
+          "elif rv.looks_broken(text):" in card)
+
+
 # ════════════════════════════════════════════════════════════════════
 def test_review_batch() -> None:
     """
@@ -5528,6 +5715,8 @@ def main() -> int:
         test_aps_project()
         test_reviews()
         test_gemini_keys()
+        test_gemini_key_diagnosis()
+        test_gemini_bad_key_ring()
         test_review_batch()
         test_no_stray_output()
         test_two_people_at_once(tmp)

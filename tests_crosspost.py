@@ -1939,6 +1939,201 @@ def test_max_photo_proof() -> None:
             browser.close()
 
 
+def test_max_feed_redraw_is_not_a_send() -> None:
+    """
+    Дорисованное старое сообщение – это НЕ наша отправка.
+
+    Живой отказ 18:33 (14.08.2026): «Пока вводили текст, в канал ушло
+    сообщение „Технические характеристики:“. Отложку не ставим». Ничего не
+    уходило: список сообщений у МАКС виртуальный, при росте поля он
+    перерисовывается – и в разметке появляются старые сообщения, которых
+    там мгновение назад не было. Прежняя проверка сравнивала ленту «до» и
+    «после» безусловно и приняла эту дорисовку за отправку, отменив уже
+    введённый пост.
+
+    Правило теперь такое: поле – главный свидетель. Чат опустошает поле,
+    когда отправляет; текст на месте – значит, не отправляли, и ленту можно
+    не спрашивать вовсе.
+    """
+    import max_browser as mb
+    print("\nМАКС: перерисовка ленты – не отправка")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    SEL = 'div[contenteditable][role="textbox"][data-lexical-editor="true"]'
+    # Лента виртуальная: старые сообщения дорисовываются, когда поле растёт.
+    page_html = MAX_CHAT_PAGE.replace(
+        "<script>",
+        """<script>
+    // Пока поле пустое, старого сообщения в разметке нет – ровно так ведёт
+    // себя виртуальный список: за экраном сообщения не нарисованы.
+    new MutationObserver(() => {
+      const ed = document.getElementById('editor');
+      if ((ed.innerText || '').length > 40 && !document.getElementById('old')) {
+        document.getElementById('feed').insertAdjacentHTML('beforeend',
+          '<div class="msg" id="old">Технические характеристики:</div>');
+      }
+    }).observe(document.getElementById('editor'), {childList: true, subtree: true,
+                                                   characterData: true});
+        """, 1)
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 900, "height": 700}).new_page()
+            page.set_content(page_html)
+            said: list[str] = []
+            why = mb._fill_post_text(page, SEL, MAX_POST, said.append)  # noqa: SLF001
+
+            check("дорисовку старого сообщения отправкой не считаем", why == "", why)
+            check("и ничего не отправляли на самом деле",
+                  page.evaluate("() => window.__sent") == [],
+                  str(page.evaluate("() => window.__sent")))
+            check("старое сообщение в ленте при этом появилось – проверка честная",
+                  "Технические характеристики" in page.eval_on_selector(
+                      "#feed", "el => el.innerText"))
+            check("текст остался в поле целиком",
+                  "1,2-5 мм" in page.eval_on_selector("#editor", "el => el.innerText"))
+        finally:
+            browser.close()
+
+
+def test_ok_link_preview_and_bold() -> None:
+    """
+    ОК: карточку сайта убрать крестиком, а про жирный не врать.
+
+    Заказчица (14.08.2026), два замечания к одному посту:
+      • «надо нажимать на крестик, когда при вводе ссылки предлагает сайт» –
+        ОК цепляет к теме карточку сайта, и в ленте выходит две картинки:
+        своя и чужая обложка;
+      • «форматирование в ОК не сделал (но на отложку поставил)» – а в логе
+        стояло «жирный из реестра сохранён». Проверка сверяла БУКВЫ, а буквы
+        совпадают и у плоского текста.
+    """
+    import ok_browser as ok
+    print("\nОК: карточка сайта и честный жирный")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    check("адрес сайта достаём из текста поста",
+          ok._post_hosts("Заказ на нашем сайте:\n🌐 stalmetural.ru\n"  # noqa: SLF001
+                         "✉ info@stalmetural.ru") == ["stalmetural.ru"],
+          str(ok._post_hosts("stalmetural.ru")))  # noqa: SLF001
+
+    # Форма темы ОК: поле, картинка поста, карточка сайта с крестиком
+    # (значок – тот самый, что прислала заказчица) и крестик закрытия всей
+    # формы, который трогать НЕЛЬЗЯ.
+    X = ('<svg width="16" height="16"><path d="M9.414 8l3.294 3.294a1 1 0 1 1-1.415 '
+         '1.413L8 9.414l-3.293 3.293a1 1 0 0 1-1.415-1.413L6.586 8 3.274 4.689a.974.974 '
+         '0 0 1 0-1.378h.001a1.025 1.025 0 0 1 1.45 0L8 6.586l3.293-3.293a1 1 0 0 1 '
+         '1.414 1.414L9.414 8z" fill-rule="evenodd" class="svg-fill"></path></svg>')
+    form = f"""
+    <html><head><meta charset="utf-8"></head><body style="margin:0">
+      <div id="form">
+        <button id="close-form" onclick="document.getElementById('form').remove()">{X}</button>
+        <div id="editor" contenteditable>ТЕКСТ ПОСТА про микрофибру
+          Оформить заказ можно на нашем сайте: stalmetural.ru</div>
+        <div id="photo">своя картинка поста</div>
+        <div id="card">
+          <a href="https://stalmetural.ru/">Металлопрокат купить в Москве – металл
+             оптом от Стальметурал | доставка металлопроката по России</a>
+          <div>Купить металлопрокат в Москве. Продажа металла оптом и в розницу.</div>
+          <button id="close-card" onclick="document.getElementById('card').remove()">{X}</button>
+        </div>
+      </div>
+    </body></html>
+    """
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 900, "height": 700}).new_page()
+            page.set_content(form)
+            said: list[str] = []
+            text = ("ТЕКСТ ПОСТА про микрофибру\nОформить заказ можно на нашем сайте: "
+                    "stalmetural.ru")
+            trouble = ok._drop_link_preview(page, "#editor", text, said.append)  # noqa: SLF001
+
+            check("крестик карточки нажат без беды", trouble == "", trouble)
+            check("карточка сайта убрана", page.locator("#card").count() == 0)
+            check("форма при этом на месте – чужой крестик не нажали",
+                  page.locator("#form").count() == 1)
+            check("текст поста цел",
+                  "микрофибру" in page.eval_on_selector("#editor", "el => el.innerText"))
+            check("и об этом сказано в логе",
+                  any("карточку сайта" in m for m in said), str(said))
+
+            # Карточки нет – ничего не жмём вовсе.
+            page.set_content(form.replace('<div id="card">', '<div id="card" hidden>'))
+            said.clear()
+            ok._drop_link_preview(page, "#editor", "текст без ссылок", said.append)  # noqa: SLF001  # noqa: E501
+            check("без ссылки в тексте крестики не трогаем", said == [], str(said))
+            check("и форма цела", page.locator("#form").count() == 1)
+
+            # ── Жирный: не на слово, а по разметке ──────────────────
+            page.set_content("""<html><body><div id="e" contenteditable>
+                <b>СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ</b><span> обычный текст</span></div></body></html>""")
+            check("жирный кусок опознан",
+                  ok._bold_applied(page, "#e", ["СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ"]))  # noqa: SLF001
+            check("не жирный за жирный не выдаём",
+                  not ok._bold_applied(page, "#e", ["обычный текст"]))  # noqa: SLF001
+
+            page.set_content("""<html><body><div id="e" contenteditable>
+                <span>СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ обычный текст</span></div></body></html>""")
+            check("плоский текст жирным не считается (вот это и врало)",
+                  not ok._bold_applied(page, "#e", ["СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ"]))  # noqa: SLF001
+
+            page.set_content("""<html><body><div id="e" contenteditable>
+                <span style="font-weight:700">Диаметр</span>: 0,25 мм</div></body></html>""")
+            check("жирный стилем тоже считается",
+                  ok._bold_applied(page, "#e", ["Диаметр"]))  # noqa: SLF001
+        finally:
+            browser.close()
+
+    import inspect
+    src = inspect.getsource(ok._type_post_text)  # noqa: SLF001
+    check("успех жирного доказывается разметкой", "_bold_applied(" in src)
+    whole = inspect.getsource(ok.schedule_postponed_post)
+    check("карточку сайта убираем в самом прогоне", "_drop_link_preview(" in whole)
+
+
+def test_report_only_click_work() -> None:
+    """
+    В отчёте – работа Click, а не история реестра.
+
+    Заказчица (14.08.2026): «в отчёты зачем мне весь список – и то, что не
+    надо выкладывать, и то, что надо?». В заголовке стояло «отложек 2 ·
+    вышло 439 · ошибок 1»: 439 – это ссылки, набитые в реестре руками за
+    месяцы. За ними не видно ни двух отложек, ни одной ошибки.
+    """
+    print("\nКросспостинг: отчёт только про работу Click")
+    import inspect
+
+    import streamlit_app as app
+
+    src = inspect.getsource(app._crosspost_report_block)  # noqa: SLF001
+    check("ссылка без действия Click в отчёт не идёт",
+          'if link and not saved.get("state"):' in src and "continue" in src)
+    check("а ссылка на поставленную Click отложку – идёт",
+          src.index('if link and not saved.get("state")') < src.index("counts[\"live\"]"))
+    check("и в пояснении сказано, почему списка нет",
+          "история, а не отчёт" in src)
+
+
 def test_form_log_is_fresh() -> None:
     """
     Лог формирования пишется по ходу, а не одной строчкой в конце.
@@ -2385,6 +2580,13 @@ def main() -> int:
     test_forget_target()
     test_build_bumped()
     test_max_text_entry()
+    test_max_text_on_real_field()
+    test_ok_bold_first_line()
+    test_max_photo_proof()
+    test_form_log_is_fresh()
+    test_max_feed_redraw_is_not_a_send()
+    test_ok_link_preview_and_bold()
+    test_report_only_click_work()
     test_publish_off()
     test_max_native_scheduling()
     test_sessions_in_store()

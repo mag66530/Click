@@ -1194,6 +1194,121 @@ def _select_closest(page, selector: str, want: str) -> str:
     return target
 
 
+# ── Карточка сайта, которую ОК подставляет сам ──────────────────────
+#
+# Стоит вписать в тему ссылку – ОК прикрепляет к посту карточку сайта:
+# заголовок страницы, описание, картинка. Заказчица (14.08.2026): «надо
+# нажимать на крестик, когда при вводе ссылки предлагает сайт» – в посте
+# должна остаться ЕЁ картинка, а не превью сайта, иначе в ленте выходит
+# два изображения и чужая обложка.
+#
+# Крестик она же и показала: это svg с вот таким путём (значок «×» из
+# набора ОК). По нему и ищем – класс у кнопки свой у каждой сборки, а
+# рисунок значка живёт годами.
+CLOSE_ICON_D = "M9.414 8l3.294 3.294"
+
+_DROP_PREVIEW_JS = r"""
+(payload) => {
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  document.querySelectorAll('[data-click-x]').forEach(n => n.removeAttribute('data-click-x'));
+  const hosts = (payload.hosts || []).map(h => h.toLowerCase()).filter(Boolean);
+  const icons = Array.from(document.querySelectorAll('svg path'))
+    .filter(p => (p.getAttribute('d') || '').startsWith(payload.icon));
+
+  for (const path of icons) {
+    const btn = path.closest('button, a, [role="button"], [title], [aria-label]')
+             || path.closest('svg');
+    if (!btn) continue;
+    const r = btn.getBoundingClientRect();
+    if (r.width < 6 || r.height < 6) continue;
+
+    // Крестик крестику рознь, и ошибиться тут дорого: крестик формы
+    // закроет всю тему вместе с набранным текстом. Поэтому карточка должна
+    // отвечать двум условиям сразу:
+    //   • в ней есть ССЫЛКА на наш сайт (не просто его имя в тексте –
+    //     имя есть и в самом посте, а пост лежит в форме);
+    //   • в ней НЕТ поля ввода: карточка стоит рядом с полем, а не вокруг
+    //     него. Это и отсекает крестик всей формы.
+    let block = btn, card = null;
+    for (let i = 0; i < 8 && block; i++, block = block.parentElement) {
+      if (block.querySelector('[contenteditable], textarea')) break;
+      const linked = hosts.some(h => !!block.querySelector(`a[href*="${h}"]`));
+      if (linked && norm(block.innerText || '').length > 30) { card = block; break; }
+    }
+    if (!card) continue;
+    btn.setAttribute('data-click-x', '1');
+    return { card: norm(card.innerText).slice(0, 80) };
+  }
+  return null;
+}
+"""
+
+
+def _post_hosts(text: str) -> list[str]:
+    """Адреса сайтов, встреченные в тексте поста – по ним узнаём карточку."""
+    import re
+    found = re.findall(r"(?:https?://)?(?:www\.)?([a-z0-9-]+\.[a-z]{2,})(?:/|\b)",
+                       (text or "").lower())
+    out: list[str] = []
+    for host in found:
+        if host not in out:
+            out.append(host)
+    return out[:5]
+
+
+def _field_text(page, text_sel: str) -> str | None:
+    """Текст поля. None – поля на странице больше нет (форма закрылась)."""
+    try:
+        return page.eval_on_selector(text_sel, "el => el.textContent || ''") or ""
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _drop_link_preview(page, text_sel: str, text: str,
+                       log: Callable[[str], None] | None = None) -> str:
+    """
+    Убрать карточку сайта, которую ОК подставил на ссылку из текста.
+
+    Возвращает '' – всё хорошо (карточку убрали или её не было), иначе
+    причину отказа: значит, крестик задел не то, и планировать в такой
+    форме нельзя.
+
+    Не нашли карточку – молчим: ОК подставляет её не всегда. Нажали –
+    убеждаемся, что форма на месте и текст цел. Крестик, закрывший всю
+    тему вместе с набранным постом, был бы куда хуже лишней картинки.
+    """
+    log = log or (lambda m: None)
+    hosts = _post_hosts(text)
+    if not hosts:
+        return ""
+    for _ in range(3):          # карточек может быть несколько
+        try:
+            found = page.evaluate(_DROP_PREVIEW_JS,
+                                  {"icon": CLOSE_ICON_D, "hosts": hosts})
+        except Exception:  # noqa: BLE001
+            return ""
+        if not found:
+            return ""
+        before = _field_text(page, text_sel)
+        if before is None:
+            return ""
+        try:
+            page.locator('[data-click-x="1"]').first.click(timeout=4_000)
+        except Exception:  # noqa: BLE001
+            return ""
+        page.wait_for_timeout(700)
+        after = _field_text(page, text_sel)
+        if after is None:
+            return ("Крестик карточки сайта закрыл всю форму темы. Пост НЕ "
+                    "запланирован – откройте ОК и посмотрите, что изменилось "
+                    "в форме")
+        if _letters(after) != _letters(before):
+            return ("Убирая карточку сайта, задели текст поста: он изменился. "
+                    "Ничего не планируем – проверьте форму в ОК")
+        log("  карточку сайта убрал (в посте остаётся своя картинка)")
+    return ""
+
+
 def _letters(s: str) -> str:
     """
     Только буквы и цифры, в нижнем регистре.
@@ -1204,6 +1319,41 @@ def _letters(s: str) -> str:
     """
     import re
     return re.sub(r"\W", "", s or "", flags=re.U).lower()
+
+
+# Что в поле НА САМОМ ДЕЛЕ нарисовано жирным. Смотрим и на теги (b,
+# strong), и на вычисленный стиль: редакторы ставят жирный то так, то так.
+_BOLD_TEXTS_JS = r"""
+(payload) => {
+  const el = document.querySelector(payload.sel);
+  if (!el) return [];
+  const out = [];
+  for (const node of el.querySelectorAll('*')) {
+    if (node.children.length) continue;             // только листья
+    const text = (node.textContent || '').trim();
+    if (!text) continue;
+    const tag = node.tagName.toLowerCase();
+    let weight = '';
+    try { weight = window.getComputedStyle(node).fontWeight || ''; } catch (e) {}
+    const heavy = tag === 'b' || tag === 'strong'
+               || weight === 'bold' || parseInt(weight, 10) >= 600;
+    if (heavy) out.push(text);
+  }
+  return out;
+}
+"""
+
+
+def _bold_applied(page, text_sel: str, want: list[str]) -> bool:
+    """Правда ли жирные куски нарисованы жирными. Нечего проверять – True."""
+    if not want:
+        return True
+    try:
+        heavy = page.evaluate(_BOLD_TEXTS_JS, {"sel": text_sel}) or []
+    except Exception:  # noqa: BLE001
+        return False
+    seen = _letters(" ".join(heavy))
+    return all(_letters(part)[:24] in seen for part in want)
 
 
 def _type_post_text(page, text_sel: str, text: str,
@@ -1248,10 +1398,20 @@ def _type_post_text(page, text_sel: str, text: str,
                 if bold:
                     page.keyboard.press("Control+B")
             page.wait_for_timeout(600)
+            # Букв совпало – это ещё не «жирный получился»: буквы совпадут и
+            # у плоского текста. Заказчица так и написала 14.08.2026:
+            # «форматирование в ОК не сделал», а в логе стояло «жирный из
+            # реестра сохранён». Поэтому спрашиваем разметку: лежат ли
+            # жирные куски внутри жирных узлов.
             if letters(in_field()) == letters(plain):
-                log("  жирный из реестра сохранён")
-                return "bold"
-            log("  жирный не дался – набираю обычным текстом")
+                want = [t for t, b in chunks if b and letters(t)]
+                if _bold_applied(page, text_sel, want):
+                    log("  жирный из реестра сохранён")
+                    return "bold"
+                log("  Ctrl+B не сработал – ОК оставил текст обычным, "
+                    "набираю заново без жирного")
+            else:
+                log("  жирный не дался – набираю обычным текстом")
         except Exception as e:  # noqa: BLE001 – ввод не должен ронять прогон
             log(f"  жирный не дался ({e}) – набираю обычным текстом")
         _clear_editor(page, text_sel)
@@ -1733,6 +1893,14 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                 if trouble:
                     shot = _debug_shot(project_id, page, "no-photo")
                     return {"ok": False, "error": trouble, "shot": shot}
+
+            # Ссылка в тексте – и ОК сам прикрепляет карточку сайта. В посте
+            # должна остаться СВОЯ картинка, а не чужая обложка: убираем
+            # карточку крестиком, как это делает человек.
+            trouble = _drop_link_preview(page, text_sel, text, log)
+            if trouble:
+                return {"ok": False, "error": trouble,
+                        "shot": _debug_shot(project_id, page, "preview-x")}
 
             # Отложка: галочка «Время публикации», под ней поле даты и два
             # выпадающих списка – часы и минуты. Кнопка внизу при этом

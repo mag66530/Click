@@ -647,10 +647,17 @@ def kp_pull(project_id: str, config: dict) -> tuple[bool, str]:
         config["kpSheetTitle"] = diag["usedSheet"]
     save_config(project_id)
     note = f'Загружено: {cities_word(len(cities))} в {diag.get("countries", 0)} странах.'
-    if diag.get("gisCities"):
-        note += f' В 2ГИС карточек: {diag["gisCities"]}.'
+    note += f' В 2ГИС карточек: {diag.get("gisCities", 0)}.'
     if diag.get("skippedDeleted"):
         note += f' Пропущено удалённых карточек: {diag["skippedDeleted"]}.'
+    # Почему город не попал в 2ГИС – по имени и по причине. Без этого
+    # «поставила Шымкент активным, а его нет» разбиралось перепиской: в
+    # приложении не было ни числа, ни имени, ни причины.
+    skipped = diag.get("gisSkippedRows") or []
+    if skipped:
+        names = "; ".join(f'{r["name"]} – {r["why"]}' for r in skipped[:6])
+        tail = " и ещё…" if len(skipped) > 6 else ""
+        note += f" В список 2ГИС не попали: {names}{tail}."
     return True, note
 
 
@@ -2730,7 +2737,16 @@ def reviews_queue_block(project_id: str, platform: str = rv.YANDEX) -> None:
                     st.warning("Разговорные слова в ответе от лица компании: "
                                + ", ".join(f"«{w}»" for w in casual)
                                + " – нажмите «Переписать» или поправьте руками.")
-                if rv.looks_broken(text):
+                # Пустое поле и испорченный черновик – разные беды, и путать
+                # их нельзя. На пустом поле Click писал «черновик оборван или
+                # в нём остались служебные заметки модели» – человек искал в
+                # пустоте заметки модели, а черновика попросту не было:
+                # причина написана выше, строкой с ⚠️.
+                if not text.strip():
+                    st.caption("Черновика нет" + (" – причина выше." if item.get("note")
+                                                  else ".")
+                               + " Напишите ответ сами или нажмите «Переписать».")
+                elif rv.looks_broken(text):
                     st.warning("Черновик не получился – оборван или в нём остались "
                                "служебные заметки модели. Нажмите «Переписать».")
 
@@ -2767,6 +2783,53 @@ def reviews_queue_block(project_id: str, platform: str = rv.YANDEX) -> None:
         _sent_report_block(project_id, done, pending, platform)
 
 
+def kp_refresh_row(project_id: str, config: dict, platform: str = rv.YANDEX) -> None:
+    """
+    «Обновить города из КП» – прямо там, где на города и смотрят.
+
+    Кнопка была и раньше, но жила только в «⚙️ Настройках», рядом с выбором
+    таблицы и листа. А человек, поправивший статус города в КП, идёт не в
+    настройки: он идёт туда, где выбирает города для прогона. Так и вышло с
+    Шымкентом – статус в таблице поставили «Активная», в списке 2ГИС города
+    нет, и позвать его туда нечем: «не нашла функционала, который обновляет
+    список 2ГИС».
+
+    Теперь список городов обновляется с той же страницы, где он показан, и
+    рядом написано, когда он обновлялся в прошлый раз и сколько в нём
+    городов ИМЕННО ЭТОЙ площадки.
+    """
+    where = "2ГИС" if platform == rv.GIS else "Яндекса"
+    if not kp_sheet.is_configured(project_id, (config.get("kpSheetUrl") or "").strip()):
+        st.caption("Города ведутся вручную: таблица КП у проекта не задана – "
+                   "«⚙️ Настройки» → «Источник городов».")
+        return
+
+    total = sum(len(c.get("cities") or []) for c in platform_countries(config, platform))
+    c1, c2 = st.columns([2, 3], vertical_alignment="center")
+    if c1.button("⟳ Обновить города из КП", key=f"kp-refresh-{platform}",
+                 use_container_width=True,
+                 help="Перечитать таблицу КП и заменить список городов. Город попадает "
+                      "в список 2ГИС, если в его строке есть ссылка на кабинет "
+                      "account.2gis.com и статус не «Удалена»."):
+        try:
+            with st.spinner("Читаю таблицу КП…"):
+                ok, note = kp_pull(project_id, config)
+        except Exception as e:  # noqa: BLE001 – текст ошибки уже человеческий
+            ok, note = False, str(e)
+        if ok:
+            st.success(note)
+            time.sleep(1.6)
+        else:
+            st.error(note)
+            time.sleep(2.5)
+        st.rerun()
+
+    synced = local_time(config.get("kpSyncedAt"))
+    c2.caption(f"Городов {where}: {total}. "
+               + (f"Список из КП обновлён: {synced}." if synced
+                  else "Из таблицы ещё не загружали."))
+
+
 def tab_actualize(project_id: str, config: dict) -> None:
     """
     Актуализация и отзывы. Площадок две – Яндекс.Бизнес и 2ГИС; выбор наверху.
@@ -2789,11 +2852,12 @@ def tab_actualize(project_id: str, config: dict) -> None:
     if not countries:
         if platform == rv.GIS:
             html(T.empty("📍", "Городов 2ГИС нет",
-                         "Загрузите города из КП во вкладке «Города»: они берутся из "
-                         "блока «2ГИС» той же таблицы. Город попадает сюда, если у него "
-                         "есть ссылка на кабинет и статус не «Удалена»."))
+                         "Города берутся из блока «2ГИС» таблицы КП. Город попадает "
+                         "сюда, если у него есть ссылка на кабинет и статус не "
+                         "«Удалена». Кнопка ниже перечитает таблицу прямо сейчас."))
         else:
             html(T.empty("🏙", "Нет городов", "Добавьте страны и города во вкладке «Города»."))
+        kp_refresh_row(project_id, config, platform)
         reviews_queue_block(project_id, platform)
         return
 
@@ -2822,6 +2886,10 @@ def tab_actualize(project_id: str, config: dict) -> None:
                  'и нажмёт кнопку <b>«Данные актуальны»</b>, если она там есть. Кнопка появляется на странице '
                  'периодически – Яндекс просит подтверждать, что данные не изменились. '
                  'Если кнопки нет – актуализация не требуется.</div>')
+
+        # Обновление списка – здесь же, над самим списком: искать его в
+        # «Настройках» человеку неоткуда (см. kp_refresh_row).
+        kp_refresh_row(project_id, config, platform)
 
         head, act = st.columns([3, 1])
         head.markdown(
@@ -3076,10 +3144,13 @@ def tab_cities(project_id: str, config: dict) -> None:
     if total:
         st.caption(f"Всего {cities_word(total)} в "
                    f"{plural(countries, 'стране', 'странах', 'странах')}. "
-                   "Для обновления списка перейдите в «Настройки» → «Источник городов»")
+                   "Списки Яндекса и 2ГИС – из одной таблицы КП, но города в них разные: "
+                   "карточка 2ГИС заведена не везде.")
     else:
-        st.info("Городов пока нет. Для обновления списка перейдите в "
-                "«Настройки» → «Источник городов»")
+        st.info("Городов пока нет – загрузите их из таблицы КП.")
+    # Кнопка загрузки – и здесь тоже, а не только в «Настройках»: список
+    # городов смотрят на этой странице, обновлять его логично отсюда же.
+    kp_refresh_row(project_id, config, rv.YANDEX)
 
     with st.expander("➕ Добавить страну"):
         c1, c2 = st.columns([3, 1])
@@ -3531,7 +3602,7 @@ def _crosspost_bar(project_id: str, config: dict, posts: list[dict],
             st.caption(sched["note"])
 
 
-def _crosspost_attention(upcoming: list[dict], state: dict) -> None:
+def _crosspost_attention(project_id: str, upcoming: list[dict], state: dict) -> None:
     """Беды – наверх и с датой словами: в календаре жёлтая плитка видна, но молчит."""
     troubles = cps.problems(state, upcoming)
     if not troubles:
@@ -3539,41 +3610,97 @@ def _crosspost_attention(upcoming: list[dict], state: dict) -> None:
     with st.container(border=True):
         html('<div class="card-title">⚠️ Требует внимания '
              f'<span class="badge badge-warn">{len(troubles)}</span></div>')
-        for tr in troubles[:12]:
+        for n, tr in enumerate(troubles[:12]):
             post = tr["post"]
             who = f' · {cps.network_ru(tr["network"])}' if tr.get("network") else ""
             d = content_plan.parse_date(post.get("date", ""))
             when = crosspost_plan.human_day(d) if d else post.get("date", "")
-            st.write(f'**{when}**{who} – {tr["what"]}')
+            # Ошибка длиной с простыню (лог Playwright) в сводке не читается:
+            # показываем первую строку, целиком – в «Отчётах и журналах».
+            what = " ".join(str(tr["what"]).split())
+            if len(what) > 160:
+                what = what[:160] + "… (целиком – в «Отчётах и журналах»)"
+            if not tr.get("network"):
+                st.write(f'**{when}**{who} – {what}')
+                continue
+            # У ошибки площадки есть выход прямо здесь: сбросить – и пост по
+            # этой площадке снова «ещё не сформирован», без вечной красноты.
+            row = st.columns([8, 2], vertical_alignment="center")
+            row[0].write(f'**{when}**{who} – {what}')
+            if row[1].button("↺ Сбросить", key=f"cp-tr-reset-{project_id}-{n}",
+                             use_container_width=True,
+                             help="Убрать ошибку: пост по этой площадке снова "
+                                  "«ещё не сформировано», можно ставить заново"):
+                cps.forget_target(project_id, post, tr["network"])
+                st.rerun()
         if len(troubles) > 12:
             st.caption(f"…и ещё {len(troubles) - 12}. Остальное видно в календаре "
                        "жёлтыми и красными плитками.")
 
 
 def _crosspost_plan_table(project_id: str, config: dict, posts: list[dict],
-                          state: dict, today: date, horizon: date) -> None:
+                          state: dict, today: date, horizon: date,
+                          formable: set[str] | None = None) -> list[str]:
     """
     План строками: когда · тип · пост · фото · площадки · что сделать.
 
-    Был календарь недель, и на макете он читался хорошо — но на живом реестре
+    Был календарь недель, и на макете он читался хорошо – но на живом реестре
     постов два-три в неделю, и сетка стояла пустой: две трети экрана «постов
     нет», а текст в узких плитках рвался по слогам. Строки плотнее, а колонки
     площадок дают то же, ради чего затевался календарь: статус ВК, ОК, ТГ и
     МАКС виден сразу и сравнивается по вертикали.
+
+    Слева от таблицы – колонка галочек: что отмечено, то и уедет по кнопке
+    «Поставить выбранные». Возвращает ключи отмеченных постов.
     """
     plan = crosspost_plan.rows(posts, state, today, horizon)
     if not plan["rows"]:
         html(T.empty("📭", "Впереди постов нет",
                      "Появятся здесь, как только в реестре будут строки с будущей датой."))
-        return
+        return []
 
     # Час выхода стоит у заголовка: даты меняются каждую неделю, а час – нет.
     html(f'<div class="card-title">🗓 План: {T.esc(plan["title"])}'
          f'<span class="hint"> · час выхода '
          f'{T.esc(content_plan.brand_default_time(project_id))} по Екатеринбургу</span></div>')
     html(T.crosspost_legend())
-    html(T.crosspost_table(plan, sheet_url=(config.get("planSheetUrl") or "").strip(),
-                           group_title=f'Впереди — {crosspost_plan.plural(len(plan["rows"]), "пост", "поста", "постов")}'))
+
+    formable = formable if formable is not None else set()
+    if len(formable) < 2:
+        # Выбирать не из чего: план сформирован или ждёт формирования ровно
+        # один пост. Галочки в этом случае – лишний столбец и лишний щелчок,
+        # под таблицей и так стоит одна кнопка на всё.
+        html(T.crosspost_table(plan, sheet_url=(config.get("planSheetUrl") or "").strip()))
+        return []
+
+    # Что отмечено, известно ДО отрисовки: галочки прошлого прогона лежат в
+    # памяти Streamlit, а нажатие на галочку перезапускает страницу. Поэтому
+    # подсветка строк в таблице всегда совпадает с тем, что реально отмечено.
+    keys = [f'cp-tick-{project_id}-{v["key"]}' for v in plan["rows"]]
+    picked = {v["key"] for v, k in zip(plan["rows"], keys)
+              if v["key"] in formable and st.session_state.get(k)}
+    table = T.crosspost_table(plan, sheet_url=(config.get("planSheetUrl") or "").strip(),
+                              picked=picked)
+
+    with st.container(key=f"cp-plan-{project_id}"):
+        ticks, table_col = st.columns([1, 32], gap="small", vertical_alignment="top")
+        with ticks:
+            with st.container(key=f"cp-ticks-{project_id}"):
+                html('<div class="cp-ticks-head"></div>')
+                for view, key in zip(plan["rows"], keys):
+                    if view["key"] not in formable:
+                        # Формировать нечего: уже стоит, вышло, публикуется
+                        # вручную или в реестре нет текста. Пустая клетка
+                        # честнее галочки, которая ничего не сделает.
+                        warn = " warn" if view["state"] == "warn" else ""
+                        html(f'<div class="cp-tick-off{warn}"></div>')
+                        continue
+                    st.checkbox(f'{view["date"]} – поставить на отложку', key=key,
+                                label_visibility="collapsed",
+                                help=f'{view["when_day"]} · {view["kind"] or "пост"}')
+        with table_col:
+            html(table)
+    return sorted(picked)
 
 
 def _crosspost_login_hint(project_id: str, config: dict) -> None:
@@ -3607,6 +3734,110 @@ def _crosspost_login_hint(project_id: str, config: dict) -> None:
                    "Яндекс.Бизнес: «Настройки» → «Вход в Яндекс».")
 
 
+def _crosspost_form_log_path(project_id: str):
+    """Лог последнего формирования – на диске, а не в исчезающем st.status."""
+    d = paths.data_root() / project_id / "crosspost"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "form-last.log"
+
+
+def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> None:
+    """
+    Отчёт: что и куда реально ушло – только факты от площадок.
+
+    Каждая строка – пост × площадка: что сделал Click и когда, ссылка на
+    вышедшую запись, текст ошибки. «Вышло» здесь пишется в двух случаях, и
+    оба – факты: ссылка стоит в реестре (публиковали руками) или площадка
+    сама подтвердила выход. Догадок в отчёте нет.
+    """
+    rows: list[str] = []
+    counts = {"set": 0, "live": 0, "bad": 0}
+    for post in sorted(posts, key=lambda p: p.get("when") or "", reverse=True):
+        for t in post.get("targets", []):
+            net = t.get("network") or ""
+            saved = cps.target(state, post, net)
+            # Отчёт – про работу CLICK, а не про весь реестр. Без этой строки
+            # в него попадали все прошлые посты со ссылками из таблицы, и
+            # заголовок писал «вышло 439»: пять лет чужой работы, среди
+            # которой не найти свои две отложки. Нет записи в памяти Click –
+            # значит Click этого не делал, и в отчёте этому места нет.
+            if not saved:
+                continue
+            link = (t.get("published_link") or "").strip()
+            at = (saved.get("at") or "")[:16].replace("T", " ")
+            # В отчёт попадает только сделанное. «Не тронуто» и «публикуется
+            # вручную» – это не событие, а тишина: строк с ней в реестре
+            # десятки, и за ними терялось то немногое, что и есть отчёт.
+            if link:
+                what, cls = f'вышло – <a href="{T.esc(link)}" target="_blank">запись ↗</a>', "ok"
+                counts["live"] += 1
+            elif saved.get("state") == cps.SCHEDULED:
+                what, cls = f"отложка поставлена {T.esc(at)}", "skip"
+                counts["set"] += 1
+            elif saved.get("state") in (cps.SENT, cps.SENT_LATE):
+                tail = f' – <a href="{T.esc(saved.get("link", ""))}" target="_blank">запись ↗</a>' \
+                    if saved.get("link") else ""
+                what, cls = f"вышло {T.esc(at)}{tail}", "ok"
+                counts["live"] += 1
+            elif saved.get("state") == cps.FAILED:
+                err = " ".join(str(saved.get("error", "")).split())
+                what, cls = f'ошибка {T.esc(at)}: {T.esc(err[:140])}', "err"
+                counts["bad"] += 1
+            elif saved.get("state") == cps.MISSED:
+                err = " ".join(str(saved.get("error", "время вышло")).split())
+                what, cls = f"пропущено: {T.esc(err[:140])}", "warn"
+                counts["bad"] += 1
+            else:
+                continue
+            name = cps.network_ru(net)
+            d = content_plan.parse_date(post.get("date", ""))
+            day = d.strftime("%d.%m") if d else post.get("date", "")
+            head = " ".join(post_text.strip_markup(post.get("text") or "").split())[:60] or "без текста"
+            rows.append(
+                f'<div class="report-row {cls}">'
+                f'<span class="cp-day">{T.esc(day)}</span>'
+                f'<span class="cp-type">{T.esc(name)}</span>'
+                f'<span class="report-row-reason">{T.esc(head)}</span>'
+                f'<span class="report-row-dur">{what}</span></div>')
+    title = " · ".join(x for x in (
+        f'отложек {counts["set"]}' if counts["set"] else "",
+        f'вышло {counts["live"]}' if counts["live"] else "",
+        f'ошибок {counts["bad"]}' if counts["bad"] else "") if x) or "пока пусто"
+    with st.expander(f"📊 Отчёт: что сделал Click – {title}", expanded=False):
+        st.caption("Только работа Click: поставленные отложки, вышедшие посты и "
+                   "ошибки. Постов, которых Click не касался, и старых записей "
+                   "реестра здесь нет – они видны в плане и в самой таблице.")
+        html("".join(rows[:120])
+             or T.empty("–", "Click пока ничего не делал",
+                        "Здесь появятся поставленные отложки, вышедшие посты и ошибки."))
+        if len(rows) > 120:
+            st.caption(f"Показаны последние 120 строк из {len(rows)}.")
+
+
+def _crosspost_form_last_log(project_id: str) -> None:
+    """Лог последнего формирования: тот же протокол, что бежал в статусе."""
+    fp = _crosspost_form_log_path(project_id)
+    if not fp.exists():
+        return
+    try:
+        text = fp.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    if not text.strip():
+        return
+    # Время – прямо в заголовке. Иначе непонятно, этого прогона лог или
+    # позавчерашнего: оба выглядят одинаково, и разбирают по ошибке чужой.
+    head = text.strip().splitlines()[0].strip()
+    when = head.replace("Формирование", "").strip()
+    with st.expander("📄 Лог последнего формирования"
+                     + (f" – {when}" if when else "")):
+        st.text_area("Что Click делал по шагам", value=text, height=240,
+                     key=f"cp-form-log-{project_id}")
+        st.download_button("⬇ Скачать (.txt)", data=text.encode("utf-8"),
+                           file_name="formirovanie-poslednee.txt", mime="text/plain",
+                           key=f"cp-form-log-dl-{project_id}")
+
+
 def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
                      state: dict, today: date, upcoming: list[dict]) -> None:
     """
@@ -3615,7 +3846,7 @@ def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
     """
     html('<div class="card-title">🔧 Настройка и проверка'
          '<span class="hint"> – обычно сюда не нужно, всё уже настроено</span></div>')
-    t1, t2, t3 = st.tabs(["🔌 Подключения", "🧪 Проверка отложки", "📜 Журналы и весь реестр"])
+    t1, t2, t3 = st.tabs(["🔌 Подключения", "🧪 Проверка отложки", "📊 Отчёты и журналы"])
 
     with t1:
         _crosspost_login_hint(project_id, config)
@@ -3632,8 +3863,9 @@ def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
             _probe_last_log(project_id, network)
 
     with t3:
+        _crosspost_report_block(project_id, posts, state)
+        _crosspost_form_last_log(project_id)
         _crosspost_scheduler_journal()
-        _crosspost_forget_block(project_id, upcoming, state)
         # Прошлые посты – архив, а не рабочий список. Блок живёт ЗДЕСЬ, где
         # есть posts/today/state: в отдельной функции их нет (на этом раздел
         # когда-то падал).
@@ -3682,18 +3914,29 @@ def tab_crosspost(project_id: str, config: dict) -> None:
                 if (d := content_plan.parse_date(p["date"])) and today <= d <= horizon]
     state = cps.load(project_id)
 
+    # Что можно формировать, считаем один раз: по этому же списку в таблице
+    # появляются галочки, а под ней – кнопки с числами по площадкам.
+    todo = _crosspost_form_todo(project_id, config, upcoming, state)
+    formable = {cps.post_key(c["post"]) for c in _crosspost_form_choices(todo)}
+
     _crosspost_bar(project_id, config, posts, upcoming, state, horizon)
-    _crosspost_attention(upcoming, state)
-    _crosspost_plan_table(project_id, config, posts, state, today, horizon)
-    _crosspost_form_block(project_id, config, upcoming, state, hints=False)
+    _crosspost_attention(project_id, upcoming, state)
+    picked_keys = _crosspost_plan_table(project_id, config, posts, state, today, horizon,
+                                        formable=formable)
+    _crosspost_form_block(project_id, config, upcoming, state, hints=False,
+                          todo=todo, picked_keys=picked_keys)
+    # Сброс памяти – сразу под кнопками, а не в глубине «Настройки и
+    # проверки»: нужен он ровно в ту минуту, когда запись удалили в соцсети
+    # или отложка встала с ошибкой, – и искать его по вкладкам не должны.
+    _crosspost_forget_block(project_id, upcoming, state)
     _crosspost_tools(project_id, config, posts, state, today, upcoming)
 
     # Честно про границы: что работает и при каких условиях.
-    st.info("Полный цикл собран: ВК, ОК и МАКС – родные отложки после входа "
-            "(держит сама площадка, Click в час выхода не нужен); Телеграм – по "
-            "времени через планировщик (нужен токен бота), и вот для него Click "
-            "в час выхода работать обязан; ЯБ – прогон по расписанию.",
-            icon="ℹ️")
+    st.info("Click формирует ВК, ОК и МАКС – родными отложками после входа: "
+            "запись держит сама площадка, и в час выхода Click не нужен. "
+            "**Телеграм пока не формируется** – в плане он помечен «вручную», "
+            "и сам Click в час выхода больше ничего не публикует. ЯБ – прогон "
+            "по расписанию, как был.", icon="ℹ️")
 
 
 def _crosspost_channels(config: dict) -> dict[str, str]:
@@ -3734,25 +3977,43 @@ def _crosspost_forget_block(project_id: str, upcoming: list[dict], state: dict) 
     if not done:
         return
 
-    with st.expander("↺ Сформировать заново – если запись удалили в соцсети"):
+    with st.expander("↺ Сформировать заново – если запись удалили в соцсети "
+                     "или отложка встала с ошибкой"):
         st.caption("Click помнит, что уже формировал, и второй раз не делает – так "
-                   "не появляются дубли. Если запись из соцсети удалили, скажите "
-                   "об этом здесь: пост снова станет «ждёт формирования».")
+                   "не появляются дубли. Если запись из соцсети удалили или отложка "
+                   "не встала, сбросьте память по нужным площадкам: пост по ним "
+                   "снова станет «ещё не сформировано».")
         titles = {}
         for post in done:
             nets = ", ".join(
-                f'{cps.network_ru(t["network"])} – {cps.status_of(state, post, t["network"])}'
+                f'{cps.network_ru(t["network"])} – {cps.HUMAN[cps.status_of(state, post, t["network"])][1]}'
                 for t in post.get("targets", [])
-                if not (t.get("published_link") or "").strip())
+                if not (t.get("published_link") or "").strip()
+                and cps.status_of(state, post, t["network"]) != cps.WAITING)
             head = (post.get("text") or "").strip().split("\n")[0][:60] or "без текста"
             titles[f'{post["date"]} · {head} · {nets}'] = post
-        picked = st.selectbox("Какой пост забыть", list(titles),
+        picked = st.selectbox("Какой пост", list(titles),
                               key=f"cp-forget-pick-{project_id}")
-        if st.button("↺ Забыть и сформировать заново", key=f"cp-forget-go-{project_id}"):
-            cps.forget_post(project_id, titles[picked])
-            st.success("Готово – пост снова в очереди на формирование. "
-                       "Проверьте, что в соцсети его правда нет, и нажмите "
-                       "«Сформировать план».")
+        post = titles[picked]
+        # Сбрасывать можно не весь пост, а отдельные площадки: заказчица
+        # удалила записи в ВК и ОК, а отложка МАКС пусть стоит – переставлять
+        # её значило бы получить в МАКС второй экземпляр.
+        with_state = [t["network"] for t in post.get("targets", [])
+                      if not (t.get("published_link") or "").strip()
+                      and cps.status_of(state, post, t["network"]) != cps.WAITING]
+        chosen = st.multiselect("Какие площадки сбросить", with_state,
+                                default=with_state, format_func=cps.network_ru,
+                                key=f"cp-forget-nets-{project_id}-{cps.post_key(post)}")
+        if st.button("↺ Сбросить и сформировать заново",
+                     key=f"cp-forget-go-{project_id}", disabled=not chosen):
+            if set(chosen) == set(with_state):
+                cps.forget_post(project_id, post)
+            else:
+                for net in chosen:
+                    cps.forget_target(project_id, post, net)
+            st.success("Готово – по сброшенным площадкам пост снова в очереди. "
+                       "Проверьте, что в соцсети его правда нет, отметьте пост "
+                       "галочкой и поставьте заново.")
             st.rerun()
 
 
@@ -3761,6 +4022,10 @@ def _crosspost_channels_block(project_id: str, config: dict) -> None:
     import tg_social
 
     with st.expander("💬 Каналы Телеграма и МАКС"):
+        st.warning("Телеграм сейчас выключен: Click его не формирует и в час "
+                   "выхода в него ничего не отправляет – в плане он помечен "
+                   "«вручную». Каналы храним, чтобы не вводить заново, когда "
+                   "Телеграм доделаем.", icon="⏸")
         c1, c2, c3 = st.columns(3)
         vals = {
             "tgChannelClient": c1.text_input("ТГ клиенты", value=config.get("tgChannelClient", ""),
@@ -3879,7 +4144,7 @@ def _crosspost_scheduler_journal() -> None:
 
 def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
                          state: dict) -> dict:
-    """Что осталось сформировать по площадкам — и готовы ли к этому входы."""
+    """Что осталось сформировать по площадкам – и готовы ли к этому входы."""
     import crosspost_form
     import max_browser
     import ok_browser
@@ -3899,6 +4164,8 @@ def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
     # пускает сессия Яндекса, та же, что публикует Яндекс.Бизнес.
     zen_ready = bool(zen_browser.has_saved_session(project_id)
                      and (config.get("zenStudioUrl") or "").strip())
+    msg_by_net = {net: crosspost_form.pending_for(upcoming, state, net)
+                  for net, chat in channels.items() if chat}
     return {
         "channels": channels,
         "vk_ready": vk_ready,
@@ -3909,17 +4176,58 @@ def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
         "ok": crosspost_form.pending_for(upcoming, state, "ok") if ok_ready else [],
         "max": crosspost_form.pending_for(upcoming, state, "max") if max_ready else [],
         "zen": crosspost_form.pending_for(upcoming, state, "zen") if zen_ready else [],
-        "msg": [p for net, chat in channels.items() if chat
-                for p in crosspost_form.pending_for(upcoming, state, net)],
+        # Плоским списком – для счётчика «ТГ: 6» (пост×площадка), по сетям –
+        # чтобы у выбора постов было видно, куда именно поедет этот пост.
+        "msg_by_net": msg_by_net,
+        "msg": [p for posts in msg_by_net.values() for p in posts],
     }
 
 
+def _crosspost_form_parts(todo: dict) -> list[str]:
+    """Счётчик для подписи кнопки: [«ВК: 4», «ОК: 4», «МАКС: 4», «ТГ: 6»]."""
+    parts = []
+    for name, key in (("ВК", "vk"), ("ОК", "ok"), ("МАКС", "max"),
+                      ("Дзен", "zen"), ("ТГ", "msg")):
+        # get, а не [key]: набор площадок растёт (последним пришёл Дзен), и
+        # словарь из старого вызова не должен ронять подпись кнопки.
+        if todo.get(key):
+            parts.append(f"{name}: {len(todo[key])}")
+    return parts
+
+
+def _crosspost_form_choices(todo: dict) -> list[dict]:
+    """
+    Посты, которым есть что формировать: [{post, nets}] в порядке плана.
+
+    Один пост обычно ждёт сразу нескольких площадок, поэтому собираем его
+    один раз и запоминаем, куда он поедет: в списке выбора это важнее, чем
+    сам факт «не сформирован».
+    """
+    picked: dict[str, dict] = {}
+    per_net = [("vk", todo["vk"]), ("ok", todo["ok"]), ("max", todo["max"]),
+               ("zen", todo.get("zen") or [])]
+    per_net += list(todo["msg_by_net"].items())
+    for net, posts in per_net:
+        for post in posts:
+            item = picked.setdefault(cps.post_key(post), {"post": post, "nets": []})
+            name = cps.network_ru(net)
+            if name not in item["nets"]:
+                item["nets"].append(name)
+    return sorted(picked.values(),
+                  key=lambda i: ((i["post"].get("when") or ""), i["post"].get("date") or ""))
+
+
 def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
-                          state: dict, hints: bool = True) -> None:
+                          state: dict, hints: bool = True, todo: dict | None = None,
+                          picked_keys: list[str] | None = None) -> None:
     """
     «Сформировать план»: ВК, ОК, МАКС и Дзен – родные отложки браузером,
     Телеграм – задания планировщику. Каждая площадка независима; исходы
     пишутся в память сразу, повтор кнопки доформирует только несделанное (Д-6).
+
+    Кнопки две: «Поставить выбранные посты на отложку» – те, что отмечены
+    галочками в плане, и «Поставить все» – весь план, как было. Формирование
+    у них одно и то же, разница только в том, какие посты в него уходят.
 
     Дзен стоит в том же ряду, хотя материал у него другой: не пост из ячейки,
     а статья по ссылке на документ. Для человека это одна кнопка – разбираться,
@@ -3927,7 +4235,8 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
     """
     import crosspost_form
 
-    todo = _crosspost_form_todo(project_id, config, upcoming, state)
+    todo = todo if todo is not None else _crosspost_form_todo(project_id, config,
+                                                              upcoming, state)
     channels = todo["channels"]
     vk_ready, ok_ready, max_ready = todo["vk_ready"], todo["ok_ready"], todo["max_ready"]
     zen_ready = todo["zen_ready"]
@@ -3942,57 +4251,127 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
                        "«Настройки» → блоки входа в соцсети.")
         return
 
-    parts = []
-    if vk_todo:
-        parts.append(f"ВК: {len(vk_todo)}")
-    if ok_todo:
-        parts.append(f"ОК: {len(ok_todo)}")
-    if max_todo:
-        parts.append(f"МАКС: {len(max_todo)}")
-    if zen_todo:
-        parts.append(f"Дзен: {len(zen_todo)}")
-    if msg_todo:
-        parts.append(f"ТГ: {len(msg_todo)}")
-    busy = runner.busy_reason(project_id, "publish") if (vk_todo or ok_todo or max_todo or zen_todo) else ""
+    parts = _crosspost_form_parts(todo)
+    # Дзен тоже ходит браузером, поэтому занятость прогоном касается и его.
+    busy = (runner.busy_reason(project_id, "publish")
+            if (vk_todo or ok_todo or max_todo or zen_todo) else "")
     if busy:
         st.caption(f"Поставить отложенные посты ({', '.join(parts)}): сейчас нельзя – {busy}.")
         return
 
-    if st.button(f"📌 Поставить отложенные посты ({', '.join(parts)})", type="primary",
-                 key=f"cp-form-all-{project_id}", use_container_width=True):
+    # Выбор постов. Раньше было «либо весь план, либо ничего»: посмотреть, как
+    # ляжет один пост, не давая уехать остальным шести, было нельзя вовсе.
+    # Галочки стоят в самом плане, слева от строк, – здесь только те посты,
+    # что отмечены (ключи приходят из таблицы, чтобы не считать их дважды).
+    choices = _crosspost_form_choices(todo)
+    by_key = {cps.post_key(c["post"]): c["post"] for c in choices}
+    picked = [by_key[k] for k in (picked_keys or []) if k in by_key]
+
+    def run(posts: list[dict], what: dict) -> None:
         site = ((project_endings(project_id).get("contacts") or {})
                 .get("Россия") or {}).get("site", "")
-        box = st.status("Формирую…", expanded=True)
+        # Свёрнутый статус: заголовок меняется по ходу («ВК: пост 2 из 4…»),
+        # а простыня шагов не лезет на страницу – развернуть можно всегда,
+        # и весь протокол после прогона лежит в «Логе последнего формирования».
+        box = st.status("Формирую…", expanded=False)
         headless = bool(get_settings(project_id)["headless"])
         ok = bad = 0
+
+        # Протокол пишется и на экран, и в файл: st.status исчезает при первой
+        # же перерисовке, а вопрос «что именно Click делал» встаёт уже после.
+        #
+        # В файл – СРАЗУ и на каждой строке, а не одним куском в конце.
+        # Раньше запись шла последней строчкой прогона, и пока прогон идёт,
+        # в разделе висел лог ПРОШЛОГО формирования: заказчица так и
+        # написала – «лог вообще старый висит, нового нет». А если прогон
+        # обрывался (перерисовка страницы, перезапуск облака), новый лог не
+        # появлялся вовсе, и разбирать было нечего.
+        lines: list[str] = [f"Формирование {apptime.now().strftime('%d.%m.%Y %H:%M')}"]
+
+        def flush() -> None:
+            try:
+                _crosspost_form_log_path(project_id).write_text(
+                    "\n".join(lines), encoding="utf-8")
+            except OSError:
+                pass   # лог не должен ронять формирование
+
+        flush()        # старый лог уступает место новому сразу, а не в конце
+
+        def say(m: str) -> None:
+            lines.append(f"[{apptime.now().strftime('%H:%M:%S')}] {m}")
+            flush()
+            box.write(m)
+            # Короткие вехи – в заголовок свёрнутого статуса, чтобы было
+            # видно, что происходит, не разворачивая.
+            if len(m) <= 60:
+                box.update(label=f"Формирую… {m}")
+
         msg_results = crosspost_form.form_messengers(
-            project_id, upcoming, site, channels, progress=lambda m: box.write(m))
+            project_id, posts, site, channels, progress=say)
         ok += len(msg_results)
         # Дзену дополнительно нужна почта проекта: у человека в Яндексе
         # несколько аккаунтов, и паспорт спрашивает, каким входить.
         zen_former = functools.partial(crosspost_form.form_zen_all,
                                        email=(config.get("email") or "").strip())
-        for net_name, todo, former, url_key in (
-                ("ВК", vk_todo, crosspost_form.form_vk_all, "vkGroupUrl"),
-                ("ОК", ok_todo, crosspost_form.form_ok_all, "okGroupUrl"),
-                ("МАКС", max_todo, crosspost_form.form_max_all, "maxWebUrl"),
-                ("Дзен", zen_todo, zen_former, "zenStudioUrl")):
-            if not todo:
+        for net_name, net_todo, former, url_key in (
+                ("ВК", what["vk"], crosspost_form.form_vk_all, "vkGroupUrl"),
+                ("ОК", what["ok"], crosspost_form.form_ok_all, "okGroupUrl"),
+                ("МАКС", what["max"], crosspost_form.form_max_all, "maxWebUrl"),
+                ("Дзен", what.get("zen") or [], zen_former, "zenStudioUrl")):
+            if not net_todo:
                 continue
-            results = former(project_id, (config.get(url_key) or "").strip(), upcoming, site,
-                             progress=lambda m: box.write(m), headless=headless)
+            say(f"— {net_name}: постов к формированию {len(net_todo)}")
+            results = former(project_id, (config.get(url_key) or "").strip(), posts, site,
+                             progress=say, headless=headless)
             ok += sum(1 for r in results if r["ok"])
             for r in results:
                 if not r["ok"]:
                     bad += 1
-                    box.write(f"❌ {net_name} {r['post']['date']}: {r['error']}")
+                    say(f"❌ {net_name} {r['post']['date']}: {r['error']}")
+                # Предупреждения – не ошибки: отложка стоит, но что-то
+                # заслуживает внимания (таблица не вставилась, Дзен не
+                # подтвердил словами). Их видно в логе, а прогон идёт дальше.
                 for w in r.get("warnings") or []:
-                    box.write(f"⚠️ {net_name} {r['post']['date']}: {w}")
+                    say(f"⚠️ {net_name} {r['post']['date']}: {w}")
+        lines.append(f"Итог: запланировано {ok}, с ошибками {bad}")
+        flush()
         box.update(label=(f"Готово: запланировано {ok}"
                           + (f", с ошибками {bad}" if bad else "")),
                    state="error" if bad else "complete")
         time.sleep(1.2)
         st.rerun()
+
+    # Выбирать не из чего (один несформированный пост) – кнопка одна и во всю
+    # ширину: галочка перед единственной кнопкой была бы лишним щелчком.
+    if len(choices) <= 1:
+        if st.button(f"📌 Поставить отложенные посты ({', '.join(parts)})", type="primary",
+                     key=f"cp-form-all-{project_id}", use_container_width=True):
+            run(upcoming, todo)
+        return
+
+    # Что уедет по выбранным – считаем тем же кодом, что и по всему плану:
+    # у поста может быть готова не всякая площадка, и «отметил один пост –
+    # поехало три отложки» человек должен видеть ДО нажатия.
+    picked_todo = _crosspost_form_todo(project_id, config, picked, state) if picked else None
+    picked_parts = _crosspost_form_parts(picked_todo) if picked_todo else []
+    html('<div class="cp-picked-note">'
+         + (f'Отмечено <b>{crosspost_plan.plural(len(picked), "пост", "поста", "постов")}</b>'
+            f' – уедет {T.esc(", ".join(picked_parts))}'
+            if picked else
+            "Отметьте галочками слева посты, которые нужно поставить сейчас, – "
+            "или ставьте весь план целиком.")
+         + "</div>")
+    left, right = st.columns(2)
+    with left:
+        if st.button("📌 Поставить выбранные посты на отложку",
+                     key=f"cp-form-picked-{project_id}", use_container_width=True,
+                     disabled=not picked,
+                     help="Отметьте посты галочками в плане" if not picked else None):
+            run(picked, picked_todo)
+    with right:
+        if st.button(f"📌 Поставить все ({', '.join(parts)})", type="primary",
+                     key=f"cp-form-all-{project_id}", use_container_width=True):
+            run(upcoming, todo)
 
 
 def _crosspost_yb_block(project_id: str, config: dict) -> None:
@@ -4577,6 +4956,14 @@ def _web_keys_block() -> None:
                     help="Пустое поле стирает ключ.")
                 if есть:
                     st.caption(f"сейчас: {secrets_local.masked(есть)}")
+                    # Значение, которое Google ключом не считает, видно ДО
+                    # всякого запроса – по началу строки. Заказчица вписала
+                    # «AQ.Ab8…» (это учётные данные OAuth, а не ключ API), и
+                    # Click полдня отвечал ей общим «Google не принял ключ».
+                    if ключ.startswith("gemini_api_key"):
+                        замечание = llm.key_note(есть)
+                        if замечание:
+                            st.warning(f"Похоже, {замечание}.", icon="🔑")
             if новые and st.button("💾 Сохранить ключи", key=f"secret-save-{ключи[0]}",
                                    type="primary"):
                 try:
@@ -4588,10 +4975,42 @@ def _web_keys_block() -> None:
                 except Exception as e:  # noqa: BLE001
                     st.error(f"Не сохранилось: {e}")
 
+            # Проверка ключей по одному. Без неё «ключи заданы, а черновиков
+            # нет» разбиралось перепиской: какой из трёх ключей плохой и чем
+            # именно – приложение не говорило, а Google говорил, просто его
+            # слова до экрана не доезжали.
+            if ключи[0].startswith("gemini_api_key"):
+                _gemini_keys_check()
+
     st.caption(f"Ключи хранятся в файле `{secrets_local.path()}` – вне папки Click, "
                "поэтому обновление программы их не тронет и в репозиторий они не "
                "попадут. Файл обычный, без шифрования: там же лежит и сохранённая "
                "сессия Яндекса.")
+
+
+def _gemini_keys_check() -> None:
+    """
+    «Проверить ключи» – по одному запросу на ключ, с приговором по каждому.
+
+    Зачем отдельная кнопка. Черновик не получается по десятку причин: ключ
+    недействителен, ключ вообще не ключ (в поле лежат учётные данные OAuth
+    вида «AQ.…»), для проекта не включён Generative Language API, у ключа
+    ограничения по адресу, кончилась квота. Раньше всё это сводилось к одной
+    строчке «Google не принял ключ Gemini» – по ней непонятно даже, какой из
+    трёх ключей чинить. Теперь Click спрашивает у Google про каждый ключ
+    отдельно и показывает ЕГО ответ.
+    """
+    if not llm.is_configured():
+        return
+    if st.button("🔎 Проверить ключи", key="gemini-keys-check"):
+        with st.spinner("Спрашиваю у Google про каждый ключ…"):
+            st.session_state["gemini-keys-verdict"] = llm.check_keys()
+    for row in st.session_state.get("gemini-keys-verdict") or []:
+        head = f"**{row['name']}** · {row['masked']}"
+        if row["ok"]:
+            st.success(f"{head} – работает", icon="✅")
+        else:
+            st.error(f"{head} – {row['reason']}", icon="⛔")
 
 
 def _forget_caches() -> None:

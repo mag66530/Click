@@ -564,6 +564,22 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip().lower()
 
 
+def _note_skip(diag: dict, city: str, why: str) -> None:
+    """
+    Запомнить город, который не попал в список 2ГИС, и причину.
+
+    Зачем это нужно. Заказчица поставила Шымкенту статус «Активная» и не
+    нашла его в 2ГИС – а сказать ей, почему города нет, приложению было
+    нечем: в диагностике лежали только числа. Теперь причина едет с именем
+    города и показывается прямо после загрузки.
+
+    Список короткий: он для человека, а не для отчёта.
+    """
+    rows = diag.setdefault("gisSkippedRows", [])
+    if len(rows) < 12 and city:
+        rows.append({"name": city, "why": why})
+
+
 def parse_rows(rows: list[list[str]]) -> tuple[list[dict], dict]:
     """
     Разбирает значения таблицы в список городов.
@@ -644,6 +660,12 @@ def parse_rows(rows: list[list[str]]) -> tuple[list[dict], dict]:
         gis_raw = cell(col_gis)
         gis_ok = bool(GIS_ACCOUNT_RX.search(gis_raw))
         if not m and not gis_ok:
+            # Ни Яндекса, ни 2ГИС – строка не про площадки. Но если в колонке
+            # 2ГИС что-то всё же написано, город в списке не появится, и это
+            # стоит объяснить: пустая строка таблицы – не то же самое, что
+            # строка с городом и пометкой вместо ссылки.
+            if country and name and gis_raw.strip():
+                _note_skip(diag, name, "в колонке 2ГИС не ссылка на кабинет")
             continue
         if not country or not name:
             diag["skippedNoUrl"] += 1
@@ -667,12 +689,20 @@ def parse_rows(rows: list[list[str]]) -> tuple[list[dict], dict]:
         if gis_ok:
             if gis_status and SKIP_STATUS_RX.search(gis_status):
                 diag["gisSkipped"] = diag.get("gisSkipped", 0) + 1
+                _note_skip(diag, name, f"статус «{gis_status.strip()}»")
             elif not GIS_ORG_RX.search(gis_raw):
                 # Ссылка на кабинет есть, а номера организации в ней нет –
                 # работать по такой нельзя, но и молчать нельзя.
                 diag["gisNoOrgId"] = diag.get("gisNoOrgId", 0) + 1
+                _note_skip(diag, name, "в ссылке нет номера организации")
             else:
                 gis_url = gis_raw if gis_raw.lower().startswith("http") else "https://" + gis_raw
+        elif gis_raw.strip():
+            # В колонке 2ГИС что-то написано, но это не ссылка на кабинет
+            # (бывает «нет», «в работе», ссылка на карту вместо аккаунта).
+            # Молча пропустить такой город – значит оставить человека гадать,
+            # почему он не появился в списке 2ГИС.
+            _note_skip(diag, name, "в колонке 2ГИС не ссылка на кабинет")
 
         if not url and not gis_url:
             continue

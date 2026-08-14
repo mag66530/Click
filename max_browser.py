@@ -27,6 +27,7 @@ Click в это время может быть выключен. Ради это
 
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -544,6 +545,297 @@ def caption_ok(caption: str, when: datetime, today=None) -> bool:
     return re.search(rf"\b{when.day}\b(?!\s*:)", low) is not None
 
 
+def _editor_node(page, sel: str):
+    """
+    ТО САМОЕ поле ввода, а не первый узел, подошедший под селектор.
+
+    У МАКС под селектор поля подходит сразу несколько узлов: рядом с живым
+    редактором лежит его пустышка-подсказка. `.first` мог взять именно её –
+    и тогда клик уходил в пустышку, текст вписывался не туда, а проверки
+    читали пустоту и объявляли отправку, которой не было.
+
+    Выбираем по размеру: настоящее поле – самое крупное из подходящих.
+    Подсказка нарисована в один пиксель или спрятана вовсе.
+    """
+    loc = page.locator(sel)
+    try:
+        count = loc.count()
+    except Exception:  # noqa: BLE001
+        return loc.first
+    if count <= 1:
+        return loc.first
+    best, best_area = loc.first, -1.0
+    for i in range(count):
+        item = loc.nth(i)
+        try:
+            box = item.bounding_box(timeout=1_000) or {}
+        except Exception:  # noqa: BLE001
+            continue
+        area = float(box.get("width") or 0) * float(box.get("height") or 0)
+        if area > best_area:
+            best, best_area = item, area
+    return best
+
+
+def _editor_text(page, sel: str) -> str:
+    """
+    Что сейчас лежит в поле поста. Пусто – поле пустое или не прочиталось.
+
+    Читаем выбранный узел, а при осечке – ещё раз: Lexical пересобирает
+    разметку прямо во время ввода, и evaluate может прийтись на узел,
+    которого уже нет. Пустая строка от такой осечки однажды была объявлена
+    «МАКС отправил строку вместо переноса» – хотя в канал ничего не уходило,
+    и весь пост стоял в поле (14.08.2026).
+    """
+    read = "el => (el.innerText != null ? el.innerText : (el.value || ''))"
+    for attempt in range(2):
+        try:
+            return _editor_node(page, sel).evaluate(read) or ""
+        except Exception:  # noqa: BLE001 – поле перерисовалось, читаем ещё раз
+            pass
+        if not attempt:
+            page.wait_for_timeout(300)
+    return ""
+
+
+# Текст СТРАНИЦЫ без поля ввода – то есть сама лента канала.
+#
+# Это ответ на вопрос заказчицы: «ты же можешь посмотреть, что там было до
+# этого и что ты написал; если там вчерашний пост – значит программа ничего
+# не отправляла». Именно так теперь и проверяем: не по тому, что померещилось
+# в поле ввода, а по тому, появилось ли в КАНАЛЕ новое сообщение.
+_FEED_JS = r"""
+(el) => {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+  const parts = [];
+  let node;
+  while ((node = walker.nextNode())) {
+    // Всё, что лежит внутри поля ввода, – это ещё не отправленное.
+    if (el && el.contains(node)) continue;
+    const t = (node.nodeValue || '').trim();
+    if (t) parts.push(t);
+  }
+  return parts.join('\n');
+}
+"""
+
+
+def _feed_letters(page, sel: str) -> str:
+    """Лента канала одной строкой из букв – для сравнения «было / стало»."""
+    try:
+        return _letters(_editor_node(page, sel).evaluate(_FEED_JS) or "")
+    except Exception:  # noqa: BLE001
+        try:
+            return _letters(page.evaluate(
+                "() => document.body ? (document.body.innerText || '') : ''") or "")
+        except Exception:  # noqa: BLE001
+            return ""
+
+
+def _sent_lines(page, sel: str, before: str, lines: list[str]) -> list[str]:
+    """
+    Какие наши строки ПОЯВИЛИСЬ в канале, которых там не было до ввода.
+
+    Пусто – значит не отправилось ничего, что бы ни показывало поле ввода.
+    Старый пост, вчерашний или сегодняшний, сюда не попадёт: он был в ленте
+    и до нас.
+    """
+    now = _feed_letters(page, sel)
+    if not now:
+        return []
+    out = []
+    for line in lines:
+        mark = _probe(line)
+        if mark and mark not in before and mark in now:
+            out.append(line)
+    return out
+
+
+def _letters(s: str) -> str:
+    """Только буквы и цифры. Значки и пробелы отбрасываем: МАКС рисует
+    эмодзи картинками, и в тексте поля их может не оказаться вовсе."""
+    import re
+    return re.sub(r"\W", "", s, flags=re.U).lower()
+
+
+def _probe(line: str) -> str:
+    """
+    Короткий отпечаток ОДНОЙ строки – по нему ищем её в поле.
+
+    Обрезка здесь только для искомой строки. Обрезать заодно и текст поля –
+    ровно та ошибка, которая 14.08.2026 сорвала отложку МАКС на ровном
+    месте: в «поле» оставались первые 32 буквы, конец текста в них не
+    находился никогда, и Click отказывался планировать уже введённый пост.
+    """
+    return _letters(line)[:32]
+
+
+def _clear_editor(page, sel: str) -> bool:
+    """
+    Опустошить поле перед вводом. True – поле пустое.
+
+    Нужно потому, что после неудачной попытки в поле остаётся её текст, и
+    следующая попытка дописывает свой в конец. На снимке заказчицы так и
+    вышло: в поле лежал хвост прошлого захода, а под ним – весь пост заново.
+    Ни одной клавиши, которая может отправить: только выделение и Backspace.
+    """
+    for attempt in range(3):
+        try:
+            _editor_node(page, sel).click(timeout=5_000)
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Backspace")
+        except Exception:  # noqa: BLE001
+            pass
+        if not _editor_text(page, sel).strip():
+            return True
+        # Второй заход – средствами самой страницы: бывает, что выделение
+        # ушло мимо поля (всплывшая подсказка перехватила фокус).
+        try:
+            _editor_node(page, sel).evaluate(
+                "el => { el.focus();"
+                " const s = window.getSelection(); const r = document.createRange();"
+                " r.selectNodeContents(el); s.removeAllRanges(); s.addRange(r);"
+                " document.execCommand('delete'); }")
+        except Exception:  # noqa: BLE001
+            pass
+        page.wait_for_timeout(300)
+    return not _editor_text(page, sel).strip()
+
+
+def _lines_in(got: str) -> int:
+    """Сколько непустых строк видно в поле."""
+    return len([ln for ln in (got or "").split("\n") if ln.strip()])
+
+
+# Миниатюры прикреплённых файлов. Веб-приложения показывают выбранный файл
+# из памяти браузера, а такая картинка всегда живёт по адресу blob: или
+# data: – в отличие от аватарок и значков, которые приходят с сервера.
+# Считаем их до и после выбора файла: выросло – фото в форме, не выросло –
+# МАКС его не принял.
+_THUMBS_JS = r"""
+() => {
+  let n = 0;
+  for (const el of document.querySelectorAll('img, video, canvas')) {
+    const src = el.getAttribute('src') || el.currentSrc || '';
+    if (!/^(blob:|data:)/.test(src)) continue;
+    const r = el.getBoundingClientRect();
+    const w = r.width || el.offsetWidth, h = r.height || el.offsetHeight;
+    if (w >= 24 && h >= 24) n++;
+  }
+  return n;
+}
+"""
+
+THUMB_WAIT_S = 20               # столько ждём миниатюру: файл ещё грузится
+
+
+def _thumbs(page) -> int:
+    """Сколько миниатюр прикреплённых файлов сейчас в форме."""
+    try:
+        return int(page.evaluate(_THUMBS_JS) or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _wait_thumbs(page, before: int, want: int) -> bool:
+    """Дождаться, пока миниатюры появятся. False – так и не появились."""
+    deadline = time.time() + THUMB_WAIT_S
+    while time.time() < deadline:
+        page.wait_for_timeout(600)
+        if _thumbs(page) - before >= want:
+            return True
+    return _thumbs(page) > before
+
+
+def _fill_post_text(page, sel: str, text: str, log: Callable[[str], None]) -> str:
+    """
+    Вписать текст в поле МАКС, НЕ отправив ни одного сообщения.
+    Возвращает '' при успехе, иначе причину отказа словами.
+
+    Здесь случилась худшая поломка Click (13.08.2026): пост из двенадцати
+    строк ушёл в канал двенадцатью отдельными сообщениями, сразу и без
+    всякой отложки. Причина простая и обидная – текст печатался знак за
+    знаком (page.type), а поле поста в МАКС это поле ЧАТА: каждый перевод
+    строки в нём Enter, то есть «отправить».
+
+    Отсюда главное правило: НИ ОДНОЙ КЛАВИШИ, которая может отправить.
+    Весь текст, вместе с переносами строк, вставляется одним вызовом
+    insert_text – это событие ввода, а не нажатие: события keydown не
+    возникает вовсе, и отправить оно не может физически. Проверено на поле,
+    устроенном как у МАКС (tests_crosspost).
+
+    Shift+Enter остался только запасным путём – на случай, если сборка МАКС
+    перестанет принимать переносы в insert_text. И проверяется он теперь по
+    КАНАЛУ, а не по полю: «в поле пусто» – это ещё не «ушло сообщение».
+    Прежняя проверка смотрела только в поле, читала пустышку (у селектора
+    несколько узлов, Lexical перерисовывает разметку) и объявляла отправку,
+    которой не было. Заказчица это и увидела: «в канале ничего нет, а Click
+    пишет, что отправил».
+
+    Растущее поле и полоса прокрутки – это нормально и никак не проверяется:
+    в поле чата так и должно быть.
+    """
+    lines = text.split("\n")
+    filled = [ln for ln in lines if _probe(ln)]
+    # Что в канале ДО ввода. Всё, что было тут раньше – вчерашний пост,
+    # позавчерашний, – в счёт «мы отправили» не пойдёт.
+    before = _feed_letters(page, sel)
+
+    if not _clear_editor(page, sel):
+        return ("Поле поста в МАКС не очистилось – в нём остался текст прошлой "
+                "попытки. Ничего не вводим: иначе пост уйдёт склеенным. "
+                "Откройте канал и очистите поле руками")
+
+    # ── Основной путь: один вызов, ни одной клавиши ──────────────────
+    page.keyboard.insert_text(text)
+    page.wait_for_timeout(400)
+    got = _editor_text(page, sel)
+    enough = _lines_in(got) >= len(filled)
+
+    # ── Запасной путь: построчно, с проверкой по каналу ──────────────
+    if not enough:
+        log("  МАКС не принял переносы одним куском – ввожу построчно")
+        if not _clear_editor(page, sel):
+            return ("Поле поста в МАКС не очистилось перед вводом построчно. "
+                    "Ничего не отправляли, проверьте канал")
+        for i, line in enumerate(lines):
+            if i:
+                page.keyboard.press("Shift+Enter")
+                # Единственное, чего тут стоит бояться: что перенос оказался
+                # отправкой. Спрашиваем об этом КАНАЛ, а не поле.
+                gone = _sent_lines(page, sel, before, lines[:i])
+                if gone:
+                    return ("МАКС отправил строку вместо переноса: в канале "
+                            f"появилось «{gone[0][:40]}». Остановились на первой "
+                            "строке – удалите это сообщение в канале и напишите "
+                            "нам, поле ввода у МАКС изменилось")
+            if line:
+                page.keyboard.insert_text(line)
+        page.wait_for_timeout(400)
+        got = _editor_text(page, sel)
+
+    # ── Сверка по краям: в поле должны быть и начало, и конец ────────
+    seen = _letters(got)
+    for what, line in (("начало", filled[0] if filled else ""),
+                       ("конец", filled[-1] if filled else "")):
+        if line and _probe(line) not in seen:
+            gone = _sent_lines(page, sel, before, lines)
+            if gone:
+                return (f"Часть поста ушла в канал сообщениями ({len(gone)} шт.): "
+                        f"первое – «{gone[0][:40]}». Отложку не ставим, "
+                        "удалите отправленное в канале")
+            return (f"В поле МАКС не видно {what} текста, но в канал ничего не "
+                    "уходило. Ничего не планируем – попробуйте ещё раз")
+
+    # Ничего не ушло? Это последняя проверка перед отложкой – и главная.
+    gone = _sent_lines(page, sel, before, lines)
+    if gone:
+        return (f"Пока вводили текст, в канал ушло сообщение «{gone[0][:40]}». "
+                "Отложку не ставим – удалите его в канале")
+    log(f"  текст вписан целиком ({_lines_in(got)} строк), в канал ничего не ушло")
+    return ""
+
+
 def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                             image_paths: list[str], when: datetime,
                             log: Callable[[str], None] | None = None,
@@ -584,14 +876,18 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "error": _why_no_editor(page)}
 
             log(f"Ввожу текст ({len(text)} знаков)")
-            page.click(text_sel)
-            page.keyboard.press("Control+A")
-            page.keyboard.press("Backspace")
-            page.type(text_sel, text, delay=8)
+            why = _fill_post_text(page, text_sel, text, log)
+            if why:
+                return {"ok": False,
+                        "shot": _debug_shot(project_id, page, "bad-text"),
+                        "error": why}
             page.wait_for_timeout(1_000)
+            # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
+            yb.drop_link_card(page, yb.text_domains(text), log)
 
             if image_paths:
                 log(f"Прикрепляю фото: {len(image_paths)}")
+                had = _thumbs(page)
                 if not _click_first(page, SEL["attach"], timeout=6_000):
                     return {"ok": False,
                             "shot": _debug_shot(project_id, page, "no-attach"),
@@ -608,7 +904,20 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                                 "shot": _debug_shot(project_id, page, "no-file-input"),
                                 "error": "Не нашли, куда отдать файлы фото в МАКС"}
                     inp.first.set_input_files(image_paths)
-                page.wait_for_timeout(3_500)
+
+                # Файл ПЕРЕДАН – это ещё не «фото в посте». 14.08.2026 МАКС
+                # поставил отложку без картинки, а Click отчитался успехом:
+                # после set_files он просто ждал три с половиной секунды и
+                # шёл дальше. Пост без картинки – это не тот пост, который
+                # просили, поэтому теперь ждём миниатюру в самой форме и без
+                # неё отложку не ставим.
+                if not _wait_thumbs(page, had, len(image_paths)):
+                    return {"ok": False,
+                            "shot": _debug_shot(project_id, page, "no-thumb"),
+                            "error": ("Файл фото передали, но в поле поста МАКС "
+                                      "миниатюра так и не появилась. Отложку не "
+                                      "ставим: пост без картинки – не тот пост. "
+                                      "Проверьте канал и попробуйте ещё раз")}
 
             # ПРАВОЙ кнопкой: левая отправит пост сейчас же. Это главное
             # место всей механики, и ошибиться тут нельзя.
@@ -622,6 +931,15 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
             # правую кнопку трижды, между попытками ждём.
             opened = ""
             for _ in range(3):
+                # Сначала закрываем всё, что могло всплыть (подсказка, меню
+                # смайлов): их подложка ловит клик вместо кнопки, и попытка
+                # уходит в тридцатисекундный таймаут – так и было 13.08.2026
+                # («backdrop … intercepts pointer events»).
+                try:
+                    page.keyboard.press("Escape")
+                    page.wait_for_timeout(300)
+                except Exception:  # noqa: BLE001
+                    pass
                 page.locator(send_sel).first.click(button="right")
                 page.wait_for_timeout(1_500)
                 opened = _click_first(page, SEL["schedule_item"], timeout=6_000)

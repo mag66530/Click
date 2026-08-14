@@ -92,11 +92,17 @@ class LlmError(RuntimeError):
     самом ответе. Прогону это важно: упёршись в лимит, долбить его дальше
     смысла нет – каждая попытка съедает до полутора минут и всё равно
     возвращает то же самое.
+
+    bad_keys – Google не принял НИ ОДИН ключ. Это тем более повод не
+    продолжать: квота за минуту хотя бы возвращается сама, а плохой ключ
+    посреди прогона не починится. Раньше такой прогон честно обходил все
+    города и на каждом писал одну и ту же ошибку про ключ.
     """
 
-    def __init__(self, message: str, is_limit: bool = False):
+    def __init__(self, message: str, is_limit: bool = False, bad_keys: bool = False):
         super().__init__(message)
         self.is_limit = is_limit
+        self.bad_keys = bad_keys
 
 
 # ─── Ключи ──────────────────────────────────────────────────────────
@@ -152,6 +158,80 @@ def api_keys() -> list[str]:
 def api_key() -> str:
     keys = api_keys()
     return keys[0] if keys else ""
+
+
+# ─── Какой ключ Google вообще считает ключом ────────────────────────
+#
+# Проверено запросами к самому Google, а не по памяти. Их сервер смотрит на
+# НАЧАЛО значения и по нему решает, что ему прислали:
+#
+#   AIza…  → это ключ API. Плохой ключ такого вида даёт 400 INVALID_ARGUMENT
+#            «API key not valid. Please pass a valid API key.»
+#   AQ.…   → это НЕ ключ. Google отвечает 401 UNAUTHENTICATED «Expected OAuth 2
+#            access token, login cookie or other valid authentication
+#            credential» – и отвечает так одинаково, куда его ни положи:
+#            в заголовок x-goog-api-key, в параметр ?key= или в Bearer.
+#
+# Отсюда живой случай заказчицы: в поле вписан ключ вида «AQ.Ab8RN6…» (55
+# знаков), приложение честно шлёт его Google, а тот честно не принимает.
+# Ключ для Gemini берётся в AI Studio кнопкой «Get API key» и выглядит как
+# «AIzaSy…» (около 39 знаков). Значение из адресной строки, из cookie или
+# токен OAuth сюда не годятся.
+API_KEY_PREFIX = "AIza"
+
+
+def looks_like_api_key(key: str) -> bool:
+    """Похоже ли значение на ключ API Google (а не на токен OAuth или мусор)."""
+    k = (key or "").strip()
+    return k.startswith(API_KEY_PREFIX) and 30 <= len(k) <= 60 and " " not in k
+
+
+def _big(s: str) -> str:
+    """Первая буква заглавной. str.capitalize() тут не годится – он гасит остальные."""
+    return s[:1].upper() + s[1:]
+
+
+def mask(key: str) -> str:
+    """Ключ в человеческом виде: начало, конец и длина. Целиком не показываем."""
+    k = (key or "").strip()
+    if not k:
+        return "пусто"
+    body = f"{k[:6]}…{k[-4:]}" if len(k) > 14 else k[:6] + "…"
+    return f"{body} ({len(k)} знаков)"
+
+
+def key_names() -> list[str]:
+    """
+    Как называется каждый ключ из api_keys() – в том же порядке.
+
+    Нужно, чтобы в ошибке было написано «ключ №2 (gemini_api_key_2)», а не
+    просто «ключ не принят»: с тремя ключами иначе непонятно, какой чинить.
+    """
+    named: list[tuple[str, str]] = [("gemini_api_key", _secret("gemini_api_key"))]
+    named += [(f"gemini_api_key_{n}", _secret(f"gemini_api_key_{n}"))
+              for n in range(2, MAX_KEYS + 1)]
+    named += [("gemini_api_keys", p.strip()) for p in _secret("gemini_api_keys").split(",")]
+    out: list[str] = []
+    seen: set[str] = set()
+    for name, value in named:
+        if value and value not in seen:
+            seen.add(value)
+            out.append(name)
+    return out
+
+
+def key_note(key: str) -> str:
+    """Что сказать про ключ ДО всякого запроса. Пусто – с виду всё в порядке."""
+    if not (key or "").strip():
+        return ""
+    if looks_like_api_key(key):
+        return ""
+    if (key or "").strip().startswith("AQ."):
+        return ("это не ключ API, а учётные данные OAuth: Google отвечает на них "
+                "«Expected OAuth 2 access token». Ключ Gemini берётся в Google AI Studio "
+                "кнопкой «Get API key» и выглядит как «AIzaSy…» (около 39 знаков)")
+    return (f"ключ не похож на ключ API Google: он должен начинаться с «{API_KEY_PREFIX}» "
+            "и быть длиной около 39 знаков")
 
 
 def is_configured() -> bool:
@@ -398,15 +478,124 @@ def _text_from(payload: dict) -> tuple[str, str]:
     return "", str(((payload.get("candidates") or [{}])[0]).get("finishReason") or "")
 
 
-def _explain(code: int, body: str) -> str:
-    if code in (400, 403):
-        return ("Google не принял ключ Gemini. Проверьте секрет gemini_api_key "
-                "и что для проекта включён Generative Language API.")
+def _google_error(body: str) -> tuple[str, str, str]:
+    """Что именно сказал Google: (сообщение, status, reason). Не разобрали – пусто."""
+    import json
+    try:
+        err = (json.loads(body or "{}") or {}).get("error") or {}
+    except (ValueError, TypeError):
+        return "", "", ""
+    reason = ""
+    for d in err.get("details") or []:
+        if d.get("reason"):
+            reason = str(d["reason"])
+            break
+    return str(err.get("message") or ""), str(err.get("status") or ""), reason
+
+
+def _explain(code: int, body: str, key: str = "") -> str:
+    """
+    Почему запрос не прошёл – словами, по которым понятно, что делать.
+
+    Здесь была своя беда, и она стоила заказчице вечера. На ЛЮБОЙ ответ 400
+    и 403 писалось одно и то же: «Google не принял ключ Gemini. Проверьте
+    секрет gemini_api_key». Это не разбор, а догадка – и часто неверная:
+    под 400 прячется и «ключ недействителен», и «в запросе лишнее поле», а
+    под 403 – «для проекта не включён Generative Language API» и «ключ
+    ограничен по адресу». Человек шёл проверять ключи, а ключи были ни при
+    чём. Теперь показываем то, что ответил сам Google, и добавляем к этому
+    ровно одно действие – какое именно, зависит от его reason.
+    """
+    message, status, reason = _google_error(body)
+    who = f" (ключ {mask(key)})" if key else ""
+    tail = f" Google: «{message}»" if message else ""
+
+    # Ключ не принят как ключ. Самый частый случай – в поле лежит не ключ API.
+    if code == 401 or status == "UNAUTHENTICATED":
+        note = key_note(key)
+        return ("Google не принял значение как ключ API" + who + "."
+                + (f" {_big(note)}." if note else
+                   " Ключ Gemini берётся в Google AI Studio кнопкой «Get API key» "
+                   "и выглядит как «AIzaSy…» (около 39 знаков).") + tail)
+    if reason == "API_KEY_INVALID" or "api key not valid" in message.lower():
+        return ("Google говорит, что ключ Gemini недействителен" + who + ". "
+                "Проверьте, что ключ скопирован целиком и не удалён в AI Studio." + tail)
+    if reason in ("SERVICE_DISABLED", "PERMISSION_DENIED") or "has not been used in project" in message:
+        return ("Для проекта Google, которому принадлежит ключ, не включён Generative "
+                "Language API" + who + ". Включите его по ссылке из ответа Google "
+                "и подождите пару минут." + tail)
+    if reason in ("API_KEY_HTTP_REFERRER_BLOCKED", "API_KEY_IP_ADDRESS_BLOCKED",
+                  "API_KEY_ANDROID_APP_BLOCKED", "API_KEY_IOS_APP_BLOCKED"):
+        return ("Ключ Gemini ограничен по адресу отправителя" + who + " – из облака "
+                "он работать не будет. Снимите ограничения ключа в Google Cloud." + tail)
+    if reason == "API_KEY_SERVICE_BLOCKED":
+        return ("Ключу Gemini запрещён Generative Language API" + who + ": "
+                "у ключа стоит ограничение по сервисам." + tail)
+    if code == 403:
+        return "Google отказал в доступе" + who + "." + (tail or " Ответ без пояснений.")
+    if code == 400:
+        # Не про ключ: скорее всего, в запросе поле, которого модель не знает.
+        return ("Gemini не принял запрос (HTTP 400)." + tail
+                + " Ключ тут, судя по ответу, ни при чём.")
     if code == 429:
         return "Упёрлись в лимит запросов Gemini. Попробуйте позже или реже."
     if code >= 500:
-        return f"Gemini временно недоступен (HTTP {code})."
-    return f"Gemini вернул HTTP {code}: {body[:200]}"
+        return f"Gemini временно недоступен (HTTP {code}).{tail}"
+    return f"Gemini вернул HTTP {code}: {(message or body)[:200]}"
+
+
+# Ответы, после которых этим ключом в ЭТОМ вызове больше не пользуемся.
+# Смысл: беда не в темпе и не в модели, а в самом ключе – повторять им
+# запросы значит тратить бюджет черновика впустую и в итоге показать
+# человеку ошибку от плохого ключа, хотя рядом лежит рабочий.
+def _key_is_dead(code: int, body: str) -> bool:
+    message, status, reason = _google_error(body)
+    if code == 401 or status == "UNAUTHENTICATED":
+        return True
+    if reason in ("API_KEY_INVALID", "SERVICE_DISABLED", "PERMISSION_DENIED",
+                  "API_KEY_HTTP_REFERRER_BLOCKED", "API_KEY_IP_ADDRESS_BLOCKED",
+                  "API_KEY_ANDROID_APP_BLOCKED", "API_KEY_IOS_APP_BLOCKED",
+                  "API_KEY_SERVICE_BLOCKED"):
+        return True
+    return "api key not valid" in message.lower()
+
+
+def check_keys() -> list[dict]:
+    """
+    Проверить каждый ключ отдельно – одним дешёвым запросом на ключ.
+
+    Отвечает на вопрос, на котором Click раньше молчал: «ключи заданы, а
+    черновиков нет – какой из них плохой?». Берём список моделей (GET,
+    без генерации): он требует ровно той же проверки прав, что и запрос
+    черновика, но ничего не тратит из квоты на токены.
+
+    Возвращает по записи на ключ: {'name', 'masked', 'ok', 'reason'}.
+    """
+    import requests
+
+    names = key_names()
+    out: list[dict] = []
+    for i, key in enumerate(api_keys()):
+        row = {"name": names[i] if i < len(names) else f"ключ №{i + 1}",
+               "masked": mask(key), "ok": False, "reason": ""}
+        # Спрашиваем Google ДАЖЕ про значение, которое на ключ не похоже.
+        # Приговор должен выносить он, а не наша догадка по началу строки:
+        # если Google завтра начнёт принимать ключи другого вида, проверка
+        # это покажет сама, а не будет уверенно врать.
+        try:
+            r = requests.get(f"{API}?pageSize=1",
+                             headers={"x-goog-api-key": key}, timeout=TIMEOUT)
+        except Exception as e:  # noqa: BLE001 – сеть
+            row["reason"] = f"Сеть не пустила запрос к Google: {e}"
+            out.append(row)
+            continue
+        if r.status_code == 200:
+            row["ok"] = True
+            row["reason"] = "работает"
+        else:
+            row["reason"] = _explain(r.status_code, r.text, key)
+        out.append(row)
+    return out
 
 
 def generate(prompt: str) -> str:
@@ -427,9 +616,20 @@ def generate(prompt: str) -> str:
     ввод, чем держать человека в ожидании минутами.
     """
     global _working_model
-    keys = api_keys()
-    if not keys:
+    all_keys = api_keys()
+    if not all_keys:
         raise LlmError("Ключ Gemini не задан – добавьте секрет gemini_api_key.")
+    names = key_names()
+
+    # Ключи, которые Google отверг ИМЕННО КАК КЛЮЧИ. Такой ключ выбывает на
+    # весь вызов: рядом может лежать рабочий, и тратить на плохой попытки –
+    # значит показать человеку чужую ошибку вместо черновика.
+    keys = list(all_keys)
+    rejected: dict[str, str] = {}
+
+    def name_of(key: str) -> str:
+        i = all_keys.index(key)
+        return names[i] if i < len(names) else f"ключ №{i + 1}"
 
     started = time.time()
     order = ([_working_model] + [m for m in MODELS if m != _working_model]
@@ -444,6 +644,8 @@ def generate(prompt: str) -> str:
         for model in order:
             if model in dead:
                 continue
+            if not keys:
+                break
             key, wait = _pick_key(keys, model)
             spent = time.time() - started
             if spent + wait > TOTAL_BUDGET_S:
@@ -462,7 +664,7 @@ def generate(prompt: str) -> str:
                     _working_model = model
                     _faster()
                     last_stats.update(model=model, seconds=round(time.time() - started, 1),
-                                      calls=calls, keys=len(keys), shared=_shared_quota,
+                                      calls=calls, keys=len(all_keys), shared=_shared_quota,
                                       pace=current_pace(), waited=round(wait, 1))
                     return text
                 last = ("Gemini не уложился в ответ и оборвал его на середине."
@@ -479,7 +681,18 @@ def generate(prompt: str) -> str:
                 _no_thinking.add(model)
                 continue
 
-            last = _explain(r.status_code, r.text)
+            # Ключ не годится сам по себе – выводим его из круга и идём
+            # дальше остальными. Раньше плохой ключ ходил по кругу до конца
+            # бюджета и в итоге его же ошибку человек и видел.
+            if _key_is_dead(r.status_code, r.text):
+                rejected[key] = _explain(r.status_code, r.text, key)
+                keys = [k for k in keys if k != key]
+                last = rejected[key]
+                if not keys:
+                    break
+                continue
+
+            last = _explain(r.status_code, r.text, key)
             if r.status_code == 429:
                 _note_limit(key, keys)
                 # Планку опускаем один раз за круг, а не на каждый отказ:
@@ -508,11 +721,25 @@ def generate(prompt: str) -> str:
             tail = " Подождите минуту и нажмите «Переписать» ещё раз."
         last = "Gemini придерживает запросы по лимиту." + tail
 
+    # Все ключи отвергнуты – называем каждый по имени и говорим, чем он плох.
+    # «Ключи заданы, а не работает» разбиралось перепиской ровно потому, что
+    # в ошибке не было ни имени ключа, ни слов самого Google.
+    if rejected and not keys:
+        lines = "; ".join(f"{name_of(k)} {mask(k)}: {why}" for k, why in rejected.items())
+        last = (f"Ни один ключ Gemini не принят Google. {lines}. "
+                "Проверить ключи по одному можно кнопкой «Проверить ключи» "
+                "в «⚙️ Настройках».")
+    elif rejected:
+        names_bad = ", ".join(f"{name_of(k)} {mask(k)}" for k in rejected)
+        last += f" Из круга выбыли непринятые ключи: {names_bad}."
+
+    all_bad = bool(rejected) and not keys
     _working_model = None
     last_stats.update(model=None, seconds=round(time.time() - started, 1),
-                      calls=calls, keys=len(keys), shared=_shared_quota,
-                      pace=current_pace(), error=last)
-    raise LlmError(last, is_limit=bool(limited_all or limited))
+                      calls=calls, keys=len(all_keys), shared=_shared_quota,
+                      pace=current_pace(), error=last, rejected=len(rejected))
+    raise LlmError(last, is_limit=bool(limited_all or limited) and not all_bad,
+                   bad_keys=all_bad)
 
 
 def model_in_use() -> str | None:

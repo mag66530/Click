@@ -1194,6 +1194,132 @@ def _select_closest(page, selector: str, want: str) -> str:
     return target
 
 
+def _letters(s: str) -> str:
+    """
+    Только буквы и цифры, в нижнем регистре.
+
+    Сверять набранное по ним надёжнее, чем посимвольно: в поле не попадают
+    ни звёздочки разметки, ни переносы строк (textContent склеивает абзацы
+    без них), а эмодзи ОК рисует картинками.
+    """
+    import re
+    return re.sub(r"\W", "", s or "", flags=re.U).lower()
+
+
+def _lines(s: str) -> list[str]:
+    """
+    Непустые строки текста, по буквам каждой – «форма» поста.
+
+    По ней видно то, чего не видно по буквам целиком: разъехавшиеся строки.
+    Редактор ОК на вставленной разметке <b> разносит жирные куски по своим
+    абзацам, и пост из «Диаметр: 0,25 мм;» превращается в «Диаметр» и
+    «: 0,25 мм;Длина волокна:» – буквы те же, читать невозможно.
+    """
+    return [_letters(ln) for ln in (s or "").split("\n") if _letters(ln)]
+
+
+def _bold_html(chunks: list[tuple[str, bool]]) -> str:
+    """Куски (текст, жирный) → HTML для вставки в поле: <b> и переводы строк."""
+    out = []
+    for part, bold in chunks:
+        esc = (part.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+               .replace("\n", "<br>"))
+        out.append(f"<b>{esc}</b>" if bold else esc)
+    return "".join(out)
+
+
+def _paste_bold_html(page, text_sel: str, chunks: list[tuple[str, bool]]) -> None:
+    """Способ первый: отдать редактору готовую разметку одной вставкой."""
+    page.eval_on_selector(
+        text_sel,
+        """(el, html) => {
+             el.focus();
+             const sel = window.getSelection();
+             const r = document.createRange();
+             r.selectNodeContents(el);
+             sel.removeAllRanges();
+             sel.addRange(r);
+             document.execCommand('insertHTML', false, html);
+             el.dispatchEvent(new Event('input', {bubbles: true}));
+             el.dispatchEvent(new Event('change', {bubbles: true}));
+           }""",
+        _bold_html(chunks))
+
+
+def _type_bold_keys(page, chunks: list[tuple[str, bool]]) -> None:
+    """Способ второй: набрать кусками, включая жирный Ctrl+B, как человек."""
+    for part, bold in chunks:
+        if bold:
+            page.keyboard.press("Control+B")
+        page.keyboard.type(part, delay=6)
+        if bold:
+            page.keyboard.press("Control+B")
+
+
+def _type_post_text(page, text_sel: str, text: str,
+                    log: Callable[[str], None] | None = None) -> str:
+    """
+    Ввести текст темы, сохранив жирный из реестра.
+
+    Заказчица (14.08.2026): «в ОК контакты норм, но жирного шрифта нет, а
+    в реестре он есть». Редактор темы ОК – обычное поле с форматированием.
+    Способа два, от точного к грубому: отдать редактору готовую разметку
+    <b> одной вставкой, а если не примет – набрать кусками, включая жирный
+    Ctrl+B, как это делает человек.
+
+    Возвращает 'bold', если удалось с жирным, и 'plain', если жирного в
+    тексте не было или он не дался. Проверка простая и жёсткая: буквы в поле
+    должны совпасть с буквами текста. Не совпали – чистим поле и набираем
+    обычным способом, как раньше. Хуже прежнего не станет никогда.
+    """
+    import post_text
+
+    log = log or (lambda m: None)
+    chunks = post_text.plain_chunks(text)
+    plain = "".join(t for t, _ in chunks)
+    letters = _letters          # общая сверка по буквам – одна на модуль
+
+    def in_field() -> str:
+        try:
+            return page.eval_on_selector(text_sel, "el => el.innerText || el.textContent || ''") or ""
+        except Exception:  # noqa: BLE001
+            return ""
+
+    if any(bold for _, bold in chunks):
+        n_bold = sum(1 for _, b in chunks if b)
+        want_lines = _lines(plain)
+        # Два способа, от человеческого к грубому. Первый – набрать текст
+        # кусками, включая жирный горячей клавишей, как это делает человек.
+        # Второй – отдать редактору готовую разметку <b> одной вставкой.
+        for way, run in (("клавишами", lambda: _type_bold_keys(page, chunks)),
+                         ("разметкой", lambda: _paste_bold_html(page, text_sel, chunks))):
+            try:
+                run()
+                page.wait_for_timeout(700)
+                got = in_field()
+                # Сверяем И буквы, И РАЗБИВКУ ПО СТРОКАМ. Одних букв мало:
+                # 14.08.2026 вставка разметки дала в ОК жирный, но развалила
+                # текст – «Диаметр» уехал на свою строку, а перенос после
+                # «0,25 мм;» пропал. Буквы при этом совпадали до единой, и
+                # проверка пропустила поломанный пост в отложку. Текст важнее
+                # жирного: не сошлись строки – способ не годится.
+                if letters(got) == letters(plain) and _lines(got) == want_lines:
+                    log(f"  жирный из реестра сохранён ({way}, кусков {n_bold})")
+                    return "bold"
+                why = ("строки разъехались"
+                       if letters(got) == letters(plain) else
+                       f"легло {len(letters(got))} знаков вместо {len(letters(plain))}")
+                log(f"  {way}: {why} – так не годится, пробую дальше")
+            except Exception as e:  # noqa: BLE001 – ввод не должен ронять прогон
+                log(f"  {way}: не вышло ({e}) – пробую дальше")
+            _clear_editor(page, text_sel)
+            page.click(text_sel)
+        log("  жирный не дался – набираю обычным текстом: целый текст важнее")
+
+    page.type(text_sel, plain, delay=8)
+    return "plain"
+
+
 def _clear_editor(page, text_sel: str) -> int:
     """
     Опустошить поле темы. Возвращает, сколько знаков было убрано.
@@ -1634,14 +1760,28 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
 
             log(f"Ввожу текст ({len(text)} знаков)")
             page.click(text_sel)
-            page.type(text_sel, text, delay=8)
+            _type_post_text(page, text_sel, text, log)
             page.wait_for_timeout(1_200)
+            # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
+            yb.drop_link_card(page, yb.text_domains(text), log)
             typed = (page.eval_on_selector(text_sel, "el => el.textContent || ''") or "")
             if text.strip() and not typed.strip():
                 return {"ok": False, "error": "Текст не попал в поле поста ОК",
                         "shot": _debug_shot(project_id, page, "no-text")}
             # Лишнее спереди – верный признак, что черновик всё-таки остался.
-            if text.strip() and not typed.strip().startswith(text.strip()[:20]):
+            #
+            # Сверяем с тем, что РЕАЛЬНО набирается, и по одним буквам. Оба
+            # уточнения – из живого отказа 14.08.2026: «В поле поста осталось
+            # лишнее от прошлого черновика: «СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ НА
+            # АРМИРУЮЩУЮ МИКРОФИБРУ…»». В поле лежал ровно наш текст – а
+            # сравнивали его с РАЗМЕТКОЙ, в которой заголовок стоит жирным
+            # (`**…**`): звёздочки в поле, разумеется, не появляются, и
+            # проверка не сходилась никогда, стоило посту начинаться с
+            # жирной строки. Заодно: textContent склеивает строки без
+            # переносов, поэтому короткий первый абзац тоже ломал сверку.
+            import post_text
+            plain = "".join(part for part, _ in post_text.plain_chunks(text))
+            if _letters(plain) and not _letters(typed).startswith(_letters(plain)[:20]):
                 return {"ok": False,
                         "error": "В поле поста осталось лишнее от прошлого черновика: "
                                  f"«{typed.strip()[:60]}…». Откройте форму в ОК и "
@@ -1663,6 +1803,11 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             # принципе – округляем ВВЕРХ, чтобы пост не вышел раньше, чем
             # просили. Для реальных постов (11:00, 09:30) это ничего не меняет.
             when = _round_to_five(when)
+            # Ещё один заход на карточку сайта – последний перед сохранением.
+            # Она приходит с сервера с задержкой и запросто появляется уже
+            # после ввода текста, пока Click прикрепляет фото: 14.08.2026 так
+            # и вышло – отложка в ОК встала вместе с чужой карточкой.
+            yb.drop_link_card(page, yb.text_domains(text), log, tries=1)
             log(f"Ставлю время публикации {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
 
             if not _turn_on_schedule(page, log):

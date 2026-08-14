@@ -1287,9 +1287,19 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             if text.strip() and not (typed or "").strip():
                 return {"ok": False, "error": "Текст не попал в поле поста – вёрстка ВК изменилась?"}
 
+            # ВК цепляет к посту карточку сайта, увидев адрес в тексте, и она
+            # оттесняет нашу картинку. Человек в этом месте жмёт крестик на
+            # карточке – жмём и мы, но только если это точно её крестик.
+            page.wait_for_timeout(1_200)
+            yb.drop_link_card(page, yb.text_domains(text), log)
+
             # «Далее» – к экрану, где живёт «Запланировать».
             page.click(f'{dlg} >> text="Далее"', timeout=15_000)
             page.wait_for_timeout(1000)
+
+            # Последний заход на карточку сайта: ВК подтягивает её с задержкой
+            # и мог успеть, пока Click жал «Далее».
+            yb.drop_link_card(page, yb.text_domains(text), log, tries=1)
 
             log(f"Ставлю таймер на {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
             _set_schedule(page, when, log)

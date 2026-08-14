@@ -112,10 +112,12 @@ def test_posts_to_form() -> None:
     if not to_form:
         return
     nets = sorted(t["network"] for t in to_form[0]["targets"])
-    check("в будущем формируем vk, ok, tg-client и дзен",
-          nets == ["ok", "tg-client", "vk", "zen"], str(nets))
+    check("в будущем формируем vk, ok и дзен", nets == ["ok", "vk", "zen"], str(nets))
+    # Телеграм Click пока не формирует вовсе (13.08.2026): отложки у бота
+    # нет, а публиковать в час выхода он больше не должен.
+    check("телеграм не формируем", "tg-client" not in nets, str(nets))
 
-    # Статья – материал Дзена, и только его. ВК с Телеграмом лонгрид не берут:
+    # Статья – материал Дзена, и только его. ВК с МАКСом лонгрид не берут:
     # у них в той же таблице свой короткий пост.
     article = [p for p in to_form if p["date"] == "2099-02-11"]
     check("статья попала в работу", len(article) == 1, str(len(article)))
@@ -225,13 +227,28 @@ def test_post_text() -> None:
     # ВК/ОК ссылку в слова не зашивают. Живой случай (11.08.2026): в реестре
     # адрес уже стоял, Click добавлял свой автоссылкой, и в ВК выходило
     # «на нашем сайте (inmetprom.ru) (inmetprom.ru/)» – два адреса подряд.
+    # Теперь текст реестра остаётся как есть, Click просто ничего не дописывает.
     real = pt.autolink(
         "🔹 Полный сортамент нержавеющего металлопроката – на нашем сайте (inmetprom.ru/).",
         "inmetprom.ru")
-    check("ВК: адрес один раз, без скобок",
+    check("ВК: адрес из реестра не трогаем и свой не дописываем",
           pt.render(real, "plain")
-          == "🔹 Полный сортамент нержавеющего металлопроката – на нашем сайте inmetprom.ru.",
+          == "🔹 Полный сортамент нержавеющего металлопроката – на нашем сайте (inmetprom.ru/).",
           pt.render(real, "plain"))
+
+    # Блок контактов внизу поста. Он и есть тот случай, когда «повтор» адреса
+    # – не повтор: почта, сайт и телефон, каждый на своей строке.
+    contacts = pt.autolink(
+        "Оформить заказ можно на нашем сайте:\n\n"
+        "🌐 stalmetural.ru\n✉️ info@stalmetural.ru\n📞 +7 (903) 086-31-16",
+        "stalmetural.ru")
+    plain_contacts = pt.render(contacts, "plain")
+    check("контакты остаются построчно",
+          plain_contacts.endswith("🌐 stalmetural.ru\n✉️ info@stalmetural.ru\n"
+                                  "📞 +7 (903) 086-31-16"), plain_contacts)
+    check("почта не теряет домен", "info@stalmetural.ru" in plain_contacts, plain_contacts)
+    check("адрес не дописан вторым разом",
+          plain_contacts.count("stalmetural.ru") == 2, plain_contacts)
     check("ВК: адреса нет в реестре – ставим свой",
           pt.render(pt.autolink("Заказ – на нашем сайте.", "a.ru"), "plain")
           == "Заказ – на нашем сайте a.ru.")
@@ -623,6 +640,26 @@ def test_scheduler() -> None:
         sent = []
         senders = {"tg": lambda tk: (sent.append(tk["id"]) or {"ok": True, "link": "https://t.me/x/1"}),
                    "max": lambda tk: {"ok": True}}
+
+        # Публикация в час выхода выключена: задание не уходит, а отменяется, и
+        # пост в памяти остаётся несформированным. Это главное правило после
+        # 13.08.2026 – Click не должен публиковать сам и не должен врать.
+        n_off = scheduler.tick(now=when + timedelta(seconds=10), senders=senders)
+        post0 = {"brand": "SMU", "date": "2026-08-13", "when": when.isoformat(), "text": "привет"}
+        check("в час выхода ничего не отправлено", sent == [], str(sent))
+        check("задание отменено, а не выполнено",
+              n_off == 1 and scheduler.load_tasks("SMU")[0]["state"] == "cancelled",
+              scheduler.load_tasks("SMU")[0]["state"])
+        check("память не врёт про «вышло»",
+              cps.status_of(cps.load("SMU"), post0, "tg-client") == cps.WAITING,
+              cps.status_of(cps.load("SMU"), post0, "tg-client"))
+
+        # Дальше – проверка самой машинки отправки: она никуда не делась и
+        # заработает, как только площадку доделают и уберут из PUBLISH_OFF.
+        was_off = scheduler.PUBLISH_OFF
+        scheduler.PUBLISH_OFF = ()
+        scheduler._save_tasks("SMU", [])
+        scheduler.queue_task("SMU", task)
         n = scheduler.tick(now=when + timedelta(seconds=10), senders=senders)
         check("тик отправил задание", n == 1 and sent == [task["id"]])
         check("задание выполнено", scheduler.load_tasks("SMU")[0]["state"] == "done")
@@ -688,6 +725,9 @@ def test_scheduler() -> None:
         check("выключатель останавливает тик",
               scheduler.tick(now=when + timedelta(days=1), senders=senders) == 0)
         scheduler.set_config(enabled=True)
+        scheduler.PUBLISH_OFF = was_off
+        check("по умолчанию ТГ и бот МАКС не публикуются",
+              set(scheduler.PUBLISH_OFF) == {"tg", "max"}, str(scheduler.PUBLISH_OFF))
     finally:
         if was is None:
             os.environ.pop("CLICK_DATA_DIR", None)
@@ -736,7 +776,7 @@ def test_plan_rows() -> None:
           plan.rows([p1, p2], {}, today, date(2025, 8, 20))["rows"] and
           len(plan.rows([p1, p2], {}, today, date(2025, 8, 20))["rows"]) == 1)
 
-    # Колонки — из самого реестра: у одного бренда Дзен, у другого нет ОК.
+    # Колонки – из самого реестра: у одного бренда Дзен, у другого нет ОК.
     mixed = plan.rows([post("2025-08-19", nets=("vk", "ok")),
                        post("2025-08-20", nets=("tg-client", "zen"))], {}, today)
     check("колонки собраны по реестру",
@@ -759,15 +799,16 @@ def test_plan_rows() -> None:
     only_link, empty_tail = plan._split_text("https://docs.google.com/document/d/1Q97")
     check("ссылка не рвётся", only_link.startswith("https://") and empty_tail == "")
 
-    # «Что сделать» — тихо там, где делать нечего.
+    # «Что сделать» – тихо там, где делать нечего.
     ready = plan.rows([post("2025-08-19")], {cps.post_key(post("2025-08-19")): {
         "targets": {"vk": {"state": cps.SCHEDULED}, "tg-client": {"state": cps.SCHEDULED}}}},
         today)["rows"][0]
-    check("готовому — «всё готово»", ready["todo"]["text"] == "всё готово", ready["todo"]["text"])
+    check("готовому – про ручные площадки", ready["todo"]["text"] == "ТГ клиенты – вручную",
+          ready["todo"]["text"])
     check("и без крика", ready["todo"]["kind"] == "quiet")
 
     empty = plan.rows([post("2025-08-19", text="", row=47)], {}, today)["rows"][0]
-    check("нет текста — жёлтая строка", empty["state"] == "warn")
+    check("нет текста – жёлтая строка", empty["state"] == "warn")
     check("сказано, какая строка листа", "47" in empty["todo"]["text"], empty["todo"]["text"])
     check("и ведёт в таблицу", empty["todo"].get("sheet") is True)
 
@@ -779,23 +820,28 @@ def test_plan_rows() -> None:
           broken["todo"]["text"].startswith("ВК:") and "сессия" in broken["todo"]["text"],
           broken["todo"]["text"])
 
-    # Знаки площадок: у ВК и ОК отложку держит сама сеть, у ТГ и МАКС — Click.
+    # Знаки площадок: у ВК и ОК отложку держит сама сеть, у ТГ и МАКС – Click.
     p = post("2025-08-19", nets=("vk", "tg-client"))
     state = {cps.post_key(p): {"targets": {"vk": {"state": cps.SCHEDULED},
                                            "tg-client": {"state": cps.SCHEDULED}}}}
     marks = {n["code"]: n for n in plan.post_view(p, state)["nets"]}
     check("ВК: отложка стоит в соцсети", marks["vk"]["cls"] == "set" and marks["vk"]["mark"] == "✓")
-    check("ТГ: отправит Click", marks["tg-client"]["cls"] == "wait" and marks["tg-client"]["mark"] == "→")
-    check("у знака есть подпись словами", "Click" in marks["tg-client"]["note"])
+    check("ТГ: помечен ручным, а не «отправит Click»",
+          marks["tg-client"].get("manual") and marks["tg-client"]["mark"] == "✎",
+          str(marks["tg-client"]))
+    check("у знака есть подпись словами", "вручную" in marks["tg-client"]["note"])
+    check("ручная площадка не делает пост несформированным",
+          plan.post_view(p, state)["state"] == "set",
+          plan.post_view(p, state)["state"])
 
     done = plan.post_view(post("2025-08-19", link="https://vk.com/wall-1_2"), {})
     check("ссылка в реестре = вышло", done["state"] == "live")
     video = plan.post_view({**post("2025-08-19"), "format": "Видео"}, {})
-    check("видео — вручную, не тревога", video["state"] == "manual")
-    # А статья с Дзеном — обычная работа Click, и «вручную» про неё писать
+    check("видео – вручную, не тревога", video["state"] == "manual")
+    # А статья с Дзеном – обычная работа Click, и «вручную» про неё писать
     # больше нельзя: раньше строка так и висела, хотя формировать её умеем.
     art = plan.post_view({**post("2025-08-19", nets=("zen",)), "format": "Статья"}, {})
-    check("статья в Дзен — не «вручную»", art["state"] != "manual", art["state"])
+    check("статья в Дзен – не «вручную»", art["state"] != "manual", art["state"])
     check("Дзен держит отложку сам",
           plan.net_view({**post("2025-08-19", nets=("zen",)), "format": "Статья"},
                         {"network": "zen"},
@@ -806,18 +852,46 @@ def test_plan_rows() -> None:
     nearest = plan.next_out([p], state, "2025-08-18T10:00:00+05:00")
     check("ближайший пост найден", nearest is not None and nearest["when"].startswith("2025-08-19"))
     check("названы ждущие площадки",
-          nearest is not None and sorted(n["code"] for n in nearest["pending"]) == ["tg-client", "vk"])
+          nearest is not None and sorted(n["code"] for n in nearest["pending"]) == ["vk"],
+          str(sorted(n["code"] for n in (nearest or {}).get("pending", []))))
     check("вышедшее в ближайшие не попадает",
           plan.next_out([post("2025-08-19", link="https://vk.com/wall-1_2")], {},
                         "2025-08-18T10:00:00+05:00") is None)
 
     # Разметка таблицы: колонки, значки и «что сделать» доезжают до HTML.
     import ui_theme as T
-    markup = T.crosspost_table(mixed, sheet_url="https://sheet", group_title="Впереди — 2 поста")
+    markup = T.crosspost_table(mixed, sheet_url="https://sheet")
     check("шапка с площадками", ">Дзен</th>" in markup and 'title="Дзен"' in markup)
-    check("группа подписана", "Впереди — 2 поста" in markup)
-    check("значок с подсказкой", 'title="ВК —' in markup)
+    check("строки-заголовка над планом нет", "cp-group" not in markup)
+    check("значок с подсказкой", 'title="ВК –' in markup)
     check("колонки заданы ширинами", "<colgroup>" in markup)
+
+    # Ровность таблицы – не украшательство: слева к ней прижата полоса
+    # галочек, и она выставлена по этим же числам (CP_ROW_H, CP_HEAD_H).
+    css = T.crosspost_css()
+    check("дата стоит по центру своей колонки",
+          '<td class="c cp-when">' in markup and "text-align:center" in css)
+    check("плашка типа не шире колонки",
+          ".cp-kind{" in css and "max-width:100%" in css and "text-overflow:ellipsis" in css)
+    check("у плашки есть подсказка с полным типом", '<span class="cp-kind" title=' in markup)
+    check("шапки площадок своим кеглем", 'th class="c n"' in markup and "th.n{" in css)
+    check("высота строки задана числом", f"height:{T.CP_ROW_H}px" in css)
+    check("шапка таблицы тоже", f"height:{T.CP_HEAD_H + 1}px" in css)
+    check("галочка стоит на первой строке, а не по центру клетки",
+          "align-items:flex-start" in css and "padding-top:10px" in css)
+    check("у таблицы нет своего нижнего отступа",
+          "table-layout:fixed;margin:0" in css)
+    check("текст поста ровно две строки", "-webkit-line-clamp:2" in css and "height:40px" in css)
+    check("«что сделать» не растягивает строку", ".cp-todo{" in css and "height:40px" in css)
+    check("полоса галочек знает про свои клетки",
+          ".cp-tick-off" in css and ".cp-ticks-head" in css)
+
+    picked_markup = T.crosspost_table(mixed,
+                                      picked={mixed["rows"][0]["key"]})
+    check("отмеченная строка подсвечена", "cp-pick" in picked_markup)
+    check("неотмеченная – нет",
+          picked_markup.count("cp-pick") == 1 and "cp-pick" not in markup)
+
     check("склонение постов",
           [plan.plural(n, "пост", "поста", "постов") for n in (1, 4, 11, 22)]
           == ["1 пост", "4 поста", "11 постов", "22 поста"])
@@ -1231,6 +1305,75 @@ def test_plan_horizon_and_past() -> None:
     check("до выхода пара минут – тоже поздно", skipped(now + timedelta(minutes=3)))
     check("через полчаса – формируем", not skipped(now + timedelta(minutes=30)))
     check("завтрашний – формируем", not skipped(now + timedelta(days=1)))
+
+
+def test_form_selection() -> None:
+    """
+    Выбор постов для формирования: «поставить один, а не весь план».
+
+    Жалоба заказчицы (13.08.2026): «хочу просто один пост поставить,
+    посмотреть, а не могу – тут либо все, либо ничего». Кнопка «Поставить
+    все» осталась, а слева в плане появились галочки: отмеченное едет,
+    остальное ждёт.
+    """
+    print("\nФормирование: выбор постов")
+    import inspect
+
+    import crosspost_state as cps
+    import streamlit_app as app
+
+    def post(day, kind, text):
+        return {"brand": "smu", "date": f"2026-08-{day}", "time": "11:00",
+                "when": f"2026-08-{day}T11:00:00+05:00", "post_type": kind,
+                "text": text, "images": [], "targets": []}
+
+    first = post("13", "Поступление", "НОВАЯ ПОСТАВКА сетка рабица на склад")
+    second = post("17", "Спецпредложение", "СПЕЦПРЕДЛОЖЕНИЕ на микрофибру")
+    todo = {"vk": [first, second], "ok": [first], "max": [],
+            "msg_by_net": {"tg-client": [first], "tg-staff": [first, second]},
+            "msg": [first, first, second]}
+
+    check("счётчик кнопки – по площадкам",
+          app._crosspost_form_parts(todo) == ["ВК: 2", "ОК: 1", "ТГ: 3"],
+          str(app._crosspost_form_parts(todo)))
+    check("пустому плану – пустой счётчик",
+          app._crosspost_form_parts({"vk": [], "ok": [], "max": [], "msg": []}) == [])
+
+    choices = app._crosspost_form_choices(todo)
+    check("каждый пост в списке один раз", len(choices) == 2, str(len(choices)))
+    check("порядок – как в плане, по времени",
+          [c["post"]["date"] for c in choices] == ["2026-08-13", "2026-08-17"])
+    check("у поста собраны все его площадки",
+          choices[0]["nets"] == ["ВК", "ОК", "ТГ клиенты", "ТГ сотрудники"],
+          str(choices[0]["nets"]))
+    check("площадка не повторяется", len(set(choices[1]["nets"])) == len(choices[1]["nets"]))
+
+    # Ключ поста – он же ключ галочки: по нему отмеченное сходится с постом
+    # даже после перечитывания реестра (строки в таблице двигаются).
+    keys = {cps.post_key(c["post"]) for c in choices}
+    check("ключи постов разные", len(keys) == 2, str(keys))
+
+    src = inspect.getsource(app._crosspost_form_block)
+    check("кнопка «поставить все» на месте", "cp-form-all-" in src)
+    check("рядом кнопка выбранных", "cp-form-picked-" in src)
+    check("подпись кнопки – словами заказчицы",
+          "Поставить выбранные посты на отложку" in src)
+    check("без выбора кнопка выбранных не жмётся", "disabled=not picked" in src)
+    check("в формирование уходят именно выбранные посты", "run(picked, picked_todo)" in src)
+    check("выбранное считается тем же счётчиком",
+          "_crosspost_form_todo(project_id, config, picked, state)" in src)
+
+    table_src = inspect.getsource(app._crosspost_plan_table)
+    check("галочка у каждой строки плана", "st.checkbox(" in table_src)
+    check("ключ галочки – ключ поста", 'f\'cp-tick-{project_id}-{v["key"]}\'' in table_src)
+    check("галочка только там, где есть что формировать",
+          'view["key"] not in formable' in table_src)
+    check("на одном посту галочек нет вовсе", "len(formable) < 2" in table_src)
+    check("отмеченное подсвечивается в таблице", "picked=picked" in table_src)
+
+    tab_src = inspect.getsource(app.tab_crosspost)
+    check("что формировать, считается один раз на вкладку",
+          "formable=formable" in tab_src and "picked_keys=picked_keys" in tab_src)
 
 
 def test_vk_confirm_schedule() -> None:
@@ -1665,6 +1808,596 @@ def test_social_defaults() -> None:
     check("пароль наружу не уезжает", "password" not in app._KEPT)
 
 
+def test_link_card_and_report() -> None:
+    """
+    Карточка сайта и отчёт – две правки 14.08 по замечаниям заказчицы.
+
+    Карточка. Увидев адрес в тексте, ВК цепляет к посту сниппет сайта и
+    оттесняет нашу картинку; человек жмёт крестик на карточке. Click теперь
+    тоже – но только на ЕЁ крестик: тем же значком нарисован крестик самого
+    окна создания поста, и промах стоил бы всего поста.
+
+    Отчёт. Показывал все посты реестра со ссылками – «вышло 439»: пять лет
+    чужой работы, среди которой не найти свои две отложки.
+    """
+    print("\nКарточка сайта и отчёт")
+    import inspect
+
+    import streamlit_app as app
+    import yb_playwright as yb
+
+    doms = yb.text_domains("Заказ на нашем сайте stalmetural.ru, почта info@stalmetural.ru, "
+                           "группа https://ok.ru/group/1")
+    check("домены из текста собраны", doms == ["stalmetural.ru", "ok.ru"], str(doms))
+    check("повторы не дублируются", len(doms) == len(set(doms)))
+    check("без адресов – пусто", yb.text_domains("просто текст") == [])
+
+    src = inspect.getsource(yb.drop_link_card)
+    check("крестик ищется по значку со страницы", "M9.414 8l3.294" in yb._CLOSE_ICON_D)
+    check("окно создания поста защищено полем ввода",
+          "[contenteditable], textarea" in src)
+    check("без домена не жмём ничего", "if not doms" in src)
+    check("карточка есть, а крестика нет – говорим словами",
+          "закройте карточку вручную" in src)
+    check("крестик ищется и по подписи кнопки (вёрстка ОК)", "'удал', 'убра'" in src)
+    check("карточку ждём несколько подходов", "for attempt in range(max(1, tries))" in src)
+
+    # Жирный для ОК: сборка разметки для вставки.
+    import ok_browser
+    html = ok_browser._bold_html([("Диаметр", True), (": 0,25\nмм", False)])
+    check("жирный кусок обёрнут <b>", html.startswith("<b>Диаметр</b>"), html)
+    check("перевод строки стал <br>", "<br>" in html, html)
+    check("угловые скобки экранированы",
+          "&lt;" in ok_browser._bold_html([("<b>чужое", False)]))
+    ok_src = inspect.getsource(ok_browser._type_post_text)
+    check("два способа и откат на обычный текст",
+          "_paste_bold_html" in ok_src and "_type_bold_keys" in ok_src
+          and "целый текст важнее" in ok_src)
+    # Главное правило после 14.08.2026: жирный не стоит поломанного текста.
+    check("сверяются и буквы, и разбивка по строкам",
+          "_lines(got) == want_lines" in ok_src)
+    check("человеческий способ идёт первым", ok_src.index("клавишами") < ok_src.index("разметкой"))
+    check("разъехавшиеся строки названы словами", "строки разъехались" in ok_src)
+    ok_lines = ok_browser._lines("Диаметр\n: 0,25 мм;Длина волокна:")
+    check("строки считаются по буквам", ok_lines == ["диаметр", "025ммдлинаволокна"], str(ok_lines))
+    check("поломанная разбивка не равна целой",
+          ok_browser._lines("Диаметр: 0,25 мм;") != ok_lines)
+
+    # Отчёт: только работа Click.
+    rep = inspect.getsource(app._crosspost_report_block)
+    check("нет записи Click – нет строки в отчёте", "if not saved:" in rep)
+    check("заголовок отчёта про работу Click", "Отчёт: что сделал Click" in rep)
+
+
+def test_ok_bold_and_probe() -> None:
+    """
+    Две правки 14.08: жирный в ОК и починенная сверка текста в МАКС.
+
+    Жирный. Заказчица: «в ОК контакты норм, но жирного нет, а в реестре
+    есть». Редактор темы ОК жирный умеет – набираем текст кусками с Ctrl+B.
+
+    Сверка МАКС. Отложка 17.08 сорвалась на ровном месте: «в поле не видно
+    конец текста», хотя текст был введён целиком и в канал ничего не ушло.
+    Отпечаток поля обрезался до 32 знаков – конец в нём не находился НИКОГДА.
+    """
+    print("\nОК: жирный, МАКС: сверка текста")
+    import inspect
+
+    import max_browser as mb
+    import ok_browser
+    import post_text as pt
+
+    # ── ОК: куски с жирностью
+    markup = pt.autolink("**СПЕЦПРЕДЛОЖЕНИЕ**\n**Диаметр**: 0,25 мм;\n"
+                         "Заказ на нашем сайте:\n🌐 a.ru", "a.ru")
+    chunks = pt.plain_chunks(markup)
+    check("жирные куски выделены",
+          [t for t, b in chunks if b] == ["СПЕЦПРЕДЛОЖЕНИЕ", "Диаметр"], str(chunks))
+    check("склейка кусков = обычный текст",
+          "".join(t for t, _ in chunks) == pt.to_plain(markup))
+    check("маркеров ** в кусках нет", "**" not in "".join(t for t, _ in chunks))
+    check("текста без жирного это не касается",
+          [b for _, b in pt.plain_chunks("просто текст")] == [False])
+
+    src = (inspect.getsource(ok_browser._type_post_text)
+           + inspect.getsource(ok_browser._type_bold_keys)
+           + inspect.getsource(ok_browser._paste_bold_html))
+    check("жирный включается Ctrl+B", 'press("Control+B")' in src)
+    check("и вставкой готовой разметки", "insertHTML" in src)
+    check("есть откат на обычный текст", "_clear_editor" in src and "plain" in src)
+    check("сверка по буквам поля", "letters(got) == letters(plain)" in src)
+    check("ОК получает разметку, а не плоский текст",
+          'network == "ok"' in inspect.getsource(
+              __import__("crosspost_form")._form_browser_all))
+
+    # ── МАКС: отпечаток поля больше не обрезается
+    text = "НАЧАЛО ТЕКСТА ПОСТА про микрофибру\n\n#Стальметурал #СМУ #Металлопрокат"
+    got = mb._letters(text)
+    first, last = text.split("\n")[0], text.split("\n")[-1]
+    check("начало находится в поле", mb._probe(first) in got)
+    check("конец тоже находится (вот это и было сломано)", mb._probe(last) in got)
+    check("а подмена ловится: в поле осталась одна последняя строка",
+          mb._probe(first) not in mb._letters(last))
+    check("отпечаток строки по-прежнему короткий", len(mb._probe("а" * 100)) == 32)
+
+
+def test_ok_bold_first_line() -> None:
+    """
+    Пост с ЖИРНЫМ заголовком не должен считаться чужим черновиком.
+
+    Живой отказ 14.08.2026: «ОК: В поле поста осталось лишнее от прошлого
+    черновика: «СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ НА АРМИРУЮЩУЮ МИКРОФИБРУ…»». В поле
+    лежал ровно наш текст – а сверяли его с РАЗМЕТКОЙ, где заголовок стоит
+    жирным (`**…**`). Звёздочки в поле, разумеется, не появляются: ОК вместо
+    них включает жирный. Проверка не сходилась никогда, стоило посту
+    начинаться с жирной строки, – а начинаются так все спецпредложения.
+
+    Второй край того же: textContent склеивает абзацы без переносов, поэтому
+    короткая первая строка ломала сверку так же надёжно.
+    """
+    print("\nОК: жирный заголовок – это не чужой черновик")
+    import ok_browser as ok
+    import post_text as pt
+
+    markup = ("**СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ НА АРМИРУЮЩУЮ МИКРОФИБРУ**\n\n"
+              "⚡ СТОИМОСТЬ – 1 400 ₽/кг ⚡\n\nТехнические характеристики:")
+    plain = "".join(part for part, _ in pt.plain_chunks(markup))
+    # Что реально оказывается в поле: без звёздочек и без переносов строк.
+    in_field = plain.replace("\n", "")
+
+    check("прежняя сверка – с разметкой – не сходится",
+          not in_field.strip().startswith(markup.strip()[:20]),
+          f"{markup[:20]!r} vs {in_field[:20]!r}")
+    check("новая сверка – по буквам набранного – сходится",
+          ok._letters(in_field).startswith(ok._letters(plain)[:20]),  # noqa: SLF001
+          f"{ok._letters(in_field)[:30]!r}")  # noqa: SLF001
+
+    # А настоящий чужой черновик по-прежнему ловится.
+    left = "Тест" + in_field
+    check("остаток чужого черновика впереди – всё ещё отказ",
+          not ok._letters(left).startswith(ok._letters(plain)[:20]),  # noqa: SLF001
+          left[:40])
+
+    import inspect
+    src = inspect.getsource(ok.schedule_postponed_post)
+    check("сверяем с тем, что набирается, а не с разметкой",
+          "plain_chunks(text)" in src, "нет разбора разметки перед сверкой")
+    check("и по буквам", "_letters(typed)" in src)
+
+
+def test_max_photo_proof() -> None:
+    """
+    Отложка МАКС без картинки – это не успех.
+
+    14.08.2026 МАКС поставил пост на 17.08 без фото, а Click отчитался
+    успехом: после передачи файла он ждал три с половиной секунды и шёл
+    дальше, ни разу не проверив, появилась ли картинка в форме. Пост без
+    картинки – не тот пост, который просили.
+    """
+    print("\nМАКС: фото должно быть видно в форме")
+    import max_browser as mb
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    PIX = ("data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==")
+    page_html = f"""
+    <html><body style="margin:0">
+      <img id="avatar" src="https://example.com/ava.png" width="40" height="40">
+      <div id="composer"></div>
+      <script>
+        window.attach = () => document.getElementById('composer').innerHTML =
+          '<img id="thumb" width="80" height="80" src="{PIX}">';
+      </script>
+    </body></html>
+    """
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 800, "height": 600}).new_page()
+            page.set_content(page_html)
+
+            check("аватарки и значки с сервера за прикреплённое фото не считаем",
+                  mb._thumbs(page) == 0, str(mb._thumbs(page)))  # noqa: SLF001
+
+            was = mb._thumbs(page)  # noqa: SLF001
+            page.evaluate("() => window.attach()")
+            check("а картинка из памяти браузера – считается",
+                  mb._thumbs(page) - was == 1, str(mb._thumbs(page)))  # noqa: SLF001
+
+            # Ждать миниатюру, которой не будет, бесконечно нельзя.
+            page.set_content(page_html)
+            was_wait = mb.THUMB_WAIT_S
+            mb.THUMB_WAIT_S = 2
+            try:
+                check("миниатюра не появилась – так и говорим",
+                      not mb._wait_thumbs(page, mb._thumbs(page), 1))  # noqa: SLF001
+                page.evaluate("() => setTimeout(window.attach, 700)")
+                check("а появившуюся с задержкой – дожидаемся",
+                      mb._wait_thumbs(page, 0, 1))  # noqa: SLF001
+            finally:
+                mb.THUMB_WAIT_S = was_wait
+
+            import inspect
+            src = inspect.getsource(mb.schedule_postponed_post)
+            check("без миниатюры отложку не ставим", "_wait_thumbs(" in src)
+            check("и человеку сказано, почему", "не тот пост" in src)
+        finally:
+            browser.close()
+
+
+def test_form_log_is_fresh() -> None:
+    """
+    Лог формирования пишется по ходу, а не одной строчкой в конце.
+
+    Заказчица (14.08.2026): «лог вообще старый висит, нового нет». Так и
+    было: файл лога переписывался ПОСЛЕДНИМ действием прогона. Пока прогон
+    шёл, в разделе висел лог прошлого раза, а если прогон обрывался –
+    новый не появлялся вовсе, и разбирать было нечего.
+    """
+    print("\nКросспостинг: лог пишется по ходу прогона")
+    import inspect
+
+    import streamlit_app as app
+
+    src = inspect.getsource(app._crosspost_form_block)  # noqa: SLF001
+    check("файл лога переписывается на каждой строке",
+          src.count("flush()") >= 3, f"вызовов flush: {src.count('flush()')}")
+    check("и в самом начале, до первого шага",
+          "flush()        # старый лог уступает место новому сразу" in src)
+    check("сама запись – в одном месте", "def flush()" in src)
+
+    head = inspect.getsource(app._crosspost_form_last_log)  # noqa: SLF001
+    check("в заголовке лога видно его время", 'f" – {when}"' in head)
+
+
+def test_forget_target() -> None:
+    """
+    Сброс одной площадки: ошибка убирается, соседние отложки не трогаются.
+
+    Живой случай (14.08.2026): у поста 17.08 отложки ВК и ОК стояли, МАКС
+    упал с таймаутом – и красная строка висела без выхода, а после удаления
+    записей в соцсети нечем было сказать Click «их больше нет». Сброс всего
+    поста переставил бы и МАКС – вторым экземпляром.
+    """
+    print("\nСброс одной площадки")
+    import os
+    import tempfile
+
+    was = os.environ.get("CLICK_DATA_DIR")
+    os.environ["CLICK_DATA_DIR"] = tempfile.mkdtemp(prefix="click-forget-")
+    try:
+        import importlib
+        import paths
+        importlib.reload(paths)
+        import crosspost_state as cps
+
+        post = {"brand": "SMU", "date": "2026-08-17", "when": "2026-08-17T11:00:00+05:00",
+                "text": "спецпредложение"}
+        cps.set_status("SMU", post, "vk", cps.SCHEDULED)
+        cps.set_status("SMU", post, "max", cps.FAILED, error="Timeout")
+
+        cps.forget_target("SMU", post, "max")
+        st_ = cps.load("SMU")
+        check("ошибка МАКС сброшена", cps.status_of(st_, post, "max") == cps.WAITING)
+        check("отложка ВК не тронута", cps.status_of(st_, post, "vk") == cps.SCHEDULED)
+        check("сброшенная площадка снова формируется",
+              not cps.is_done(st_, post, "max"))
+        check("беды по сброшенному больше нет",
+              not cps.problems(st_, [dict(post, images=["x"], targets=[
+                  {"network": "max", "published_link": ""}])]))
+
+        cps.forget_target("SMU", post, "vk")
+        check("сброс последней площадки не падает",
+              cps.status_of(cps.load("SMU"), post, "vk") == cps.WAITING)
+    finally:
+        if was is None:
+            os.environ.pop("CLICK_DATA_DIR", None)
+        else:
+            os.environ["CLICK_DATA_DIR"] = was
+        import importlib
+        import paths
+        importlib.reload(paths)
+
+
+def test_build_bumped() -> None:
+    """
+    Правил модули – подними метку сборки. Иначе правка НЕ доезжает.
+
+    Облако держит модули в памяти от прежней сборки и перечитывает их только
+    когда BUILD в build.py изменился. 13.08.2026 это стоило второго прогона
+    по уже исправленной поломке: починенный max_browser лежал в репозитории,
+    а в облаке крутился старый – метку поднять забыли, и «та же ошибка»
+    повторилась на живом канале. Здесь это ловится на тестах: изменился код
+    модулей – BUILD обязан измениться тоже.
+
+    .build-hash обновляется сам, когда метка поднята: файл коммитится вместе
+    с правкой, как золотые файлы текстов.
+    """
+    print("\nМетка сборки")
+    import hashlib
+    import json
+    from pathlib import Path
+
+    import build
+    import streamlit_app as app
+
+    root = Path(__file__).parent
+    digest = hashlib.sha1()
+    for name in sorted(app._OWN_MODULES):
+        fp = root / f"{name}.py"
+        if fp.exists():
+            digest.update(fp.read_bytes())
+    code_hash = digest.hexdigest()
+
+    stamp_fp = root / ".build-hash"
+    try:
+        stamp = json.loads(stamp_fp.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        stamp = {}
+
+    if stamp.get("hash") == code_hash:
+        check("код модулей не менялся с последней метки", True)
+        check("метка на месте", stamp.get("build") == build.BUILD,
+              f'{stamp.get("build")} vs {build.BUILD}')
+        return
+
+    check("код изменился → метка сборки поднята (build.py, BUILD)",
+          stamp.get("build") != build.BUILD,
+          f"метка всё ещё «{build.BUILD}» – правка НЕ доедет до облака")
+    if stamp.get("build") != build.BUILD:
+        stamp_fp.write_text(json.dumps({"hash": code_hash, "build": build.BUILD},
+                                       ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def test_max_text_entry() -> None:
+    """
+    Ввод текста в МАКС: НИ ОДНОГО Enter и ни одного посимвольного набора.
+
+    Худшая поломка Click (13.08.2026): пост из двенадцати строк ушёл в канал
+    двенадцатью отдельными сообщениями – сразу, до всякой отложки. Поле
+    поста МАКС – поле чата, каждый Enter в нём «отправить», а page.type()
+    печатал текст со всеми переводами строк как клавишами.
+    """
+    print("\nМАКС: ввод текста без отправки")
+    import inspect
+
+    import max_browser as mb
+
+    src = inspect.getsource(mb._fill_post_text)
+    check("посимвольного набора больше нет", "page.type(" not in src)
+    check("текст вставляется событием, не клавишами", "insert_text" in src)
+    check("голого Enter нет", 'press("Enter")' not in src.replace("Shift+Enter", ""))
+    check("отправку проверяем по каналу, а не по полю", "_sent_lines(" in src)
+    check("в конце сверяем начало и конец текста", "_probe" in src)
+
+    whole = inspect.getsource(mb.schedule_postponed_post)
+    check("формирование зовёт безопасный ввод", "_fill_post_text(" in whole)
+    check("отказ ввода останавливает отложку", '"bad-text"' in whole)
+    check("перед правым кликом закрываются всплывашки", 'press("Escape")' in whole)
+
+    # Отпечаток строки: эмодзи и пробелы не мешают сверке.
+    check("отпечаток строки игнорирует значки",
+          mb._probe("⚡ СТОИМОСТЬ – 1 400 ₽/кг ⚡") == mb._probe("СТОИМОСТЬ 1400кг"),
+          mb._probe("⚡ СТОИМОСТЬ – 1 400 ₽/кг ⚡"))
+    check("пустая строка – пустой отпечаток", mb._probe("⚡ – ⚡") == "")
+
+
+# Поле МАКС, устроенное как настоящее: contenteditable с role=textbox,
+# рядом – узел-подсказка, подходящий под ТОТ ЖЕ селектор (на нём и ломалось
+# чтение), выше – лента канала со вчерашним постом.
+MAX_CHAT_PAGE = """
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;font:14px sans-serif">
+  <div id="feed">
+    <div class="msg">Вчерашний пост: поступила партия арматуры, отгружаем со склада.</div>
+  </div>
+  <div id="hint" contenteditable role="textbox" data-lexical-editor="true"
+       style="position:absolute;opacity:0;height:1px;width:1px"></div>
+  <div id="editor" contenteditable role="textbox" data-lexical-editor="true"
+       style="border:1px solid #ccc;min-height:28px;max-height:90px;overflow:auto"></div>
+  <script>
+    // Два переключателя – это две беды, которые надо уметь пережить:
+    //   __eatInsertBreaks – сборка МАКС не принимает переносы одним куском;
+    //   __enterAlwaysSends – Shift+Enter в ней ОТПРАВЛЯЕТ, а не переносит.
+    window.__sent = [];
+    const ed = document.getElementById('editor');
+
+    ed.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if ((e.shiftKey || e.ctrlKey) && !window.__enterAlwaysSends) {
+        document.execCommand('insertLineBreak');
+        return;
+      }
+      window.__sent.push(ed.innerText);
+      document.getElementById('feed').insertAdjacentHTML(
+        'beforeend', '<div class="msg">' + ed.innerText + '</div>');
+      ed.innerHTML = '';
+    });
+
+    // Переносы из вставки текста выбрасываем через Range, а не execCommand:
+    // execCommand внутри обработчика сам поднимает beforeinput, и поведение
+    // становится непредсказуемым от захода к заходу.
+    ed.addEventListener('beforeinput', e => {
+      if (!window.__eatInsertBreaks) return;
+      const data = e.data || '';
+      if (!(e.inputType || '').startsWith('insert') || !data.includes('\\n')) return;
+      e.preventDefault();
+      const sel = window.getSelection();
+      const node = document.createTextNode(data.replace(/\\n+/g, ''));
+      if (sel && sel.rangeCount) {
+        const r = sel.getRangeAt(0);
+        r.deleteContents();
+        r.insertNode(node);
+        r.setStartAfter(node);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      } else {
+        ed.appendChild(node);
+      }
+    });
+  </script>
+</body></html>
+"""
+
+MAX_POST = ("На склад поступила новая партия сетки рабицы\n"
+            "В наличии:\n"
+            "\n"
+            "• Размер ячейки: от 10x10 до 100x100 мм;\n"
+            "• Диаметр проволоки: 1,2-5 мм.")
+
+
+def test_max_text_on_real_field() -> None:
+    """
+    Ввод текста МАКС – в настоящем браузере, на поле как в кабинете.
+
+    Две беды подряд, обе из одной семьи «проверка врёт про отправку».
+
+    13.08.2026: пост ушёл в канал двенадцатью сообщениями – текст печатался
+    клавишами, а каждый Enter в поле чата это «отправить».
+
+    14.08.2026: Click объявил «МАКС отправил строку вместо переноса: после
+    Shift+Enter поле опустело» – а в канале ничего не появилось, и весь пост
+    стоял в поле. Проверка смотрела ТОЛЬКО в поле и читала при этом первый
+    подходящий узел, а он у МАКС – пустышка-подсказка.
+
+    Поэтому здесь проверяется главное: в канал не уходит НИЧЕГО, а решение
+    «отправилось» принимается по самому каналу – по тому, появилось ли в нём
+    сообщение, которого не было до ввода. Вчерашний пост в ленте лежит с
+    самого начала: принять его за свежую отправку нельзя.
+    """
+    import max_browser as mb
+    print("\nМАКС: ввод текста на живом поле")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    SEL = 'div[contenteditable][role="textbox"][data-lexical-editor="true"]'
+    lines = [ln for ln in MAX_POST.split("\n") if ln.strip()]
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            context = browser.new_context(viewport={"width": 900, "height": 700})
+            said: list[str] = []
+
+            def sent(p):
+                return p.evaluate("() => window.__sent")
+
+            def chat(**flags):
+                """Свежая страница канала. Каждому случаю своя: повторный
+                set_content в одной вкладке скрипт страницы уже не заводит,
+                и переключатели фикстуры молча перестают работать."""
+                p = context.new_page()
+                p.set_content(MAX_CHAT_PAGE)
+                for name, value in flags.items():
+                    p.evaluate(f"() => {{ window.{name} = {str(value).lower()}; }}")
+                return p
+
+            # ── Обычный случай ───────────────────────────────────────
+            page = chat()
+            why = mb._fill_post_text(page, SEL, MAX_POST, said.append)  # noqa: SLF001
+            check("текст вписан без отказа", why == "", why)
+            check("в канал не ушло ни одного сообщения", sent(page) == [], str(sent(page)))
+            got = page.eval_on_selector("#editor", "el => el.innerText")
+            check("в поле все строки, а не одна",
+                  len([ln for ln in got.split("\n") if ln.strip()]) >= len(lines), repr(got))
+            check("начало текста на месте", "сетки рабицы" in got, got[:60])
+            check("конец текста на месте", "1,2-5 мм" in got, got[-60:])
+            check("строки не склеились", "задачВ наличии" not in got.replace(" ", ""))
+            check("вчерашний пост в ленте не тронут",
+                  "Вчерашний пост" in page.eval_on_selector("#feed", "el => el.innerText"))
+
+            # ── В поле остался хвост прошлой попытки ─────────────────
+            # На снимке заказчицы в поле лежал хвост прошлого захода, а под
+            # ним – весь пост заново. Дописывать в остаток нельзя.
+            page = chat()
+            page.eval_on_selector("#editor", "el => el.innerText = 'хвост прошлой попытки'")
+            why = mb._fill_post_text(page, SEL, MAX_POST, said.append)  # noqa: SLF001
+            check("с остатком в поле тоже справились", why == "", why)
+            got = page.eval_on_selector("#editor", "el => el.innerText")
+            check("остаток стёрт, а не дописан", "хвост прошлой" not in got, got[:60])
+
+            # ── МАКС не принимает переносы одним куском ──────────────
+            # Тогда идём построчно – но по-прежнему ничего не отправляем.
+            page = chat(__eatInsertBreaks=True)
+            why = mb._fill_post_text(page, SEL, MAX_POST, said.append)  # noqa: SLF001
+            check("запасной путь сработал", why == "", why)
+            check("и снова ничего не отправлено", sent(page) == [], str(sent(page)))
+            check("про запасной путь сказано в логе",
+                  any("построчно" in m for m in said), str(said[-3:]))
+
+            # ── Худший случай: Shift+Enter в этой сборке ОТПРАВЛЯЕТ ──
+            page = chat(__eatInsertBreaks=True, __enterAlwaysSends=True)
+            why = mb._fill_post_text(page, SEL, MAX_POST, said.append)  # noqa: SLF001
+            check("отправку заметили и остановились", "отправил строку" in why, why)
+            check("и потеряли ровно одну строку, а не весь пост", len(sent(page)) == 1,
+                  str(sent(page)))
+            check("в отказе сказано, что удалить в канале",
+                  "удалите" in why.lower(), why)
+
+            # ── Ложная тревога: поле «пустое», а канал не тронут ─────
+            # Тот самый случай 14.08.2026. Читаем первый подходящий узел –
+            # он пустышка; настоящее поле полно текста. Отправкой это
+            # объявлять нельзя.
+            page = chat()
+            page.eval_on_selector("#editor", "el => el.innerText = 'вписанный пост'")
+            check("читаем самый полный узел, а не первый попавшийся",
+                  mb._editor_text(page, SEL).strip() == "вписанный пост",  # noqa: SLF001
+                  repr(mb._editor_text(page, SEL)))  # noqa: SLF001
+            check("канал не менялся – значит, ничего не отправляли",
+                  mb._sent_lines(page, SEL, mb._feed_letters(page, SEL),  # noqa: SLF001
+                                 ["вписанный пост"]) == [])
+
+            # А вот вчерашний пост в ленте за нашу отправку не выдаётся –
+            # он был там до нас.
+            before = mb._feed_letters(page, SEL)  # noqa: SLF001
+            check("старое сообщение в канале нашей отправкой не считается",
+                  mb._sent_lines(page, SEL, before,  # noqa: SLF001
+                                 ["Вчерашний пост: поступила партия арматуры"]) == [])
+        finally:
+            browser.close()
+
+
+def test_publish_off() -> None:
+    """
+    Click в час выхода ничего не публикует (13.08.2026, решение заказчицы).
+
+    Телеграм уходил не тем видом, а раздел писал «вышло» – неправда. Пока
+    площадку не доделали: Телеграм в плане – «вручную», задания планировщику
+    не ставятся, а уже стоящие отменяются, не отправляясь.
+    """
+    print("\nПубликация в час выхода выключена")
+    import content_plan as cp
+    import scheduler
+
+    check("Телеграм не формируется",
+          not any(n.startswith("tg") for n in cp.SUPPORTED), str(cp.SUPPORTED))
+    # Дзен добавился 14.08.2026 – он публикует статьи родной отложкой, и к
+    # выключенной публикации Телеграма отношения не имеет.
+    check("ВК, ОК, МАКС и Дзен остались",
+          set(cp.SUPPORTED) == {"vk", "ok", "max", "zen"}, str(cp.SUPPORTED))
+    check("реестр Телеграм по-прежнему понимает",
+          cp.canonical_network("Телеграм клиенты") == "tg-client")
+    check("планировщик не шлёт ТГ и бот МАКС",
+          set(scheduler.PUBLISH_OFF) == {"tg", "max"}, str(scheduler.PUBLISH_OFF))
+
+
 def test_max_native_scheduling() -> None:
     """
     МАКС переехал с бота на родную отложку – и не должен уйти дважды.
@@ -1745,11 +2478,18 @@ def main() -> int:
     test_max_slow_load()
     test_tg_access_advice()
     test_social_defaults()
+    test_link_card_and_report()
+    test_ok_bold_and_probe()
+    test_forget_target()
+    test_build_bumped()
+    test_max_text_entry()
+    test_publish_off()
     test_max_native_scheduling()
     test_sessions_in_store()
     test_ok_session_detection()
     test_ok_schedule_flow()
     test_plan_horizon_and_past()
+    test_form_selection()
     test_vk_confirm_schedule()
     test_vk_captcha_on_posting()
     test_playwright_worker()

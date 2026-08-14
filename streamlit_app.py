@@ -3528,7 +3528,7 @@ def _crosspost_bar(project_id: str, config: dict, posts: list[dict],
             st.caption(sched["note"])
 
 
-def _crosspost_attention(upcoming: list[dict], state: dict) -> None:
+def _crosspost_attention(project_id: str, upcoming: list[dict], state: dict) -> None:
     """Беды – наверх и с датой словами: в календаре жёлтая плитка видна, но молчит."""
     troubles = cps.problems(state, upcoming)
     if not troubles:
@@ -3536,12 +3536,29 @@ def _crosspost_attention(upcoming: list[dict], state: dict) -> None:
     with st.container(border=True):
         html('<div class="card-title">⚠️ Требует внимания '
              f'<span class="badge badge-warn">{len(troubles)}</span></div>')
-        for tr in troubles[:12]:
+        for n, tr in enumerate(troubles[:12]):
             post = tr["post"]
             who = f' · {cps.network_ru(tr["network"])}' if tr.get("network") else ""
             d = content_plan.parse_date(post.get("date", ""))
             when = crosspost_plan.human_day(d) if d else post.get("date", "")
-            st.write(f'**{when}**{who} – {tr["what"]}')
+            # Ошибка длиной с простыню (лог Playwright) в сводке не читается:
+            # показываем первую строку, целиком – в «Отчётах и журналах».
+            what = " ".join(str(tr["what"]).split())
+            if len(what) > 160:
+                what = what[:160] + "… (целиком – в «Отчётах и журналах»)"
+            if not tr.get("network"):
+                st.write(f'**{when}**{who} – {what}')
+                continue
+            # У ошибки площадки есть выход прямо здесь: сбросить – и пост по
+            # этой площадке снова «ещё не сформирован», без вечной красноты.
+            row = st.columns([8, 2], vertical_alignment="center")
+            row[0].write(f'**{when}**{who} – {what}')
+            if row[1].button("↺ Сбросить", key=f"cp-tr-reset-{project_id}-{n}",
+                             use_container_width=True,
+                             help="Убрать ошибку: пост по этой площадке снова "
+                                  "«ещё не сформировано», можно ставить заново"):
+                cps.forget_target(project_id, post, tr["network"])
+                st.rerun()
         if len(troubles) > 12:
             st.caption(f"…и ещё {len(troubles) - 12}. Остальное видно в календаре "
                        "жёлтыми и красными плитками.")
@@ -3735,7 +3752,6 @@ def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
         _crosspost_report_block(project_id, posts, state)
         _crosspost_form_last_log(project_id)
         _crosspost_scheduler_journal()
-        _crosspost_forget_block(project_id, upcoming, state)
         # Прошлые посты – архив, а не рабочий список. Блок живёт ЗДЕСЬ, где
         # есть posts/today/state: в отдельной функции их нет (на этом раздел
         # когда-то падал).
@@ -3790,11 +3806,15 @@ def tab_crosspost(project_id: str, config: dict) -> None:
     formable = {cps.post_key(c["post"]) for c in _crosspost_form_choices(todo)}
 
     _crosspost_bar(project_id, config, posts, upcoming, state, horizon)
-    _crosspost_attention(upcoming, state)
+    _crosspost_attention(project_id, upcoming, state)
     picked_keys = _crosspost_plan_table(project_id, config, posts, state, today, horizon,
                                         formable=formable)
     _crosspost_form_block(project_id, config, upcoming, state, hints=False,
                           todo=todo, picked_keys=picked_keys)
+    # Сброс памяти – сразу под кнопками, а не в глубине «Настройки и
+    # проверки»: нужен он ровно в ту минуту, когда запись удалили в соцсети
+    # или отложка встала с ошибкой, – и искать его по вкладкам не должны.
+    _crosspost_forget_block(project_id, upcoming, state)
     _crosspost_tools(project_id, config, posts, state, today, upcoming)
 
     # Честно про границы: что работает и при каких условиях.
@@ -3843,25 +3863,43 @@ def _crosspost_forget_block(project_id: str, upcoming: list[dict], state: dict) 
     if not done:
         return
 
-    with st.expander("↺ Сформировать заново – если запись удалили в соцсети"):
+    with st.expander("↺ Сформировать заново – если запись удалили в соцсети "
+                     "или отложка встала с ошибкой"):
         st.caption("Click помнит, что уже формировал, и второй раз не делает – так "
-                   "не появляются дубли. Если запись из соцсети удалили, скажите "
-                   "об этом здесь: пост снова станет «ждёт формирования».")
+                   "не появляются дубли. Если запись из соцсети удалили или отложка "
+                   "не встала, сбросьте память по нужным площадкам: пост по ним "
+                   "снова станет «ещё не сформировано».")
         titles = {}
         for post in done:
             nets = ", ".join(
-                f'{cps.network_ru(t["network"])} – {cps.status_of(state, post, t["network"])}'
+                f'{cps.network_ru(t["network"])} – {cps.HUMAN[cps.status_of(state, post, t["network"])][1]}'
                 for t in post.get("targets", [])
-                if not (t.get("published_link") or "").strip())
+                if not (t.get("published_link") or "").strip()
+                and cps.status_of(state, post, t["network"]) != cps.WAITING)
             head = (post.get("text") or "").strip().split("\n")[0][:60] or "без текста"
             titles[f'{post["date"]} · {head} · {nets}'] = post
-        picked = st.selectbox("Какой пост забыть", list(titles),
+        picked = st.selectbox("Какой пост", list(titles),
                               key=f"cp-forget-pick-{project_id}")
-        if st.button("↺ Забыть и сформировать заново", key=f"cp-forget-go-{project_id}"):
-            cps.forget_post(project_id, titles[picked])
-            st.success("Готово – пост снова в очереди на формирование. "
-                       "Проверьте, что в соцсети его правда нет, и нажмите "
-                       "«Сформировать план».")
+        post = titles[picked]
+        # Сбрасывать можно не весь пост, а отдельные площадки: заказчица
+        # удалила записи в ВК и ОК, а отложка МАКС пусть стоит – переставлять
+        # её значило бы получить в МАКС второй экземпляр.
+        with_state = [t["network"] for t in post.get("targets", [])
+                      if not (t.get("published_link") or "").strip()
+                      and cps.status_of(state, post, t["network"]) != cps.WAITING]
+        chosen = st.multiselect("Какие площадки сбросить", with_state,
+                                default=with_state, format_func=cps.network_ru,
+                                key=f"cp-forget-nets-{project_id}-{cps.post_key(post)}")
+        if st.button("↺ Сбросить и сформировать заново",
+                     key=f"cp-forget-go-{project_id}", disabled=not chosen):
+            if set(chosen) == set(with_state):
+                cps.forget_post(project_id, post)
+            else:
+                for net in chosen:
+                    cps.forget_target(project_id, post, net)
+            st.success("Готово – по сброшенным площадкам пост снова в очереди. "
+                       "Проверьте, что в соцсети его правда нет, отметьте пост "
+                       "галочкой и поставьте заново.")
             st.rerun()
 
 

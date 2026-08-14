@@ -157,6 +157,19 @@ def forget_post(project_id: str, post: dict) -> None:
         save(project_id, state)
 
 
+def forget_target(project_id: str, post: dict, network: str) -> None:
+    """
+    Забыть ОДНУ площадку поста: ошибка сбрасывается, пост по ней снова
+    «ещё не сформирован». Остальные площадки не трогаем – их отложки стоят.
+    Нужно после ошибки формирования: раньше красная строка висела вечно,
+    пока пост целиком не переформируют.
+    """
+    state = load(project_id)
+    targets = state.get(post_key(post), {}).get("targets", {})
+    if targets.pop(network, None) is not None:
+        save(project_id, state)
+
+
 # ─── Сводка для раздела ─────────────────────────────────────────────
 def summarize(state: dict, posts: list[dict]) -> dict:
     """

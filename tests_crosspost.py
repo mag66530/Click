@@ -1778,6 +1778,55 @@ def test_social_defaults() -> None:
     check("пароль наружу не уезжает", "password" not in app._KEPT)
 
 
+def test_forget_target() -> None:
+    """
+    Сброс одной площадки: ошибка убирается, соседние отложки не трогаются.
+
+    Живой случай (14.08.2026): у поста 17.08 отложки ВК и ОК стояли, МАКС
+    упал с таймаутом – и красная строка висела без выхода, а после удаления
+    записей в соцсети нечем было сказать Click «их больше нет». Сброс всего
+    поста переставил бы и МАКС – вторым экземпляром.
+    """
+    print("\nСброс одной площадки")
+    import os
+    import tempfile
+
+    was = os.environ.get("CLICK_DATA_DIR")
+    os.environ["CLICK_DATA_DIR"] = tempfile.mkdtemp(prefix="click-forget-")
+    try:
+        import importlib
+        import paths
+        importlib.reload(paths)
+        import crosspost_state as cps
+
+        post = {"brand": "SMU", "date": "2026-08-17", "when": "2026-08-17T11:00:00+05:00",
+                "text": "спецпредложение"}
+        cps.set_status("SMU", post, "vk", cps.SCHEDULED)
+        cps.set_status("SMU", post, "max", cps.FAILED, error="Timeout")
+
+        cps.forget_target("SMU", post, "max")
+        st_ = cps.load("SMU")
+        check("ошибка МАКС сброшена", cps.status_of(st_, post, "max") == cps.WAITING)
+        check("отложка ВК не тронута", cps.status_of(st_, post, "vk") == cps.SCHEDULED)
+        check("сброшенная площадка снова формируется",
+              not cps.is_done(st_, post, "max"))
+        check("беды по сброшенному больше нет",
+              not cps.problems(st_, [dict(post, images=["x"], targets=[
+                  {"network": "max", "published_link": ""}])]))
+
+        cps.forget_target("SMU", post, "vk")
+        check("сброс последней площадки не падает",
+              cps.status_of(cps.load("SMU"), post, "vk") == cps.WAITING)
+    finally:
+        if was is None:
+            os.environ.pop("CLICK_DATA_DIR", None)
+        else:
+            os.environ["CLICK_DATA_DIR"] = was
+        import importlib
+        import paths
+        importlib.reload(paths)
+
+
 def test_build_bumped() -> None:
     """
     Правил модули – подними метку сборки. Иначе правка НЕ доезжает.
@@ -1964,6 +2013,7 @@ def main() -> int:
     test_max_slow_load()
     test_tg_access_advice()
     test_social_defaults()
+    test_forget_target()
     test_build_bumped()
     test_max_text_entry()
     test_publish_off()

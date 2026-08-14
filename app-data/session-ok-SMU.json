@@ -1,12 +1,42 @@
 {
   "cookies": [
     {
-      "name": "remixcav",
-      "value": "d585547a5d1c5ef1011cdbbc752b72cb",
-      "domain": ".id.vk.ru",
-      "path": "/",
-      "expires": 1786628882.042487,
+      "name": "ss_wb",
+      "value": "34SmO6Pk84Q4pWbmBffGgQ3XRcHtDI14nVXm3NoJrd3Jc9pBLQEX9E0Uo1eMmxTvFvN3tCxT8bftvXRX_5L4K7v4H4QtONliZA",
+      "domain": ".ok.ru",
+      "path": "/web/gwt/daafbb8d/one.app.community.dk.gwt.dm.block.Block",
+      "expires": 1786793565.620261,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "ss_wb",
+      "value": "T1xitDTVs4WSXzoZZrhcNuzTyWs39sZTnllN1IoNAvQTlnEiDBtlLPGWVUDCVya9obsN1vcA979SR8B_OfoGxq0Y5SOYpskqSaE",
+      "domain": ".ok.ru",
+      "path": "/group/70000004574376",
+      "expires": 1786793565.565099,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "CDN",
+      "value": "",
+      "domain": "ok.ru",
+      "path": "/group/70000004574376",
+      "expires": -1,
       "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ss_wb",
+      "value": "BKj0UdxnndZqVTFTj1iTUbLqkyEohUxomta-hCLHQch3eTTGtA9_91fSqnLH-vBMv4zSgM-vb9eNydJmjAscDMcog1YwmtX1QQ",
+      "domain": ".ok.ru",
+      "path": "/res/js",
+      "expires": 1786793565.617274,
+      "httpOnly": true,
       "secure": true,
       "sameSite": "None"
     },
@@ -81,21 +111,11 @@
       "sameSite": "Lax"
     },
     {
-      "name": "ss_wb",
-      "value": "4kulC6KrBDxYofeW7l6uUK-kZprfA4p_Caxf5DMdp5iGjDWPATnVRnH1BArpQU0xgqpGJNwtkV3EoUcMOxq5DwlSkqOK6R7QZg",
-      "domain": ".ok.ru",
-      "path": "/",
-      "expires": 1786628908.213677,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "tmr_lvid",
       "value": "08cbf647136546ca763dfd51dbefd5d1",
       "domain": ".ok.ru",
       "path": "/",
-      "expires": 1815315257,
+      "expires": 1815478366,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -105,7 +125,7 @@
       "value": "1786542508638",
       "domain": ".ok.ru",
       "path": "/",
-      "expires": 1815315257,
+      "expires": 1815478366,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -131,21 +151,11 @@
       "sameSite": "None"
     },
     {
-      "name": "_ym_isad",
-      "value": "2",
-      "domain": ".ok.ru",
-      "path": "/",
-      "expires": 1786614508,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "_touch",
       "value": "false",
       "domain": "ok.ru",
       "path": "/",
-      "expires": 1821104058.209495,
+      "expires": 1821267166.17309,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -155,7 +165,7 @@
       "value": "true",
       "domain": "ok.ru",
       "path": "/",
-      "expires": 1821104058.209655,
+      "expires": 1821267166.173188,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -165,7 +175,7 @@
       "value": "XL",
       "domain": "ok.ru",
       "path": "/",
-      "expires": 1821104058.209723,
+      "expires": 1821267166.173229,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -175,7 +185,7 @@
       "value": "false",
       "domain": "ok.ru",
       "path": "/",
-      "expires": 1787840058,
+      "expires": 1788003167,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -186,16 +196,6 @@
       "domain": ".ok.ru",
       "path": "/",
       "expires": 1821102509.084826,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "_gid",
-      "value": "GA1.2.1109291177.1786542509",
-      "domain": ".ok.ru",
-      "path": "/",
-      "expires": 1786628909,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -225,7 +225,7 @@
       "value": "2468555756792551",
       "domain": ".ok.ru",
       "path": "/",
-      "expires": 1787148857.519478,
+      "expires": 1787311965.564967,
       "httpOnly": true,
       "secure": true,
       "sameSite": "Lax"
@@ -235,7 +235,7 @@
       "value": "LIGHT",
       "domain": "ok.ru",
       "path": "/",
-      "expires": 1787148857.519507,
+      "expires": 1787311965.565013,
       "httpOnly": true,
       "secure": true,
       "sameSite": "Lax"
@@ -251,41 +251,11 @@
       "sameSite": "Lax"
     },
     {
-      "name": "JSESSIONID",
-      "value": "a23623f05c483ac9bd2bcbd027ab49eda9e5a5081d4fa8be.438a8f1e",
-      "domain": ".ok.ru",
-      "path": "/",
-      "expires": -1,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "AUTHCODE",
-      "value": "5LeD41RUXJByv75NgNB2KojcCch3rqYGxlUarej3ub0avJuAQCo-kD_NMx6zQAa3f379IWzvSNnnhyBHupbgi_M4a9rU49bHcVPj_SfDyyzhaEuHLx7CYzsvRSlm0l9qo5hlxBmVl_BNw_SDCMWUSslxwTok_5",
-      "domain": ".ok.ru",
-      "path": "/",
-      "expires": 1818080057.519385,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "LASTSRV",
       "value": "ok.ru",
       "domain": ".ok.ru",
       "path": "/",
       "expires": -1,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "__last_online",
-      "value": "1786544057622",
-      "domain": "ok.ru",
-      "path": "/",
-      "expires": 1821104057.519534,
       "httpOnly": false,
       "secure": true,
       "sameSite": "Lax"
@@ -321,28 +291,258 @@
       "sameSite": "Lax"
     },
     {
+      "name": "JSESSIONID",
+      "value": "b0ca42405f7d2a2aa2f4d0de6871447cb0d6b82ad0b1ee35.b120edfd",
+      "domain": ".ok.ru",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "AUTHCODE",
+      "value": "ZUgoa6tR6ONucxCwV_eOY8073dV2LlQcUEHZJbsazJhNQgeTPNg366vs2Zhr123UFYfAyXoNaXfLHcl5gVxTYjTjN-feCC2ES62l6xxbwVQkdH2TI2fy9z6DH6bQFrPDUpHrEWgSi6o-fFSVPvrXY3yT_SJv_5",
+      "domain": ".ok.ru",
+      "path": "/",
+      "expires": 1818243166.190292,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "ss_wb",
+      "value": "509s0ks7s7RpoBqIRVWSYEYZCFgH9mwP1YGwX0x6aPhKeGF5Lu4NsexBZqQgaWhpQ0Wf9CAu5S3ZAfNRaWZGilOByjY8Bh1E3A",
+      "domain": ".ok.ru",
+      "path": "/",
+      "expires": 1786793565.620768,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ym_isad",
+      "value": "2",
+      "domain": ".ok.ru",
+      "path": "/",
+      "expires": 1786779166,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "yabs-sid",
+      "value": "980593341786707166",
+      "domain": "mc.yandex.ru",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "i",
+      "value": "9HnFMEcQXZUKcOlgeOoe5DTEpXrFX0q7dTMsjDwyDjHSigikfMv1fKPa/IoIM1YDLaFTLB+Es/YMbd80aFN6H2iEof8=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1821267166.156062,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "yandexuid",
+      "value": "5079421831786707166",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1821267166.156083,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "yuidss",
+      "value": "5079421831786707166",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1821267166.156097,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "ymex",
+      "value": "2102067166.yrts.1786707166#2102067166.yrtsi.1786707166",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1818243166,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "receive-cookie-deprecation",
+      "value": "1",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1818243184,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None",
+      "partitionKey": "https://ok.ru",
+      "_crHasCrossSiteAncestor": true
+    },
+    {
       "name": "domain_sid",
-      "value": "xhZ5HCFndxVY3rPF0h84G%3A1786544058601",
+      "value": "xhZ5HCFndxVY3rPF0h84G%3A1786707167127",
       "domain": "ok.ru",
       "path": "/",
-      "expires": 1787148858.608412,
+      "expires": 1787311967.127183,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
+    },
+    {
+      "name": "PVID",
+      "value": "1W81t224H0If00003q3fvSYf:::0-f99559e-0-f99559e-0-f99559f:CAASECY512-eRTBD6gVt_Yz5zXsacMZWyrIxEXzhTRkfbygWeHKsZpGae83CGL9gH_D_OKGMBhb2QTWBUu7PGECFH7qzMZQwypic7uTLHVzLf51p2tRdCkL_LDZGWz4C6v9lDEcQzHrCkWcRq-8Ek_fmMXacZ9h2ACLbygnPW5N4iyNUnjw",
+      "domain": "top-fwz1.mail.ru",
+      "path": "/",
+      "expires": 1818329567.392427,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None",
+      "partitionKey": "https://ok.ru",
+      "_crHasCrossSiteAncestor": true
+    },
+    {
+      "name": "VID",
+      "value": "1W81t224H0If00003q3fvSYf:::0-f99559e-0-f99559e-0-f99559f:CAASECY512-eRTBD6gVt_Yz5zXsacMZWyrIxEXzhTRkfbygWeHKsZpGae83CGL9gH_D_OKGMBhb2QTWBUu7PGECFH7qzMZQwypic7uTLHVzLf51p2tRdCkL_LDZGWz4C6v9lDEcQzHrCkWcRq-8Ek_fmMXacZ9h2ACLbygnPW5N4iyNUnjw",
+      "domain": ".mail.ru",
+      "path": "/",
+      "expires": 1818329567.392518,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "guid",
+      "value": "328D6D276A7EFCE0X1786707168",
+      "domain": ".tns-counter.ru",
+      "path": "/",
+      "expires": 1818243168.576905,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "remixlang",
+      "value": "0",
+      "domain": ".vk.ru",
+      "path": "/",
+      "expires": 1818273148.083352,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "remixstlid",
+      "value": "9111588989579754824_nWDE3XWPQQbfoE4zzQv9qyzMCwiqxkwMZKQWFpWhjhP",
+      "domain": ".vk.ru",
+      "path": "/",
+      "expires": 1818243168.083382,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "remixlns",
+      "value": "10bbbb83f41941456a",
+      "domain": ".vk.ru",
+      "path": "/",
+      "expires": 1786707198.0834,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "pu",
+      "value": "2030823921786707168",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1821267168.509206,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None",
+      "partitionKey": "https://ok.ru",
+      "_crHasCrossSiteAncestor": true
+    },
+    {
+      "name": "pi",
+      "value": "IcQQYNSnaz2gD6QoZ2gFJdvr+m20Bu1DCsVnIBIDnAC0wd1Zd23TqFrN/2fen8x1I19EGa2JsBRZBa9BUzBWAII75gY=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1821267168.509265,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None",
+      "partitionKey": "https://ok.ru",
+      "_crHasCrossSiteAncestor": true
+    },
+    {
+      "name": "yashr",
+      "value": "5709162941786707168",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1818243168,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None",
+      "partitionKey": "https://ok.ru",
+      "_crHasCrossSiteAncestor": true
+    },
+    {
+      "name": "cid",
+      "value": "AJZusfIPP3YKzDNVjvFZI9A",
+      "domain": ".adriver.ru",
+      "path": "/",
+      "expires": 1821267169.587623,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "bh",
+      "value": "EigiQ2hyb21pdW0iO3Y9IjE1MSIsICJOb3Q9QT9CcmFuZCI7dj0iOTkiGgN4ODYiDTE1MS4wLjc5MjIuMzQqAj8wOgkiV2luZG93cyJCBDEwLjBKAjY0UjciQ2hyb21pdW0iO3Y9IjE1MS4wLjc5MjIuMzQiLCJOb3Q9QT9CcmFuZCI7dj0iOTkuMC4wLjAiYOH5+9MGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1821267169,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
     },
     {
       "name": "tmr_detect",
-      "value": "0%7C1786544060307",
+      "value": "0%7C1786707169178",
       "domain": "ok.ru",
       "path": "/",
-      "expires": 1786630460,
+      "expires": 1786793569,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
     },
     {
+      "name": "mdd",
+      "value": "0",
+      "domain": ".ok.ru",
+      "path": "/",
+      "expires": 1786793570,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
       "name": "TZD",
-      "value": "10.200",
+      "value": "10.1",
       "domain": "ok.ru",
       "path": "/",
       "expires": -1,
@@ -352,12 +552,22 @@
     },
     {
       "name": "TD",
-      "value": "200",
+      "value": "1",
       "domain": "ok.ru",
       "path": "/",
       "expires": -1,
       "httpOnly": false,
       "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__last_online",
+      "value": "1786707197689",
+      "domain": "ok.ru",
+      "path": "/",
+      "expires": 1821267197.279663,
+      "httpOnly": false,
+      "secure": true,
       "sameSite": "Lax"
     }
   ],
@@ -367,7 +577,7 @@
       "localStorage": [
         {
           "name": "rb_sync_id",
-          "value": "{\"time\":1786544058601,\"fpid\":\"xhZ5HCFndxVY3rPF0h84G\",\"metricsTime\":1786542509125}"
+          "value": "{\"time\":1786707167127,\"fpid\":\"xhZ5HCFndxVY3rPF0h84G\",\"metricsTime\":1786707167128}"
         },
         {
           "name": "mobile-menu-button.info-bubble.last-shown-at",
@@ -379,11 +589,11 @@
         },
         {
           "name": "ms.state",
-          "value": "{\"activityType\":\"FEED\",\"timestamp\":1786544058471,\"playerTimestamp\":null}"
+          "value": "{\"activityType\":\"OTHER\",\"timestamp\":1786707197346,\"playerTimestamp\":null}"
         },
         {
           "name": "tmr_trgfpid",
-          "value": "{\"fpid\":\"xhZ5HCFndxVY3rPF0h84G\",\"ts\":1786542509875}"
+          "value": "{\"fpid\":\"xhZ5HCFndxVY3rPF0h84G\",\"ts\":1786707167124}"
         },
         {
           "name": "_ym709396_lsid",
@@ -395,7 +605,7 @@
         },
         {
           "name": "_ym87663567_lastHit",
-          "value": "1786542529329"
+          "value": "1786707184226"
         },
         {
           "name": "_ym87663567_lsid",
@@ -411,19 +621,19 @@
         },
         {
           "name": "_ym87663567:0_reqNum",
-          "value": "12"
+          "value": "25"
         },
         {
           "name": "_ym709396:1_reqNum",
-          "value": "4"
+          "value": "6"
         },
         {
           "name": "broadcast",
-          "value": "{\"id\":\"17865440580580.9456046908954606\",\"type\":\"hello\"}"
+          "value": "{\"id\":\"17867071661940.7808384958259165\",\"type\":\"ping\"}"
         },
         {
           "name": "tmr_tslog",
-          "value": "{\"activity\":{},\"count\":{}}"
+          "value": "{\"activity\":{\"1963260_36_1786707167341_a0c744d9c0eb58f4\":{\"uid\":\"1963260_36\",\"name\":\"36\",\"counterID\":1963260,\"canUseInBackground\":false,\"isActive\":true,\"startTime\":1786707167341,\"timespent\":{\"visible\":28703}},\"null_0_1786707166020_a0c744d9c0eb58f4\":{\"uid\":\"null_0\",\"name\":\"0\",\"counterID\":[\"1963260\"],\"canUseInBackground\":false,\"isActive\":true,\"startTime\":1786707166020,\"timespent\":{\"visible\":30023}}},\"count\":{}}"
         },
         {
           "name": "tmr_lvidTS",
@@ -431,7 +641,7 @@
         },
         {
           "name": "tmr_reqNum",
-          "value": "17"
+          "value": "19"
         },
         {
           "name": "_ym_uid",
@@ -451,7 +661,7 @@
         },
         {
           "name": "ok-web",
-          "value": "[[\"@ok.591127163048.notification_enabled_messenger\",\"{\\\"isEnable\\\":false,\\\"isNewVersion\\\":true}\"],[\"@ok.591127163048.notification_enabled_messenger.meta\",\"{\\\"lastUsed\\\":1786544058555,\\\"expires\\\":null}\"],[\"@ok.591127163048.external-user-id-sync\",\"{\\\"dzen\\\":{\\\"lastSyncTimestamp\\\":1786542515258}}\"],[\"@ok.591127163048.external-user-id-sync.meta\",\"{\\\"lastUsed\\\":1786544058606,\\\"expires\\\":null}\"],[\"@ok.591127163048.fixed-vkid-links-banner\",\"{\\\"lastTimestamp\\\":1786542515610,\\\"ttl\\\":\\\"86400000\\\"}\"],[\"@ok.591127163048.fixed-vkid-links-banner.meta\",\"{\\\"lastUsed\\\":1786544059082,\\\"expires\\\":\\\"178654251561086400000\\\"}\"],[\"firePushContent\",\"17865440580580.9456046908954606<!--SP--><!--{\\\"p_DFF\\\":10000,\\\"p_OPE\\\":true,\\\"sTZDc\\\":true,\\\"p_PSE\\\":true,\\\"p_PSB\\\":\\\"2097152\\\",\\\"cBlocks\\\":\\\"NTF,TD,FeedbackGrowl,FSC,VCP,MainFeedsNewFeedPush,IR\\\",\\\"p_sId\\\":\\\"727049980807802398\\\",\\\"p_LPR\\\":220992,\\\"p_SMF\\\":2,\\\"p_SLPT\\\":\\\"1800000\\\",\\\"p_SRT\\\":\\\"56819\\\",\\\"p_CES\\\":10,\\\"p_NLP\\\":\\\"1786544680492\\\",\\\"p_WDTL\\\":\\\"60000\\\",\\\"p_SWT\\\":\\\"60000\\\",\\\"fetchTime\\\":1000,\\\"serverTime\\\":\\\"1786544066311\\\",\\\"p_SFRRT\\\":\\\"10000\\\",\\\"p_WDI\\\":\\\"2000\\\"}--><!--&--><div data-l=\\\"layerId,layer_notifications,t,growl\\\" data-time=\\\"1786543687698\\\" data-id=\\\"n11786543687698000_s\\\" class=\\\"growl null\\\"><div data-l=\\\"notifMarker,102_2_~_I_~_K5jcTwzdRgPcSwPdSA3eM03cvqe__576845875952\\\" data-id=\\\"n11786543687698000_s\\\" class=\\\"h-mod\\\" data-module=\\\"NotificationsMarkAsRead\\\"><a data-l=\\\"nA,GROWL_OPEN,t,growl_open\\\" href=\\\"/notifications?cmd=NotificationsLayerContent&amp;st.ntf.page=1&amp;st.ntf.cat=All&amp;st.cmd=userMain&amp;st._aid=NTF_Open_All\\\" class=\\\"growl_lnk\\\"></a><div class=\\\"growl_ava\\\"><svg class=\\\"svg-ic svg-ico_gift_32 svg-ic32\\\" viewBox=\\\"0 0 32 32\\\">\\n<path fill-rule=\\\"evenodd\\\" clip-rule=\\\"evenodd\\\" d=\\\"M13.1326 1.68004C13.7897 0.730039 14.8699 0.165039 16.0234 0.165039C17.1768 0.165039 18.257 0.730039 18.9141 1.68004L19.8718 3.06004L21.4244 2.41504C22.4897 1.97504 23.7042 2.08004 24.6745 2.70504C25.6449 3.33004 26.2478 4.39004 26.2881 5.54004L26.3467 7.22004L28.0013 7.52004C29.1367 7.72504 30.0998 8.47004 30.579 9.52004C31.0582 10.57 30.9924 11.785 30.4031 12.78L29.5441 14.225L30.7754 15.37C31.6202 16.155 32.0263 17.305 31.8622 18.445C31.698 19.585 30.9845 20.575 29.9526 21.09L28.4487 21.84L28.8658 23.47C29.1519 24.585 28.872 25.775 28.1166 26.645C27.3613 27.52 26.2265 27.965 25.0797 27.84L23.4084 27.66L22.8788 29.255C22.5154 30.35 21.6383 31.195 20.5316 31.52C19.4248 31.845 18.229 31.605 17.3315 30.885L16.0234 29.825L14.7152 30.885C13.8177 31.605 12.6219 31.845 11.5152 31.52C10.4084 31.195 9.53132 30.35 9.16792 29.255L8.63832 27.66L6.96702 27.84C5.82022 27.965 4.68547 27.52 3.93007 26.645C3.17472 25.775 2.89477 24.585 3.18092 23.47L3.59797 21.84L2.09412 21.09C1.06222 20.575 0.348673 19.585 0.184523 18.445C0.0203725 17.305 0.426472 16.155 1.27132 15.37L2.50257 14.225L1.64362 12.78C1.05427 11.785 0.988523 10.57 1.46772 9.52004C1.94687 8.47004 2.91007 7.72504 4.04537 7.52004L5.69997 7.22004L5.75862 5.54004C5.79887 4.39004 6.40182 3.33004 7.37217 2.70504C8.34257 2.08004 9.55702 1.97504 10.6223 2.41504L12.1749 3.06004L13.1326 1.68004Z\\\" fill=\\\"#FF35B5\\\"/>\\n<path fill-rule=\\\"evenodd\\\" clip-rule=\\\"evenodd\\\" d=\\\"M23.1038 13.605C23.1336 13.19 22.9896 12.78 22.7064 12.475C22.4231 12.17 22.0259 12 21.6099 12C18.833 11.995 13.172 11.985 10.3919 11.98C9.97495 11.98 9.57665 12.155 9.29245 12.46C9.0082 12.765 8.86365 13.175 8.8935 13.59C9.0352 15.565 9.2764 18.925 9.4381 21.18C9.53195 22.485 10.6204 23.5 11.9317 23.5C14.2404 23.5 17.7584 23.5 20.0671 23.5C21.3785 23.5 22.4669 22.485 22.5607 21.18C22.7221 18.93 22.9626 15.575 23.1038 13.605Z\\\" fill=\\\"white\\\"/>\\n<path fill-rule=\\\"evenodd\\\" clip-rule=\\\"evenodd\\\" d=\\\"M15.4298 11.135C15.3495 11.335 15.372 11.565 15.4902 11.745C15.6085 11.93 15.8078 12.045 16.025 12.055C18.319 12.15 19.3623 11.865 20.1854 11.38C21.3714 10.68 21.8389 9.53004 21.2972 8.51504C20.7808 7.54504 19.6516 7.28504 18.6328 7.57504C17.4852 7.90004 16.3009 8.94504 15.4298 11.135ZM17.0895 10.73C18.2995 10.715 18.9625 10.545 19.5034 10.225C19.9815 9.94505 20.3308 9.55505 20.1124 9.14505C19.9027 8.75005 19.4134 8.75005 18.9997 8.86505C18.3081 9.06505 17.6578 9.65505 17.0895 10.73Z\\\" fill=\\\"#4066FF\\\"/>\\n<path fill-rule=\\\"evenodd\\\" clip-rule=\\\"evenodd\\\" d=\\\"M16.0936 12.055C16.3114 12.045 16.5112 11.93 16.6294 11.745C16.7476 11.565 16.7695 11.335 16.6881 11.13C15.8108 8.94997 14.616 7.94497 13.4731 7.57997C12.5625 7.28997 11.2909 7.53997 10.7673 8.50997C10.1628 9.63497 10.8217 10.94 12.3055 11.595C12.9184 11.865 13.7985 12.15 16.0936 12.055ZM15.0197 10.73C14.436 9.65997 13.762 9.08497 13.0659 8.85997C12.6988 8.74497 12.1601 8.75497 11.949 9.14997C11.8517 9.32997 11.8806 9.51497 11.9819 9.68497C12.1466 9.96497 12.4588 10.195 12.8471 10.365C13.2601 10.55 13.8203 10.71 15.0197 10.73Z\\\" fill=\\\"#4066FF\\\"/>\\n<path fill-rule=\\\"evenodd\\\" clip-rule=\\\"evenodd\\\" d=\\\"M15.0063 23.5H16.9897V12H15.0063V23.5Z\\\" fill=\\\"#4066FF\\\"/>\\n\\n</svg></div><div class=\\\"growl_cnt\\\"><div class=\\\"growl_tx\\\"><div class=\\\"growl_name ellip\\\">Оксана Хайлова</div> прислала вам открытку.<a data-l=\\\"nA,GROWL_LINK,t,growl_link\\\" href=\\\"/notifications?cmd=NotificationsLayerContent&amp;st.ntf.page=1&amp;st.ntf.cat=All&amp;st.cmd=userMain&amp;st._aid=NTF_Open_All\\\" class=\\\"al growl_open\\\">Посмотреть</a></div></div><span id=\\\"hook_Form_cn11786543687698000_s\\\" class=\\\"hook h-mod\\\" data-module=\\\"Form\\\"><form method=\\\"POST\\\" action=\\\"/dk?cmd=NotificationsGrowl&amp;st.id=t11786543687698000_102_s\\\"><span data-l=\\\"nA,GROWL_CLOSE,t,growl_close\\\" title=\\\"скрыть\\\" onclick=\\\"OK.submit(this);\\\" class=\\\"ic ic12 ic12_close-g growl_close\\\"></span></form></span></div></div><!--&--><!--{\\\"removed\\\":[],\\\"action\\\":\\\"news\\\",\\\"closed\\\":[],\\\"totalUnread\\\":7}--><!--&--><!--{\\\"checkTime\\\":{\\\"privateConvTime\\\":\\\"1786544057492\\\",\\\"chatConvTime\\\":\\\"1786544056965\\\",\\\"privateMessagesTime\\\":\\\"1786544057492\\\",\\\"chatMessagesTime\\\":\\\"1786544056965\\\"}}--><!--&--><!----><!--&-->{\\\"notifications\\\":[{\\\"counter\\\":{\\\"count\\\":0,\\\"counterCreateTime\\\":{\\\"timeMicros\\\":\\\"1786544066301007\\\"},\\\"lastUserAccessTime\\\":{\\\"timeMicros\\\":\\\"1786534704555001\\\"},\\\"hasGroupFeedackUpdates\\\":false,\\\"hasReply\\\":false}}],\\\"userLoggedIn\\\":true,\\\"redirect\\\":false,\\\"conf\\\":{\\\"enabled\\\":true,\\\"autoScroll\\\":true,\\\"devMode\\\":false}}<!--&--><button type=\\\"button\\\" aria-expanded=\\\"false\\\" class=\\\"h-mod toolbar_nav_a toolbar_nav_a__feedback __a11y\\\" role=\\\"button\\\" id=\\\"HeaderTopNewFeedbackInToolbar\\\" data-module=\\\"feedback/FeedbackButton\\\" data-counter=\\\"0\\\" data-gfu=\\\"false\\\" data-time=\\\"1786544066301007\\\" aria-label=\\\"События\\\" role=\\\"link\\\"><span class=\\\"toolbar_nav_i_ic\\\"></span><span class=\\\"toolbar_nav_i_tooltip\\\"><span class=\\\"toolbar_nav_i_tooltip_cnt\\\">События</span></span><span class=\\\"toolbar_nav_notif\\\"><span id=\\\"counter_feedback\\\" class=\\\"notifications notifications__hide\\\"><span class=\\\"counterText\\\"></span></span></span></button><!--&--><div class=\\\"hookData\\\" id=\\\"data_ToolbarDiscussions\\\"><!--{\\\"jsp.ur.cnt\\\":0,\\\"respLCT\\\":\\\"1786544066300\\\",\\\"jsp.lazy\\\":true,\\\"refId\\\":\\\"newsFetch\\\",\\\"respHN\\\":true}--></div><span class=\\\"toolbar_nav_notif\\\"><span id=\\\"counter_ToolbarDiscussions\\\" class=\\\"notifications notifications__hide\\\"><span class=\\\"counterText\\\"></span></span></span><!--&--><!--{\\\"mrf\\\":true,\\\"state2form.blocks\\\":[\\\"ToolbarNotifications\\\",\\\"NotificationsController\\\",\\\"PopLayerCropUserPhoto\\\"],\\\"cfgtlb.lsft\\\":3000,\\\"cfgtlb.f.c.h.p\\\":true,\\\"cfgtlb.ucet\\\":600000,\\\"rOnNav\\\":false,\\\"cfgtlb.ltshfl\\\":\\\"DISCUSSIONS_LAYER,DISCUSSIONS_LAYER_D\\\",\\\"cfgtlb.ucpt\\\":600000,\\\"cfgtlb.ltmt\\\":3000,\\\"cfgtlb.lsse\\\":true,\\\"cfgtlb.d.e\\\":true,\\\"cfgtlb.ucfet\\\":600000}--><!--&--><!--&--><!--{\\\"counter\\\":0}--><!--SP-->PeriodicManager,NotificationsGrowl,NotificationsController,MessagesPushController,VideoChatPush,FeedbackController,HeaderTopNewFeedbackInToolbar,ToolbarDiscussions,GwtToolbarCfg,GroupCallPush,DiscussionsPushController<!--SP-->BQ_ARtPlMMaDqXv5Mus0JPiLC-tm9_rf\"]]"
+          "value": "[[\"@ok.591127163048.notification_enabled_messenger\",\"{\\\"isEnable\\\":false,\\\"isNewVersion\\\":true}\"],[\"@ok.591127163048.notification_enabled_messenger.meta\",\"{\\\"lastUsed\\\":1786707167411,\\\"expires\\\":null}\"],[\"@ok.591127163048.external-user-id-sync\",\"{\\\"dzen\\\":{\\\"lastSyncTimestamp\\\":1786707167424}}\"],[\"@ok.591127163048.external-user-id-sync.meta\",\"{\\\"lastUsed\\\":1786707167424,\\\"expires\\\":null}\"],[\"@ok.591127163048.fixed-vkid-links-banner\",\"{\\\"lastTimestamp\\\":1786707168146,\\\"ttl\\\":\\\"86400000\\\"}\"],[\"@ok.591127163048.fixed-vkid-links-banner.meta\",\"{\\\"lastUsed\\\":1786707168146,\\\"expires\\\":\\\"178670716814686400000\\\"}\"],[\"firePushContent\",\"17867071661940.7808384958259165<!--SP--><!--{\\\"p_DFF\\\":10000,\\\"p_OPE\\\":true,\\\"sTZDc\\\":true,\\\"p_PSE\\\":true,\\\"p_PSB\\\":\\\"2097152\\\",\\\"cBlocks\\\":\\\"NTF,TD,FeedbackGrowl,FSC,VCP,MainFeedsNewFeedPush,IR\\\",\\\"p_sId\\\":\\\"726768677629781442\\\",\\\"p_LPR\\\":158194,\\\"p_SMF\\\":2,\\\"p_SLPT\\\":\\\"1800000\\\",\\\"p_SRT\\\":\\\"48577\\\",\\\"p_CES\\\":10,\\\"p_NLP\\\":\\\"1786707774961\\\",\\\"p_WDTL\\\":\\\"60000\\\",\\\"p_SWT\\\":\\\"60000\\\",\\\"fetchTime\\\":1000,\\\"serverTime\\\":\\\"1786707174702\\\",\\\"p_SFRRT\\\":\\\"10000\\\",\\\"p_WDI\\\":\\\"2000\\\"}--><!--&--><div data-l=\\\"layerId,layer_notifications,t,growl\\\" data-time=\\\"1786681238178\\\" data-id=\\\"n11786681238178000_s\\\" class=\\\"growl null\\\"><div data-l=\\\"notifMarker,102_2_~_I_~_K5jcTwzdSwjcOc3eNs3eM03cvqe__576845875952\\\" data-id=\\\"n11786681238178000_s\\\" class=\\\"h-mod\\\" data-module=\\\"NotificationsMarkAsRead\\\"><a data-l=\\\"nA,GROWL_OPEN,t,growl_open\\\" href=\\\"/notifications?cmd=NotificationsLayerContent&amp;st.ntf.page=1&amp;st.ntf.cat=All&amp;st.cmd=userMain&amp;st._aid=NTF_Open_All\\\" class=\\\"growl_lnk\\\"></a><div class=\\\"growl_ava\\\"><svg class=\\\"svg-ic svg-ico_gift_32 svg-ic32\\\" viewBox=\\\"0 0 32 32\\\">\\n<path fill-rule=\\\"evenodd\\\" clip-rule=\\\"evenodd\\\" d=\\\"M13.1326 1.68004C13.7897 0.730039 14.8699 0.165039 16.0234 0.165039C17.1768 0.165039 18.257 0.730039 18.9141 1.68004L19.8718 3.06004L21.4244 2.41504C22.4897 1.97504 23.7042 2.08004 24.6745 2.70504C25.6449 3.33004 26.2478 4.39004 26.2881 5.54004L26.3467 7.22004L28.0013 7.52004C29.1367 7.72504 30.0998 8.47004 30.579 9.52004C31.0582 10.57 30.9924 11.785 30.4031 12.78L29.5441 14.225L30.7754 15.37C31.6202 16.155 32.0263 17.305 31.8622 18.445C31.698 19.585 30.9845 20.575 29.9526 21.09L28.4487 21.84L28.8658 23.47C29.1519 24.585 28.872 25.775 28.1166 26.645C27.3613 27.52 26.2265 27.965 25.0797 27.84L23.4084 27.66L22.8788 29.255C22.5154 30.35 21.6383 31.195 20.5316 31.52C19.4248 31.845 18.229 31.605 17.3315 30.885L16.0234 29.825L14.7152 30.885C13.8177 31.605 12.6219 31.845 11.5152 31.52C10.4084 31.195 9.53132 30.35 9.16792 29.255L8.63832 27.66L6.96702 27.84C5.82022 27.965 4.68547 27.52 3.93007 26.645C3.17472 25.775 2.89477 24.585 3.18092 23.47L3.59797 21.84L2.09412 21.09C1.06222 20.575 0.348673 19.585 0.184523 18.445C0.0203725 17.305 0.426472 16.155 1.27132 15.37L2.50257 14.225L1.64362 12.78C1.05427 11.785 0.988523 10.57 1.46772 9.52004C1.94687 8.47004 2.91007 7.72504 4.04537 7.52004L5.69997 7.22004L5.75862 5.54004C5.79887 4.39004 6.40182 3.33004 7.37217 2.70504C8.34257 2.08004 9.55702 1.97504 10.6223 2.41504L12.1749 3.06004L13.1326 1.68004Z\\\" fill=\\\"#FF35B5\\\"/>\\n<path fill-rule=\\\"evenodd\\\" clip-rule=\\\"evenodd\\\" d=\\\"M23.1038 13.605C23.1336 13.19 22.9896 12.78 22.7064 12.475C22.4231 12.17 22.0259 12 21.6099 12C18.833 11.995 13.172 11.985 10.3919 11.98C9.97495 11.98 9.57665 12.155 9.29245 12.46C9.0082 12.765 8.86365 13.175 8.8935 13.59C9.0352 15.565 9.2764 18.925 9.4381 21.18C9.53195 22.485 10.6204 23.5 11.9317 23.5C14.2404 23.5 17.7584 23.5 20.0671 23.5C21.3785 23.5 22.4669 22.485 22.5607 21.18C22.7221 18.93 22.9626 15.575 23.1038 13.605Z\\\" fill=\\\"white\\\"/>\\n<path fill-rule=\\\"evenodd\\\" clip-rule=\\\"evenodd\\\" d=\\\"M15.4298 11.135C15.3495 11.335 15.372 11.565 15.4902 11.745C15.6085 11.93 15.8078 12.045 16.025 12.055C18.319 12.15 19.3623 11.865 20.1854 11.38C21.3714 10.68 21.8389 9.53004 21.2972 8.51504C20.7808 7.54504 19.6516 7.28504 18.6328 7.57504C17.4852 7.90004 16.3009 8.94504 15.4298 11.135ZM17.0895 10.73C18.2995 10.715 18.9625 10.545 19.5034 10.225C19.9815 9.94505 20.3308 9.55505 20.1124 9.14505C19.9027 8.75005 19.4134 8.75005 18.9997 8.86505C18.3081 9.06505 17.6578 9.65505 17.0895 10.73Z\\\" fill=\\\"#4066FF\\\"/>\\n<path fill-rule=\\\"evenodd\\\" clip-rule=\\\"evenodd\\\" d=\\\"M16.0936 12.055C16.3114 12.045 16.5112 11.93 16.6294 11.745C16.7476 11.565 16.7695 11.335 16.6881 11.13C15.8108 8.94997 14.616 7.94497 13.4731 7.57997C12.5625 7.28997 11.2909 7.53997 10.7673 8.50997C10.1628 9.63497 10.8217 10.94 12.3055 11.595C12.9184 11.865 13.7985 12.15 16.0936 12.055ZM15.0197 10.73C14.436 9.65997 13.762 9.08497 13.0659 8.85997C12.6988 8.74497 12.1601 8.75497 11.949 9.14997C11.8517 9.32997 11.8806 9.51497 11.9819 9.68497C12.1466 9.96497 12.4588 10.195 12.8471 10.365C13.2601 10.55 13.8203 10.71 15.0197 10.73Z\\\" fill=\\\"#4066FF\\\"/>\\n<path fill-rule=\\\"evenodd\\\" clip-rule=\\\"evenodd\\\" d=\\\"M15.0063 23.5H16.9897V12H15.0063V23.5Z\\\" fill=\\\"#4066FF\\\"/>\\n\\n</svg></div><div class=\\\"growl_cnt\\\"><div class=\\\"growl_tx\\\"><div class=\\\"growl_name ellip\\\">Оксана Хайлова</div> прислала вам открытку.<a data-l=\\\"nA,GROWL_LINK,t,growl_link\\\" href=\\\"/notifications?cmd=NotificationsLayerContent&amp;st.ntf.page=1&amp;st.ntf.cat=All&amp;st.cmd=userMain&amp;st._aid=NTF_Open_All\\\" class=\\\"al growl_open\\\">Посмотреть</a></div></div><span id=\\\"hook_Form_cn11786681238178000_s\\\" class=\\\"hook h-mod\\\" data-module=\\\"Form\\\"><form method=\\\"POST\\\" action=\\\"/dk?cmd=NotificationsGrowl&amp;st.id=t11786681238178000_102_s\\\"><span data-l=\\\"nA,GROWL_CLOSE,t,growl_close\\\" title=\\\"скрыть\\\" onclick=\\\"OK.submit(this);\\\" class=\\\"ic ic12 ic12_close-g growl_close\\\"></span></form></span></div></div><!--&--><!--{\\\"removed\\\":[],\\\"action\\\":\\\"news\\\",\\\"closed\\\":[],\\\"totalUnread\\\":11}--><!--&--><!--{\\\"checkTime\\\":{\\\"privateConvTime\\\":\\\"1786707165777\\\",\\\"chatConvTime\\\":\\\"1786707165641\\\",\\\"privateMessagesTime\\\":\\\"1786707165777\\\",\\\"chatMessagesTime\\\":\\\"1786707165641\\\"}}--><!--&--><!----><!--&-->{\\\"notifications\\\":[{\\\"counter\\\":{\\\"count\\\":0,\\\"counterCreateTime\\\":{\\\"timeMicros\\\":\\\"1786707174692000\\\"},\\\"lastUserAccessTime\\\":{\\\"timeMicros\\\":\\\"1786534704555001\\\"},\\\"hasGroupFeedackUpdates\\\":false,\\\"hasReply\\\":false}}],\\\"redirect\\\":false,\\\"userLoggedIn\\\":true,\\\"conf\\\":{\\\"enabled\\\":true,\\\"autoScroll\\\":true,\\\"devMode\\\":false}}<!--&--><button type=\\\"button\\\" aria-expanded=\\\"false\\\" class=\\\"h-mod toolbar_nav_a toolbar_nav_a__feedback __a11y\\\" role=\\\"button\\\" id=\\\"HeaderTopNewFeedbackInToolbar\\\" data-module=\\\"feedback/FeedbackButton\\\" data-counter=\\\"0\\\" data-gfu=\\\"false\\\" data-time=\\\"1786707174692000\\\" aria-label=\\\"События\\\" role=\\\"link\\\"><span class=\\\"toolbar_nav_i_ic\\\"></span><span class=\\\"toolbar_nav_i_tooltip\\\"><span class=\\\"toolbar_nav_i_tooltip_cnt\\\">События</span></span><span class=\\\"toolbar_nav_notif\\\"><span id=\\\"counter_feedback\\\" class=\\\"notifications notifications__hide\\\"><span class=\\\"counterText\\\"></span></span></span></button><!--&--><div class=\\\"hookData\\\" id=\\\"data_ToolbarDiscussions\\\"><!--{\\\"jsp.ur.cnt\\\":0,\\\"respLCT\\\":\\\"1786707174688\\\",\\\"jsp.lazy\\\":true,\\\"refId\\\":\\\"newsFetch\\\",\\\"respHN\\\":true}--></div><span class=\\\"toolbar_nav_notif\\\"><span id=\\\"counter_ToolbarDiscussions\\\" class=\\\"notifications notifications__hide\\\"><span class=\\\"counterText\\\"></span></span></span><!--&--><!--{\\\"mrf\\\":true,\\\"state2form.blocks\\\":[\\\"ToolbarNotifications\\\",\\\"NotificationsController\\\",\\\"PopLayerCropUserPhoto\\\"],\\\"cfgtlb.lsft\\\":3000,\\\"cfgtlb.f.c.h.p\\\":true,\\\"cfgtlb.ucet\\\":600000,\\\"rOnNav\\\":false,\\\"cfgtlb.ltshfl\\\":\\\"DISCUSSIONS_LAYER,DISCUSSIONS_LAYER_D\\\",\\\"cfgtlb.ucpt\\\":600000,\\\"cfgtlb.ltmt\\\":3000,\\\"cfgtlb.lsse\\\":true,\\\"cfgtlb.d.e\\\":true,\\\"cfgtlb.ucfet\\\":600000}--><!--&--><!--&--><!--{\\\"counter\\\":0}--><!--SP-->PeriodicManager,NotificationsGrowl,NotificationsController,MessagesPushController,VideoChatPush,FeedbackController,HeaderTopNewFeedbackInToolbar,ToolbarDiscussions,GwtToolbarCfg,GroupCallPush,DiscussionsPushController<!--SP-->zYI_JcEBieFKeLQDPnFxNmecjU6r8Ljd\"]]"
         },
         {
           "name": "_ym87663567_il",

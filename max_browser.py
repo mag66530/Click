@@ -883,7 +883,8 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "error": why}
             page.wait_for_timeout(1_000)
             # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
-            yb.drop_link_card(page, yb.text_domains(text), log)
+            yb.drop_link_card(page, yb.text_domains(text), log,
+                              diag_dir=paths.data_root() / project_id / "crosspost")
 
             if image_paths:
                 log(f"Прикрепляю фото: {len(image_paths)}")

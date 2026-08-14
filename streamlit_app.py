@@ -644,10 +644,17 @@ def kp_pull(project_id: str, config: dict) -> tuple[bool, str]:
         config["kpSheetTitle"] = diag["usedSheet"]
     save_config(project_id)
     note = f'Загружено: {cities_word(len(cities))} в {diag.get("countries", 0)} странах.'
-    if diag.get("gisCities"):
-        note += f' В 2ГИС карточек: {diag["gisCities"]}.'
+    note += f' В 2ГИС карточек: {diag.get("gisCities", 0)}.'
     if diag.get("skippedDeleted"):
         note += f' Пропущено удалённых карточек: {diag["skippedDeleted"]}.'
+    # Почему город не попал в 2ГИС – по имени и по причине. Без этого
+    # «поставила Шымкент активным, а его нет» разбиралось перепиской: в
+    # приложении не было ни числа, ни имени, ни причины.
+    skipped = diag.get("gisSkippedRows") or []
+    if skipped:
+        names = "; ".join(f'{r["name"]} – {r["why"]}' for r in skipped[:6])
+        tail = " и ещё…" if len(skipped) > 6 else ""
+        note += f" В список 2ГИС не попали: {names}{tail}."
     return True, note
 
 
@@ -2727,7 +2734,16 @@ def reviews_queue_block(project_id: str, platform: str = rv.YANDEX) -> None:
                     st.warning("Разговорные слова в ответе от лица компании: "
                                + ", ".join(f"«{w}»" for w in casual)
                                + " – нажмите «Переписать» или поправьте руками.")
-                if rv.looks_broken(text):
+                # Пустое поле и испорченный черновик – разные беды, и путать
+                # их нельзя. На пустом поле Click писал «черновик оборван или
+                # в нём остались служебные заметки модели» – человек искал в
+                # пустоте заметки модели, а черновика попросту не было:
+                # причина написана выше, строкой с ⚠️.
+                if not text.strip():
+                    st.caption("Черновика нет" + (" – причина выше." if item.get("note")
+                                                  else ".")
+                               + " Напишите ответ сами или нажмите «Переписать».")
+                elif rv.looks_broken(text):
                     st.warning("Черновик не получился – оборван или в нём остались "
                                "служебные заметки модели. Нажмите «Переписать».")
 
@@ -2764,6 +2780,53 @@ def reviews_queue_block(project_id: str, platform: str = rv.YANDEX) -> None:
         _sent_report_block(project_id, done, pending, platform)
 
 
+def kp_refresh_row(project_id: str, config: dict, platform: str = rv.YANDEX) -> None:
+    """
+    «Обновить города из КП» – прямо там, где на города и смотрят.
+
+    Кнопка была и раньше, но жила только в «⚙️ Настройках», рядом с выбором
+    таблицы и листа. А человек, поправивший статус города в КП, идёт не в
+    настройки: он идёт туда, где выбирает города для прогона. Так и вышло с
+    Шымкентом – статус в таблице поставили «Активная», в списке 2ГИС города
+    нет, и позвать его туда нечем: «не нашла функционала, который обновляет
+    список 2ГИС».
+
+    Теперь список городов обновляется с той же страницы, где он показан, и
+    рядом написано, когда он обновлялся в прошлый раз и сколько в нём
+    городов ИМЕННО ЭТОЙ площадки.
+    """
+    where = "2ГИС" if platform == rv.GIS else "Яндекса"
+    if not kp_sheet.is_configured(project_id, (config.get("kpSheetUrl") or "").strip()):
+        st.caption("Города ведутся вручную: таблица КП у проекта не задана – "
+                   "«⚙️ Настройки» → «Источник городов».")
+        return
+
+    total = sum(len(c.get("cities") or []) for c in platform_countries(config, platform))
+    c1, c2 = st.columns([2, 3], vertical_alignment="center")
+    if c1.button("⟳ Обновить города из КП", key=f"kp-refresh-{platform}",
+                 use_container_width=True,
+                 help="Перечитать таблицу КП и заменить список городов. Город попадает "
+                      "в список 2ГИС, если в его строке есть ссылка на кабинет "
+                      "account.2gis.com и статус не «Удалена»."):
+        try:
+            with st.spinner("Читаю таблицу КП…"):
+                ok, note = kp_pull(project_id, config)
+        except Exception as e:  # noqa: BLE001 – текст ошибки уже человеческий
+            ok, note = False, str(e)
+        if ok:
+            st.success(note)
+            time.sleep(1.6)
+        else:
+            st.error(note)
+            time.sleep(2.5)
+        st.rerun()
+
+    synced = local_time(config.get("kpSyncedAt"))
+    c2.caption(f"Городов {where}: {total}. "
+               + (f"Список из КП обновлён: {synced}." if synced
+                  else "Из таблицы ещё не загружали."))
+
+
 def tab_actualize(project_id: str, config: dict) -> None:
     """
     Актуализация и отзывы. Площадок две – Яндекс.Бизнес и 2ГИС; выбор наверху.
@@ -2786,11 +2849,12 @@ def tab_actualize(project_id: str, config: dict) -> None:
     if not countries:
         if platform == rv.GIS:
             html(T.empty("📍", "Городов 2ГИС нет",
-                         "Загрузите города из КП во вкладке «Города»: они берутся из "
-                         "блока «2ГИС» той же таблицы. Город попадает сюда, если у него "
-                         "есть ссылка на кабинет и статус не «Удалена»."))
+                         "Города берутся из блока «2ГИС» таблицы КП. Город попадает "
+                         "сюда, если у него есть ссылка на кабинет и статус не "
+                         "«Удалена». Кнопка ниже перечитает таблицу прямо сейчас."))
         else:
             html(T.empty("🏙", "Нет городов", "Добавьте страны и города во вкладке «Города»."))
+        kp_refresh_row(project_id, config, platform)
         reviews_queue_block(project_id, platform)
         return
 
@@ -2819,6 +2883,10 @@ def tab_actualize(project_id: str, config: dict) -> None:
                  'и нажмёт кнопку <b>«Данные актуальны»</b>, если она там есть. Кнопка появляется на странице '
                  'периодически – Яндекс просит подтверждать, что данные не изменились. '
                  'Если кнопки нет – актуализация не требуется.</div>')
+
+        # Обновление списка – здесь же, над самим списком: искать его в
+        # «Настройках» человеку неоткуда (см. kp_refresh_row).
+        kp_refresh_row(project_id, config, platform)
 
         head, act = st.columns([3, 1])
         head.markdown(
@@ -3073,10 +3141,13 @@ def tab_cities(project_id: str, config: dict) -> None:
     if total:
         st.caption(f"Всего {cities_word(total)} в "
                    f"{plural(countries, 'стране', 'странах', 'странах')}. "
-                   "Для обновления списка перейдите в «Настройки» → «Источник городов»")
+                   "Списки Яндекса и 2ГИС – из одной таблицы КП, но города в них разные: "
+                   "карточка 2ГИС заведена не везде.")
     else:
-        st.info("Городов пока нет. Для обновления списка перейдите в "
-                "«Настройки» → «Источник городов»")
+        st.info("Городов пока нет – загрузите их из таблицы КП.")
+    # Кнопка загрузки – и здесь тоже, а не только в «Настройках»: список
+    # городов смотрят на этой странице, обновлять его логично отсюда же.
+    kp_refresh_row(project_id, config, rv.YANDEX)
 
     with st.expander("➕ Добавить страну"):
         c1, c2 = st.columns([3, 1])
@@ -3737,7 +3808,12 @@ def _crosspost_form_last_log(project_id: str) -> None:
         return
     if not text.strip():
         return
-    with st.expander("📄 Лог последнего формирования"):
+    # Время – прямо в заголовке. Иначе непонятно, этого прогона лог или
+    # позавчерашнего: оба выглядят одинаково, и разбирают по ошибке чужой.
+    head = text.strip().splitlines()[0].strip()
+    when = head.replace("Формирование", "").strip()
+    with st.expander("📄 Лог последнего формирования"
+                     + (f" – {when}" if when else "")):
         st.text_area("Что Click делал по шагам", value=text, height=240,
                      key=f"cp-form-log-{project_id}")
         st.download_button("⬇ Скачать (.txt)", data=text.encode("utf-8"),
@@ -4161,10 +4237,27 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
 
         # Протокол пишется и на экран, и в файл: st.status исчезает при первой
         # же перерисовке, а вопрос «что именно Click делал» встаёт уже после.
+        #
+        # В файл – СРАЗУ и на каждой строке, а не одним куском в конце.
+        # Раньше запись шла последней строчкой прогона, и пока прогон идёт,
+        # в разделе висел лог ПРОШЛОГО формирования: заказчица так и
+        # написала – «лог вообще старый висит, нового нет». А если прогон
+        # обрывался (перерисовка страницы, перезапуск облака), новый лог не
+        # появлялся вовсе, и разбирать было нечего.
         lines: list[str] = [f"Формирование {apptime.now().strftime('%d.%m.%Y %H:%M')}"]
+
+        def flush() -> None:
+            try:
+                _crosspost_form_log_path(project_id).write_text(
+                    "\n".join(lines), encoding="utf-8")
+            except OSError:
+                pass   # лог не должен ронять формирование
+
+        flush()        # старый лог уступает место новому сразу, а не в конце
 
         def say(m: str) -> None:
             lines.append(f"[{apptime.now().strftime('%H:%M:%S')}] {m}")
+            flush()
             box.write(m)
             # Короткие вехи – в заголовок свёрнутого статуса, чтобы было
             # видно, что происходит, не разворачивая.
@@ -4189,11 +4282,7 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
                     bad += 1
                     say(f"❌ {net_name} {r['post']['date']}: {r['error']}")
         lines.append(f"Итог: запланировано {ok}, с ошибками {bad}")
-        try:
-            _crosspost_form_log_path(project_id).write_text(
-                "\n".join(lines), encoding="utf-8")
-        except OSError:
-            pass   # лог не должен ронять формирование
+        flush()
         box.update(label=(f"Готово: запланировано {ok}"
                           + (f", с ошибками {bad}" if bad else "")),
                    state="error" if bad else "complete")
@@ -4795,6 +4884,14 @@ def _web_keys_block() -> None:
                     help="Пустое поле стирает ключ.")
                 if есть:
                     st.caption(f"сейчас: {secrets_local.masked(есть)}")
+                    # Значение, которое Google ключом не считает, видно ДО
+                    # всякого запроса – по началу строки. Заказчица вписала
+                    # «AQ.Ab8…» (это учётные данные OAuth, а не ключ API), и
+                    # Click полдня отвечал ей общим «Google не принял ключ».
+                    if ключ.startswith("gemini_api_key"):
+                        замечание = llm.key_note(есть)
+                        if замечание:
+                            st.warning(f"Похоже, {замечание}.", icon="🔑")
             if новые and st.button("💾 Сохранить ключи", key=f"secret-save-{ключи[0]}",
                                    type="primary"):
                 try:
@@ -4806,10 +4903,42 @@ def _web_keys_block() -> None:
                 except Exception as e:  # noqa: BLE001
                     st.error(f"Не сохранилось: {e}")
 
+            # Проверка ключей по одному. Без неё «ключи заданы, а черновиков
+            # нет» разбиралось перепиской: какой из трёх ключей плохой и чем
+            # именно – приложение не говорило, а Google говорил, просто его
+            # слова до экрана не доезжали.
+            if ключи[0].startswith("gemini_api_key"):
+                _gemini_keys_check()
+
     st.caption(f"Ключи хранятся в файле `{secrets_local.path()}` – вне папки Click, "
                "поэтому обновление программы их не тронет и в репозиторий они не "
                "попадут. Файл обычный, без шифрования: там же лежит и сохранённая "
                "сессия Яндекса.")
+
+
+def _gemini_keys_check() -> None:
+    """
+    «Проверить ключи» – по одному запросу на ключ, с приговором по каждому.
+
+    Зачем отдельная кнопка. Черновик не получается по десятку причин: ключ
+    недействителен, ключ вообще не ключ (в поле лежат учётные данные OAuth
+    вида «AQ.…»), для проекта не включён Generative Language API, у ключа
+    ограничения по адресу, кончилась квота. Раньше всё это сводилось к одной
+    строчке «Google не принял ключ Gemini» – по ней непонятно даже, какой из
+    трёх ключей чинить. Теперь Click спрашивает у Google про каждый ключ
+    отдельно и показывает ЕГО ответ.
+    """
+    if not llm.is_configured():
+        return
+    if st.button("🔎 Проверить ключи", key="gemini-keys-check"):
+        with st.spinner("Спрашиваю у Google про каждый ключ…"):
+            st.session_state["gemini-keys-verdict"] = llm.check_keys()
+    for row in st.session_state.get("gemini-keys-verdict") or []:
+        head = f"**{row['name']}** · {row['masked']}"
+        if row["ok"]:
+            st.success(f"{head} – работает", icon="✅")
+        else:
+            st.error(f"{head} – {row['reason']}", icon="⛔")
 
 
 def _forget_caches() -> None:

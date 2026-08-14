@@ -1988,6 +1988,18 @@ def _reviews_for_city(project_id: str, page, task: dict, prompt: str,
             # В логе это выглядело так: четыре одинаковых отказа по одному
             # городу, шесть минут впустую. Заказчик спросила прямо: «какой
             # смысл?». Смысла нет – квота за минуту сама не появится.
+            # Ключ Google не принял вовсе. Ждать тут нечего: квота за минуту
+            # возвращается сама, а плохой ключ посреди прогона не починится.
+            # Раньше прогон обходил все города и на каждом писал одну и ту же
+            # ошибку про ключ – отзывы собирались, время уходило впустую.
+            if budget is not None and getattr(e, "bad_keys", False):
+                if not budget.get("giveUp"):
+                    budget["giveUp"] = True
+                    _append_log(project_id, "WARN",
+                                "  💬 КЛЮЧ · Google не принял ни один ключ Gemini – "
+                                "черновики до конца прогона не пишем, отзывы всё равно "
+                                "собираем. Проверьте ключи в «⚙️ Настройках» кнопкой "
+                                "«Проверить ключи», потом «Переписать все».")
             if budget is not None and getattr(e, "is_limit", False):
                 budget["limitStreak"] = budget.get("limitStreak", 0) + 1
                 if budget["limitStreak"] >= LIMIT_GIVE_UP and not budget.get("giveUp"):

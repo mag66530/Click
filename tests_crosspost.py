@@ -1880,6 +1880,143 @@ def test_ok_bold_and_probe() -> None:
     check("отпечаток строки по-прежнему короткий", len(mb._probe("а" * 100)) == 32)
 
 
+def test_ok_bold_first_line() -> None:
+    """
+    Пост с ЖИРНЫМ заголовком не должен считаться чужим черновиком.
+
+    Живой отказ 14.08.2026: «ОК: В поле поста осталось лишнее от прошлого
+    черновика: «СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ НА АРМИРУЮЩУЮ МИКРОФИБРУ…»». В поле
+    лежал ровно наш текст – а сверяли его с РАЗМЕТКОЙ, где заголовок стоит
+    жирным (`**…**`). Звёздочки в поле, разумеется, не появляются: ОК вместо
+    них включает жирный. Проверка не сходилась никогда, стоило посту
+    начинаться с жирной строки, – а начинаются так все спецпредложения.
+
+    Второй край того же: textContent склеивает абзацы без переносов, поэтому
+    короткая первая строка ломала сверку так же надёжно.
+    """
+    print("\nОК: жирный заголовок – это не чужой черновик")
+    import ok_browser as ok
+    import post_text as pt
+
+    markup = ("**СПЕЦИАЛЬНОЕ ПРЕДЛОЖЕНИЕ НА АРМИРУЮЩУЮ МИКРОФИБРУ**\n\n"
+              "⚡ СТОИМОСТЬ – 1 400 ₽/кг ⚡\n\nТехнические характеристики:")
+    plain = "".join(part for part, _ in pt.plain_chunks(markup))
+    # Что реально оказывается в поле: без звёздочек и без переносов строк.
+    in_field = plain.replace("\n", "")
+
+    check("прежняя сверка – с разметкой – не сходится",
+          not in_field.strip().startswith(markup.strip()[:20]),
+          f"{markup[:20]!r} vs {in_field[:20]!r}")
+    check("новая сверка – по буквам набранного – сходится",
+          ok._letters(in_field).startswith(ok._letters(plain)[:20]),  # noqa: SLF001
+          f"{ok._letters(in_field)[:30]!r}")  # noqa: SLF001
+
+    # А настоящий чужой черновик по-прежнему ловится.
+    left = "Тест" + in_field
+    check("остаток чужого черновика впереди – всё ещё отказ",
+          not ok._letters(left).startswith(ok._letters(plain)[:20]),  # noqa: SLF001
+          left[:40])
+
+    import inspect
+    src = inspect.getsource(ok.schedule_postponed_post)
+    check("сверяем с тем, что набирается, а не с разметкой",
+          "plain_chunks(text)" in src, "нет разбора разметки перед сверкой")
+    check("и по буквам", "_letters(typed)" in src)
+
+
+def test_max_photo_proof() -> None:
+    """
+    Отложка МАКС без картинки – это не успех.
+
+    14.08.2026 МАКС поставил пост на 17.08 без фото, а Click отчитался
+    успехом: после передачи файла он ждал три с половиной секунды и шёл
+    дальше, ни разу не проверив, появилась ли картинка в форме. Пост без
+    картинки – не тот пост, который просили.
+    """
+    print("\nМАКС: фото должно быть видно в форме")
+    import max_browser as mb
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    PIX = ("data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==")
+    page_html = f"""
+    <html><body style="margin:0">
+      <img id="avatar" src="https://example.com/ava.png" width="40" height="40">
+      <div id="composer"></div>
+      <script>
+        window.attach = () => document.getElementById('composer').innerHTML =
+          '<img id="thumb" width="80" height="80" src="{PIX}">';
+      </script>
+    </body></html>
+    """
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            page = browser.new_context(viewport={"width": 800, "height": 600}).new_page()
+            page.set_content(page_html)
+
+            check("аватарки и значки с сервера за прикреплённое фото не считаем",
+                  mb._thumbs(page) == 0, str(mb._thumbs(page)))  # noqa: SLF001
+
+            was = mb._thumbs(page)  # noqa: SLF001
+            page.evaluate("() => window.attach()")
+            check("а картинка из памяти браузера – считается",
+                  mb._thumbs(page) - was == 1, str(mb._thumbs(page)))  # noqa: SLF001
+
+            # Ждать миниатюру, которой не будет, бесконечно нельзя.
+            page.set_content(page_html)
+            was_wait = mb.THUMB_WAIT_S
+            mb.THUMB_WAIT_S = 2
+            try:
+                check("миниатюра не появилась – так и говорим",
+                      not mb._wait_thumbs(page, mb._thumbs(page), 1))  # noqa: SLF001
+                page.evaluate("() => setTimeout(window.attach, 700)")
+                check("а появившуюся с задержкой – дожидаемся",
+                      mb._wait_thumbs(page, 0, 1))  # noqa: SLF001
+            finally:
+                mb.THUMB_WAIT_S = was_wait
+
+            import inspect
+            src = inspect.getsource(mb.schedule_postponed_post)
+            check("без миниатюры отложку не ставим", "_wait_thumbs(" in src)
+            check("и человеку сказано, почему", "не тот пост" in src)
+        finally:
+            browser.close()
+
+
+def test_form_log_is_fresh() -> None:
+    """
+    Лог формирования пишется по ходу, а не одной строчкой в конце.
+
+    Заказчица (14.08.2026): «лог вообще старый висит, нового нет». Так и
+    было: файл лога переписывался ПОСЛЕДНИМ действием прогона. Пока прогон
+    шёл, в разделе висел лог прошлого раза, а если прогон обрывался –
+    новый не появлялся вовсе, и разбирать было нечего.
+    """
+    print("\nКросспостинг: лог пишется по ходу прогона")
+    import inspect
+
+    import streamlit_app as app
+
+    src = inspect.getsource(app._crosspost_form_block)  # noqa: SLF001
+    check("файл лога переписывается на каждой строке",
+          src.count("flush()") >= 3, f"вызовов flush: {src.count('flush()')}")
+    check("и в самом начале, до первого шага",
+          "flush()        # старый лог уступает место новому сразу" in src)
+    check("сама запись – в одном месте", "def flush()" in src)
+
+    head = inspect.getsource(app._crosspost_form_last_log)  # noqa: SLF001
+    check("в заголовке лога видно его время", 'f" – {when}"' in head)
+
+
 def test_forget_target() -> None:
     """
     Сброс одной площадки: ошибка убирается, соседние отложки не трогаются.
@@ -1996,10 +2133,8 @@ def test_max_text_entry() -> None:
     src = inspect.getsource(mb._fill_post_text)
     check("посимвольного набора больше нет", "page.type(" not in src)
     check("текст вставляется событием, не клавишами", "insert_text" in src)
-    check("перенос строки – только Shift+Enter", 'press("Shift+Enter")' in src)
     check("голого Enter нет", 'press("Enter")' not in src.replace("Shift+Enter", ""))
-    check("после первого переноса – проверка, что поле не опустело",
-          "_editor_text" in src and "i == 1" in src)
+    check("отправку проверяем по каналу, а не по полю", "_sent_lines(" in src)
     check("в конце сверяем начало и конец текста", "_probe" in src)
 
     whole = inspect.getsource(mb.schedule_postponed_post)
@@ -2012,6 +2147,190 @@ def test_max_text_entry() -> None:
           mb._probe("⚡ СТОИМОСТЬ – 1 400 ₽/кг ⚡") == mb._probe("СТОИМОСТЬ 1400кг"),
           mb._probe("⚡ СТОИМОСТЬ – 1 400 ₽/кг ⚡"))
     check("пустая строка – пустой отпечаток", mb._probe("⚡ – ⚡") == "")
+
+
+# Поле МАКС, устроенное как настоящее: contenteditable с role=textbox,
+# рядом – узел-подсказка, подходящий под ТОТ ЖЕ селектор (на нём и ломалось
+# чтение), выше – лента канала со вчерашним постом.
+MAX_CHAT_PAGE = """
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;font:14px sans-serif">
+  <div id="feed">
+    <div class="msg">Вчерашний пост: поступила партия арматуры, отгружаем со склада.</div>
+  </div>
+  <div id="hint" contenteditable role="textbox" data-lexical-editor="true"
+       style="position:absolute;opacity:0;height:1px;width:1px"></div>
+  <div id="editor" contenteditable role="textbox" data-lexical-editor="true"
+       style="border:1px solid #ccc;min-height:28px;max-height:90px;overflow:auto"></div>
+  <script>
+    // Два переключателя – это две беды, которые надо уметь пережить:
+    //   __eatInsertBreaks – сборка МАКС не принимает переносы одним куском;
+    //   __enterAlwaysSends – Shift+Enter в ней ОТПРАВЛЯЕТ, а не переносит.
+    window.__sent = [];
+    const ed = document.getElementById('editor');
+
+    ed.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if ((e.shiftKey || e.ctrlKey) && !window.__enterAlwaysSends) {
+        document.execCommand('insertLineBreak');
+        return;
+      }
+      window.__sent.push(ed.innerText);
+      document.getElementById('feed').insertAdjacentHTML(
+        'beforeend', '<div class="msg">' + ed.innerText + '</div>');
+      ed.innerHTML = '';
+    });
+
+    // Переносы из вставки текста выбрасываем через Range, а не execCommand:
+    // execCommand внутри обработчика сам поднимает beforeinput, и поведение
+    // становится непредсказуемым от захода к заходу.
+    ed.addEventListener('beforeinput', e => {
+      if (!window.__eatInsertBreaks) return;
+      const data = e.data || '';
+      if (!(e.inputType || '').startsWith('insert') || !data.includes('\\n')) return;
+      e.preventDefault();
+      const sel = window.getSelection();
+      const node = document.createTextNode(data.replace(/\\n+/g, ''));
+      if (sel && sel.rangeCount) {
+        const r = sel.getRangeAt(0);
+        r.deleteContents();
+        r.insertNode(node);
+        r.setStartAfter(node);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      } else {
+        ed.appendChild(node);
+      }
+    });
+  </script>
+</body></html>
+"""
+
+MAX_POST = ("На склад поступила новая партия сетки рабицы\n"
+            "В наличии:\n"
+            "\n"
+            "• Размер ячейки: от 10x10 до 100x100 мм;\n"
+            "• Диаметр проволоки: 1,2-5 мм.")
+
+
+def test_max_text_on_real_field() -> None:
+    """
+    Ввод текста МАКС – в настоящем браузере, на поле как в кабинете.
+
+    Две беды подряд, обе из одной семьи «проверка врёт про отправку».
+
+    13.08.2026: пост ушёл в канал двенадцатью сообщениями – текст печатался
+    клавишами, а каждый Enter в поле чата это «отправить».
+
+    14.08.2026: Click объявил «МАКС отправил строку вместо переноса: после
+    Shift+Enter поле опустело» – а в канале ничего не появилось, и весь пост
+    стоял в поле. Проверка смотрела ТОЛЬКО в поле и читала при этом первый
+    подходящий узел, а он у МАКС – пустышка-подсказка.
+
+    Поэтому здесь проверяется главное: в канал не уходит НИЧЕГО, а решение
+    «отправилось» принимается по самому каналу – по тому, появилось ли в нём
+    сообщение, которого не было до ввода. Вчерашний пост в ленте лежит с
+    самого начала: принять его за свежую отправку нельзя.
+    """
+    import max_browser as mb
+    print("\nМАКС: ввод текста на живом поле")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        check("playwright доступен", False, "не установлен")
+        return
+
+    SEL = 'div[contenteditable][role="textbox"][data-lexical-editor="true"]'
+    lines = [ln for ln in MAX_POST.split("\n") if ln.strip()]
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            browser = pw.chromium.launch()
+        try:
+            context = browser.new_context(viewport={"width": 900, "height": 700})
+            said: list[str] = []
+
+            def sent(p):
+                return p.evaluate("() => window.__sent")
+
+            def chat(**flags):
+                """Свежая страница канала. Каждому случаю своя: повторный
+                set_content в одной вкладке скрипт страницы уже не заводит,
+                и переключатели фикстуры молча перестают работать."""
+                p = context.new_page()
+                p.set_content(MAX_CHAT_PAGE)
+                for name, value in flags.items():
+                    p.evaluate(f"() => {{ window.{name} = {str(value).lower()}; }}")
+                return p
+
+            # ── Обычный случай ───────────────────────────────────────
+            page = chat()
+            why = mb._fill_post_text(page, SEL, MAX_POST, said.append)  # noqa: SLF001
+            check("текст вписан без отказа", why == "", why)
+            check("в канал не ушло ни одного сообщения", sent(page) == [], str(sent(page)))
+            got = page.eval_on_selector("#editor", "el => el.innerText")
+            check("в поле все строки, а не одна",
+                  len([ln for ln in got.split("\n") if ln.strip()]) >= len(lines), repr(got))
+            check("начало текста на месте", "сетки рабицы" in got, got[:60])
+            check("конец текста на месте", "1,2-5 мм" in got, got[-60:])
+            check("строки не склеились", "задачВ наличии" not in got.replace(" ", ""))
+            check("вчерашний пост в ленте не тронут",
+                  "Вчерашний пост" in page.eval_on_selector("#feed", "el => el.innerText"))
+
+            # ── В поле остался хвост прошлой попытки ─────────────────
+            # На снимке заказчицы в поле лежал хвост прошлого захода, а под
+            # ним – весь пост заново. Дописывать в остаток нельзя.
+            page = chat()
+            page.eval_on_selector("#editor", "el => el.innerText = 'хвост прошлой попытки'")
+            why = mb._fill_post_text(page, SEL, MAX_POST, said.append)  # noqa: SLF001
+            check("с остатком в поле тоже справились", why == "", why)
+            got = page.eval_on_selector("#editor", "el => el.innerText")
+            check("остаток стёрт, а не дописан", "хвост прошлой" not in got, got[:60])
+
+            # ── МАКС не принимает переносы одним куском ──────────────
+            # Тогда идём построчно – но по-прежнему ничего не отправляем.
+            page = chat(__eatInsertBreaks=True)
+            why = mb._fill_post_text(page, SEL, MAX_POST, said.append)  # noqa: SLF001
+            check("запасной путь сработал", why == "", why)
+            check("и снова ничего не отправлено", sent(page) == [], str(sent(page)))
+            check("про запасной путь сказано в логе",
+                  any("построчно" in m for m in said), str(said[-3:]))
+
+            # ── Худший случай: Shift+Enter в этой сборке ОТПРАВЛЯЕТ ──
+            page = chat(__eatInsertBreaks=True, __enterAlwaysSends=True)
+            why = mb._fill_post_text(page, SEL, MAX_POST, said.append)  # noqa: SLF001
+            check("отправку заметили и остановились", "отправил строку" in why, why)
+            check("и потеряли ровно одну строку, а не весь пост", len(sent(page)) == 1,
+                  str(sent(page)))
+            check("в отказе сказано, что удалить в канале",
+                  "удалите" in why.lower(), why)
+
+            # ── Ложная тревога: поле «пустое», а канал не тронут ─────
+            # Тот самый случай 14.08.2026. Читаем первый подходящий узел –
+            # он пустышка; настоящее поле полно текста. Отправкой это
+            # объявлять нельзя.
+            page = chat()
+            page.eval_on_selector("#editor", "el => el.innerText = 'вписанный пост'")
+            check("читаем самый полный узел, а не первый попавшийся",
+                  mb._editor_text(page, SEL).strip() == "вписанный пост",  # noqa: SLF001
+                  repr(mb._editor_text(page, SEL)))  # noqa: SLF001
+            check("канал не менялся – значит, ничего не отправляли",
+                  mb._sent_lines(page, SEL, mb._feed_letters(page, SEL),  # noqa: SLF001
+                                 ["вписанный пост"]) == [])
+
+            # А вот вчерашний пост в ленте за нашу отправку не выдаётся –
+            # он был там до нас.
+            before = mb._feed_letters(page, SEL)  # noqa: SLF001
+            check("старое сообщение в канале нашей отправкой не считается",
+                  mb._sent_lines(page, SEL, before,  # noqa: SLF001
+                                 ["Вчерашний пост: поступила партия арматуры"]) == [])
+        finally:
+            browser.close()
 
 
 def test_publish_off() -> None:

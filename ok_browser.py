@@ -1194,6 +1194,61 @@ def _select_closest(page, selector: str, want: str) -> str:
     return target
 
 
+def _type_post_text(page, text_sel: str, text: str,
+                    log: Callable[[str], None] | None = None) -> str:
+    """
+    Ввести текст темы, сохранив жирный из реестра.
+
+    Заказчица (14.08.2026): «в ОК контакты норм, но жирного шрифта нет, а
+    в реестре он есть». Редактор темы ОК – обычное поле с форматированием,
+    жирный в нём включается Ctrl+B, как в любом текстовом редакторе. Поэтому
+    текст набирается кусками: перед жирным куском жмём Ctrl+B, после –
+    отпускаем.
+
+    Возвращает 'bold', если удалось с жирным, и 'plain', если жирного в
+    тексте не было или он не дался. Проверка простая и жёсткая: буквы в поле
+    должны совпасть с буквами текста. Не совпали – чистим поле и набираем
+    обычным способом, как раньше. Хуже прежнего не станет никогда.
+    """
+    import re
+
+    import post_text
+
+    log = log or (lambda m: None)
+    chunks = post_text.plain_chunks(text)
+    plain = "".join(t for t, _ in chunks)
+
+    def letters(s: str) -> str:
+        return re.sub(r"\W", "", s or "", flags=re.U).lower()
+
+    def in_field() -> str:
+        try:
+            return page.eval_on_selector(text_sel, "el => el.innerText || el.textContent || ''") or ""
+        except Exception:  # noqa: BLE001
+            return ""
+
+    if any(bold for _, bold in chunks):
+        try:
+            for part, bold in chunks:
+                if bold:
+                    page.keyboard.press("Control+B")
+                page.keyboard.type(part, delay=6)
+                if bold:
+                    page.keyboard.press("Control+B")
+            page.wait_for_timeout(600)
+            if letters(in_field()) == letters(plain):
+                log("  жирный из реестра сохранён")
+                return "bold"
+            log("  жирный не дался – набираю обычным текстом")
+        except Exception as e:  # noqa: BLE001 – ввод не должен ронять прогон
+            log(f"  жирный не дался ({e}) – набираю обычным текстом")
+        _clear_editor(page, text_sel)
+        page.click(text_sel)
+
+    page.type(text_sel, plain, delay=8)
+    return "plain"
+
+
 def _clear_editor(page, text_sel: str) -> int:
     """
     Опустошить поле темы. Возвращает, сколько знаков было убрано.
@@ -1634,7 +1689,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
 
             log(f"Ввожу текст ({len(text)} знаков)")
             page.click(text_sel)
-            page.type(text_sel, text, delay=8)
+            _type_post_text(page, text_sel, text, log)
             page.wait_for_timeout(1_200)
             typed = (page.eval_on_selector(text_sel, "el => el.textContent || ''") or "")
             if text.strip() and not typed.strip():

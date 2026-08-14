@@ -1778,6 +1778,55 @@ def test_social_defaults() -> None:
     check("пароль наружу не уезжает", "password" not in app._KEPT)
 
 
+def test_ok_bold_and_probe() -> None:
+    """
+    Две правки 14.08: жирный в ОК и починенная сверка текста в МАКС.
+
+    Жирный. Заказчица: «в ОК контакты норм, но жирного нет, а в реестре
+    есть». Редактор темы ОК жирный умеет – набираем текст кусками с Ctrl+B.
+
+    Сверка МАКС. Отложка 17.08 сорвалась на ровном месте: «в поле не видно
+    конец текста», хотя текст был введён целиком и в канал ничего не ушло.
+    Отпечаток поля обрезался до 32 знаков – конец в нём не находился НИКОГДА.
+    """
+    print("\nОК: жирный, МАКС: сверка текста")
+    import inspect
+
+    import max_browser as mb
+    import ok_browser
+    import post_text as pt
+
+    # ── ОК: куски с жирностью
+    markup = pt.autolink("**СПЕЦПРЕДЛОЖЕНИЕ**\n**Диаметр**: 0,25 мм;\n"
+                         "Заказ на нашем сайте:\n🌐 a.ru", "a.ru")
+    chunks = pt.plain_chunks(markup)
+    check("жирные куски выделены",
+          [t for t, b in chunks if b] == ["СПЕЦПРЕДЛОЖЕНИЕ", "Диаметр"], str(chunks))
+    check("склейка кусков = обычный текст",
+          "".join(t for t, _ in chunks) == pt.to_plain(markup))
+    check("маркеров ** в кусках нет", "**" not in "".join(t for t, _ in chunks))
+    check("текста без жирного это не касается",
+          [b for _, b in pt.plain_chunks("просто текст")] == [False])
+
+    src = inspect.getsource(ok_browser._type_post_text)
+    check("жирный включается Ctrl+B", 'press("Control+B")' in src)
+    check("есть откат на обычный текст", "_clear_editor" in src and "plain" in src)
+    check("сверка по буквам поля", "letters(in_field())" in src)
+    check("ОК получает разметку, а не плоский текст",
+          'network == "ok"' in inspect.getsource(
+              __import__("crosspost_form")._form_browser_all))
+
+    # ── МАКС: отпечаток поля больше не обрезается
+    text = "НАЧАЛО ТЕКСТА ПОСТА про микрофибру\n\n#Стальметурал #СМУ #Металлопрокат"
+    got = mb._letters(text)
+    first, last = text.split("\n")[0], text.split("\n")[-1]
+    check("начало находится в поле", mb._probe(first) in got)
+    check("конец тоже находится (вот это и было сломано)", mb._probe(last) in got)
+    check("а подмена ловится: в поле осталась одна последняя строка",
+          mb._probe(first) not in mb._letters(last))
+    check("отпечаток строки по-прежнему короткий", len(mb._probe("а" * 100)) == 32)
+
+
 def test_forget_target() -> None:
     """
     Сброс одной площадки: ошибка убирается, соседние отложки не трогаются.
@@ -2013,6 +2062,7 @@ def main() -> int:
     test_max_slow_load()
     test_tg_access_advice()
     test_social_defaults()
+    test_ok_bold_and_probe()
     test_forget_target()
     test_build_bumped()
     test_max_text_entry()

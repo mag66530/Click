@@ -3663,29 +3663,38 @@ def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> 
     сама подтвердила выход. Догадок в отчёте нет.
     """
     rows: list[str] = []
+    counts = {"set": 0, "live": 0, "bad": 0}
     for post in sorted(posts, key=lambda p: p.get("when") or "", reverse=True):
         for t in post.get("targets", []):
             net = t.get("network") or ""
-            name = cps.network_ru(net)
             saved = cps.target(state, post, net)
             link = (t.get("published_link") or "").strip()
             at = (saved.get("at") or "")[:16].replace("T", " ")
+            # В отчёт попадает только сделанное. «Не тронуто» и «публикуется
+            # вручную» – это не событие, а тишина: строк с ней в реестре
+            # десятки, и за ними терялось то немногое, что и есть отчёт.
             if link:
                 what, cls = f'вышло – <a href="{T.esc(link)}" target="_blank">запись ↗</a>', "ok"
+                counts["live"] += 1
             elif saved.get("state") == cps.SCHEDULED:
                 what, cls = f"отложка поставлена {T.esc(at)}", "skip"
+                counts["set"] += 1
             elif saved.get("state") in (cps.SENT, cps.SENT_LATE):
                 tail = f' – <a href="{T.esc(saved.get("link", ""))}" target="_blank">запись ↗</a>' \
                     if saved.get("link") else ""
                 what, cls = f"вышло {T.esc(at)}{tail}", "ok"
+                counts["live"] += 1
             elif saved.get("state") == cps.FAILED:
-                what, cls = f'ошибка {T.esc(at)}: {T.esc(saved.get("error", ""))}', "err"
+                err = " ".join(str(saved.get("error", "")).split())
+                what, cls = f'ошибка {T.esc(at)}: {T.esc(err[:140])}', "err"
+                counts["bad"] += 1
             elif saved.get("state") == cps.MISSED:
-                what, cls = f"пропущено: {T.esc(saved.get('error', 'время вышло'))}", "warn"
-            elif net not in content_plan.SUPPORTED:
-                what, cls = "Click не публикует – вручную", ""
+                err = " ".join(str(saved.get("error", "время вышло")).split())
+                what, cls = f"пропущено: {T.esc(err[:140])}", "warn"
+                counts["bad"] += 1
             else:
-                what, cls = "не тронуто", ""
+                continue
+            name = cps.network_ru(net)
             d = content_plan.parse_date(post.get("date", ""))
             day = d.strftime("%d.%m") if d else post.get("date", "")
             head = " ".join(post_text.strip_markup(post.get("text") or "").split())[:60] or "без текста"
@@ -3695,14 +3704,18 @@ def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> 
                 f'<span class="cp-type">{T.esc(name)}</span>'
                 f'<span class="report-row-reason">{T.esc(head)}</span>'
                 f'<span class="report-row-dur">{what}</span></div>')
-            if len(rows) >= 120:
-                break
-        if len(rows) >= 120:
-            break
-    with st.expander("📊 Отчёт: что и куда ушло", expanded=False):
-        st.caption("Только факты: ссылка из реестра или подтверждение самой "
-                   "площадки. Что Click не трогал, так и подписано.")
-        html("".join(rows) or T.empty("–", "Пока пусто", ""))
+    title = " · ".join(x for x in (
+        f'отложек {counts["set"]}' if counts["set"] else "",
+        f'вышло {counts["live"]}' if counts["live"] else "",
+        f'ошибок {counts["bad"]}' if counts["bad"] else "") if x) or "пока пусто"
+    with st.expander(f"📊 Отчёт: что и куда ушло – {title}", expanded=False):
+        st.caption("Только сделанное: отложка поставлена, пост вышел, ошибка. "
+                   "Постов, которых Click не касался, здесь нет – они видны в плане.")
+        html("".join(rows[:120])
+             or T.empty("–", "Click пока ничего не делал",
+                        "Здесь появятся поставленные отложки, вышедшие посты и ошибки."))
+        if len(rows) > 120:
+            st.caption(f"Показаны последние 120 строк из {len(rows)}.")
 
 
 def _crosspost_form_last_log(project_id: str) -> None:

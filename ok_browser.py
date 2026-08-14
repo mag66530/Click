@@ -1206,6 +1206,40 @@ def _letters(s: str) -> str:
     return re.sub(r"\W", "", s or "", flags=re.U).lower()
 
 
+def _diag_dir(project_id: str) -> Path:
+    """Куда складывать разметку для разбора – рядом с логом формирования."""
+    d = paths.data_root() / project_id / "crosspost"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _save_editor_markup(page, text_sel: str, project_id: str,
+                        log: Callable[[str], None]) -> None:
+    """
+    Сохранить разметку поля темы и панели над ним.
+
+    Затем, что жирный в ОК Click так и не выставил, а вслепую его чинить
+    больше нельзя: у площадки своя вёрстка, и угадывать её по классам –
+    это те самые круги, на которые ушёл день. По этому файлу видно всё:
+    есть ли у поля панель форматирования, какая у неё кнопка «Ж» и что
+    редактор сделал с нашим текстом.
+    """
+    try:
+        html = page.eval_on_selector(
+            text_sel,
+            """(el) => {
+                 let box = el;
+                 for (let i = 0; i < 3 && box.parentElement; i++) box = box.parentElement;
+                 return (box.outerHTML || '').slice(0, 12000);
+               }""") or ""
+        if html:
+            (_diag_dir(project_id) / "ok-editor.html").write_text(html, encoding="utf-8")
+            log("  разметку поля ОК сохранил рядом с логом (ok-editor.html) – "
+                "пришлите её, и жирный будет сделан точно")
+    except Exception:  # noqa: BLE001 – диагностика не должна ронять прогон
+        pass
+
+
 def _lines(s: str) -> list[str]:
     """
     Непустые строки текста, по буквам каждой – «форма» поста.
@@ -1257,7 +1291,8 @@ def _type_bold_keys(page, chunks: list[tuple[str, bool]]) -> None:
 
 
 def _type_post_text(page, text_sel: str, text: str,
-                    log: Callable[[str], None] | None = None) -> str:
+                    log: Callable[[str], None] | None = None,
+                    project_id: str = "") -> str:
     """
     Ввести текст темы, сохранив жирный из реестра.
 
@@ -1315,6 +1350,8 @@ def _type_post_text(page, text_sel: str, text: str,
             _clear_editor(page, text_sel)
             page.click(text_sel)
         log("  жирный не дался – набираю обычным текстом: целый текст важнее")
+        if project_id:
+            _save_editor_markup(page, text_sel, project_id, log)
 
     page.type(text_sel, plain, delay=8)
     return "plain"
@@ -1760,10 +1797,11 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
 
             log(f"Ввожу текст ({len(text)} знаков)")
             page.click(text_sel)
-            _type_post_text(page, text_sel, text, log)
+            _type_post_text(page, text_sel, text, log, project_id=project_id)
             page.wait_for_timeout(1_200)
             # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
-            yb.drop_link_card(page, yb.text_domains(text), log)
+            yb.drop_link_card(page, yb.text_domains(text), log,
+                              diag_dir=_diag_dir(project_id))
             typed = (page.eval_on_selector(text_sel, "el => el.textContent || ''") or "")
             if text.strip() and not typed.strip():
                 return {"ok": False, "error": "Текст не попал в поле поста ОК",
@@ -1807,7 +1845,8 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             # Она приходит с сервера с задержкой и запросто появляется уже
             # после ввода текста, пока Click прикрепляет фото: 14.08.2026 так
             # и вышло – отложка в ОК встала вместе с чужой карточкой.
-            yb.drop_link_card(page, yb.text_domains(text), log, tries=1)
+            yb.drop_link_card(page, yb.text_domains(text), log, tries=1,
+                              diag_dir=_diag_dir(project_id))
             log(f"Ставлю время публикации {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
 
             if not _turn_on_schedule(page, log):

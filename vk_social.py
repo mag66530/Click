@@ -1291,7 +1291,8 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             # оттесняет нашу картинку. Человек в этом месте жмёт крестик на
             # карточке – жмём и мы, но только если это точно её крестик.
             page.wait_for_timeout(1_200)
-            yb.drop_link_card(page, yb.text_domains(text), log)
+            yb.drop_link_card(page, yb.text_domains(text), log,
+                              diag_dir=paths.data_root() / project_id / "crosspost")
 
             # «Далее» – к экрану, где живёт «Запланировать».
             page.click(f'{dlg} >> text="Далее"', timeout=15_000)
@@ -1299,7 +1300,8 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
 
             # Последний заход на карточку сайта: ВК подтягивает её с задержкой
             # и мог успеть, пока Click жал «Далее».
-            yb.drop_link_card(page, yb.text_domains(text), log, tries=1)
+            yb.drop_link_card(page, yb.text_domains(text), log, tries=1,
+                              diag_dir=paths.data_root() / project_id / "crosspost")
 
             log(f"Ставлю таймер на {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
             _set_schedule(page, when, log)

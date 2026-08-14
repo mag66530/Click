@@ -2038,103 +2038,155 @@ _CLOSE_ICON_D = "M9.414 8l3.294 3.294"
 
 def drop_link_card(page, domains: list[str],
                    log: Callable[[str], None] | None = None,
-                   tries: int = 3) -> str:
+                   tries: int = 3, diag_dir: "Path | None" = None) -> str:
     """
     Убрать карточку сайта, которую площадка подтянула по ссылке в тексте.
 
-    Зачем. В тексте поста есть адрес сайта, и ВК (а за ним и остальные)
-    цепляет к посту сниппет: картинка с сайта, заголовок, описание. Нашу
-    собственную картинку он при этом оттесняет, и пост выходит не тем, что
-    в реестре. Человек в этом месте жмёт крестик на карточке – Click теперь
-    тоже.
+    Зачем. В тексте поста есть адрес сайта, и площадка цепляет к посту
+    сниппет: картинка с сайта, заголовок, описание. Нашу собственную
+    картинку он оттесняет, и пост выходит не тем, что в реестре. Человек в
+    этом месте жмёт крестик на карточке.
 
-    Что здесь сделано ради безопасности, и почему именно так. Крестик на
-    странице не один: им же закрывается само окно создания поста, и промах
-    стоил бы всего поста. Поэтому жмём не «первый попавшийся крестик», а
-    только тот, у которого В ПРЕДКАХ есть ссылка на наш домен – то есть
-    крестик именно этой карточки. Не нашли такого – не делаем НИЧЕГО.
+    Как ищем – и почему именно так. Два прежних захода (по контуру значка,
+    потом по подписи кнопки) не сработали на живом ОК: у каждой площадки
+    своя вёрстка, и угадывать её по классам бессмысленно. Поэтому ищем не
+    по разметке, а ПО МЕСТУ – так же, как ищет человек глазами:
 
-    Возвращает: 'closed' – карточку убрали, '' – её и не было (или не нашли).
+      1. находим саму карточку: ссылка на наш домен вне поля ввода;
+      2. поднимаемся от неё вверх, пока блок не начнёт включать поле ввода, –
+         это и есть прямоугольник карточки;
+      3. наводим на него мышь: у ВК и ОК крестик появляется по наведению;
+      4. берём маленькие кликабельные элементы внутри этого прямоугольника
+         и у его верхней кромки (крестик всегда там) – и жмём ближайший к
+         правому верхнему углу.
+
+    Промахнуться по крестику ОКНА нельзя: он далеко от карточки и в её
+    прямоугольник не попадает. Не нашли ничего – не делаем НИЧЕГО, пишем в
+    лог и (если дали diag_dir) сохраняем разметку карточки: по ней правка
+    делается точно, а не на ощупь.
+
+    Возвращает: 'closed' – карточку убрали, '' – её не было или не нашли.
     """
     log = log or (lambda m: None)
     doms = [d.lower() for d in domains if d]
     if not doms:
         return ""
-    js = """
-    (args) => {
-      const [needle, doms] = args;
-      // Крестик карточки у каждой площадки нарисован по-своему: у ВК это
-      // тот самый значок из разметки, у ОК – кнопка с подписью «Удалить».
-      // Берём и то, и другое: сузит выбор всё равно проверка ниже.
-      const words = ['удал', 'убра', 'закр', 'открепить', 'remove', 'delete', 'close'];
-      const named = (el) => {
-        const t = ((el.getAttribute('aria-label') || '') + ' ' +
-                   (el.getAttribute('title') || '') + ' ' +
-                   (el.className && typeof el.className === 'string' ? el.className : '')
-                  ).toLowerCase();
-        return words.some(w => t.includes(w));
-      };
-      const btns = [...document.querySelectorAll('button, [role="button"], a, i, span')];
-      for (const b of btns) {
-        if (!b.querySelector(`path[d^="${needle}"]`) && !named(b)) continue;
-        // Поднимаемся от крестика вверх, пока не найдём его карточку. Признак
-        // карточки: в ней есть ссылка на наш сайт И НЕТ поля ввода. Второе
-        // важнее первого: без него «карточкой» оказывалось всё окно создания
-        // поста – ссылка-то внутри него тоже есть, – и Click нажимал крестик
-        // ОКНА, закрывая пост целиком (поймано на макете, 14.08.2026).
-        let p = b.parentElement;
-        for (let i = 0; i < 6 && p; i++, p = p.parentElement) {
-          if (p.querySelector('[contenteditable], textarea, input[type="text"]')) break;
-          const links = [...p.querySelectorAll('a[href]')].map(a => a.href.toLowerCase());
-          if (links.some(h => doms.some(d => h.includes(d)))) {
-            b.setAttribute('data-click-card-x', '1');
-            return true;
-          }
-        }
+
+    find_card = """
+    (doms) => {
+      const link = [...document.querySelectorAll('a[href]')].find(a => {
+        const h = (a.href || '').toLowerCase();
+        return doms.some(d => h.includes(d)) && !a.closest('[contenteditable], textarea');
+      });
+      if (!link) return null;
+      let card = link, p = link.parentElement;
+      for (let i = 0; i < 8 && p; i++, p = p.parentElement) {
+        if (p.querySelector('[contenteditable], textarea, input[type="text"]')) break;
+        card = p;
       }
-      return false;
+      card.setAttribute('data-click-card', '1');
+      const r = card.getBoundingClientRect();
+      return {x: r.x, y: r.y, w: r.width, h: r.height};
     }
     """
-    has_card_js = """(doms) => [...document.querySelectorAll('a[href]')].some(a => {
-           const h = a.href.toLowerCase();
-           return doms.some(d => h.includes(d))
-                  && !a.closest('[contenteditable], textarea');
-       })"""
+    mark_x = """
+    (box) => {
+      const card = document.querySelector('[data-click-card="1"]');
+      if (!card) return null;
+      // Крестик может лежать и вне карточки – у её верхней кромки. Берём
+      // всё, что рисуется в этой полосе: сама карточка плюс 44px сверху и
+      // справа. Дальше отбираем маленькое и кликабельное.
+      const pad = 44;
+      const inZone = (r) => r.width > 0 && r.height > 0 && r.width <= 64 && r.height <= 64
+        && r.left >= box.x - pad && r.right <= box.x + box.w + pad
+        && r.top >= box.y - pad && r.top <= box.y + Math.min(box.h, 120);
+      const clickable = (el) => {
+        if (el.closest('[contenteditable], textarea')) return false;
+        const tag = el.tagName.toLowerCase();
+        if (tag === 'button' || el.getAttribute('role') === 'button') return true;
+        if (tag === 'a' && !el.getAttribute('href')) return true;
+        return getComputedStyle(el).cursor === 'pointer' && el.children.length <= 2;
+      };
+      let best = null, bestScore = 1e9;
+      for (const el of document.querySelectorAll('button, [role="button"], a, i, span, div')) {
+        const r = el.getBoundingClientRect();
+        if (!inZone(r) || !clickable(el)) continue;
+        if ((el.innerText || '').trim().length > 3) continue;   // это не крестик, а подпись
+        // Ближе к правому верхнему углу карточки – вероятнее крестик.
+        const score = Math.abs(r.right - (box.x + box.w)) + Math.abs(r.top - box.y);
+        if (score < bestScore) { best = el; bestScore = score; }
+      }
+      if (!best) return null;
+      best.setAttribute('data-click-card-x', '1');
+      const r = best.getBoundingClientRect();
+      return {tag: best.tagName.toLowerCase(),
+              label: (best.getAttribute('aria-label') || best.getAttribute('title') || ''),
+              cls: String(best.className || '').slice(0, 60),
+              x: r.x + r.width / 2, y: r.y + r.height / 2};
+    }
+    """
 
-    def has_card() -> bool:
+    def card_box():
         try:
-            return bool(page.evaluate(has_card_js, doms))
-        except Exception:  # noqa: BLE001
-            return False
+            return page.evaluate(find_card, doms)
+        except Exception:  # noqa: BLE001 – поиск карточки не должен ронять прогон
+            return None
 
-    # Карточку площадка подтягивает не мгновенно: сначала уходит запрос за
-    # заголовком и картинкой сайта, и только потом она появляется в форме.
-    # Поэтому не «заглянули один раз и ушли», а несколько подходов с паузами –
-    # ровно как ждёт человек, прежде чем нажать крестик.
     for attempt in range(max(1, tries)):
         if attempt:
             page.wait_for_timeout(1_500 * attempt)
+        box = card_box()
+        if not box:
+            continue                      # карточки ещё (или уже) нет
+        # Наведение: у обеих площадок крестик появляется по наведению мыши.
         try:
-            found = page.evaluate(js, [_CLOSE_ICON_D, doms])
-        except Exception:  # noqa: BLE001 – поиск карточки не должен ронять прогон
-            return ""
+            page.mouse.move(box["x"] + box["w"] / 2, box["y"] + 12)
+            page.wait_for_timeout(400)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            found = page.evaluate(mark_x, box)
+        except Exception:  # noqa: BLE001
+            found = None
         if not found:
             continue
-        try:
-            page.locator('[data-click-card-x="1"]').first.click(timeout=4_000)
-            page.wait_for_timeout(700)
-            log("  убрал карточку сайта, которую площадка подтянула по ссылке")
-            return "closed"
-        except Exception as e:  # noqa: BLE001
-            log(f"  карточку сайта убрать не вышло ({e}) – оставляю как есть")
-            return ""
+        for how in ("клик", "клик силой", "клик из страницы"):
+            try:
+                loc = page.locator('[data-click-card-x="1"]').first
+                if how == "клик":
+                    loc.click(timeout=3_000)
+                elif how == "клик силой":
+                    loc.click(timeout=3_000, force=True)
+                else:
+                    page.evaluate("() => document.querySelector('[data-click-card-x=\"1\"]').click()")
+                page.wait_for_timeout(800)
+                if not card_box():
+                    log(f"  убрал карточку сайта ({how}"
+                        + (f", кнопка «{found['label']}»" if found.get("label") else "") + ")")
+                    return "closed"
+            except Exception:  # noqa: BLE001 – пробуем следующий способ
+                continue
 
-    # Карточка есть, а её крестика не нашли – говорим об этом словами.
-    # Молча оставлять нельзя: человек должен знать, что пост уйдёт с
-    # карточкой, и мы должны знать, что вёрстка у площадки изменилась.
-    if has_card():
-        log("  внимание: площадка подтянула карточку сайта, а её крестик "
-            "не нашёлся – закройте карточку вручную")
+    if not card_box():
+        return ""                          # карточки нет – и хорошо
+    log("  внимание: карточка сайта осталась – крестик не нашёлся или не нажался. "
+        "Закройте её вручную")
+    if diag_dir is not None:
+        try:
+            html = page.evaluate(
+                """() => {
+                     const c = document.querySelector('[data-click-card]');
+                     if (!c) return '';
+                     const p = c.parentElement || c;
+                     return (p.outerHTML || '').slice(0, 8000);
+                   }""") or ""
+            if html:
+                Path(diag_dir).mkdir(parents=True, exist_ok=True)
+                (Path(diag_dir) / "link-card.html").write_text(html, encoding="utf-8")
+                log("  разметку карточки сохранил рядом с логом (link-card.html) – "
+                    "пришлите её, и крестик будет найден точно")
+        except Exception:  # noqa: BLE001
+            pass
     return ""
 
 

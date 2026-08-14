@@ -2099,7 +2099,7 @@ def test_report_only_click_work() -> None:
     check("а ссылка на поставленную Click отложку – идёт",
           src.index('if link and not saved.get("state")') < src.index("counts[\"live\"]"))
     check("и в пояснении сказано, почему списка нет",
-          "история, а не отчёт" in src)
+          "старых записей" in src and "реестра здесь нет" in src)
 
 
 def test_form_log_is_fresh() -> None:

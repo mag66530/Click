@@ -4093,7 +4093,10 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
     def run(posts: list[dict], what: dict) -> None:
         site = ((project_endings(project_id).get("contacts") or {})
                 .get("Россия") or {}).get("site", "")
-        box = st.status("Формирую…", expanded=True)
+        # Свёрнутый статус: заголовок меняется по ходу («ВК: пост 2 из 4…»),
+        # а простыня шагов не лезет на страницу – развернуть можно всегда,
+        # и весь протокол после прогона лежит в «Логе последнего формирования».
+        box = st.status("Формирую…", expanded=False)
         headless = bool(get_settings(project_id)["headless"])
         ok = bad = 0
 
@@ -4104,6 +4107,10 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
         def say(m: str) -> None:
             lines.append(f"[{apptime.now().strftime('%H:%M:%S')}] {m}")
             box.write(m)
+            # Короткие вехи – в заголовок свёрнутого статуса, чтобы было
+            # видно, что происходит, не разворачивая.
+            if len(m) <= 60:
+                box.update(label=f"Формирую… {m}")
 
         msg_results = crosspost_form.form_messengers(
             project_id, posts, site, channels, progress=say)

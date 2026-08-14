@@ -1778,6 +1778,56 @@ def test_social_defaults() -> None:
     check("пароль наружу не уезжает", "password" not in app._KEPT)
 
 
+def test_build_bumped() -> None:
+    """
+    Правил модули – подними метку сборки. Иначе правка НЕ доезжает.
+
+    Облако держит модули в памяти от прежней сборки и перечитывает их только
+    когда BUILD в build.py изменился. 13.08.2026 это стоило второго прогона
+    по уже исправленной поломке: починенный max_browser лежал в репозитории,
+    а в облаке крутился старый – метку поднять забыли, и «та же ошибка»
+    повторилась на живом канале. Здесь это ловится на тестах: изменился код
+    модулей – BUILD обязан измениться тоже.
+
+    .build-hash обновляется сам, когда метка поднята: файл коммитится вместе
+    с правкой, как золотые файлы текстов.
+    """
+    print("\nМетка сборки")
+    import hashlib
+    import json
+    from pathlib import Path
+
+    import build
+    import streamlit_app as app
+
+    root = Path(__file__).parent
+    digest = hashlib.sha1()
+    for name in sorted(app._OWN_MODULES):
+        fp = root / f"{name}.py"
+        if fp.exists():
+            digest.update(fp.read_bytes())
+    code_hash = digest.hexdigest()
+
+    stamp_fp = root / ".build-hash"
+    try:
+        stamp = json.loads(stamp_fp.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        stamp = {}
+
+    if stamp.get("hash") == code_hash:
+        check("код модулей не менялся с последней метки", True)
+        check("метка на месте", stamp.get("build") == build.BUILD,
+              f'{stamp.get("build")} vs {build.BUILD}')
+        return
+
+    check("код изменился → метка сборки поднята (build.py, BUILD)",
+          stamp.get("build") != build.BUILD,
+          f"метка всё ещё «{build.BUILD}» – правка НЕ доедет до облака")
+    if stamp.get("build") != build.BUILD:
+        stamp_fp.write_text(json.dumps({"hash": code_hash, "build": build.BUILD},
+                                       ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def test_max_text_entry() -> None:
     """
     Ввод текста в МАКС: НИ ОДНОГО Enter и ни одного посимвольного набора.
@@ -1914,6 +1964,7 @@ def main() -> int:
     test_max_slow_load()
     test_tg_access_advice()
     test_social_defaults()
+    test_build_bumped()
     test_max_text_entry()
     test_publish_off()
     test_max_native_scheduling()

@@ -1778,6 +1778,56 @@ def test_social_defaults() -> None:
     check("пароль наружу не уезжает", "password" not in app._KEPT)
 
 
+def test_link_card_and_report() -> None:
+    """
+    Карточка сайта и отчёт – две правки 14.08 по замечаниям заказчицы.
+
+    Карточка. Увидев адрес в тексте, ВК цепляет к посту сниппет сайта и
+    оттесняет нашу картинку; человек жмёт крестик на карточке. Click теперь
+    тоже – но только на ЕЁ крестик: тем же значком нарисован крестик самого
+    окна создания поста, и промах стоил бы всего поста.
+
+    Отчёт. Показывал все посты реестра со ссылками – «вышло 439»: пять лет
+    чужой работы, среди которой не найти свои две отложки.
+    """
+    print("\nКарточка сайта и отчёт")
+    import inspect
+
+    import streamlit_app as app
+    import yb_playwright as yb
+
+    doms = yb.text_domains("Заказ на нашем сайте stalmetural.ru, почта info@stalmetural.ru, "
+                           "группа https://ok.ru/group/1")
+    check("домены из текста собраны", doms == ["stalmetural.ru", "ok.ru"], str(doms))
+    check("повторы не дублируются", len(doms) == len(set(doms)))
+    check("без адресов – пусто", yb.text_domains("просто текст") == [])
+
+    src = inspect.getsource(yb.drop_link_card)
+    check("крестик ищется по значку со страницы", "M9.414 8l3.294" in yb._CLOSE_ICON_D)
+    check("окно создания поста защищено полем ввода",
+          "[contenteditable], textarea" in src)
+    check("без домена не жмём ничего", "if not doms" in src)
+    check("карточка есть, а крестика нет – говорим словами",
+          "закройте карточку вручную" in src)
+
+    # Жирный для ОК: сборка разметки для вставки.
+    import ok_browser
+    html = ok_browser._bold_html([("Диаметр", True), (": 0,25\nмм", False)])
+    check("жирный кусок обёрнут <b>", html.startswith("<b>Диаметр</b>"), html)
+    check("перевод строки стал <br>", "<br>" in html, html)
+    check("угловые скобки экранированы",
+          "&lt;" in ok_browser._bold_html([("<b>чужое", False)]))
+    ok_src = inspect.getsource(ok_browser._type_post_text)
+    check("два способа и откат на обычный текст",
+          "_paste_bold_html" in ok_src and "_type_bold_keys" in ok_src
+          and "как раньше" in ok_src)
+
+    # Отчёт: только работа Click.
+    rep = inspect.getsource(app._crosspost_report_block)
+    check("нет записи Click – нет строки в отчёте", "if not saved:" in rep)
+    check("заголовок отчёта про работу Click", "Отчёт: что сделал Click" in rep)
+
+
 def test_ok_bold_and_probe() -> None:
     """
     Две правки 14.08: жирный в ОК и починенная сверка текста в МАКС.
@@ -1808,10 +1858,13 @@ def test_ok_bold_and_probe() -> None:
     check("текста без жирного это не касается",
           [b for _, b in pt.plain_chunks("просто текст")] == [False])
 
-    src = inspect.getsource(ok_browser._type_post_text)
+    src = (inspect.getsource(ok_browser._type_post_text)
+           + inspect.getsource(ok_browser._type_bold_keys)
+           + inspect.getsource(ok_browser._paste_bold_html))
     check("жирный включается Ctrl+B", 'press("Control+B")' in src)
+    check("и вставкой готовой разметки", "insertHTML" in src)
     check("есть откат на обычный текст", "_clear_editor" in src and "plain" in src)
-    check("сверка по буквам поля", "letters(in_field())" in src)
+    check("сверка по буквам поля", "letters(got) == letters(plain)" in src)
     check("ОК получает разметку, а не плоский текст",
           'network == "ok"' in inspect.getsource(
               __import__("crosspost_form")._form_browser_all))
@@ -2062,6 +2115,7 @@ def main() -> int:
     test_max_slow_load()
     test_tg_access_advice()
     test_social_defaults()
+    test_link_card_and_report()
     test_ok_bold_and_probe()
     test_forget_target()
     test_build_bumped()

@@ -1194,6 +1194,44 @@ def _select_closest(page, selector: str, want: str) -> str:
     return target
 
 
+def _bold_html(chunks: list[tuple[str, bool]]) -> str:
+    """Куски (текст, жирный) → HTML для вставки в поле: <b> и переводы строк."""
+    out = []
+    for part, bold in chunks:
+        esc = (part.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+               .replace("\n", "<br>"))
+        out.append(f"<b>{esc}</b>" if bold else esc)
+    return "".join(out)
+
+
+def _paste_bold_html(page, text_sel: str, chunks: list[tuple[str, bool]]) -> None:
+    """Способ первый: отдать редактору готовую разметку одной вставкой."""
+    page.eval_on_selector(
+        text_sel,
+        """(el, html) => {
+             el.focus();
+             const sel = window.getSelection();
+             const r = document.createRange();
+             r.selectNodeContents(el);
+             sel.removeAllRanges();
+             sel.addRange(r);
+             document.execCommand('insertHTML', false, html);
+             el.dispatchEvent(new Event('input', {bubbles: true}));
+             el.dispatchEvent(new Event('change', {bubbles: true}));
+           }""",
+        _bold_html(chunks))
+
+
+def _type_bold_keys(page, chunks: list[tuple[str, bool]]) -> None:
+    """Способ второй: набрать кусками, включая жирный Ctrl+B, как человек."""
+    for part, bold in chunks:
+        if bold:
+            page.keyboard.press("Control+B")
+        page.keyboard.type(part, delay=6)
+        if bold:
+            page.keyboard.press("Control+B")
+
+
 def _type_post_text(page, text_sel: str, text: str,
                     log: Callable[[str], None] | None = None) -> str:
     """
@@ -1228,22 +1266,27 @@ def _type_post_text(page, text_sel: str, text: str,
             return ""
 
     if any(bold for _, bold in chunks):
-        try:
-            for part, bold in chunks:
-                if bold:
-                    page.keyboard.press("Control+B")
-                page.keyboard.type(part, delay=6)
-                if bold:
-                    page.keyboard.press("Control+B")
-            page.wait_for_timeout(600)
-            if letters(in_field()) == letters(plain):
-                log("  жирный из реестра сохранён")
-                return "bold"
-            log("  жирный не дался – набираю обычным текстом")
-        except Exception as e:  # noqa: BLE001 – ввод не должен ронять прогон
-            log(f"  жирный не дался ({e}) – набираю обычным текстом")
-        _clear_editor(page, text_sel)
-        page.click(text_sel)
+        n_bold = sum(1 for _, b in chunks if b)
+        # Два способа, от точного к грубому. Первый – вставить готовую
+        # разметку <b> одним куском (execCommand отдаёт её редактору как
+        # вставку из буфера, и ОК её разбирает). Второй – набирать текст
+        # кусками, включая жирный горячей клавишей, как это делает человек.
+        for way, run in (("разметкой", lambda: _paste_bold_html(page, text_sel, chunks)),
+                         ("клавишами", lambda: _type_bold_keys(page, chunks))):
+            try:
+                run()
+                page.wait_for_timeout(700)
+                got = in_field()
+                if letters(got) == letters(plain):
+                    log(f"  жирный из реестра сохранён ({way}, кусков {n_bold})")
+                    return "bold"
+                log(f"  {way}: в поле легло не то "
+                    f"({len(letters(got))} знаков вместо {len(letters(plain))}) – пробую дальше")
+            except Exception as e:  # noqa: BLE001 – ввод не должен ронять прогон
+                log(f"  {way}: не вышло ({e}) – пробую дальше")
+            _clear_editor(page, text_sel)
+            page.click(text_sel)
+        log("  жирный не дался – набираю обычным текстом, как раньше")
 
     page.type(text_sel, plain, delay=8)
     return "plain"
@@ -1691,6 +1734,8 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             page.click(text_sel)
             _type_post_text(page, text_sel, text, log)
             page.wait_for_timeout(1_200)
+            # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
+            yb.drop_link_card(page, yb.text_domains(text), log)
             typed = (page.eval_on_selector(text_sel, "el => el.textContent || ''") or "")
             if text.strip() and not typed.strip():
                 return {"ok": False, "error": "Текст не попал в поле поста ОК",

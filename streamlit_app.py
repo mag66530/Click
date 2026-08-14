@@ -3668,6 +3668,13 @@ def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> 
         for t in post.get("targets", []):
             net = t.get("network") or ""
             saved = cps.target(state, post, net)
+            # Отчёт – про работу CLICK, а не про весь реестр. Без этой строки
+            # в него попадали все прошлые посты со ссылками из таблицы, и
+            # заголовок писал «вышло 439»: пять лет чужой работы, среди
+            # которой не найти свои две отложки. Нет записи в памяти Click –
+            # значит Click этого не делал, и в отчёте этому места нет.
+            if not saved:
+                continue
             link = (t.get("published_link") or "").strip()
             at = (saved.get("at") or "")[:16].replace("T", " ")
             # В отчёт попадает только сделанное. «Не тронуто» и «публикуется
@@ -3708,9 +3715,10 @@ def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> 
         f'отложек {counts["set"]}' if counts["set"] else "",
         f'вышло {counts["live"]}' if counts["live"] else "",
         f'ошибок {counts["bad"]}' if counts["bad"] else "") if x) or "пока пусто"
-    with st.expander(f"📊 Отчёт: что и куда ушло – {title}", expanded=False):
-        st.caption("Только сделанное: отложка поставлена, пост вышел, ошибка. "
-                   "Постов, которых Click не касался, здесь нет – они видны в плане.")
+    with st.expander(f"📊 Отчёт: что сделал Click – {title}", expanded=False):
+        st.caption("Только работа Click: поставленные отложки, вышедшие посты и "
+                   "ошибки. Постов, которых Click не касался, и старых записей "
+                   "реестра здесь нет – они видны в плане и в самой таблице.")
         html("".join(rows[:120])
              or T.empty("–", "Click пока ничего не делал",
                         "Здесь появятся поставленные отложки, вышедшие посты и ошибки."))

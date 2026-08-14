@@ -64,6 +64,20 @@ from build import BUILD  # noqa: F401
 
 TIMEZONE_ID = "Asia/Yekaterinburg"
 
+# Сколько ждём ПОСЛЕ нажатия «Опубликовать позже», прежде чем закрыть браузер.
+#
+# Закрывать сразу нельзя. Нажатие – это только начало: Дзену надо отправить
+# отложку на сервер и получить ответ, а браузер, закрытый на середине этого
+# разговора, обрывает его вместе с окном. Внешне всё выглядело удачно –
+# «быстро-быстро и выключился», как сказал заказчик, – а лежит ли статья в
+# отложенных, оставалось на веру.
+#
+# Поэтому: сначала ждём тишины в сети (запрос ушёл и ответ пришёл), потом
+# ещё пауза. При видимом окне пауза длиннее – чтобы человек успел увидеть
+# своими глазами, что Дзен принял статью, а не смотрел на мелькнувшее окно.
+SETTLE_MS = 6_000
+WATCH_HOLD_MS = 12_000
+
 # Куки, по которым видно ВХОД. Яндексовые – те же, что у ЯБ (session_id и
 # компания на .yandex.ru); дзеновские площадка ставит уже сама.
 YANDEX_AUTH = {"session_id", "sessionid2", "yandex_login"}
@@ -979,6 +993,45 @@ def _turn_on_later(page, log: Callable[[str], None]) -> str:
 #  ПУБЛИКАЦИЯ
 # ════════════════════════════════════════════════════════════════════
 
+def settle_after_publish(page, headless: bool, title: str,
+                         log: Callable[[str], None]) -> bool:
+    """
+    Дать Дзену договорить и убедиться, что статья принята. True – увидели
+    подтверждение своими глазами.
+
+    Порядок такой. Сначала ждём тишины в сети: пока идут запросы, отложка
+    ещё в пути, и закрывать браузер нельзя. Потом ищем на странице прямое
+    подтверждение – слова «Отложенные», «Запланирована» или заголовок нашей
+    статьи в списке публикаций. И только после этого держим окно ещё
+    немного: при видимом браузере – подольше, чтобы человек успел увидеть.
+    """
+    try:
+        page.wait_for_load_state("networkidle", timeout=15_000)
+    except Exception:  # noqa: BLE001 – Дзен любит держать соединения открытыми
+        pass
+
+    seen = False
+    marks = ("Отложенные", "Запланирована", "запланирована",
+             "Публикация запланирована", "Отложенная публикация")
+    for _ in range(10):
+        body = _body_text(page)
+        if any(m in body for m in marks) or (title and title[:40] in body):
+            seen = True
+            break
+        page.wait_for_timeout(700)
+
+    if seen:
+        log("Дзен подтвердил: статья принята и стоит в отложенных")
+    else:
+        log("Прямого подтверждения на экране нет – доверяю закрытому окну публикации")
+
+    hold = WATCH_HOLD_MS if not headless else SETTLE_MS
+    log(f"Жду {hold // 1000} с, чтобы Дзен доотправил отложку" +
+        ("" if headless else " (и чтобы вы успели посмотреть)"))
+    page.wait_for_timeout(hold)
+    return seen
+
+
 def schedule_article(project_id: str, editor_url: str, article: dict,
                      when: datetime, email: str = "",
                      log: Callable[[str], None] | None = None,
@@ -1177,13 +1230,16 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
             for _ in range(40):
                 page.wait_for_timeout(500)
                 body = _body_text(page)
-                if any(mark in body for mark in ("Отложенные", "запланирована",
-                                                 "Публикация запланирована", "Черновики")):
-                    log("Дзен подтвердил: статья в отложенных")
-                    yb._save_storage_state(context, session_path(project_id))
-                    return {"ok": True, "warnings": warnings}
-                if "Опубликовать позже" not in body:
-                    log("Окно публикации закрылось – Дзен принял отложку")
+                done = any(mark in body for mark in ("Отложенные", "запланирована",
+                                                     "Публикация запланирована", "Черновики"))
+                if done or "Опубликовать позже" not in body:
+                    log("Окно публикации закрылось – Дзен принял отложку"
+                        if not done else "Дзен подтвердил: статья в отложенных")
+                    # Не закрываем браузер сразу: отложка ещё летит на сервер,
+                    # и оборванный на середине разговор её потеряет.
+                    if not settle_after_publish(page, headless, article.get("title", ""), log):
+                        warnings.append("Дзен не написал словами, что статья в отложенных – "
+                                        "загляните в студию и проверьте.")
                     yb._save_storage_state(context, session_path(project_id))
                     return {"ok": True, "warnings": warnings}
 

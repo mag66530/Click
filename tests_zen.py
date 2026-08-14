@@ -265,6 +265,9 @@ class FakePage:
         self.pending = f"text:{text}"
         return FakeLocator(self, 1)
 
+    def wait_for_load_state(self, _state: str, timeout: int = 0) -> None:
+        self.clicks.append("networkidle")
+
     def evaluate_handle(self, _js: str, arg):
         """Ищем кнопку по точной надписи – так же, как настоящий поиск."""
         title = arg if isinstance(arg, str) else (arg[0] if arg else "")
@@ -560,6 +563,48 @@ def test_confirm_button() -> None:
           '"Опубликовать позже" not in body' in src)
 
 
+def test_settle_after_publish() -> None:
+    print("После нажатия ждём, а не закрываем браузер")
+    try:
+        import zen_browser as zb
+    except ImportError as e:
+        print(f"  ⏭ пропускаю: {e}")
+        return
+
+    waits: list[int] = []
+
+    class Waiting(FakePage):
+        def wait_for_timeout(self, ms: int) -> None:
+            waits.append(ms)
+
+    # Отложка ещё летит на сервер: сначала ждём тишины в сети, и только
+    # потом отпускаем браузер. Закрытый на середине разговора – теряет её.
+    confirmed = Waiting(text="Публикации Отложенные Проверка Click")
+    check("подтверждение на экране замечено",
+          zb.settle_after_publish(confirmed, True, "Проверка Click", lambda m: None))
+    check("сначала дождались тишины в сети", "networkidle" in confirmed.clicks)
+    check("и подождали перед закрытием", sum(waits) >= zb.SETTLE_MS, str(waits))
+
+    waits.clear()
+    quiet = Waiting(text="Редактор статьи")
+    check("прямого подтверждения нет – так и говорим",
+          not zb.settle_after_publish(quiet, True, "Проверка Click", lambda m: None))
+
+    # При видимом окне держим дольше: человек должен успеть посмотреть.
+    waits.clear()
+    zb.settle_after_publish(Waiting(text="Отложенные"), False, "", lambda m: None)
+    watched = sum(waits)
+    waits.clear()
+    zb.settle_after_publish(Waiting(text="Отложенные"), True, "", lambda m: None)
+    hidden = sum(waits)
+    check("видимое окно держим дольше скрытого", watched > hidden, f"{watched} vs {hidden}")
+    check("и это не мгновение", zb.WATCH_HOLD_MS >= 10_000, str(zb.WATCH_HOLD_MS))
+
+    import inspect
+    check("ожидание встроено в публикацию",
+          "settle_after_publish(" in inspect.getsource(zb.schedule_article))
+
+
 def test_date_already_set() -> None:
     print("Дата уже стоит нужная – календарь не трогаем")
     try:
@@ -684,6 +729,7 @@ def main() -> int:
     test_calendar()
     test_date_already_set()
     test_confirm_button()
+    test_settle_after_publish()
     test_session_source()
     test_registry_wiring()
     print("\n" + "═" * 60)

@@ -68,8 +68,14 @@ TIMEZONE_ID = "Asia/Yekaterinburg"
 # компания на .yandex.ru); дзеновские площадка ставит уже сама.
 YANDEX_AUTH = {"session_id", "sessionid2", "yandex_login"}
 
+# Месяцы в двух падежах, и путать их нельзя. В ПОЛЕ даты Дзен пишет
+# «14 августа 2026» (родительный), а в шапке КАЛЕНДАРЯ – «Август 2026»
+# (именительный). Первый живой прогон искал в календаре родительный, не
+# находил никогда и листал вперёд до июля 2027.
 MONTHS_RU = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля",
              "августа", "сентября", "октября", "ноября", "декабря")
+MONTHS_NOM = ("Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль",
+              "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь")
 
 # Селекторы. Классы Дзена собраны сборщиком и несут хвост-хеш
 # («…__addButton-1Z»): при следующем релизе хвост сменится, а середина имени
@@ -592,6 +598,14 @@ def render_table_png(context, rows: list[list[str]], out_path: Path) -> str:
             pass
 
 
+def _field_text(field) -> str:
+    """Что сейчас написано в поле редактора."""
+    try:
+        return (field.inner_text() or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _paste_html_into(page, field, html: str) -> bool:
     """
     Вставить HTML в поле редактора – ровно так, как это делает Ctrl+V.
@@ -601,15 +615,24 @@ def _paste_html_into(page, field, html: str) -> bool:
     и шлём настоящее событие paste – к системному буферу в облаке доступа
     нет, да он там и не нужен.
 
+    УСПЕХ СЧИТАЕМ ПО СОДЕРЖИМОМУ ПОЛЯ, а не по ответу dispatchEvent. Это не
+    придирка: первый живой прогон вставил текст правильно, но решил, что не
+    смог, и набрал его ВТОРОЙ РАЗ поверх – в статье получилось «…можно
+    удалиЭто пробная статья…» и обрывок «ть.» отдельным абзацем. Причина
+    тонкая и обратная интуиции: dispatchEvent возвращает false, когда
+    обработчик вызвал preventDefault() – то есть именно когда вставка
+    УДАЛАСЬ. Поэтому смотрим на текст: прибавилось – значит вставилось.
+
     Работаем с локатором, а не с селектором: у полей Дзена своих примет нет,
     и найдены они по порядку (см. find_editor_fields) – селектора, который
     указывал бы именно на них, попросту не существует.
     """
+    before = _field_text(field)
     try:
         handle = field.element_handle()
         if handle is None:
             return False
-        return bool(handle.evaluate(
+        handle.evaluate(
             """(el, html) => {
                 el.focus();
                 const dt = new DataTransfer();
@@ -617,10 +640,18 @@ def _paste_html_into(page, field, html: str) -> bool:
                 dt.setData('text/plain', html.replace(/<[^>]+>/g, ' '));
                 const ev = new ClipboardEvent('paste', {
                     bubbles: true, cancelable: true, clipboardData: dt });
-                return el.dispatchEvent(ev);
-            }""", html))
+                el.dispatchEvent(ev);
+            }""", html)
     except Exception:  # noqa: BLE001
         return False
+
+    # Редактор разбирает вставку не мгновенно – даём ему секунду-другую.
+    for _ in range(6):
+        page.wait_for_timeout(500)
+        now = _field_text(field)
+        if len(now) > len(before) + 10:
+            return True
+    return False
 
 
 def _type_blocks_into(page, field, blocks: list[dict]) -> None:
@@ -633,6 +664,11 @@ def _type_blocks_into(page, field, blocks: list[dict]) -> None:
     """
     try:
         field.click()
+        # Вставка могла лечь наполовину – набирать поверх неё нельзя, иначе
+        # текст задвоится. Чистим поле целиком и пишем с нуля.
+        page.keyboard.press("Control+A")
+        page.keyboard.press("Backspace")
+        page.wait_for_timeout(300)
     except Exception:  # noqa: BLE001
         pass
     for b in blocks:
@@ -704,42 +740,89 @@ def time_caption_ok(caption: str, when: datetime) -> bool:
     return (caption or "").strip() == when.strftime("%H:%M")
 
 
+def calendar_shows(body_text: str, when: datetime) -> bool:
+    """
+    Виден ли в календаре нужный месяц. Дзен показывает СРАЗУ ДВА месяца
+    рядом («Август 2026» и «Сентябрь 2026»), и открывается он на текущем –
+    то есть чаще всего листать не нужно вовсе.
+    """
+    return f"{MONTHS_NOM[when.month - 1]} {when.year}" in (body_text or "")
+
+
+def _click_day_in_month(page, when: datetime) -> bool:
+    """
+    Нажать число внутри блока НУЖНОГО месяца.
+
+    Почему не просто «нажать 14»: месяцев на экране два, и четырнадцатое
+    есть в обоих. Поэтому находим заголовок «Август 2026», поднимаемся от
+    него до блока, где лежат числа, и жмём нужное уже внутри этого блока.
+    """
+    title = f"{MONTHS_NOM[when.month - 1]} {when.year}"
+    try:
+        handle = page.evaluate_handle(
+            """([title, day]) => {
+                const leaf = (e) => e.children.length === 0;
+                const heads = [...document.querySelectorAll('*')]
+                    .filter(e => leaf(e) && e.textContent.trim() === title);
+                if (!heads.length) return null;
+                let box = heads[0].parentElement;
+                for (let i = 0; i < 6 && box; i++) {
+                    const cells = [...box.querySelectorAll('*')]
+                        .filter(e => leaf(e) && e.textContent.trim() === day);
+                    if (cells.length) return cells[cells.length - 1];
+                    box = box.parentElement;
+                }
+                return null;
+            }""", [title, str(when.day)])
+        el = handle.as_element() if handle else None
+        if el is None:
+            return False
+        el.click()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _open_calendar_and_pick(page, when: datetime, log: Callable[[str], None]) -> str:
     """
     Выбрать день в календаре Дзена. Пусто – получилось, иначе причина.
 
-    Вписать дату в поле нельзя, оно readonly – только клик по числу. Если
-    нужный месяц ещё не открыт, листаем вперёд стрелкой; назад не листаем
-    никогда: отложка в прошлое невозможна, и там нам делать нечего.
+    Вписать дату в поле нельзя, оно readonly – только клик по числу.
+
+    Про листание отдельно. Календарь открывается на ТЕКУЩЕМ месяце и
+    показывает сразу два, так что для ближайших недель листать не нужно
+    вовсе. Первый живой прогон этого не понимал: он искал в календаре
+    «августа» (родительный падеж, как в поле даты), а там написано
+    «Август» – совпадения не было никогда, и Click пролистал вперёд до
+    июля 2027. Теперь сравниваем правильным падежом, сначала СМОТРИМ, а
+    потом листаем, и не больше чем на год вперёд.
     """
     date_sel = _first_visible(page, SEL["date_input"], timeout=6_000)
     if not date_sel:
         return "не нашли поле даты в окне отложки"
     page.locator(date_sel).first.click()
-    page.wait_for_timeout(800)
+    page.wait_for_timeout(900)
 
-    target_month = f"{MONTHS_RU[when.month - 1]}"
-    for _ in range(14):                       # год вперёд с запасом
-        body = _body_text(page)
-        if re.search(rf"{target_month}\s*{when.year}", body, re.I) or target_month in body.lower():
-            break
-        moved = _click_first(page, ['[class*="calendar"] [class*="next"]',
-                                    '[aria-label*="Следующий"]',
-                                    '[class*="arrow"][class*="right"]'], timeout=2_000)
-        if not moved:
-            break
-        page.wait_for_timeout(500)
+    target = f"{MONTHS_NOM[when.month - 1]} {when.year}"
+    if not calendar_shows(_body_text(page), when):
+        for step in range(1, 13):
+            if not _click_first(page, ['[class*="calendar"] [class*="next"]',
+                                       '[aria-label*="Следующий"]',
+                                       '[class*="arrow"][class*="right"]'], timeout=2_000):
+                break
+            page.wait_for_timeout(600)
+            if calendar_shows(_body_text(page), when):
+                log(f"Пролистал календарь до «{target}» ({step} шаг(ов))")
+                break
+        else:
+            return (f"в календаре не нашёлся «{target}» – пролистал год вперёд "
+                    "и остановился, чтобы не уехать в чужой год")
+    if not calendar_shows(_body_text(page), when):
+        return f"в календаре не видно «{target}»"
 
-    # Число кликаем ТОЧНЫМ совпадением текста: иначе «2» попадёт в «22».
-    try:
-        day = page.locator(
-            f'[class*="calendar"] >> text="{when.day}"').first
-        if not day.count():
-            day = page.get_by_text(str(when.day), exact=True).last
-        day.click()
-        page.wait_for_timeout(900)
-    except Exception as e:  # noqa: BLE001
-        return f"не удалось нажать число {when.day} в календаре ({e})"
+    if not _click_day_in_month(page, when):
+        return f"не удалось нажать {when.day} в блоке «{target}»"
+    page.wait_for_timeout(900)
 
     caption = ""
     try:

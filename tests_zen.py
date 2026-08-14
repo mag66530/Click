@@ -417,6 +417,84 @@ def test_popups_and_fields() -> None:
     check("редактора нет – честно говорим об этом", t2 is None and b2 is None)
 
 
+class FakeField:
+    """
+    Поле редактора: текст растёт, если «редактор» принял вставку.
+
+    Нужно ради одного, зато дорого стоившего случая: dispatchEvent вернул
+    false (редактор вызвал preventDefault, то есть вставку ПРИНЯЛ), а Click
+    решил, что не вышло, и набрал текст второй раз поверх.
+    """
+
+    def __init__(self, accepts: bool = True, text: str = ""):
+        self.accepts = accepts
+        self.text = text
+        self.pasted = None
+
+    def inner_text(self) -> str:
+        return self.text
+
+    def click(self, **kw) -> None:
+        pass
+
+    def element_handle(self):
+        return self
+
+    def evaluate(self, _js: str, html):
+        self.pasted = html
+        if self.accepts:
+            self.text = "Статья целиком, много букв " + html[:200]
+        return False          # ровно так и отвечает настоящий редактор
+
+
+def test_paste_detection() -> None:
+    print("Вставка текста: успех считаем по тексту, а не по ответу события")
+    try:
+        import zen_browser as zb
+    except ImportError as e:
+        print(f"  ⏭ пропускаю: {e}")
+        return
+
+    page = FakePage()
+    took = FakeField(accepts=True)
+    check("редактор принял вставку – это успех",
+          zb._paste_html_into(page, took, "<p>Текст статьи достаточной длины</p>"))
+    check("и текст правда лёг в поле", len(took.text) > 20, took.text[:40])
+
+    ignored = FakeField(accepts=False)
+    check("редактор вставку не принял – идём набирать",
+          not zb._paste_html_into(page, ignored, "<p>Текст</p>"))
+
+
+def test_calendar() -> None:
+    print("Календарь отложки")
+    try:
+        import zen_browser as zb
+    except ImportError as e:
+        print(f"  ⏭ пропускаю: {e}")
+        return
+
+    when = datetime(2026, 8, 14, 19, 41, tzinfo=timezone(timedelta(hours=5)))
+
+    # Календарь пишет месяц ИМЕНИТЕЛЬНЫМ падежом и показывает сразу два.
+    # На этом и погорели: искали «августа», листали до июля 2027.
+    two_months = "Опубликовать позже Август 2026 пн вт ср Сентябрь 2026 пн вт"
+    check("нужный месяц виден – листать не надо", zb.calendar_shows(two_months, when))
+    check("родительный падеж в календаре не ищем",
+          not zb.calendar_shows("14 августа 2026", when))
+    check("чужой месяц не сходит за нужный",
+          not zb.calendar_shows("Июль 2027 пн вт ср", when))
+    check("соседний месяц тоже виден",
+          zb.calendar_shows(two_months, when.replace(month=9)))
+
+    # А в ПОЛЕ даты падеж родительный – и сверяем мы именно его.
+    check("поле даты сверяется родительным", zb.date_caption_ok("14 августа 2026", when))
+    check("«14 июля 2027» не сойдёт", not zb.date_caption_ok("14 июля 2027", when))
+
+    check("месяцев в обоих падежах по двенадцать",
+          len(zb.MONTHS_RU) == 12 and len(zb.MONTHS_NOM) == 12)
+
+
 def test_session_source(tmp: Path | None = None) -> None:
     print("Вход в Дзен берётся от Яндекс.Бизнеса")
     try:
@@ -507,6 +585,8 @@ def main() -> int:
     test_browser_logic()
     test_login_flow()
     test_popups_and_fields()
+    test_paste_detection()
+    test_calendar()
     test_session_source()
     test_registry_wiring()
     print("\n" + "═" * 60)

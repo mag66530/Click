@@ -170,7 +170,7 @@
           "id": "ct-MPE-0-27-оренбург",
           "name": "Оренбург",
           "url": "https://yandex.ru/sprav/171400752610/p/edit/posts/",
-          "kpStatus": "Активная"
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-MPE-0-28-томск",
@@ -662,7 +662,7 @@
           "id": "ct-MPE-0-109-первоуральск",
           "name": "Первоуральск",
           "url": "https://yandex.ru/sprav/177621134341/p/edit/posts/",
-          "kpStatus": "Активная"
+          "kpStatus": "Онлайн"
         },
         {
           "id": "ct-MPE-0-110-черкесск",
@@ -948,5 +948,12 @@
   "email": "mepen88@yandex.ru",
   "kpSheetUrl": "https://docs.google.com/spreadsheets/d/1-7PoEXl8ik8L1k8KEOxNrS7OaH76xQnD/edit?gid=441667614#gid=441667614",
   "kpSheetTitle": "КП",
-  "kpSyncedAt": "2026-08-10T13:33:30.167634+00:00"
+  "kpSyncedAt": "2026-08-17T06:35:10.150489+00:00",
+  "vkGroupUrl": "https://vk.ru/metpromenergo",
+  "okGroupUrl": "https://ok.ru/group/70000042911963",
+  "tgChannelClient": "@metpromenergo",
+  "maxWebUrl": "https://web.max.ru/-71839887647351",
+  "zenUrl": "https://dzen.ru/mepen.ru",
+  "zenStudioUrl": "https://dzen.ru/profile/editor/mepen.ru",
+  "planSheetUrl": "https://docs.google.com/spreadsheets/d/1GIeO3P43eR9N4xYv5H6vNos7068nwoVLwWwfKKAkvaE/edit"
 }

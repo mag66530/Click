@@ -1290,6 +1290,9 @@ _MARK_JS = """
     return r;
   };
   let done = 0, missed = 0;
+  el.focus();                       // фокус ОДИН раз и ДО выделения: поздний
+                                    // foc() после addRange сдвигал выделение и
+                                    // «съедал» первую букву жирного куска.
   for (const span of args.spans) {
     const map = build();
     const idx = map.full.indexOf(span.text);
@@ -1298,7 +1301,6 @@ _MARK_JS = """
     if (!r) { missed++; continue; }
     const sel = window.getSelection();
     sel.removeAllRanges(); sel.addRange(r);
-    el.focus();
     try {
       if (span.kind === 'link') document.execCommand('createLink', false, span.url);
       else document.execCommand('bold', false, null);
@@ -1673,9 +1675,17 @@ def _type_post_text(page, text_sel: str, text: str,
     if not bold_spans and not link_spans:
         return "plain"
 
-    # 2. Жирный – родной кнопкой «Ж» панели форматирования (execCommand в
-    #    запасе). Так первая буква не теряется.
-    bold_done = _apply_bold(page, text_sel, bold_spans, log) if bold_spans else 0
+    # 2. Жирный – execCommand поверх выделения. НЕ кликаем по панели
+    #    форматирования вслепую: угадывание кнопки «Ж» ловило чужой элемент и
+    #    закрывало форму (живой прогон 18.08.2026). execCommand безопасен –
+    #    ничего не закрывает, а первую букву чиним порядком фокуса в _MARK_JS.
+    res = _apply_marks(page, text_sel, bold_spans) if bold_spans else {}
+    if res.get("error"):
+        log(f"  разметку наложить не вышло ({res['error']}) – остаётся обычный текст")
+        if project_id:
+            _save_editor_markup(page, text_sel, project_id, log)
+        return "plain"
+    bold_done = res.get("bold", 0)
 
     # 2б. Ссылки – родным редактором ссылок ОК (свой <a> он выбрасывает).
     links_done = _apply_links_native(page, text_sel, link_spans, log, project_id) \

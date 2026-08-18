@@ -1159,13 +1159,14 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
             # правую кнопку трижды, между попытками ждём.
             opened = ""
             for _ in range(3):
-                # Сначала закрываем всё, что могло всплыть (подсказка, меню
-                # смайлов): их подложка ловит клик вместо кнопки, и попытка
-                # уходит в тридцатисекундный таймаут – так и было 13.08.2026
-                # («backdrop … intercepts pointer events»).
+                # Снимаем всплывшие подсказки/меню БЕЗ Escape: после вставки фото
+                # Escape в МАКС убирает картинку и вообще закрывает чат – окно
+                # «схлопывалось, как от Escape» (живой прогон 18.08.2026, фото уже
+                # стояло). Вместо этого возвращаем фокус в поле сообщения кликом –
+                # это гасит подсказку и НИЧЕГО не закрывает и не удаляет.
                 try:
-                    page.keyboard.press("Escape")
-                    page.wait_for_timeout(300)
+                    page.locator(text_sel).first.click(timeout=1_500)
+                    page.wait_for_timeout(250)
                 except Exception:  # noqa: BLE001
                     pass
                 page.locator(send_sel).first.click(button="right")

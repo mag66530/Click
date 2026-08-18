@@ -772,6 +772,29 @@ _THUMBS_JS = r"""
 
 THUMB_WAIT_S = 20               # столько ждём миниатюру: файл ещё грузится
 
+# Дамп разметки области вложений вместе с теневыми корнями – для разбора,
+# когда миниатюра «не появилась». body.innerHTML теневой DOM не отдаёт, а
+# именно там у МАКС живут вложения; без этого присланный файл был бы пуст в
+# самом нужном месте.
+_ATTACH_DUMP_JS = r"""
+() => {
+  const parts = [];
+  const seen = new Set();
+  const walk = (root, label) => {
+    if (!root || seen.has(root)) return;
+    seen.add(root);
+    try { parts.push('<!-- ' + label + ' -->\n' + (root.innerHTML || '')); }
+    catch (e) { /* пропускаем недоступное */ }
+    let all = [];
+    try { all = root.querySelectorAll('*'); } catch (e) { return; }
+    let i = 0;
+    for (const el of all) if (el.shadowRoot) walk(el.shadowRoot, label + ' > shadow#' + (i++));
+  };
+  walk(document.body, 'body');
+  return parts.join('\n\n').slice(0, 200000);
+}
+"""
+
 
 def _thumbs(page) -> int:
     """Сколько миниатюр прикреплённых файлов сейчас в форме."""
@@ -974,9 +997,12 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                     try:
                         d = paths.data_root() / project_id / "crosspost"
                         d.mkdir(parents=True, exist_ok=True)
+                        # С теневыми корнями: МАКС – одностраничное приложение,
+                        # и вложение почти наверняка живёт в shadow DOM, которого
+                        # body.innerHTML не видит. Без него присланная разметка
+                        # пуста в самом важном месте.
                         (d / "max-attach.html").write_text(
-                            page.evaluate("() => document.body.innerHTML.slice(0, 60000)") or "",
-                            encoding="utf-8")
+                            page.evaluate(_ATTACH_DUMP_JS) or "", encoding="utf-8")
                         log("  разметку области вложений сохранил (max-attach.html) – "
                             "пришлите её, и миниатюра будет узнаваться точно")
                     except Exception:  # noqa: BLE001

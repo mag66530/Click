@@ -3751,6 +3751,7 @@ def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> 
     сама подтвердила выход. Догадок в отчёте нет.
     """
     rows: list[str] = []
+    csv_rows: list[list[str]] = []   # то же, но для скачивания одним файлом
     counts = {"set": 0, "live": 0, "bad": 0}
     for post in sorted(posts, key=lambda p: p.get("when") or "", reverse=True):
         for t in post.get("targets", []):
@@ -3778,22 +3779,27 @@ def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> 
                 continue
             if link:
                 what, cls = f'вышло – <a href="{T.esc(link)}" target="_blank">запись ↗</a>', "ok"
+                itog, url_cell = "вышло", link
                 counts["live"] += 1
             elif saved.get("state") == cps.SCHEDULED:
                 what, cls = f"отложка поставлена {T.esc(at)}", "skip"
+                itog, url_cell = f"отложка поставлена {at}", ""
                 counts["set"] += 1
             elif saved.get("state") in (cps.SENT, cps.SENT_LATE):
                 tail = f' – <a href="{T.esc(saved.get("link", ""))}" target="_blank">запись ↗</a>' \
                     if saved.get("link") else ""
                 what, cls = f"вышло {T.esc(at)}{tail}", "ok"
+                itog, url_cell = f"вышло {at}", saved.get("link", "")
                 counts["live"] += 1
             elif saved.get("state") == cps.FAILED:
                 err = " ".join(str(saved.get("error", "")).split())
                 what, cls = f'ошибка {T.esc(at)}: {T.esc(err[:140])}', "err"
+                itog, url_cell = f"ошибка {at}: {err[:140]}", ""
                 counts["bad"] += 1
             elif saved.get("state") == cps.MISSED:
                 err = " ".join(str(saved.get("error", "время вышло")).split())
                 what, cls = f"пропущено: {T.esc(err[:140])}", "warn"
+                itog, url_cell = f"пропущено: {err[:140]}", ""
                 counts["bad"] += 1
             else:
                 continue
@@ -3807,6 +3813,7 @@ def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> 
                 f'<span class="cp-type">{T.esc(name)}</span>'
                 f'<span class="report-row-reason">{T.esc(head)}</span>'
                 f'<span class="report-row-dur">{what}</span></div>')
+            csv_rows.append([day, name, head, itog, url_cell])
     title = " · ".join(x for x in (
         f'отложек {counts["set"]}' if counts["set"] else "",
         f'вышло {counts["live"]}' if counts["live"] else "",
@@ -3820,6 +3827,19 @@ def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> 
                         "Здесь появятся поставленные отложки, вышедшие посты и ошибки."))
         if len(rows) > 120:
             st.caption(f"Показаны последние 120 строк из {len(rows)}.")
+        # Отчёт скачивается целиком (не только видимые 120 строк) – одним CSV,
+        # который открывается в Excel/Google-таблицах.
+        if csv_rows:
+            head = "Дата;Площадка;Текст;Итог;Ссылка"
+            body = [head]
+            for cells in csv_rows:
+                body.append(";".join(re.sub(r"[;\r\n]+", " ", str(c)) for c in cells))
+            blob = ("﻿" + "\n".join(body)).encode("utf-8")
+            st.download_button(
+                "⬇ Скачать отчёт (CSV)", data=blob,
+                file_name=f"otchet-click-{apptime.now().strftime('%Y-%m-%d')}.csv",
+                mime="text/csv", key=f"cp-report-dl-{project_id}",
+                use_container_width=True)
 
 
 def _crosspost_form_last_log(project_id: str) -> None:
@@ -3858,7 +3878,7 @@ def _crosspost_diag_block(project_id: str) -> None:
     """
     d = paths.data_root() / project_id / "crosspost"
     files = [(f, d / f) for f in ("link-card.html", "ok-editor.html",
-                                  "max-attach.html")]
+                                  "max-attach.html", "vk-dialog.html")]
     have = [(name, fp) for name, fp in files if fp.exists()]
     if not have:
         return

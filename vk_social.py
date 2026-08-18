@@ -1200,6 +1200,63 @@ def _dialog_complaint(page) -> str:
     return ("ВК пишет: «" + " · ".join(pick[:4]) + "».") if pick else ""
 
 
+def _save_dialog_html(page, dlg: str, project_id: str, name: str) -> None:
+    """Сохранить разметку окна поста рядом с логом – для точной правки.
+    Тихо: диагностика не должна ронять отложку."""
+    try:
+        d = paths.data_root() / project_id / "crosspost"
+        d.mkdir(parents=True, exist_ok=True)
+        src = page.eval_on_selector(dlg, "el => el.outerHTML")
+        (d / name).write_text(src or "", encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _advance_to_schedule(page, dlg: str, project_id: str,
+                         log: Callable[[str], None]) -> None:
+    """
+    Со страницы набора текста – на экран, где живёт «Запланировать».
+
+    ВК зовёт кнопку «Далее», но подпись и вёрстка у неё менялись, а клик мимо
+    (по карточке сайта) закрывал форму – тогда «Далее» и не находилась, отсюда
+    Timeout на живом прогоне 18.08.2026. Поэтому:
+      • если кнопка отложки уже на экране – «Далее» вообще не нужно (ВК мог
+        убрать этот шаг), молча идём дальше;
+      • иначе пробуем несколько БЕЗОПАСНЫХ подписей (ни одна не публикует
+        сразу) и считаем успехом появление кнопки отложки, а не сам клик;
+      • не дошли – сохраняем разметку окна, чтобы следующая правка была точной.
+    """
+    if page.locator(SEL["postponed_open"]).count():
+        return
+    candidates = (
+        f'{dlg} >> text="Далее"',
+        f'{dlg} button:has-text("Далее")',
+        f'{dlg} [role="button"]:has-text("Далее")',
+        f'{dlg} button:has-text("Продолжить")',
+    )
+    for sel in candidates:
+        loc = page.locator(sel)
+        if not loc.count():
+            continue
+        try:
+            loc.first.click(timeout=4_000)
+        except Exception:  # noqa: BLE001 – пробуем следующую подпись
+            continue
+        try:
+            page.wait_for_selector(SEL["postponed_open"], timeout=6_000)
+            return
+        except Exception:  # noqa: BLE001 – клик был, но экран не сменился
+            continue
+    _save_dialog_html(page, dlg, project_id, "vk-dialog.html")
+    hint = _dialog_complaint(page)
+    raise RuntimeError(
+        "Не нашли кнопку «Далее», чтобы перейти к планированию поста. "
+        + (hint + " " if hint else "")
+        + "Разметку окна сохранил (vk-dialog.html) – скачайте её в «Отчётах и "
+          "журналах» → «Разметка площадки для разбора» и пришлите, тогда кнопка "
+          "найдётся точно.")
+
+
 def schedule_postponed_post(project_id: str, group_url: str, text: str,
                             image_paths: list[str], when: datetime,
                             log: Callable[[str], None] | None = None,
@@ -1294,8 +1351,9 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             yb.drop_link_card(page, yb.text_domains(text), log,
                               diag_dir=paths.data_root() / project_id / "crosspost")
 
-            # «Далее» – к экрану, где живёт «Запланировать».
-            page.click(f'{dlg} >> text="Далее"', timeout=15_000)
+            # «Далее» – к экрану, где живёт «Запланировать». Устойчиво: если
+            # шаг уже пройден или ВК его убрал – идём дальше без ошибки.
+            _advance_to_schedule(page, dlg, project_id, log)
             page.wait_for_timeout(1000)
 
             # Последний заход на карточку сайта: ВК подтягивает её с задержкой

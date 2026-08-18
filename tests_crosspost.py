@@ -286,6 +286,51 @@ def test_bold_from_real_file() -> None:
     check("и не сломала распознавание сетей", {"vk", "ok", "max"} <= nets, str(sorted(nets)))
 
 
+def test_google_bold_utf16() -> None:
+    """
+    Жирное из Google-таблицы после ЭМОДЗИ не теряет первую букву.
+
+    Живой прогон 18.08.2026: в ОК и МАКС жирный ложился со ВТОРОЙ буквы –
+    «Главные» → «лавные», «Многоуровневый» → «ногоуровневый». Причина:
+    границы жирного (startIndex в textFormatRuns) Google отдаёт в единицах
+    UTF-16, а эмодзи вне основного диапазона (🏗️, ⚙️) занимают в UTF-16
+    две единицы, в Python – одну. После эмодзи все границы съезжали на +1.
+    """
+    print("\nGoogle: жирное после эмодзи не теряет первую букву")
+
+    # Смещение начала «Главные» в UTF-16 (🏗 = 2 единицы, ️ и пробел = по 1).
+    prefix = "🏗️ "
+    u16_start = sum(2 if ord(ch) > 0xFFFF else 1 for ch in prefix)
+    base = prefix + "Главные плюсы"
+    check("эмодзи правда сдвигает UTF-16", u16_start == len(prefix) + 1, str(u16_start))
+
+    cell = {
+        "userEnteredValue": {"stringValue": base},
+        "textFormatRuns": [
+            {"startIndex": 0, "format": {"bold": False}},
+            {"startIndex": u16_start, "format": {"bold": True}},
+        ],
+    }
+    markup = cp._google_cell_markup(cell)
+    bold = [t for t, b in __import__("post_text").plain_chunks(markup) if b]
+    check("первая буква жирного на месте", bold == ["Главные плюсы"], str(bold))
+
+    # Два эмодзи подряд – сдвиг накапливается, второй кусок тоже целый.
+    base2 = "⚙️ Раз 🚀 **опущено** Многоуровневый"
+    # Простая проверка карты индексов: один суррогат = +1 к UTF-16.
+    m = cp._u16_index_map("A🚀B")   # 🚀 – суррогатная пара
+    check("карта: A на 0", m[0] == 0)
+    check("карта: две единицы 🚀 ведут к одному символу", m[1] == 1 and m[2] == 1)
+    check("карта: B после суррогата на 2", m[3] == 2, str(m))
+    check("текст без эмодзи не затронут",
+          cp._google_cell_markup({"userEnteredValue": {"stringValue": "Просто **жир** тут"},
+                                  "textFormatRuns": [
+                                      {"startIndex": 0, "format": {"bold": False}},
+                                      {"startIndex": 7, "format": {"bold": True}},
+                                      {"startIndex": 10, "format": {"bold": False}}]})
+          is not None)
+
+
 def test_vk_domain() -> None:
     """
     Домен сообщества обязан совпадать с доменом сессии.
@@ -2674,6 +2719,7 @@ def main() -> int:
     test_ok_verify_code()
     test_platform_clients()
     test_post_text()
+    test_google_bold_utf16()
     test_bold_from_real_file()
     test_state()
     test_network_mapping()

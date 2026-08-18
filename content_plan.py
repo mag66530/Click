@@ -273,6 +273,29 @@ def posts_to_form(posts: list[dict], today: date | None = None) -> list[dict]:
 
 
 # ─── Живой источник: Google-таблица (тот же аккаунт, что у КП) ───────
+def _u16_index_map(base: str) -> list[int]:
+    """
+    Индекс UTF-16 → индекс питоновской строки (по кодовым точкам).
+
+    Зачем. Google отдаёт границы жирного (startIndex в textFormatRuns) в
+    единицах UTF-16. Эмодзи вне основного диапазона (🏗️, ⚙️, 🚀 …) в UTF-16
+    занимают ДВЕ единицы, а в Python – ОДИН символ. Резать `base[start:end]`
+    напрямую после такого эмодзи значило съесть по одной букве у каждого
+    последующего жирного куска: «Главные» превращалось в «лавные», а Ctrl+B
+    в ОК и МАКС ложился со второго символа (живой прогон 18.08.2026).
+
+    Возвращает список: m[u16] = индекс питоновской строки для смещения u16.
+    Длиннее base на 1 – последним элементом стоит конец строки.
+    """
+    m: list[int] = []
+    for py, ch in enumerate(base):
+        m.append(py)
+        if ord(ch) > 0xFFFF:              # суррогатная пара – вторая единица UTF-16
+            m.append(py)                  # ведёт к тому же питоновскому символу
+    m.append(len(base))
+    return m
+
+
 def _google_cell_markup(v: dict) -> str:
     """
     Ячейка из сетки Sheets API → строка с разметкой жирного.
@@ -281,6 +304,10 @@ def _google_cell_markup(v: dict) -> str:
     startIndex и тянется до начала следующего. Текст до первого куска (и
     ячейка вовсе без кусков) живёт форматом самой ячейки –
     effectiveFormat.textFormat.bold.
+
+    ВАЖНО: startIndex – в единицах UTF-16, а не питоновских символах. Перед
+    нарезкой переводим их через _u16_index_map, иначе после эмодзи у жирных
+    кусков отваливается первая буква (см. её докстринг).
     """
     import post_text
     base = ((v.get("userEnteredValue") or {}).get("stringValue"))
@@ -292,13 +319,25 @@ def _google_cell_markup(v: dict) -> str:
     fmt_runs = v.get("textFormatRuns")
     if not fmt_runs:
         return post_text.runs_to_markup([(base, cell_bold)])
+
+    u16 = _u16_index_map(base)
+
+    def py_at(u16_idx: int) -> int:
+        """UTF-16 смещение → индекс питоновской строки, с защитой от выхода за край."""
+        if u16_idx < 0:
+            return 0
+        if u16_idx >= len(u16):
+            return len(base)
+        return u16[u16_idx]
+
     runs: list[tuple[str, bool]] = []
     first = fmt_runs[0].get("startIndex", 0)
     if first > 0:
-        runs.append((base[:first], cell_bold))
+        runs.append((base[:py_at(first)], cell_bold))
     for i, run in enumerate(fmt_runs):
-        start = run.get("startIndex", 0)
-        end = fmt_runs[i + 1].get("startIndex", len(base)) if i + 1 < len(fmt_runs) else len(base)
+        start = py_at(run.get("startIndex", 0))
+        end = (py_at(fmt_runs[i + 1].get("startIndex", 0))
+               if i + 1 < len(fmt_runs) else len(base))
         bold = (run.get("format") or {}).get("bold")
         runs.append((base[start:end], cell_bold if bold is None else bool(bold)))
     return post_text.runs_to_markup(runs)

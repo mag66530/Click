@@ -810,23 +810,51 @@ def select_text_by_mouse(page: Page, field_sel: str, text: str,
     def _norm(s: str) -> str:
         return "".join((s or "").split()).lower()
 
-    for attempt in range(2):
+    want = _norm(text)
+
+    def _hit() -> bool:
+        got = _norm(_selection_text(page, field_sel))
+        return bool(got) and want in got
+
+    def _drag() -> None:
+        # Зажать в начале, протянуть через середину к концу, отпустить.
+        page.mouse.move(rc["x1"], rc["y1"])
+        page.mouse.down()
+        page.mouse.move((rc["x1"] + rc["x2"]) / 2, (rc["y1"] + rc["y2"]) / 2, steps=6)
+        page.mouse.move(rc["x2"], rc["y2"], steps=6)
+        page.mouse.up()
+
+    def _shift_click() -> None:
+        # Клик в начало – курсор туда; Shift+клик в конец – выделить до него.
+        # В сложных редакторах (Lexical у МАКС) это надёжнее протяжки: там
+        # линейная протяжка через несколько строк выделяла не весь кусок.
+        page.mouse.click(rc["x1"], rc["y1"])
+        page.wait_for_timeout(60)
+        page.keyboard.down("Shift")
+        page.mouse.click(rc["x2"], rc["y2"])
+        page.keyboard.up("Shift")
+
+    # Пробуем оба человеческих способа по разу, каждый – с проверкой, что в
+    # поле выделился ИМЕННО наш кусок. Протяжка первой (она не сдвигает
+    # прокрутку), Shift+клик – запас понадёжнее.
+    for method in (_drag, _shift_click, _drag):
         try:
-            page.mouse.move(rc["x1"], rc["y1"])
-            page.mouse.down()
-            # Через середину – чтобы редактор получил движение, а не телепорт:
-            # мгновенный «прыжок» указателя иные поля за выделение не считают.
-            page.mouse.move((rc["x1"] + rc["x2"]) / 2, (rc["y1"] + rc["y2"]) / 2, steps=6)
-            page.mouse.move(rc["x2"], rc["y2"], steps=6)
-            page.mouse.up()
+            method()
             page.wait_for_timeout(120)
         except Exception as e:  # noqa: BLE001
             if log:
-                log(f"    протяжка мыши не удалась: {e}")
-            return False
-        got = _norm(_selection_text(page, field_sel))
-        if got and _norm(text) in got:
+                log(f"    выделение мышью не удалось: {e}")
+            continue
+        if _hit():
             return True
+        # Координаты могли устареть (поле подросло) – пересчитаем перед повтором.
+        try:
+            fresh = page.evaluate(_RANGE_RECT_JS,
+                                  {"sel": field_sel, "text": text, "from": from_index})
+            if fresh:
+                rc = fresh
+        except Exception:  # noqa: BLE001
+            pass
     return False
 
 

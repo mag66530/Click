@@ -27,6 +27,7 @@ ok_browser.py – Одноклассники: вход с сохранением
 
 from __future__ import annotations
 
+import re
 import time as _time
 from datetime import datetime
 from pathlib import Path
@@ -1497,6 +1498,127 @@ def _open_link_editor(page, project_id: str = "",
         return False
 
 
+# Нажать кнопку «Ж» в той же панели форматирования (первая слева). Жирный так
+# ложится ровно по выделению – execCommand же местами «съедал» первую букву
+# (живой прогон 18.08.2026). Панель ищем так же, как для ссылки.
+_CLICK_BOLD_JS = r"""
+() => {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return false;
+  const rect = sel.getRangeAt(0).getBoundingClientRect();
+  let bar = null, barR = null;
+  for (const el of document.querySelectorAll('div, span, ul, nav')) {
+    let btns;
+    try { btns = el.querySelectorAll('button, [role="button"], a'); } catch (e) { continue; }
+    if (btns.length < 4 || btns.length > 14) continue;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height || r.height > 80) continue;
+    const st = getComputedStyle(el);
+    if (st.visibility === 'hidden' || st.display === 'none' || +st.opacity === 0) continue;
+    const above = r.bottom <= rect.top + 24 && (rect.top - r.bottom) < 160
+      && Math.abs((r.left + r.right) / 2 - (rect.left + rect.right) / 2) < 400;
+    if (!above) continue;
+    if (!bar || (rect.top - r.bottom) < (rect.top - barR.bottom)) { bar = el; barR = r; }
+  }
+  if (!bar) return false;
+  const btns = [...bar.querySelectorAll('button, [role="button"], a')];
+  const norm = (b) => ((b.getAttribute('title') || '') + ' ' + (b.getAttribute('aria-label') || '')
+                       + ' ' + (b.className || '')).toLowerCase();
+  const useHref = (b) => { const u = b.querySelector('use'); return u ? (u.getAttribute('href') || u.getAttribute('xlink:href') || '') : ''; };
+  let target = btns.find(b => {
+    const t = norm(b);
+    return t.includes('полужир') || t.includes('жирн') || /\bbold\b/.test(t) || /bold/i.test(useHref(b));
+  }) || btns[0];   // первая кнопка панели — «Ж»
+  if (!target) return false;
+  target.click();
+  return true;
+}
+"""
+
+_IS_BOLD_JS = r"""
+(args) => {
+  const el = document.querySelector(args.sel);
+  if (!el) return false;
+  for (const b of el.querySelectorAll('b, strong')) {
+    if ((b.textContent || '').includes(args.text)) return true;
+  }
+  return false;
+}
+"""
+
+
+def _is_bold(page, text_sel: str, text: str) -> bool:
+    try:
+        return bool(page.evaluate(_IS_BOLD_JS, {"sel": text_sel, "text": text}))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _apply_bold(page, text_sel: str, bold_spans: list[dict],
+                log: Callable[[str], None]) -> int:
+    """
+    Выставить жирный по кускам через РОДНУЮ кнопку «Ж» панели форматирования.
+
+    Так делает человек, и первая буква не теряется. Если панель не всплыла или
+    кнопка не нашлась – запасом идёт execCommand на то же выделение (как было).
+    Возвращает, сколько кусков реально стали жирными.
+    """
+    done = 0
+    for span in bold_spans:
+        t = span["text"]
+        try:
+            if not page.evaluate(_SELECT_TEXT_JS, {"sel": text_sel, "text": t}):
+                continue
+            page.wait_for_timeout(220)               # дать панельке всплыть
+            clicked = False
+            try:
+                clicked = bool(page.evaluate(_CLICK_BOLD_JS))
+            except Exception:  # noqa: BLE001
+                clicked = False
+            page.wait_for_timeout(160)
+            if not (clicked and _is_bold(page, text_sel, t)):
+                # запас: execCommand на то же выделение
+                page.evaluate(_SELECT_TEXT_JS, {"sel": text_sel, "text": t})
+                _apply_marks(page, text_sel, [{"kind": "bold", "text": t}])
+            if _is_bold(page, text_sel, t):
+                done += 1
+        except Exception:  # noqa: BLE001 – жирный не должен ронять прогон
+            continue
+    return done
+
+
+_ANCHOR_RX = re.compile(r'\[[^\]\n]+\]\((https?://[^\s)]+)\)')
+_ANCHOR_LABEL_RX = re.compile(r'\[([^\]\n]+)\]\((https?://[^\s)]+)\)')
+
+
+def _drop_trailing_bare(markup: str) -> str:
+    """
+    Убрать голый адрес СРАЗУ ПОСЛЕ анкора на тот же адрес (в одной строке).
+
+    Заказчица: «нашем сайте stalmetural.ru.» → анкор на «нашем сайте», а
+    хвост «stalmetural.ru» убрать, точку оставить. Блок контактов (адрес с
+    новой строки, после «🌐») не трогаем: там адрес не идёт вплотную за анкором.
+    """
+    out: list[str] = []
+    i = 0
+    for m in _ANCHOR_RX.finditer(markup):
+        out.append(markup[i:m.end()])
+        bare = re.sub(r'^https?://', '', m.group(1)).rstrip('/')
+        rest = markup[m.end():]
+        mm = re.match(r'[ \t]+(?:https?://)?' + re.escape(bare) + r'(?=[\s.,;:!?)]|$)',
+                      rest, re.I)
+        i = m.end() + mm.end() if mm else m.end()
+    out.append(markup[i:])
+    return "".join(out)
+
+
+def _bold_anchors(markup: str) -> str:
+    """Анкор сделать ещё и жирным: «нашем сайте» должно гореть и жирным (по
+    просьбе заказчицы). Уже жирные (**…**) второй раз не оборачиваем."""
+    rx = re.compile(r'(?<!\*)\[[^\]\n]+\]\((https?://[^\s)]+)\)(?!\*)')
+    return rx.sub(lambda m: f'**{m.group(0)}**', markup)
+
+
 def _type_post_text(page, text_sel: str, text: str,
                     log: Callable[[str], None] | None = None,
                     project_id: str = "") -> str:
@@ -1522,7 +1644,15 @@ def _type_post_text(page, text_sel: str, text: str,
     import post_text
 
     log = log or (lambda m: None)
-    chunks = post_text.plain_chunks(text)
+    # ОК-подготовка разметки: убрать голый адрес сразу после анкора и сделать
+    # сам анкор жирным (по просьбе заказчицы – «нашем сайте» ссылкой и жирным).
+    text = _bold_anchors(_drop_trailing_bare(text))
+    # Для ПЛОСКОГО текста анкор → просто его ярлык, без дописывания голого
+    # адреса (это делает post_text._links_to_words, когда адреса больше нет в
+    # тексте – и тогда «нашем сайте» снова обрастало «stalmetural.ru»). Ссылку
+    # повесит редактор ОК по anchor_spans, адрес в плоском тексте не нужен.
+    label_only = _ANCHOR_LABEL_RX.sub(r"\1", text)
+    chunks = post_text.plain_chunks(label_only)
     plain = "".join(t for t, _ in chunks)
     letters = _letters          # общая сверка по буквам – одна на модуль
 
@@ -1543,13 +1673,9 @@ def _type_post_text(page, text_sel: str, text: str,
     if not bold_spans and not link_spans:
         return "plain"
 
-    # 2. Жирный – execCommand поверх выделения (ОК его принимает и держит).
-    res = _apply_marks(page, text_sel, bold_spans)
-    if res.get("error"):
-        log(f"  разметку наложить не вышло ({res['error']}) – остаётся обычный текст")
-        if project_id:
-            _save_editor_markup(page, text_sel, project_id, log)
-        return "plain"
+    # 2. Жирный – родной кнопкой «Ж» панели форматирования (execCommand в
+    #    запасе). Так первая буква не теряется.
+    bold_done = _apply_bold(page, text_sel, bold_spans, log) if bold_spans else 0
 
     # 2б. Ссылки – родным редактором ссылок ОК (свой <a> он выбрасывает).
     links_done = _apply_links_native(page, text_sel, link_spans, log, project_id) \
@@ -1568,14 +1694,14 @@ def _type_post_text(page, text_sel: str, text: str,
 
     want_bold = len(bold_spans)
     want_links = len(link_spans)
-    log(f"  разметка: жирных кусков {res.get('bold', 0)} из {want_bold}, "
+    log(f"  разметка: жирных кусков {bold_done} из {want_bold}, "
         f"ссылок {links_done} из {want_links}")
     if link_spans and not links_done:
         log("  ссылку редактор ОК не принял – остаётся обычный текст со ссылкой "
             "в блоке контактов")
         if project_id:
             _save_editor_markup(page, text_sel, project_id, log)
-    if not res.get("bold") and want_bold:
+    if not bold_done and want_bold:
         log("  жирный редактор ОК не принял – текст ушёл обычным")
         if project_id:
             _save_editor_markup(page, text_sel, project_id, log)

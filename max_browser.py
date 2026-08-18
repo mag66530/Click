@@ -50,7 +50,8 @@ SEL = {
     # Скрепка ПОЛЯ СООБЩЕНИЯ (aria-label «Загрузить файл» – подтверждён вживую
     # 18.08.2026). Прежний 'button:has(svg.shape)' цеплял «+» вверху списка
     # чатов и открывал «Создать группу/канал» – оттого фото и не прикреплялось.
-    "attach": ('button[aria-label="Загрузить файл"]', 'button[aria-label*="агрузить файл"]',
+    "attach": ('button:has(use[href="#icon_attachment"])',
+               'button[aria-label="Загрузить файл"]', 'button[aria-label*="агрузить файл"]',
                'button[aria-label*="рикреп"]', '[aria-label*="Прикрепить"]'),
     "attach_photo": ('text="Фото или видео"', 'text="Фото"'),
     # Скрытый input поля сообщения – именно в него скрепка кладёт файл.
@@ -1082,8 +1083,11 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "shot": _debug_shot(project_id, page, "bad-text"),
                         "error": why}
             page.wait_for_timeout(1_000)
-            # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
-            yb.drop_link_card(page, yb.text_domains(text), log,
+            # Карточка сайта – ТОЛЬКО в поле сообщения. Без этого удаление
+            # искало крестик по всей странице и цепляло ссылку на сайт в
+            # ЗАКРЕПЛЁННОМ посте, а «клик из страницы» жал крестик закрепа и
+            # схлопывал всё окно («закрыл всё, как будто Escape», 18.08.2026).
+            yb.drop_link_card(page, yb.text_domains(text), log, scope=".composer",
                               diag_dir=paths.data_root() / project_id / "crosspost")
 
             if image_paths:
@@ -1092,21 +1096,26 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                 attached = False
                 # 1) Буфер обмена (Ctrl+V) – заказчица подтвердила, что так МАКС
                 #    берёт картинку вернее всего.
+                log("  этап 1: вставка через буфер (Ctrl+V)")
                 if _paste_images(page, text_sel, image_paths, log):
                     attached = _wait_thumbs(page, had, len(image_paths), timeout_s=12)
                 # 2) Скрепка «Загрузить файл» поля сообщения (не «+» вверху!).
-                if not attached and _attach_via_clip(page, image_paths, log):
-                    attached = _wait_thumbs(page, had, len(image_paths), timeout_s=12)
+                if not attached:
+                    log("  этап 2: скрепка «Загрузить файл» → выбор файла")
+                    if _attach_via_clip(page, image_paths, log):
+                        attached = _wait_thumbs(page, had, len(image_paths), timeout_s=12)
                 # 3) Скрытый input поля – последний запас.
                 if not attached:
                     inp = _composer_file_input(page)
                     if inp is not None:
-                        log("  кладу файл прямо в поле сообщения (скрытый input)")
+                        log("  этап 3: кладу файл прямо в скрытый input поля")
                         try:
                             inp.set_input_files(image_paths)
                             attached = _wait_thumbs(page, had, len(image_paths), timeout_s=20)
                         except Exception:  # noqa: BLE001
                             pass
+                if attached:
+                    log("  миниатюра фото появилась – картинка в поле")
 
                 # Файл ПЕРЕДАН – это ещё не «фото в посте». 14.08.2026 МАКС
                 # поставил отложку без картинки, а Click отчитался успехом:

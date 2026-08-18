@@ -1350,9 +1350,18 @@ _SELECT_TEXT_JS = r"""
   if (!a || !b) return false;
   const r = document.createRange();
   r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]);
+  el.focus();
   const sel = window.getSelection();
   sel.removeAllRanges(); sel.addRange(r);
-  el.focus();
+  // Подтолкнуть панель форматирования: ОК показывает её по событиям выделения/
+  // отпускания мыши, а программное выделение их само не шлёт – без этого
+  // панелька иногда не всплывала, и ссылка не ставилась (0 из 1).
+  try {
+    document.dispatchEvent(new Event('selectionchange'));
+    const rc = r.getBoundingClientRect();
+    const opts = {bubbles: true, clientX: rc.right, clientY: rc.top};
+    el.dispatchEvent(new MouseEvent('mouseup', opts));
+  } catch (e) {}
   return true;
 }
 """
@@ -1402,10 +1411,18 @@ def _apply_links_native(page, text_sel: str, link_spans: list[dict],
     warned = False
     for span in link_spans:
         try:
-            if not page.evaluate(_SELECT_TEXT_JS, {"sel": text_sel, "text": span["text"]}):
-                continue
-            page.wait_for_timeout(350)                # дать панельке форматирования всплыть
-            if not _open_link_editor(page, project_id, log):
+            # Панель форматирования капризна – выделяем и пробуем открыть окно
+            # ссылки до трёх раз, каждый раз заново наводя выделение.
+            opened = False
+            for _ in range(3):
+                if not page.evaluate(_SELECT_TEXT_JS, {"sel": text_sel, "text": span["text"]}):
+                    break
+                page.wait_for_timeout(450)            # дать панельке всплыть
+                if _open_link_editor(page, project_id, log):
+                    opened = True
+                    break
+                page.wait_for_timeout(300)
+            if not opened:
                 if not warned:
                     log("  окно «Добавить ссылку» не открылось – панельку выделения "
                         "сохранил (ok-linktoolbar.html), пришлите, привяжу кнопку точно")
@@ -1621,6 +1638,34 @@ def _bold_anchors(markup: str) -> str:
     return rx.sub(lambda m: f'**{m.group(0)}**', markup)
 
 
+def _type_with_bold(page, text_sel: str, chunks: list, log) -> int:
+    """
+    Набрать текст кусками, включая ЖИРНЫЙ НА ЛЕТУ (Ctrl+B), как печатает человек.
+
+    Перед жирным куском жмём Ctrl+B, после – снова Ctrl+B. Так жирный ложится на
+    ВЕСЬ кусок и не «съедает» первую букву – чего не удавалось добиться
+    выделением поверх готового текста (там первая буква то и дело выпадала).
+    Возвращает, сколько жирных кусков реально стали жирными.
+    """
+    page.click(text_sel)
+    page.wait_for_timeout(150)
+    for t, is_bold in chunks:
+        if not t:
+            continue
+        if is_bold and t.strip():
+            page.keyboard.press("Control+b")
+            page.keyboard.type(t, delay=6)
+            page.keyboard.press("Control+b")
+        else:
+            page.keyboard.type(t, delay=6)
+    page.wait_for_timeout(300)
+    done = 0
+    for t, is_bold in chunks:
+        if is_bold and t.strip() and _is_bold(page, text_sel, t.strip()):
+            done += 1
+    return done
+
+
 def _type_post_text(page, text_sel: str, text: str,
                     log: Callable[[str], None] | None = None,
                     project_id: str = "") -> str:
@@ -1664,28 +1709,28 @@ def _type_post_text(page, text_sel: str, text: str,
         except Exception:  # noqa: BLE001
             return ""
 
-    # 1. Обычный текст. Всегда, при любом исходе разметки.
-    page.type(text_sel, plain, delay=8)
-    page.wait_for_timeout(500)
-
     bold_spans = [{"kind": "bold", "text": t.strip()} for t, bold in chunks
                   if bold and len(t.strip()) > 1]
     link_spans = [{"kind": "link", "text": t, "url": u}
                   for t, u in post_text.anchor_spans(text)]
+
+    # 1+2. Набираем текст, включая ЖИРНЫЙ НА ЛЕТУ (Ctrl+B), как печатает человек:
+    # так жирный ложится на всё слово и не теряет первую букву. Выделением
+    # поверх готового текста больше не наводим – именно там первая буква и
+    # выпадала.
+    bold_done = _type_with_bold(page, text_sel, chunks, log)
+    page.wait_for_timeout(400)
+
     if not bold_spans and not link_spans:
         return "plain"
 
-    # 2. Жирный – execCommand поверх выделения. НЕ кликаем по панели
-    #    форматирования вслепую: угадывание кнопки «Ж» ловило чужой элемент и
-    #    закрывало форму (живой прогон 18.08.2026). execCommand безопасен –
-    #    ничего не закрывает, а первую букву чиним порядком фокуса в _MARK_JS.
-    res = _apply_marks(page, text_sel, bold_spans) if bold_spans else {}
-    if res.get("error"):
-        log(f"  разметку наложить не вышло ({res['error']}) – остаётся обычный текст")
-        if project_id:
-            _save_editor_markup(page, text_sel, project_id, log)
-        return "plain"
-    bold_done = res.get("bold", 0)
+    # Запас: ОК проглотил Ctrl+B и жирного нет вовсе – накладываем выделением
+    # (текст уже набран). Мисклик тут исключён: execCommand по выделению ничего
+    # не закрывает.
+    if bold_spans and not bold_done:
+        log("  жирный на лету не принялся – накладываю выделением")
+        res = _apply_marks(page, text_sel, bold_spans)
+        bold_done = res.get("bold", 0)
 
     # 2б. Ссылки – родным редактором ссылок ОК (свой <a> он выбрасывает).
     links_done = _apply_links_native(page, text_sel, link_spans, log, project_id) \

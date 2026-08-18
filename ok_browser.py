@@ -1390,28 +1390,35 @@ def _apply_links_native(page, text_sel: str, link_spans: list[dict],
     сверит, что текст не пострадал.
     """
     done = 0
-    warned = False
+    # Кнопку, что ОТКРЫВАЕТ окно ссылки, ещё не знаем: Ctrl+K его не открыл, а
+    # Escape после него закрывал всю форму поста (живой прогон 18.08.2026) –
+    # оттого ОК и падал. Пока триггера нет, окно НЕ трогаем ни одной клавишей:
+    # кусок остаётся обычным текстом (адрес есть в блоке контактов и кликается),
+    # а форма цела. Как только пришлют скрин панельки при выделении текста –
+    # включим _open_link_editor() и вставку через js-field_url заработает.
+    trigger = _open_link_editor
+    if trigger is None:
+        if link_spans:
+            log("  ссылку в слова пока не вшиваю: нужен способ открыть окно "
+                "«Добавить ссылку». Выделите текст в поле поста ОК и пришлите "
+                "скрин всплывающей панельки (там иконка ссылки) – привяжу точно")
+        return 0
     for span in link_spans:
         try:
             if not page.evaluate(_SELECT_TEXT_JS, {"sel": text_sel, "text": span["text"]}):
                 continue
-            page.keyboard.press("Control+k")
+            if not trigger(page):                     # окно не открылось – идём дальше
+                continue
             try:
                 page.wait_for_selector("input.js-field_url", state="visible", timeout=2500)
-            except Exception:  # noqa: BLE001 – окно ссылки этим способом не открылось
-                if not warned:
-                    log("  окно «Добавить ссылку» не открылось (Ctrl+K) – пришлите "
-                        "скрин панельки, что всплывает при выделении текста в ОК, "
-                        "и я привяжу кнопку ссылки точно")
-                    warned = True
-                page.keyboard.press("Escape")
+            except Exception:  # noqa: BLE001
                 continue
             page.locator("input.js-field_url").last.fill(span["url"])
             txt = page.locator("input.js-field_txt").last
             try:
                 if not (txt.input_value() or "").strip():
                     txt.fill(span["text"])
-            except Exception:  # noqa: BLE001 – поле текста может быть скрыто
+            except Exception:  # noqa: BLE001
                 pass
             page.click(".js-posting-link-editor-confirm")
             page.wait_for_timeout(600)
@@ -1420,12 +1427,15 @@ def _apply_links_native(page, text_sel: str, link_spans: list[dict],
                 done += 1
         except Exception as e:  # noqa: BLE001 – ссылка не должна ронять прогон
             log(f"  ссылку вставить не вышло: {e}")
-            try:
-                page.keyboard.press("Escape")
-            except Exception:  # noqa: BLE001
-                pass
             continue
     return done
+
+
+# Как открыть окно «Добавить ссылку» ОК. Пока не знаем (Ctrl+K не сработал,
+# Escape закрывал форму) – ставим None, и тогда вставка ссылки просто
+# пропускается, ничего не ломая. Появится скрин панельки выделения – сюда
+# ляжет функция, которая жмёт кнопку ссылки в ней.
+_open_link_editor = None
 
 
 def _type_post_text(page, text_sel: str, text: str,

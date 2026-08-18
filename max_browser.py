@@ -47,11 +47,15 @@ SEL = {
     "text": ('div[contenteditable][role="textbox"][data-lexical-editor="true"]',
              'div[contenteditable][role="textbox"]',
              '[aria-placeholder="Пост"]', '[placeholder="Пост"]'),
-    # Скрепка и пункт «Фото или видео» под ней.
-    "attach": ('button[aria-label*="рикреп"]', 'button:has(svg.shape)',
-               '[aria-label*="Прикрепить"]'),
+    # Скрепка ПОЛЯ СООБЩЕНИЯ (aria-label «Загрузить файл» – подтверждён вживую
+    # 18.08.2026). Прежний 'button:has(svg.shape)' цеплял «+» вверху списка
+    # чатов и открывал «Создать группу/канал» – оттого фото и не прикреплялось.
+    "attach": ('button[aria-label="Загрузить файл"]', 'button[aria-label*="агрузить файл"]',
+               'button[aria-label*="рикреп"]', '[aria-label*="Прикрепить"]'),
     "attach_photo": ('text="Фото или видео"', 'text="Фото"'),
-    "file_input": 'input[type="file"]',
+    # Скрытый input поля сообщения – именно в него скрепка кладёт файл.
+    "file_input": '.composer input[type="file"]',
+    "file_input_any": 'input[type="file"][multiple]',
     # Кружок со стрелкой. ЛЕВОЙ кнопкой не жмём никогда – пост уйдёт сразу.
     "send": ('button[aria-label="Отправить сообщение"]',
              'button[aria-label*="Отправить сообщени"]'),
@@ -846,6 +850,23 @@ def _wait_thumbs(page, before: int, want: int) -> bool:
     return _thumbs(page) > before
 
 
+def _composer_file_input(page):
+    """
+    Скрытый <input type="file"> ПОЛЯ СООБЩЕНИЯ МАКС (он multiple). None – не нашли.
+
+    Берём последний подходящий: у МАКС на странице есть и другие file-input
+    (аватар и пр.), а нужный – в композере внизу, он отрисовывается последним.
+    """
+    for sel in (SEL["file_input"], SEL["file_input_any"], 'input[type="file"]'):
+        try:
+            loc = page.locator(sel)
+            if loc.count():
+                return loc.last
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
 def _fill_post_text(page, sel: str, text: str, log: Callable[[str], None]) -> str:
     """
     Вписать текст в поле МАКС, НЕ отправив ни одного сообщения.
@@ -999,22 +1020,29 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
             if image_paths:
                 log(f"Прикрепляю фото: {len(image_paths)}")
                 had = _thumbs(page)
-                if not _click_first(page, SEL["attach"], timeout=6_000):
-                    return {"ok": False,
-                            "shot": _debug_shot(project_id, page, "no-attach"),
-                            "error": "Не нашли скрепку для прикрепления фото"}
-                page.wait_for_timeout(700)
-                try:
-                    with page.expect_file_chooser(timeout=6_000) as picked:
-                        _click_first(page, SEL["attach_photo"], timeout=5_000)
-                    picked.value.set_files(image_paths)
-                except Exception:  # noqa: BLE001 – пробуем скрытое поле
-                    inp = page.locator(SEL["file_input"])
-                    if not inp.count():
+                # Файл отдаём НАПРЯМУЮ в скрытый input поля сообщения – ровно то,
+                # что делает скрепка, но без меню, в котором Click промахивался
+                # на «+ Создать» вверху списка чатов. Скрытому input set_files не
+                # мешает: событие change улетает, МАКС рисует миниатюру.
+                inp = _composer_file_input(page)
+                if inp is not None:
+                    log("  кладу файл прямо в поле сообщения (скрытый input)")
+                    inp.set_input_files(image_paths)
+                else:
+                    # Запас: жмём ИМЕННО скрепку поля (не «+») и ловим диалог.
+                    if not _click_first(page, SEL["attach"], timeout=6_000):
+                        return {"ok": False,
+                                "shot": _debug_shot(project_id, page, "no-attach"),
+                                "error": "Не нашли скрепку «Загрузить файл» в поле поста"}
+                    page.wait_for_timeout(700)
+                    try:
+                        with page.expect_file_chooser(timeout=6_000) as picked:
+                            _click_first(page, SEL["attach_photo"], timeout=5_000)
+                        picked.value.set_files(image_paths)
+                    except Exception:  # noqa: BLE001
                         return {"ok": False,
                                 "shot": _debug_shot(project_id, page, "no-file-input"),
                                 "error": "Не нашли, куда отдать файлы фото в МАКС"}
-                    inp.first.set_input_files(image_paths)
 
                 # Файл ПЕРЕДАН – это ещё не «фото в посте». 14.08.2026 МАКС
                 # поставил отложку без картинки, а Click отчитался успехом:

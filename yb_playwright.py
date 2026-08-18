@@ -2038,7 +2038,8 @@ _CLOSE_ICON_D = "M9.414 8l3.294 3.294"
 
 def drop_link_card(page, domains: list[str],
                    log: Callable[[str], None] | None = None,
-                   tries: int = 3, diag_dir: "Path | None" = None) -> str:
+                   tries: int = 3, diag_dir: "Path | None" = None,
+                   scope: str = "") -> str:
     """
     Убрать карточку сайта, которую площадка подтянула по ссылке в тексте.
 
@@ -2066,6 +2067,12 @@ def drop_link_card(page, domains: list[str],
     делается точно, а не на ощупь.
 
     Возвращает: 'closed' – карточку убрали, '' – её не было или не нашли.
+
+    scope – css-селектор области, ВНУТРИ которой искать карточку и крестик.
+    Без него ВК цеплял ссылку на наш сайт из БОКОВОЙ КОЛОНКИ сообщества
+    («Официальный сайт – stalmetural.ru») позади формы поста, а «клик из
+    страницы» жал по ней и ЗАКРЫВАЛ форму (живой прогон 18.08.2026). Область
+    поста передаём явно – и тогда трогаем только настоящую карточку в форме.
     """
     log = log or (lambda m: None)
     doms = [d.lower() for d in domains if d]
@@ -2073,10 +2080,12 @@ def drop_link_card(page, domains: list[str],
         return ""
 
     find_card = """
-    (doms) => {
-      const link = [...document.querySelectorAll('a[href]')].find(a => {
+    (args) => {
+      const root = args.scope ? document.querySelector(args.scope) : document;
+      if (!root) return null;
+      const link = [...root.querySelectorAll('a[href]')].find(a => {
         const h = (a.href || '').toLowerCase();
-        return doms.some(d => h.includes(d)) && !a.closest('[contenteditable], textarea');
+        return args.doms.some(d => h.includes(d)) && !a.closest('[contenteditable], textarea');
       });
       if (!link) return null;
       let card = link, p = link.parentElement;
@@ -2090,7 +2099,10 @@ def drop_link_card(page, domains: list[str],
     }
     """
     mark_x = """
-    (box) => {
+    (args) => {
+      const box = args.box, scope = args.scope;
+      const root = scope ? document.querySelector(scope) : document;
+      if (!root) return null;
       const card = document.querySelector('[data-click-card="1"]');
       if (!card) return null;
       // Крестик может лежать и вне карточки – у её верхней кромки. Берём
@@ -2108,7 +2120,7 @@ def drop_link_card(page, domains: list[str],
         return getComputedStyle(el).cursor === 'pointer' && el.children.length <= 2;
       };
       let best = null, bestScore = 1e9;
-      for (const el of document.querySelectorAll('button, [role="button"], a, i, span, div')) {
+      for (const el of root.querySelectorAll('button, [role="button"], a, i, span, div')) {
         const r = el.getBoundingClientRect();
         if (!inZone(r) || !clickable(el)) continue;
         if ((el.innerText || '').trim().length > 3) continue;   // это не крестик, а подпись
@@ -2130,7 +2142,7 @@ def drop_link_card(page, domains: list[str],
 
     def card_box():
         try:
-            return page.evaluate(find_card, doms)
+            return page.evaluate(find_card, {"doms": doms, "scope": scope})
         except Exception:  # noqa: BLE001 – поиск карточки не должен ронять прогон
             return None
 
@@ -2154,7 +2166,7 @@ def drop_link_card(page, domains: list[str],
         except Exception:  # noqa: BLE001
             pass
         try:
-            found = page.evaluate(mark_x, box)
+            found = page.evaluate(mark_x, {"box": box, "scope": scope})
         except Exception:  # noqa: BLE001
             found = None
         if not found:

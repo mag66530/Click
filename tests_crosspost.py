@@ -1851,12 +1851,24 @@ def test_link_card_and_report() -> None:
     # Разметка ОК: жирный и ссылки НАКЛАДЫВАЮТСЯ на готовый текст.
     import ok_browser
     ok_src = inspect.getsource(ok_browser._type_post_text)
+    # Порядок: набрать ОБЫЧНЫЙ текст, потом наложить разметку выделением.
+    # Жирный «на лету» (Ctrl+B при наборе) забракован – теперь основной путь
+    # накладывает жирный ПОСЛЕ набора, через _apply_bold.
     check("сначала обычный текст, потом разметка",
-          ok_src.index("page.type(text_sel, plain") < ok_src.index("_apply_marks"))
+          ok_src.index("keyboard.type(plain") < ok_src.index("_apply_bold"))
+    bold_src = inspect.getsource(ok_browser._apply_bold)
+    check("жирный выделяется настоящей мышью, потом Ctrl+B",
+          "_select(" in bold_src and 'press("Control+b")' in bold_src)
     check("жирный и ссылки идут вместе",
-          '"kind": "bold"' in ok_src and '"kind": "link"' in ok_src)
+          '"kind": "bold"' in ok_src and ("_apply_links_native" in ok_src
+                                          or '"kind": "link"' in ok_src))
+    # Выделение куска – НАСТОЯЩЕЙ мышью (общий помощник yb.select_text_by_mouse),
+    # программное execCommand осталось лишь последним запасом.
+    sel_src = inspect.getsource(ok_browser._select)
+    check("выделяем кусок мышью, как человек",
+          "select_text_by_mouse" in sel_src)
     mark_src = inspect.getsource(ok_browser._apply_marks) + ok_browser._MARK_JS
-    check("выделяем кусок и включаем формат, как человек",
+    check("запас разметки на месте (execCommand по выделению)",
           "createRange" in mark_src and "execCommand" in mark_src)
     check("ссылка вшивается в слова", "createLink" in mark_src)
     check("считаем, что РЕАЛЬНО легло в поле",
@@ -1875,6 +1887,56 @@ def test_link_card_and_report() -> None:
     rep = inspect.getsource(app._crosspost_report_block)
     check("нет записи Click – нет строки в отчёте", "if not saved:" in rep)
     check("заголовок отчёта про работу Click", "Отчёт: что сделал Click" in rep)
+
+
+def test_mouse_selection_wiring() -> None:
+    """
+    Разметку ОК и МАКС накладываем ВЫДЕЛЕНИЕМ НАСТОЯЩЕЙ МЫШИ.
+
+    Заказчица прислала скринами: редакторы ОК и МАКС узнают только выделение
+    зажимом и протяжкой мыши. Программное (execCommand/Range) для них не
+    существует – панель не всплывает, Ctrl+B цепляет не то, первая буква
+    жирного «уплывает». Общий помощник yb.select_text_by_mouse наводит
+    настоящую мышь; проверяем, что ОК и МАКС зовут именно его.
+    """
+    print("\nВыделение куска – настоящей мышью")
+    import inspect
+
+    import max_browser as mb
+    import ok_browser
+    import yb_playwright as yb
+
+    check("общий помощник выделения мышью есть", hasattr(yb, "select_text_by_mouse"))
+    sel_src = inspect.getsource(yb.select_text_by_mouse)
+    check("помощник двигает мышь зажимом и протяжкой",
+          "mouse.down" in sel_src and "mouse.move" in sel_src and "mouse.up" in sel_src)
+    check("сверяет, что кусок правда выделился",
+          "_selection_text" in sel_src)
+    rect_src = yb._RANGE_RECT_JS
+    check("координаты берём из getClientRects", "getClientRects" in rect_src)
+    check("учтена внутренняя прокрутка поля (МАКС)", "scrollTop" in rect_src)
+
+    # ОК: и жирный, и ссылка выделяются мышью (через _select → мышь).
+    ok_select = inspect.getsource(ok_browser._select)
+    check("ОК выделяет мышью", "select_text_by_mouse" in ok_select)
+    check("ОК: программное выделение осталось лишь запасом",
+          "_SELECT_TEXT_JS" in ok_select)
+
+    # МАКС: форматирование накладывается на введённый текст, мышью + Ctrl+B/Ctrl+K.
+    fmt_src = inspect.getsource(mb._apply_max_format)
+    check("МАКС выделяет мышью", "select_text_by_mouse" in fmt_src)
+    check("МАКС: жирный – Ctrl+B", 'press("Control+b")' in fmt_src)
+    check("МАКС: ссылка – через _add_max_link (Ctrl+K)", "_add_max_link" in fmt_src)
+    link_src = inspect.getsource(mb._add_max_link)
+    check("МАКС ссылку открывает Ctrl+K", 'press("Control+k")' in link_src)
+    check("МАКС ссылку НЕ закрывает Escape (закрыл бы форму)",
+          'press("Escape")' not in link_src)
+    collapse_src = inspect.getsource(mb._collapse_selection)
+    check("после форматирования выделение снимаем (фото не затрёт текст)",
+          "collapse" in collapse_src)
+    fmt_flow = inspect.getsource(mb.schedule_postponed_post)
+    check("МАКС печатает ПЛОСКИЙ текст, разметку накладывает следом",
+          "to_plain(text)" in fmt_flow and "_apply_max_format(" in fmt_flow)
 
 
 def test_ok_bold_and_probe() -> None:
@@ -1916,8 +1978,8 @@ def test_ok_bold_and_probe() -> None:
           "разметка изменила текст" in src and "_clear_editor" in src)
     check("про жирный больше не врём",
           "жирный редактор ОК не принял" in src and "жирных кусков" in src)
-    check("ОК получает разметку, а не плоский текст",
-          'network == "ok"' in inspect.getsource(
+    check("ОК и МАКС получают разметку, а не плоский текст",
+          'network in ("ok", "max")' in inspect.getsource(
               __import__("crosspost_form")._form_browser_all))
 
     # ── МАКС: отпечаток поля больше не обрезается
@@ -2280,7 +2342,12 @@ def test_max_text_entry() -> None:
     whole = inspect.getsource(mb.schedule_postponed_post)
     check("формирование зовёт безопасный ввод", "_fill_post_text(" in whole)
     check("отказ ввода останавливает отложку", '"bad-text"' in whole)
-    check("перед правым кликом закрываются всплывашки", 'press("Escape")' in whole)
+    # Всплывашки перед правым кликом гасим ВОЗВРАТОМ ФОКУСА В ПОЛЕ, а НЕ
+    # Escape: Escape в МАКС убирает картинку и закрывает чат целиком (живой
+    # прогон 18.08.2026). Клик в поле подсказку гасит и ничего не закрывает.
+    check("всплывашки перед правым кликом гасим без Escape",
+          'button="right"' in whole and "БЕЗ Escape" in whole)
+    check("Escape после фото в МАКС не жмём", 'press("Escape")' not in whole)
 
     # Отпечаток строки: эмодзи и пробелы не мешают сверке.
     check("отпечаток строки игнорирует значки",
@@ -2578,6 +2645,7 @@ def main() -> int:
     test_tg_access_advice()
     test_social_defaults()
     test_link_card_and_report()
+    test_mouse_selection_wiring()
     test_ok_bold_and_probe()
     test_forget_target()
     test_build_bumped()

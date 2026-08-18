@@ -148,10 +148,12 @@ def _form_browser_all(project_id: str, network: str, schedule_fn,
 
         progress(f"{label}: готовлю текст и фото")
         markup = social_markup(post, site)
-        # ОК умеет жирный в теме группы и набирает его сам (Ctrl+B), поэтому
-        # ему отдаём разметку. ВК и МАКС жирного в посте не умеют – им
-        # плоский текст, как и было.
-        text = markup if network == "ok" else post_text.render(markup, "plain")
+        # ОК и МАКС накладывают форматирование на уже введённый текст,
+        # выделяя куски настоящей мышью (жирный – кнопкой/Ctrl+B, ссылку –
+        # Ctrl+K). Им отдаём РАЗМЕТКУ – по ней площадка сама решит, что
+        # выделить. ВК форматирования в посте не умеет – ему плоский текст,
+        # как и было. Плоский из разметки площадка при нужде получит сама.
+        text = markup if network in ("ok", "max") else post_text.render(markup, "plain")
 
         local: list[str] = []
         if post.get("images"):

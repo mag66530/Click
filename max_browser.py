@@ -1037,6 +1037,110 @@ def _fill_post_text(page, sel: str, text: str, log: Callable[[str], None]) -> st
             "уходило. Ничего не планируем – попробуйте ещё раз")
 
 
+def _collapse_selection(page, sel: str) -> None:
+    """
+    Снять выделение, поставив курсор в конец поля.
+
+    Без этого беда: после форматирования в поле остаётся ВЫДЕЛЕННЫЙ кусок, а
+    следующая вставка фото (Ctrl+V) заменяет собой выделенное – и кусок
+    текста пропадает. Схлопываем выделение в точку, тогда вставке нечего
+    затирать.
+    """
+    try:
+        page.evaluate(
+            "(s) => { const el = document.querySelector(s); if (!el) return;"
+            " const r = document.createRange(); r.selectNodeContents(el);"
+            " r.collapse(false); const sel = window.getSelection();"
+            " sel.removeAllRanges(); sel.addRange(r); }", sel)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _apply_max_format(page, text_sel: str, markup: str,
+                      log: Callable[[str], None]) -> None:
+    """
+    Наложить жирный и ссылки на УЖЕ ВВЕДЁННЫЙ плоский текст МАКС.
+
+    Так делает человек: пишет пост, потом выделяет кусок мышью и жмёт Ctrl+B
+    (жирный) или Ctrl+K (ссылка → окно «Ссылка» → «Добавить»). Настоящее
+    выделение мышью тут ключевое: программное МАКС не видит, панель не
+    всплывает, Ctrl+B цепляет не то (заказчица прислала это скринами).
+
+    Ничего не отправляет: Ctrl+B и Ctrl+K – комбинации с модификатором,
+    события Enter не рождают физически, а поле не опустошают. Если что-то не
+    вышло – кусок остаётся обычным текстом (адрес и так есть в блоке
+    контактов), прогон не падает. В конце выделение снимаем, чтобы вставка
+    фото не затёрла текст.
+    """
+    import post_text
+
+    chunks = post_text.plain_chunks(markup)
+    bold = [t.strip() for t, is_bold in chunks if is_bold and t.strip()]
+    anchors = [(t.strip(), u) for t, u in post_text.anchor_spans(markup) if t.strip()]
+    if not bold and not anchors:
+        return
+
+    for t in bold:
+        if yb.select_text_by_mouse(page, text_sel, t, log=log):
+            page.keyboard.press("Control+b")   # безопасно: не Enter, не отправит
+            page.wait_for_timeout(150)
+            log(f"  жирным: «{t[:32]}»")
+        else:
+            log(f"  жирный пропущен – не выделилось «{t[:32]}»")
+
+    for t, url in anchors:
+        if not yb.select_text_by_mouse(page, text_sel, t, log=log):
+            log(f"  ссылка пропущена – не выделилось «{t[:32]}»")
+            continue
+        if _add_max_link(page, url, log):
+            log(f"  ссылка: «{t[:24]}» → {url}")
+        else:
+            log(f"  окно «Ссылка» не открылось – «{t[:24]}» осталось текстом")
+
+    _collapse_selection(page, text_sel)
+
+
+# Поля окна «Ссылка» МАКС ищем широко: точных классов у нас нет, а имя-хвост
+# у сборки МАКС меняется. Адрес – в поле для url/ссылки; подтверждение –
+# кнопкой «Добавить» (или «Сохранить»/«Готово», если сборка назовёт иначе).
+_LINK_URL_SEL = ('input[type="url"], input[placeholder*="сылк" i], '
+                 'input[placeholder*="дрес" i], input[placeholder*="http" i], '
+                 'input[name*="url" i]')
+_LINK_OK_RX = "Добавить|Сохранить|Готово|Применить"
+
+
+def _add_max_link(page, url: str, log: Callable[[str], None]) -> bool:
+    """
+    Открыть окно ссылки (Ctrl+K), вписать адрес, нажать «Добавить».
+
+    Строго безопасно: не нашли поле адреса за полторы секунды – ничего не
+    трогаем и уходим (кусок останется текстом). Escape НЕ жмём: у МАКС и ОК
+    он закрывал всю форму поста (живые прогоны), а тут это стоило бы отложки.
+    """
+    import re
+    try:
+        page.keyboard.press("Control+k")
+        page.wait_for_timeout(600)
+        field = page.locator(_LINK_URL_SEL).last
+        try:
+            field.wait_for(state="visible", timeout=1_500)
+        except Exception:  # noqa: BLE001 – окна нет, оставляем текст как есть
+            return False
+        field.fill(url)
+        page.wait_for_timeout(150)
+        btn = page.get_by_role("button", name=re.compile(_LINK_OK_RX, re.I)).last
+        if btn.count():
+            btn.click()
+        else:
+            # Кнопки не нашли – подтверждаем вводом в поле адреса (частый путь).
+            field.press("Enter")
+        page.wait_for_timeout(400)
+        return True
+    except Exception as e:  # noqa: BLE001
+        log(f"  ссылка МАКС: {e}")
+        return False
+
+
 def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                             image_paths: list[str], when: datetime,
                             log: Callable[[str], None] | None = None,
@@ -1076,18 +1180,29 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "shot": _debug_shot(project_id, page, "no-editor"),
                         "error": _why_no_editor(page)}
 
-            log(f"Ввожу текст ({len(text)} знаков)")
-            why = _fill_post_text(page, text_sel, text, log)
+            # Текст приходит РАЗМЕТКОЙ (жирный **…**, ссылки [текст](адрес)).
+            # Печатать её буквально нельзя – в поле попали бы звёздочки и
+            # скобки. Печатаем видимый текст, разметку накладываем следом.
+            import post_text
+            plain = post_text.to_plain(text)
+            log(f"Ввожу текст ({len(plain)} знаков)")
+            why = _fill_post_text(page, text_sel, plain, log)
             if why:
                 return {"ok": False,
                         "shot": _debug_shot(project_id, page, "bad-text"),
                         "error": why}
-            page.wait_for_timeout(1_000)
+            page.wait_for_timeout(800)
+
+            # Жирный и ссылки – выделением мышью по введённому тексту.
+            log("Накладываю форматирование (жирный, ссылки)")
+            _apply_max_format(page, text_sel, text, log)
+            page.wait_for_timeout(500)
+
             # Карточка сайта – ТОЛЬКО в поле сообщения. Без этого удаление
             # искало крестик по всей странице и цепляло ссылку на сайт в
             # ЗАКРЕПЛЁННОМ посте, а «клик из страницы» жал крестик закрепа и
             # схлопывал всё окно («закрыл всё, как будто Escape», 18.08.2026).
-            yb.drop_link_card(page, yb.text_domains(text), log, scope=".composer",
+            yb.drop_link_card(page, yb.text_domains(plain), log, scope=".composer",
                               diag_dir=paths.data_root() / project_id / "crosspost")
 
             if image_paths:

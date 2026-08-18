@@ -1366,6 +1366,27 @@ _SELECT_TEXT_JS = r"""
 }
 """
 
+def _select(page, text_sel: str, text: str, from_index: int = -1) -> bool:
+    """
+    Выделить кусок в поле – СНАЧАЛА настоящей мышью, и только если не вышло,
+    старым программным способом.
+
+    В этом вся разница между рабочим жирным и нерабочим. ОК показывает панель
+    форматирования и слушает Ctrl+B только по НАСТОЯЩЕМУ выделению мышью;
+    программное (addRange + поддельный mouseup) панель то всплывало, то нет –
+    оттого жирный и ссылка выходили через раз. Мышь редактор видит всегда.
+    Программный путь оставлен запасом: координаты куска иногда не вычислить
+    (поле перерисовалось), и тогда лучше выделить хоть как-то, чем никак.
+    """
+    import yb_playwright as yb
+    if yb.select_text_by_mouse(page, text_sel, text, from_index=from_index):
+        return True
+    try:
+        return bool(page.evaluate(_SELECT_TEXT_JS, {"sel": text_sel, "text": text}))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 # Проверка, что анкор с нашим адресом реально появился в поле.
 _HAS_LINK_JS = r"""
 (args) => {
@@ -1415,7 +1436,7 @@ def _apply_links_native(page, text_sel: str, link_spans: list[dict],
             # ссылки до трёх раз, каждый раз заново наводя выделение.
             opened = False
             for _ in range(3):
-                if not page.evaluate(_SELECT_TEXT_JS, {"sel": text_sel, "text": span["text"]}):
+                if not _select(page, text_sel, span["text"]):
                     break
                 page.wait_for_timeout(450)            # дать панельке всплыть
                 if _open_link_editor(page, project_id, log):
@@ -1586,18 +1607,24 @@ def _apply_bold(page, text_sel: str, bold_spans: list[dict],
     for span in bold_spans:
         t = span["text"]
         try:
-            if not page.evaluate(_SELECT_TEXT_JS, {"sel": text_sel, "text": t}):
+            if not _select(page, text_sel, t):
                 continue
-            page.wait_for_timeout(220)               # дать панельке всплыть
-            clicked = False
-            try:
-                clicked = bool(page.evaluate(_CLICK_BOLD_JS))
-            except Exception:  # noqa: BLE001
-                clicked = False
+            # Как человек: выделил мышью – нажал Ctrl+B. На НАСТОЯЩЕМ выделении
+            # редактор ОК его принимает, и первая буква не теряется.
+            page.keyboard.press("Control+b")
             page.wait_for_timeout(160)
-            if not (clicked and _is_bold(page, text_sel, t)):
-                # запас: execCommand на то же выделение
-                page.evaluate(_SELECT_TEXT_JS, {"sel": text_sel, "text": t})
+            if not _is_bold(page, text_sel, t):
+                # Не принял Ctrl+B – жмём родную кнопку «Ж» панели форматирования.
+                if _select(page, text_sel, t):
+                    page.wait_for_timeout(220)       # дать панельке всплыть
+                    try:
+                        page.evaluate(_CLICK_BOLD_JS)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    page.wait_for_timeout(160)
+            if not _is_bold(page, text_sel, t):
+                # Последний запас – execCommand на то же выделение.
+                _select(page, text_sel, t)
                 _apply_marks(page, text_sel, [{"kind": "bold", "text": t}])
             if _is_bold(page, text_sel, t):
                 done += 1
@@ -1636,34 +1663,6 @@ def _bold_anchors(markup: str) -> str:
     просьбе заказчицы). Уже жирные (**…**) второй раз не оборачиваем."""
     rx = re.compile(r'(?<!\*)\[[^\]\n]+\]\((https?://[^\s)]+)\)(?!\*)')
     return rx.sub(lambda m: f'**{m.group(0)}**', markup)
-
-
-def _type_with_bold(page, text_sel: str, chunks: list, log) -> int:
-    """
-    Набрать текст кусками, включая ЖИРНЫЙ НА ЛЕТУ (Ctrl+B), как печатает человек.
-
-    Перед жирным куском жмём Ctrl+B, после – снова Ctrl+B. Так жирный ложится на
-    ВЕСЬ кусок и не «съедает» первую букву – чего не удавалось добиться
-    выделением поверх готового текста (там первая буква то и дело выпадала).
-    Возвращает, сколько жирных кусков реально стали жирными.
-    """
-    page.click(text_sel)
-    page.wait_for_timeout(150)
-    for t, is_bold in chunks:
-        if not t:
-            continue
-        if is_bold and t.strip():
-            page.keyboard.press("Control+b")
-            page.keyboard.type(t, delay=6)
-            page.keyboard.press("Control+b")
-        else:
-            page.keyboard.type(t, delay=6)
-    page.wait_for_timeout(300)
-    done = 0
-    for t, is_bold in chunks:
-        if is_bold and t.strip() and _is_bold(page, text_sel, t.strip()):
-            done += 1
-    return done
 
 
 def _type_post_text(page, text_sel: str, text: str,
@@ -1714,23 +1713,23 @@ def _type_post_text(page, text_sel: str, text: str,
     link_spans = [{"kind": "link", "text": t, "url": u}
                   for t, u in post_text.anchor_spans(text)]
 
-    # 1+2. Набираем текст, включая ЖИРНЫЙ НА ЛЕТУ (Ctrl+B), как печатает человек:
-    # так жирный ложится на всё слово и не теряет первую букву. Выделением
-    # поверх готового текста больше не наводим – именно там первая буква и
-    # выпадала.
-    bold_done = _type_with_bold(page, text_sel, chunks, log)
+    # 1. Набираем ОБЫЧНЫЙ текст целиком, без форматирования на лету.
+    #
+    #    Жирный «при наборе» (Ctrl+B во время печати) заказчица забраковала
+    #    прямо: первая буква куска «уплывала», а панель ссылки не всплывала
+    #    вовсе. Причина одна и та же – редакторы ОК и МАКС узнают только
+    #    НАСТОЯЩЕЕ выделение мышью, а не программное. Поэтому текст ложится
+    #    целым, а разметка накладывается следом, выделением мыши.
+    page.click(text_sel)
+    page.wait_for_timeout(150)
+    page.keyboard.type(plain, delay=6)
     page.wait_for_timeout(400)
 
     if not bold_spans and not link_spans:
         return "plain"
 
-    # Запас: ОК проглотил Ctrl+B и жирного нет вовсе – накладываем выделением
-    # (текст уже набран). Мисклик тут исключён: execCommand по выделению ничего
-    # не закрывает.
-    if bold_spans and not bold_done:
-        log("  жирный на лету не принялся – накладываю выделением")
-        res = _apply_marks(page, text_sel, bold_spans)
-        bold_done = res.get("bold", 0)
+    # 2. Жирный – выделяем кусок мышью и жмём Ctrl+B / кнопку «Ж», как рукой.
+    bold_done = _apply_bold(page, text_sel, bold_spans, log) if bold_spans else 0
 
     # 2б. Ссылки – родным редактором ссылок ОК (свой <a> он выбрасывает).
     links_done = _apply_links_native(page, text_sel, link_spans, log, project_id) \

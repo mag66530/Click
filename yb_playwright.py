@@ -707,6 +707,129 @@ def click_at(page: Page, coords: dict) -> None:
     page.mouse.click(coords["x"], coords["y"])
 
 
+# ── Выделение куска текста НАСТОЯЩЕЙ мышью ──────────────────────────────
+#
+# Зачем это вообще. Редакторы ОК и МАКС узнают только выделение, сделанное
+# зажимом и протяжкой мыши. Выделение «на бумаге» (execCommand, Range +
+# addRange) для них не существует: панель форматирования не всплывает,
+# Ctrl+B цепляет не тот кусок, у жирного «уплывает» первая буква, а панель
+# ссылки не появляется вовсе. Именно на это жаловалась заказчица.
+#
+# Настоящая протяжка мыши редактору неотличима от руки, и он ведёт себя
+# правильно. Координаты куска берём из самого браузера: строим Range на
+# нужном тексте и спрашиваем его getClientRects() – это точные пиксели
+# начала и конца, с разбивкой по строкам, если кусок перенёсся.
+_RANGE_RECT_JS = r"""
+(args) => {
+  const el = document.querySelector(args.sel);
+  if (!el) return null;
+  const nodes = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let full = '';
+  while (w.nextNode()) { nodes.push([w.currentNode, full.length]); full += w.currentNode.nodeValue; }
+  const idx = (args.from != null && args.from >= 0) ? args.from : full.indexOf(args.text);
+  if (idx < 0) return null;
+  const to = idx + (args.text != null ? args.text.length : args.len);
+  const at = (pos, end) => {
+    for (const [node, start] of nodes) {
+      const len = node.nodeValue.length;
+      if (pos >= start && pos <= start + len) {
+        if (pos === start + len && !end) continue;   // конец узла – это начало следующего
+        return [node, pos - start];
+      }
+    }
+    return null;
+  };
+  const a = at(idx, false), b = at(to, true);
+  if (!a || !b) return null;
+  const r = document.createRange();
+  r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]);
+  // Подтянуть кусок в видимую часть. Две разные прокрутки, и обе важны:
+  //   1) страница – если само поле уехало за окно (scrollIntoView поля);
+  //   2) ВНУТРЕННЯЯ прокрутка поля – у МАКС поле растёт и прокручивается
+  //      само, и слово внизу мышью не достать. scrollIntoView поле бы не
+  //      сдвинуло его собственную прокрутку, поэтому двигаем el.scrollTop
+  //      руками, по разнице краёв поля и куска.
+  try { el.scrollIntoView({block: 'nearest', inline: 'nearest'}); } catch (e) {}
+  const fr = el.getBoundingClientRect();
+  const rr = r.getBoundingClientRect();
+  if (rr.height > 0 && (rr.top < fr.top || rr.bottom > fr.bottom)) {
+    el.scrollTop += (rr.top - fr.top) - Math.max(0, (fr.height - rr.height) / 2);
+  }
+  let rects = [...r.getClientRects()].filter(rc => rc.width > 0 && rc.height > 0);
+  if (!rects.length) {
+    const rc = r.getBoundingClientRect();
+    if (rc.width <= 0 || rc.height <= 0) return null;
+    rects = [rc];
+  }
+  const first = rects[0], last = rects[rects.length - 1];
+  return {
+    x1: first.left + 1,  y1: first.top + first.height / 2,   // старт – у левого края первой строки
+    x2: last.right - 1,  y2: last.top + last.height / 2,     // конец – у правого края последней
+    lines: rects.length,
+  };
+}
+"""
+
+
+def _selection_text(page: Page, field_sel: str) -> str:
+    """Что сейчас выделено в поле – по нему и проверяем, попали ли мышью."""
+    try:
+        return page.evaluate(
+            "(sel) => { const s = window.getSelection();"
+            " return s ? String(s) : ''; }", field_sel) or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def select_text_by_mouse(page: Page, field_sel: str, text: str,
+                         from_index: int = -1, log=None) -> bool:
+    """
+    Выделить кусок текста в поле зажимом и протяжкой мыши – как рукой.
+
+    Одно это отличает рабочий жирный от нерабочего: редактор видит
+    настоящее выделение и всплывает панелью / принимает Ctrl+B по нужному
+    куску, без потери первой буквы. Возвращает True, если после протяжки в
+    поле действительно выделен наш текст (сверяем по видимым буквам).
+
+    `from_index` – если задан (≥0), берём кусок с этой позиции, а не первое
+    вхождение: на случай, когда одинаковых слов в тексте несколько.
+    """
+    text = (text or "").strip()
+    if not text:
+        return False
+    try:
+        rc = page.evaluate(_RANGE_RECT_JS,
+                           {"sel": field_sel, "text": text, "from": from_index})
+    except Exception as e:  # noqa: BLE001
+        if log:
+            log(f"    координаты куска не получены: {e}")
+        return False
+    if not rc:
+        return False
+
+    def _norm(s: str) -> str:
+        return "".join((s or "").split()).lower()
+
+    for attempt in range(2):
+        try:
+            page.mouse.move(rc["x1"], rc["y1"])
+            page.mouse.down()
+            # Через середину – чтобы редактор получил движение, а не телепорт:
+            # мгновенный «прыжок» указателя иные поля за выделение не считают.
+            page.mouse.move((rc["x1"] + rc["x2"]) / 2, (rc["y1"] + rc["y2"]) / 2, steps=6)
+            page.mouse.move(rc["x2"], rc["y2"], steps=6)
+            page.mouse.up()
+            page.wait_for_timeout(120)
+        except Exception as e:  # noqa: BLE001
+            if log:
+                log(f"    протяжка мыши не удалась: {e}")
+            return False
+        got = _norm(_selection_text(page, field_sel))
+        if got and _norm(text) in got:
+            return True
+    return False
+
+
 def click_element(page: Page, el, what: str) -> str:
     """
     Нажать НАЙДЕННЫЙ элемент, а не точку экрана.

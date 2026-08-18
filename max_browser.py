@@ -770,7 +770,33 @@ _THUMBS_JS = r"""
 }
 """
 
-THUMB_WAIT_S = 20               # столько ждём миниатюру: файл ещё грузится
+THUMB_WAIT_S = 45               # столько ждём миниатюру: в облаке/headless
+                                # загрузка blob-превью бывает заметно дольше 20 с
+
+# Превью вложения у МАКС – это <img loading="lazy" src="blob:…"> (подтверждено
+# вживую 18.08.2026). В headless-браузере ленивая картинка ниже видимой части
+# может так и не начать грузиться – поэтому перед подсчётом подтягиваем область
+# вложений в поле зрения, чтобы миниатюра точно отрисовалась.
+_SCROLL_ATTACH_JS = r"""
+() => {
+  const seen = new Set(), roots = [document];
+  const collect = (root) => {
+    if (!root || seen.has(root)) return; seen.add(root);
+    let all = []; try { all = root.querySelectorAll('*'); } catch (e) { return; }
+    for (const el of all) if (el.shadowRoot) { roots.push(el.shadowRoot); collect(el.shadowRoot); }
+  };
+  collect(document);
+  let n = 0;
+  for (const root of roots) {
+    let imgs = []; try { imgs = root.querySelectorAll('img'); } catch (e) { continue; }
+    for (const im of imgs) {
+      const src = im.getAttribute('src') || im.currentSrc || '';
+      if (/^(blob:|data:)/.test(src)) { try { im.scrollIntoView({block: 'center'}); } catch (e) {} n++; }
+    }
+  }
+  return n;
+}
+"""
 
 # Дамп разметки области вложений вместе с теневыми корнями – для разбора,
 # когда миниатюра «не появилась». body.innerHTML теневой DOM не отдаёт, а
@@ -808,6 +834,12 @@ def _wait_thumbs(page, before: int, want: int) -> bool:
     """Дождаться, пока миниатюры появятся. False – так и не появились."""
     deadline = time.time() + THUMB_WAIT_S
     while time.time() < deadline:
+        # Подтягиваем ленивые blob-превью в поле зрения – иначе в headless они
+        # могут не отрисоваться, и подсчёт будет видеть ноль на пустом месте.
+        try:
+            page.evaluate(_SCROLL_ATTACH_JS)
+        except Exception:  # noqa: BLE001
+            pass
         page.wait_for_timeout(600)
         if _thumbs(page) - before >= want:
             return True

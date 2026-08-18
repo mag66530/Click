@@ -60,6 +60,10 @@ SEL = {
     "file_input_any": 'input[type="file"]',
     "photo_remove": '[data-testid="posting_attachment_photo_item_remove"]',
     "submit_now": '[data-testid="posting_submit_button"]',
+    # «Далее» – переход с экрана набора к экрану планирования. Живёт в подвале
+    # модалки (data-testid подтверждён вживую 18.08.2026), а НЕ внутри
+    # [role="dialog"] – поэтому прежний поиск «в диалоге по тексту» и падал.
+    "next": '[data-testid="posting_base_screen_next"]',
     # планирование
     "postponed_open": '[data-testid="posting_postponed_button"]',
     "postponed_confirm": '[data-testid="posting_postponed_publish_button"]',
@@ -1229,10 +1233,11 @@ def _advance_to_schedule(page, dlg: str, project_id: str,
     if page.locator(SEL["postponed_open"]).count():
         return
     candidates = (
-        f'{dlg} >> text="Далее"',
+        SEL["next"],                                  # точный data-testid – главный
+        'button:has-text("Далее")',                   # запас: по подписи, на всю страницу
         f'{dlg} button:has-text("Далее")',
         f'{dlg} [role="button"]:has-text("Далее")',
-        f'{dlg} button:has-text("Продолжить")',
+        'button:has-text("Продолжить")',
     )
     for sel in candidates:
         loc = page.locator(sel)

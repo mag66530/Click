@@ -1316,11 +1316,116 @@ _MARK_JS = """
 
 
 def _apply_marks(page, text_sel: str, spans: list[dict]) -> dict:
-    """Наложить жирный и ссылки на уже введённый текст. Возвращает отчёт."""
+    """Наложить жирный на уже введённый текст. Возвращает отчёт."""
     try:
         return page.evaluate(_MARK_JS, {"sel": text_sel, "spans": spans}) or {}
     except Exception as e:  # noqa: BLE001 – разметка не должна ронять прогон
         return {"error": str(e)}
+
+
+# Выделить в поле кусок текста по его содержимому – под родной редактор ссылок.
+_SELECT_TEXT_JS = r"""
+(args) => {
+  const el = document.querySelector(args.sel);
+  if (!el) return false;
+  const nodes = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let full = '';
+  while (w.nextNode()) { nodes.push([w.currentNode, full.length]); full += w.currentNode.nodeValue; }
+  const idx = full.indexOf(args.text);
+  if (idx < 0) return false;
+  const at = (pos, end) => {
+    for (const [node, start] of nodes) {
+      const len = node.nodeValue.length;
+      if (pos >= start && pos <= start + len) {
+        if (pos === start + len && !end) continue;
+        return [node, pos - start];
+      }
+    }
+    return null;
+  };
+  const a = at(idx, false), b = at(idx + args.text.length, true);
+  if (!a || !b) return false;
+  const r = document.createRange();
+  r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(r);
+  el.focus();
+  return true;
+}
+"""
+
+# Проверка, что анкор с нашим адресом реально появился в поле.
+_HAS_LINK_JS = r"""
+(args) => {
+  const el = document.querySelector(args.sel);
+  if (!el) return false;
+  for (const a of el.querySelectorAll('a')) {
+    const h = a.getAttribute('href') || a.getAttribute('data-link') || '';
+    if (h && h.indexOf(args.host) >= 0) return true;
+  }
+  return false;
+}
+"""
+
+
+def _apply_links_native(page, text_sel: str, link_spans: list[dict],
+                        log: Callable[[str], None],
+                        project_id: str = "") -> int:
+    """
+    Вшить ссылку в слова РОДНЫМ редактором ссылок ОК, а не execCommand.
+
+    Почему так. Поле темы – `data-link-labels-enabled="1"`: ОК ведёт ссылки
+    своими «ярлыками» и чужой <a> от execCommand('createLink') молча
+    выбрасывает – оттого «нашем сайте» и не загоралось анкором (проверено по
+    разметке поля 18.08.2026). Человек делает это через окошко «Добавить
+    ссылку»: выделяет слова, вписывает адрес, жмёт «Добавить». Повторяем:
+      1. выделяем слова анкора прямо в поле;
+      2. открываем окно ссылки (Ctrl+K – штатное сочетание rich-редактора);
+      3. вписываем адрес в js-field_url, при пустом тексте – и сами слова;
+      4. «Добавить» (js-posting-link-editor-confirm) и проверяем, что анкор
+         с нашим адресом правда встал.
+
+    Возвращает, сколько ссылок реально вшилось. Ничего не ломает: если окно не
+    открылось, кусок остаётся обычным текстом (как и было), а вызывающий потом
+    сверит, что текст не пострадал.
+    """
+    done = 0
+    warned = False
+    for span in link_spans:
+        try:
+            if not page.evaluate(_SELECT_TEXT_JS, {"sel": text_sel, "text": span["text"]}):
+                continue
+            page.keyboard.press("Control+k")
+            try:
+                page.wait_for_selector("input.js-field_url", state="visible", timeout=2500)
+            except Exception:  # noqa: BLE001 – окно ссылки этим способом не открылось
+                if not warned:
+                    log("  окно «Добавить ссылку» не открылось (Ctrl+K) – пришлите "
+                        "скрин панельки, что всплывает при выделении текста в ОК, "
+                        "и я привяжу кнопку ссылки точно")
+                    warned = True
+                page.keyboard.press("Escape")
+                continue
+            page.locator("input.js-field_url").last.fill(span["url"])
+            txt = page.locator("input.js-field_txt").last
+            try:
+                if not (txt.input_value() or "").strip():
+                    txt.fill(span["text"])
+            except Exception:  # noqa: BLE001 – поле текста может быть скрыто
+                pass
+            page.click(".js-posting-link-editor-confirm")
+            page.wait_for_timeout(600)
+            host = span["url"].split("://")[-1].strip("/").split("/")[0]
+            if page.evaluate(_HAS_LINK_JS, {"sel": text_sel, "host": host}):
+                done += 1
+        except Exception as e:  # noqa: BLE001 – ссылка не должна ронять прогон
+            log(f"  ссылку вставить не вышло: {e}")
+            try:
+                page.keyboard.press("Escape")
+            except Exception:  # noqa: BLE001
+                pass
+            continue
+    return done
 
 
 def _type_post_text(page, text_sel: str, text: str,
@@ -1362,20 +1467,24 @@ def _type_post_text(page, text_sel: str, text: str,
     page.type(text_sel, plain, delay=8)
     page.wait_for_timeout(500)
 
-    spans = [{"kind": "bold", "text": t.strip()} for t, bold in chunks
-             if bold and len(t.strip()) > 1]
-    spans += [{"kind": "link", "text": t, "url": u}
-              for t, u in post_text.anchor_spans(text)]
-    if not spans:
+    bold_spans = [{"kind": "bold", "text": t.strip()} for t, bold in chunks
+                  if bold and len(t.strip()) > 1]
+    link_spans = [{"kind": "link", "text": t, "url": u}
+                  for t, u in post_text.anchor_spans(text)]
+    if not bold_spans and not link_spans:
         return "plain"
 
-    # 2. Разметка поверх готового текста.
-    res = _apply_marks(page, text_sel, spans)
+    # 2. Жирный – execCommand поверх выделения (ОК его принимает и держит).
+    res = _apply_marks(page, text_sel, bold_spans)
     if res.get("error"):
         log(f"  разметку наложить не вышло ({res['error']}) – остаётся обычный текст")
         if project_id:
             _save_editor_markup(page, text_sel, project_id, log)
         return "plain"
+
+    # 2б. Ссылки – родным редактором ссылок ОК (свой <a> он выбрасывает).
+    links_done = _apply_links_native(page, text_sel, link_spans, log, project_id) \
+        if link_spans else 0
 
     # 3. Проверка по факту: и текст цел, и разметка на месте.
     got = in_field()
@@ -1388,10 +1497,15 @@ def _type_post_text(page, text_sel: str, text: str,
             _save_editor_markup(page, text_sel, project_id, log)
         return "plain"
 
-    want_bold = sum(1 for s in spans if s["kind"] == "bold")
-    want_links = sum(1 for s in spans if s["kind"] == "link")
+    want_bold = len(bold_spans)
+    want_links = len(link_spans)
     log(f"  разметка: жирных кусков {res.get('bold', 0)} из {want_bold}, "
-        f"ссылок {res.get('links', 0)} из {want_links}")
+        f"ссылок {links_done} из {want_links}")
+    if link_spans and not links_done:
+        log("  ссылку редактор ОК не принял – остаётся обычный текст со ссылкой "
+            "в блоке контактов")
+        if project_id:
+            _save_editor_markup(page, text_sel, project_id, log)
     if not res.get("bold") and want_bold:
         log("  жирный редактор ОК не принял – текст ушёл обычным")
         if project_id:

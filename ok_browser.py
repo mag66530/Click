@@ -1396,18 +1396,17 @@ def _apply_links_native(page, text_sel: str, link_spans: list[dict],
     # кусок остаётся обычным текстом (адрес есть в блоке контактов и кликается),
     # а форма цела. Как только пришлют скрин панельки при выделении текста –
     # включим _open_link_editor() и вставку через js-field_url заработает.
-    trigger = _open_link_editor
-    if trigger is None:
-        if link_spans:
-            log("  ссылку в слова пока не вшиваю: нужен способ открыть окно "
-                "«Добавить ссылку». Выделите текст в поле поста ОК и пришлите "
-                "скрин всплывающей панельки (там иконка ссылки) – привяжу точно")
-        return 0
+    warned = False
     for span in link_spans:
         try:
             if not page.evaluate(_SELECT_TEXT_JS, {"sel": text_sel, "text": span["text"]}):
                 continue
-            if not trigger(page):                     # окно не открылось – идём дальше
+            page.wait_for_timeout(350)                # дать панельке форматирования всплыть
+            if not _open_link_editor(page, project_id, log):
+                if not warned:
+                    log("  окно «Добавить ссылку» не открылось – панельку выделения "
+                        "сохранил (ok-linktoolbar.html), пришлите, привяжу кнопку точно")
+                    warned = True
                 continue
             try:
                 page.wait_for_selector("input.js-field_url", state="visible", timeout=2500)
@@ -1431,11 +1430,71 @@ def _apply_links_native(page, text_sel: str, link_spans: list[dict],
     return done
 
 
-# Как открыть окно «Добавить ссылку» ОК. Пока не знаем (Ctrl+K не сработал,
-# Escape закрывал форму) – ставим None, и тогда вставка ссылки просто
-# пропускается, ничего не ломая. Появится скрин панельки выделения – сюда
-# ляжет функция, которая жмёт кнопку ссылки в ней.
-_open_link_editor = None
+# Открыть окно «Добавить ссылку» ОК: выделение уже стоит, над ним всплывает
+# панелька форматирования (B I U ¶ H « » 🔗 – иконка ссылки последняя). Находим
+# эту панель (небольшая, стоит ВПЛОТНУЮ НАД выделением) и жмём кнопку ссылки,
+# опознавая её по подписи/классу/иконке. Escape/Ctrl+K не трогаем – они
+# закрывали всю форму. Не опознали кнопку – сохраняем разметку панели, чтобы
+# привязать её точно, и ничего не ломаем.
+_OPEN_LINK_JS = r"""
+() => {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return {ok: false, reason: 'нет выделения'};
+  const rect = sel.getRangeAt(0).getBoundingClientRect();
+  let bar = null, barR = null;
+  for (const el of document.querySelectorAll('div, span, ul, nav')) {
+    let btns;
+    try { btns = el.querySelectorAll('button, [role="button"], a'); } catch (e) { continue; }
+    if (btns.length < 4 || btns.length > 14) continue;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height || r.height > 80) continue;
+    const st = getComputedStyle(el);
+    if (st.visibility === 'hidden' || st.display === 'none' || +st.opacity === 0) continue;
+    // панель форматирования стоит НАД выделением, вплотную и по центру
+    const above = r.bottom <= rect.top + 24 && (rect.top - r.bottom) < 160
+      && Math.abs((r.left + r.right) / 2 - (rect.left + rect.right) / 2) < 400;
+    if (!above) continue;
+    if (!bar || (rect.top - r.bottom) < (rect.top - barR.bottom)) { bar = el; barR = r; }
+  }
+  if (!bar) return {ok: false, reason: 'панель форматирования не найдена'};
+  const html = (bar.outerHTML || '').slice(0, 6000);
+  const btns = [...bar.querySelectorAll('button, [role="button"], a')];
+  const isLink = (b) => {
+    const t = ((b.getAttribute('title') || '') + ' ' + (b.getAttribute('aria-label') || '')
+               + ' ' + (b.className || '')).toLowerCase();
+    if (t.includes('сылк') || /\blink\b/.test(t)) return true;
+    const u = b.querySelector('use');
+    const href = u ? (u.getAttribute('href') || u.getAttribute('xlink:href') || '') : '';
+    return /link/i.test(href);
+  };
+  const target = btns.find(isLink);
+  if (!target) return {ok: false, reason: 'кнопка ссылки не опознана', html};
+  target.click();
+  return {ok: true, html};
+}
+"""
+
+
+def _open_link_editor(page, project_id: str = "",
+                      log: Callable[[str], None] | None = None) -> bool:
+    """Нажать кнопку ссылки в панели форматирования ОК. True – окно открылось."""
+    try:
+        res = page.evaluate(_OPEN_LINK_JS) or {}
+    except Exception:  # noqa: BLE001
+        res = {}
+    if project_id and res.get("html"):
+        try:
+            (_diag_dir(project_id) / "ok-linktoolbar.html").write_text(
+                res["html"], encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            pass
+    if not res.get("ok"):
+        return False
+    try:
+        page.wait_for_selector("input.js-field_url", state="visible", timeout=1_500)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _type_post_text(page, text_sel: str, text: str,

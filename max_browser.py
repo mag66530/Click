@@ -834,9 +834,9 @@ def _thumbs(page) -> int:
         return 0
 
 
-def _wait_thumbs(page, before: int, want: int) -> bool:
+def _wait_thumbs(page, before: int, want: int, timeout_s: float = THUMB_WAIT_S) -> bool:
     """Дождаться, пока миниатюры появятся. False – так и не появились."""
-    deadline = time.time() + THUMB_WAIT_S
+    deadline = time.time() + timeout_s
     while time.time() < deadline:
         # Подтягиваем ленивые blob-превью в поле зрения – иначе в headless они
         # могут не отрисоваться, и подсчёт будет видеть ноль на пустом месте.
@@ -848,6 +848,75 @@ def _wait_thumbs(page, before: int, want: int) -> bool:
         if _thumbs(page) - before >= want:
             return True
     return _thumbs(page) > before
+
+
+# Вставка картинки в поле поста через буфер обмена – как Ctrl+V руками.
+# Заказчица подтвердила (18.08.2026), что так МАКС берёт картинку вернее
+# всего; скрытый input и меню скрепки на её канале не срабатывали.
+_PASTE_JS = r"""
+(args) => {
+  const el = document.querySelector(args.sel);
+  if (!el) return false;
+  const bin = atob(args.b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  const file = new File([arr], args.name, {type: args.mime});
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  el.focus();
+  let ev;
+  try { ev = new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData: dt}); }
+  catch (e) { ev = new Event('paste', {bubbles: true, cancelable: true}); }
+  try { Object.defineProperty(ev, 'clipboardData', {value: dt}); } catch (e) {}
+  el.dispatchEvent(ev);
+  return true;
+}
+"""
+
+
+def _paste_images(page, text_sel: str, image_paths: list[str],
+                  log: Callable[[str], None]) -> bool:
+    """Вставить фото в поле поста через буфер (Ctrl+V). True – событие ушло."""
+    import base64
+    import mimetypes
+    sent = False
+    for p in image_paths:
+        try:
+            b64 = base64.b64encode(Path(p).read_bytes()).decode()
+            mime = mimetypes.guess_type(p)[0] or "image/png"
+            ok = page.evaluate(_PASTE_JS, {"sel": text_sel, "b64": b64,
+                                           "mime": mime, "name": Path(p).name})
+            sent = sent or bool(ok)
+            page.wait_for_timeout(800)
+        except Exception as e:  # noqa: BLE001 – вставка не должна ронять прогон
+            log(f"  вставка через буфер не удалась: {e}")
+    if sent:
+        log("  вставил фото через буфер (Ctrl+V)")
+    return sent
+
+
+def _attach_via_clip(page, image_paths: list[str],
+                     log: Callable[[str], None]) -> bool:
+    """Прикрепить фото скрепкой поля сообщения. True – файл отдан в выбор."""
+    # A) скрепка сразу открывает выбор файла?
+    try:
+        with page.expect_file_chooser(timeout=4_000) as picked:
+            if not _click_first(page, SEL["attach"], timeout=4_000):
+                return False
+        picked.value.set_files(image_paths)
+        log("  прикрепил фото скрепкой «Загрузить файл»")
+        return True
+    except Exception:  # noqa: BLE001 – возможно, скрепка открыла меню
+        pass
+    # B) под скрепкой меню → «Фото или видео» открывает выбор файла
+    try:
+        with page.expect_file_chooser(timeout=4_000) as picked:
+            _click_first(page, SEL["attach_photo"], timeout=3_000)
+        picked.value.set_files(image_paths)
+        log("  прикрепил фото через «Фото или видео»")
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _composer_file_input(page):
@@ -1020,29 +1089,24 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
             if image_paths:
                 log(f"Прикрепляю фото: {len(image_paths)}")
                 had = _thumbs(page)
-                # Файл отдаём НАПРЯМУЮ в скрытый input поля сообщения – ровно то,
-                # что делает скрепка, но без меню, в котором Click промахивался
-                # на «+ Создать» вверху списка чатов. Скрытому input set_files не
-                # мешает: событие change улетает, МАКС рисует миниатюру.
-                inp = _composer_file_input(page)
-                if inp is not None:
-                    log("  кладу файл прямо в поле сообщения (скрытый input)")
-                    inp.set_input_files(image_paths)
-                else:
-                    # Запас: жмём ИМЕННО скрепку поля (не «+») и ловим диалог.
-                    if not _click_first(page, SEL["attach"], timeout=6_000):
-                        return {"ok": False,
-                                "shot": _debug_shot(project_id, page, "no-attach"),
-                                "error": "Не нашли скрепку «Загрузить файл» в поле поста"}
-                    page.wait_for_timeout(700)
-                    try:
-                        with page.expect_file_chooser(timeout=6_000) as picked:
-                            _click_first(page, SEL["attach_photo"], timeout=5_000)
-                        picked.value.set_files(image_paths)
-                    except Exception:  # noqa: BLE001
-                        return {"ok": False,
-                                "shot": _debug_shot(project_id, page, "no-file-input"),
-                                "error": "Не нашли, куда отдать файлы фото в МАКС"}
+                attached = False
+                # 1) Буфер обмена (Ctrl+V) – заказчица подтвердила, что так МАКС
+                #    берёт картинку вернее всего.
+                if _paste_images(page, text_sel, image_paths, log):
+                    attached = _wait_thumbs(page, had, len(image_paths), timeout_s=12)
+                # 2) Скрепка «Загрузить файл» поля сообщения (не «+» вверху!).
+                if not attached and _attach_via_clip(page, image_paths, log):
+                    attached = _wait_thumbs(page, had, len(image_paths), timeout_s=12)
+                # 3) Скрытый input поля – последний запас.
+                if not attached:
+                    inp = _composer_file_input(page)
+                    if inp is not None:
+                        log("  кладу файл прямо в поле сообщения (скрытый input)")
+                        try:
+                            inp.set_input_files(image_paths)
+                            attached = _wait_thumbs(page, had, len(image_paths), timeout_s=20)
+                        except Exception:  # noqa: BLE001
+                            pass
 
                 # Файл ПЕРЕДАН – это ещё не «фото в посте». 14.08.2026 МАКС
                 # поставил отложку без картинки, а Click отчитался успехом:
@@ -1050,7 +1114,7 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                 # шёл дальше. Пост без картинки – это не тот пост, который
                 # просили, поэтому теперь ждём миниатюру в самой форме и без
                 # неё отложку не ставим.
-                if not _wait_thumbs(page, had, len(image_paths)):
+                if not attached:
                     # Разметку области сохраняем рядом с логом: без неё
                     # «миниатюра не появилась» не разобрать – может, МАКС её
                     # рисует так, как мы ещё не умеем узнавать.

@@ -709,23 +709,106 @@ def _type_blocks_into(page, field, blocks: list[dict]) -> None:
         page.keyboard.press("Enter")
 
 
-def _attach_image(page, path: str, log: Callable[[str], None] | None = None) -> bool:
-    """Отдать картинку редактору через файловое поле (их у него несколько)."""
+def _image_insert_controls(page, log: Callable[[str], None]) -> None:
+    """Выписать в лог кнопки, похожие на «вставить изображение» – чтобы по
+    живому прогону узнать, чем Дзен на самом деле добавляет картинку."""
+    try:
+        found = page.evaluate(
+            """() => {
+                const out = [];
+                const nodes = [...document.querySelectorAll(
+                    'button,[role="button"],[aria-label],[title],svg,use')];
+                const key = /изображ|картин|фото|image|photo|media|добав|вставит|\\+/i;
+                for (const e of nodes) {
+                    const lab = (e.getAttribute && (e.getAttribute('aria-label')
+                        || e.getAttribute('title') || '')) || '';
+                    const txt = (e.textContent || '').trim().slice(0, 24);
+                    const hay = lab + ' ' + txt
+                        + ' ' + (e.className && e.className.toString ? e.className.toString() : '');
+                    if (key.test(hay) && (e.offsetParent || e.getClientRects().length)) {
+                        out.push(((e.tagName || '').toLowerCase())
+                            + (lab ? ' aria«' + lab.slice(0, 24) + '»' : '')
+                            + (txt ? ' txt«' + txt + '»' : ''));
+                        if (out.length >= 10) break;
+                    }
+                }
+                return out;
+            }""")
+        if found:
+            log("🔬 похоже на вставку картинки: " + " | ".join(found))
+        else:
+            log("🔬 кнопок «вставить изображение» не видно на странице")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _paste_image_into(page, field, path: str, log: Callable[[str], None]) -> bool:
+    """Вставить картинку в поле как Ctrl+V из буфера – через DataTransfer с
+    настоящим File. Многие редакторы (в т.ч. дзеновский) картинку из вставки
+    разбирают сами, и файловое поле для этого не нужно."""
+    if field is None:
+        return False
+    try:
+        import base64
+        data = base64.b64encode(Path(path).read_bytes()).decode()
+        handle = field.element_handle()
+        if handle is None:
+            return False
+        before = _field_text(field)
+        handle.evaluate(
+            """(el, b64) => {
+                el.focus();
+                const bin = atob(b64);
+                const arr = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+                const file = new File([arr], 'table.png', { type: 'image/png' });
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                const ev = new ClipboardEvent('paste', {
+                    bubbles: true, cancelable: true, clipboardData: dt });
+                el.dispatchEvent(ev);
+            }""", data)
+        # Картинка грузится на сервер Дзена – ждём, пока в поле что-то прибавится.
+        for _ in range(10):
+            page.wait_for_timeout(600)
+            if page.locator("img").count() and _field_text(field) != before:
+                return True
+        return bool(page.locator("img").count())
+    except Exception as e:  # noqa: BLE001
+        log(f"🔬 вставка картинкой из буфера не прошла – {type(e).__name__}: {e}")
+        return False
+
+
+def _attach_image(page, path: str, log: Callable[[str], None] | None = None,
+                  field=None) -> bool:
+    """
+    Отдать картинку редактору. У статей Дзена нет открытого <input type=file>
+    (живой прогон 19.08: «файловых полей 0»), поэтому идём несколькими путями:
+    сперва существующее файловое поле, затем вставкой из буфера прямо в текст.
+    Что нашли по дороге – пишем в лог, чтобы доводить прицельно.
+    """
     log = log or (lambda m: None)
+    # 1) Готовое файловое поле, если вдруг есть.
     try:
         inputs = page.locator(SEL["file_input"][0])
         cnt = inputs.count()
         log(f"🔬 _attach_image: файловых полей на странице: {cnt}")
-        if not cnt:
-            log("🔬 _attach_image: ни одного <input type=file> – редактор мог "
-                "спрятать поле до нажатия «＋»; картинку так не отдать")
-            return False
-        inputs.first.set_input_files(path)
-        page.wait_for_timeout(3_000)
-        return True
+        if cnt:
+            inputs.first.set_input_files(path)
+            page.wait_for_timeout(3_000)
+            return True
     except Exception as e:  # noqa: BLE001
-        log(f"🔬 _attach_image: не получилось – {type(e).__name__}: {e}")
-        return False
+        log(f"🔬 _attach_image: файловое поле не сработало – {type(e).__name__}: {e}")
+
+    # 2) Смотрим, чем редактор вообще вставляет картинку (для лога и разбора).
+    _image_insert_controls(page, log)
+
+    # 3) Вставка картинкой из буфера прямо в тело статьи.
+    log("🔬 _attach_image: пробую вставить картинку в текст как Ctrl+V")
+    if _paste_image_into(page, field, path, log):
+        log("🔬 _attach_image: картинка ушла вставкой в текст")
+        return True
+    return False
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -782,59 +865,49 @@ def calendar_shows(body_text: str, when: datetime) -> bool:
 
 def _day_candidates(page, when: datetime) -> list:
     """
-    Все ячейки с нужным числом ВНУТРИ блока нужного месяца – по порядку,
-    но «живые» (кликабельные) впереди, а серые (соседний месяц, прошедшая
-    дата) в конце запасным вариантом.
+    Ячейки календаря с нужным числом – «живые» (кликабельные) впереди, серые
+    (соседний месяц, прошедшая дата) в конце запасным вариантом.
 
-    Почему так сложно. Месяцев на экране два, и число живёт сразу в
-    нескольких местах – значит просто «нажать 31» нельзя. Хуже того: у
-    крайних чисел месяца ДВА совпадения и в самом блоке нужного месяца.
-    Дзен подрисовывает в первую неделю хвост предыдущего месяца, и на
-    «31 августа 2026» первой ячейкой «31» в блоке «Август 2026» шла не
-    искомая (последняя строка), а «31 июля» из ведущей недели – серая и
-    прошедшая. Прежний код брал её, промахивался и объявлял неудачу.
+    Живой прогон 19.08 показал, на чём всё стояло. Заголовок Дзен рисует НЕ
+    цельным текстом: «Август» и «2026» – разные узлы без пробела между, и
+    `textContent.includes("Август 2026")` не находит его никогда. Прежняя
+    версия на этом сдавалась (`заголовок не найден → 0 кандидатов`), хотя
+    нужная ячейка «31» была тут же и ЖИВАЯ. Поэтому от заголовка отказались
+    вовсе: берём ячейки прямо из блока календаря (класс/предок со словом
+    datepicker или calendar), а нужный месяц отсекаем не по заголовку, а по
+    сверке поля даты после клика – это делает _click_day_in_month.
 
-    Заголовок при этом не обязательно цельный: «Август 2026» бывает собран
-    из кусочков, поэтому берём его как САМЫЙ МЕЛКИЙ элемент с этим текстом.
-    Границу справа кладём по заголовку СЛЕДУЮЩЕГО месяца – всё, что за ним,
-    относится уже к соседнему блоку. Внутри границ серые ячейки не
-    выбрасываем, а отодвигаем в конец: клик по нужной сверяется по полю
-    даты, и если живой не окажется, серая останется запасным путём.
+    Показаны сразу два месяца, и одно и то же число живёт в обоих (25 августа
+    и 25 сентября – оба «живые»). Поэтому кандидатов может быть несколько;
+    идём по ним по порядку страницы (текущий месяц раньше следующего) и
+    оставляем выбор за сверкой поля. Серые уходят в конец: по прошедшей дате
+    или соседнему месяцу всё равно не кликнуть.
     """
-    title = f"{MONTHS_NOM[when.month - 1]} {when.year}"
-    nxt = when.year + (1 if when.month == 12 else 0)
-    next_title = f"{MONTHS_NOM[when.month % 12]} {nxt}"
     try:
         arr = page.evaluate_handle(
-            """([title, nextTitle, day]) => {
+            """(day) => {
                 const nodes = [...document.querySelectorAll('*')];
                 const shown = (e) => !!(e.offsetParent || e.getClientRects().length);
-                const smallest = (txt) => {
-                    const hs = nodes.filter(e =>
-                        shown(e) && (e.textContent || '').includes(txt));
-                    if (!hs.length) return -1;
-                    hs.sort((a, b) =>
-                        a.querySelectorAll('*').length - b.querySelectorAll('*').length);
-                    return nodes.indexOf(hs[0]);
+                const cls = (e) => (e.className && e.className.toString
+                    ? e.className.toString() : '');
+
+                // Ячейка календаря: она сама или предок помечены как
+                // datepicker/calendar. Так отсекаем посторонние числа на
+                // странице (чипы времени, счётчики и прочее).
+                const inCal = (el) => {
+                    for (let e = el; e && e !== document.body; e = e.parentElement)
+                        if (/datepicker|calendar/i.test(cls(e))) return true;
+                    return false;
                 };
 
-                const from = smallest(title);
-                if (from < 0) return [];
-                // Граница справа – заголовок следующего месяца, если он показан
-                // и идёт после нашего. Иначе ищем до конца страницы.
-                let to = nodes.length;
-                const ni = smallest(nextTitle);
-                if (ni > from) to = ni;
-
-                // Серая/неактивная ячейка: соседний месяц или прошедший день.
-                // Класс у Дзена свой, поэтому смотрим на любые признаки сразу.
+                // Серая/неактивная: соседний месяц или прошедший день. Слова
+                // datepicker/calendar тут НЕ считаем – это имя самого блока.
                 const dead = (el) => {
                     for (let e = el; e && e !== document.body; e = e.parentElement) {
                         if (e.getAttribute && (e.getAttribute('aria-disabled') === 'true'
                             || e.hasAttribute('disabled'))) return true;
-                        const c = (e.className && e.className.toString
-                            ? e.className.toString() : '');
-                        if (/disabl|faded|muted|outside|other|adjac|inactive|foreign|sibling|not-?current|another|prev|next-?month|passed|past/i.test(c))
+                        const c = cls(e);
+                        if (/disabl|faded|muted|outside|other|adjac|inactive|foreign|sibling|not-?current|another|weekend-off|prev-|next-month|passed|_past|-past/i.test(c))
                             return true;
                         let st = null;
                         try { st = getComputedStyle(e); } catch (_) {}
@@ -846,21 +919,23 @@ def _day_candidates(page, when: datetime) -> list:
 
                 const cells = [];
                 const seen = new Set();
-                for (let i = from; i < to; i++) {
-                    const e = nodes[i];
+                for (const e of nodes) {
                     if (e.children.length === 0 && shown(e)
-                        && e.textContent.trim() === day) {
-                        // Нажимать надо по ячейке целиком: сам текст может
-                        // лежать в неактивном span внутри кнопки дня.
-                        const cell = e.closest('td,button,[role="button"],[class*="day"]') || e;
+                        && (e.textContent || '').trim() === day) {
+                        // Кликаем по ячейке целиком: число может лежать в
+                        // неактивном span внутри кнопки/ячейки дня.
+                        const cell = e.closest(
+                            'td,button,[role="button"],[class*="day"],[class*="cell"]') || e;
+                        if (!inCal(cell)) continue;
                         if (seen.has(cell)) continue;
                         seen.add(cell);
                         cells.push(cell);
                     }
                 }
-                // Живые впереди, серые – в конец запасным вариантом.
+                // Живые впереди, серые – в конец запасным вариантом (стабильно,
+                // поэтому текущий месяц остаётся раньше следующего).
                 return cells.sort((a, b) => (dead(a) ? 1 : 0) - (dead(b) ? 1 : 0));
-            }""", [title, next_title, str(when.day)])
+            }""", str(when.day))
         cells = []
         try:
             for _, handle in sorted(arr.get_properties().items(),
@@ -971,61 +1046,58 @@ def _dump_calendar(page, when: datetime, log: Callable[[str], None],
     head = f"🔬 Осмотр календаря{(' [' + tag + ']') if tag else ''}:"
     try:
         info = page.evaluate(
-            """([title, nextTitle, day]) => {
+            """([title, day]) => {
                 const nodes = [...document.querySelectorAll('*')];
                 const shown = e => !!(e.offsetParent || e.getClientRects().length);
                 const cls = e => (e.className && e.className.toString
                     ? e.className.toString() : '');
-                const smallest = (txt) => {
-                    const hs = nodes.filter(e => shown(e) && (e.textContent || '').includes(txt));
-                    if (!hs.length) return null;
-                    hs.sort((a, b) =>
-                        a.querySelectorAll('*').length - b.querySelectorAll('*').length);
-                    return hs[0];
+                const inCal = (el) => {
+                    for (let e = el; e && e !== document.body; e = e.parentElement)
+                        if (/datepicker|calendar/i.test(cls(e))) return true;
+                    return false;
                 };
-                const head = smallest(title), nhead = smallest(nextTitle);
-                const from = head ? nodes.indexOf(head) : -1;
-                let to = nodes.length;
-                if (nhead) { const ni = nodes.indexOf(nhead); if (ni > from) to = ni; }
                 const deadWhy = (el) => {
                     for (let e = el; e && e !== document.body; e = e.parentElement) {
                         if (e.getAttribute && (e.getAttribute('aria-disabled') === 'true'
                             || e.hasAttribute('disabled'))) return 'disabled';
                         const c = cls(e);
-                        if (/disabl|faded|muted|outside|other|adjac|inactive|foreign|sibling|not-?current|another|prev|next-?month|passed|past/i.test(c))
-                            return 'class«' + c.slice(0, 30) + '»';
+                        if (/disabl|faded|muted|outside|other|adjac|inactive|foreign|sibling|not-?current|another|weekend-off|prev-|next-month|passed|_past|-past/i.test(c))
+                            return 'class«' + c.slice(0, 40) + '»';
                         let st = null; try { st = getComputedStyle(e); } catch (_) {}
                         if (st && st.pointerEvents === 'none') return 'pointer-events:none';
                         if (st && parseFloat(st.opacity) < 0.5) return 'opacity:' + st.opacity;
                     }
                     return '';
                 };
+                // Есть ли где-то на странице цельный «Август 2026» (innerText со
+                // склейкой пробела) – чтобы видеть, что месяц реально показан.
+                const bodyTxt = (document.body && document.body.innerText) || '';
+                const headSeen = bodyTxt.includes(title);
                 const hits = [], sample = [];
-                let digits = 0;
-                for (let i = (from < 0 ? 0 : from); i < to; i++) {
-                    const e = nodes[i];
-                    if (e.children.length === 0 && shown(e)
-                        && /^\\d{1,2}$/.test((e.textContent || '').trim())) {
-                        digits++;
-                        const t = e.textContent.trim();
-                        const cell = e.closest('td,button,[role="button"],[class*="day"]') || e;
-                        const r = cell.getBoundingClientRect();
-                        const rec = t + ':' + cell.tagName.toLowerCase()
-                            + (cls(cell) ? '.' + cls(cell).replace(/\\s+/g, '.').slice(0, 40) : '')
-                            + (deadWhy(cell) ? ' серая(' + deadWhy(cell) + ')' : ' ЖИВАЯ')
-                            + ' [' + Math.round(r.x) + ',' + Math.round(r.y) + ']';
-                        if (sample.length < 12) sample.push(rec);
-                        if (t === day) hits.push(rec);
-                    }
+                let dayCells = 0, box = null;
+                for (const e of nodes) {
+                    if (e.children.length !== 0 || !shown(e)) continue;
+                    if (!/^\\d{1,2}$/.test((e.textContent || '').trim())) continue;
+                    const cell = e.closest(
+                        'td,button,[role="button"],[class*="day"],[class*="cell"]') || e;
+                    if (!inCal(cell)) continue;   // только ячейки календаря
+                    dayCells++;
+                    if (!box) box = cell.closest('[class*="datepicker"],[class*="calendar"]');
+                    const t = e.textContent.trim();
+                    const r = cell.getBoundingClientRect();
+                    const rec = t + ':' + cell.tagName.toLowerCase()
+                        + (cls(cell) ? '.' + cls(cell).replace(/\\s+/g, '.').slice(0, 40) : '')
+                        + (deadWhy(cell) ? ' серая(' + deadWhy(cell) + ')' : ' ЖИВАЯ')
+                        + ' [' + Math.round(r.x) + ',' + Math.round(r.y) + ']';
+                    if (sample.length < 14) sample.push(rec);
+                    if (t === day) hits.push(rec);
                 }
-                let box = head;
-                for (let k = 0; k < 4 && box && box.parentElement; k++) box = box.parentElement;
                 const html = box ? box.outerHTML.replace(/\\s+/g, ' ') : '';
                 return {
-                    head: !!head, next: !!nhead, digits, hits, sample,
-                    htmlLen: html.length, htmlSample: html.slice(0, 900),
+                    headSeen, dayCells, hits, sample,
+                    htmlLen: html.length, htmlSample: html.slice(0, 1200),
                 };
-            }""", [title, next_title, str(when.day)])
+            }""", [title, str(when.day)])
     except Exception as e:  # noqa: BLE001
         log(f"{head} осмотреть не удалось – {type(e).__name__}: {e}")
         return
@@ -1036,16 +1108,15 @@ def _dump_calendar(page, when: datetime, log: Callable[[str], None],
         field = ""
     log(head)
     log(f"🔬 поле даты сейчас: «{field or 'пусто'}»")
-    log(f"🔬 заголовок «{title}»: {'найден' if info.get('head') else 'НЕ найден'}; "
-        f"«{next_title}»: {'найден' if info.get('next') else 'НЕ найден'}")
-    log(f"🔬 ячеек-чисел в блоке месяца: {info.get('digits', 0)}; "
+    log(f"🔬 «{title}» на странице (innerText): {'виден' if info.get('headSeen') else 'НЕ виден'}")
+    log(f"🔬 ячеек-дней в календаре: {info.get('dayCells', 0)}; "
         f"из них «{when.day}»: {len(info.get('hits') or [])}")
     for h in (info.get("hits") or []):
         log(f"🔬   «{when.day}» → {h}")
     if info.get("sample"):
-        log("🔬 первые ячейки блока: " + " | ".join(info["sample"]))
+        log("🔬 ячейки календаря: " + " | ".join(info["sample"]))
     if info.get("htmlSample"):
-        log(f"🔬 HTML блока ({info.get('htmlLen', 0)} симв.), начало:")
+        log(f"🔬 HTML календаря ({info.get('htmlLen', 0)} симв.), начало:")
         log("🔬 " + info["htmlSample"])
 
 
@@ -1397,7 +1468,7 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
                     log(f"⚠️ Таблица {n} не вставилась")
                     continue
                 log(f"🔬 Таблица {n}: картинка готова ({shot_path.name}), отдаю редактору")
-                if not _attach_image(page, made, log):
+                if not _attach_image(page, made, log, field=body):
                     warnings.append(f"Таблицу {n} вставить не удалось – "
                                     "добавьте её картинкой руками в черновике.")
                     log(f"⚠️ Таблица {n} не вставилась")

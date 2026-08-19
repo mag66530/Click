@@ -531,18 +531,17 @@ def test_calendar() -> None:
 
 def test_click_day_spillover() -> None:
     """
-    Крайнее число месяца в календаре Дзена дублируется серой ведущей неделей
-    соседнего месяца – и на «31 августа 2026» прежний код брал первую «31»,
-    а ею шла прошедшая «31 июля» (серая, pointer-events:none). Playwright по
-    такой ячейке кликнуть не может, отсюда и «не удалось нажать 31 в блоке
-    Август 2026. Статья осталась черновиком».
+    Ровно тот календарь, на котором Дзен падал (по живому дампу 19.08):
+    два месяца рядом, ячейки – <td class="…datepicker-calendar-cell…">,
+    заголовок «Август» и «2026» РАЗНЫМИ узлами без пробела (значит
+    textContent.includes('Август 2026') не находит его – на этом и стоял
+    прежний выбор дня), прошедшие и соседние дни серые с aria-disabled.
 
-    Строим ровно такой календарь – два месяца рядом, у каждого ведущая
-    неделя-хвост соседнего серым и прошедшие дни неактивны, поле даты
-    readonly обновляется только при клике по живому дню – и проверяем, что
-    выбирается именно живое «31 августа», а не серое «31 июля».
+    Проверяем: выбор больше не зависит от заголовка, живое «31 августа»
+    находится и нажимается, а число, живое СРАЗУ в двух месяцах (25 августа
+    и 25 сентября), выбирается по нужному месяцу за счёт сверки поля даты.
     """
-    print("Календарь: крайнее число не путаем с серым хвостом соседнего месяца")
+    print("Календарь: выбираем живой день без опоры на заголовок месяца")
     try:
         import zen_browser as zb
         from playwright.sync_api import sync_playwright
@@ -551,28 +550,33 @@ def test_click_day_spillover() -> None:
         return
     import calendar as _cal
 
+    CELL = "article-editor-desktop--datepicker-calendar-cell"
+
     def grid(year: int, month: int, today) -> str:
         cells = []
         for d in _cal.Calendar(firstweekday=0).itermonthdates(year, month):
             adj = d.month != month
             past = d < today
-            cls = "day" + (" day_other-month" if adj else "") + \
-                  (" day_disabled" if past and not adj else "")
+            cls = CELL + ((" " + CELL + "_disabled") if (adj or past) else "")
             dis = 'aria-disabled="true"' if (adj or past) else ""
             cap = f"{d.day} {zb.MONTHS_RU[month - 1]} {year}"
             live = "" if (adj or past) else \
                 f"onclick=\"document.getElementById('dt').value='{cap}'\""
-            cells.append(f'<button class="{cls}" {dis} {live}><span>{d.day}</span></button>')
-        title = f"{zb.MONTHS_NOM[month - 1]} {year}"
-        head = f'<div class="cap"><span>{title.split()[0]}</span> <span>{title.split()[1]}</span></div>'
-        return f'<div class="cal">{head}{"".join(cells)}</div>'
+            cells.append(f'<td class="{cls}" {dis} {live}><span>{d.day}</span></td>')
+        m = zb.MONTHS_NOM[month - 1]
+        # Заголовок нарочно РАЗБИТ: между «Август» и «2026» нет текстового
+        # пробела – ровно как у Дзена, где includes('Август 2026') не срабатывает.
+        head = f'<div class="cap"><span>{m}</span><span>{year}</span></div>'
+        return (f'<table class="article-editor-desktop--datepicker-calendar">'
+                f'<caption>{head}</caption><tbody><tr>{"".join(cells)}</tr></tbody></table>')
 
     today = datetime(2026, 8, 19).date()
     html = ('<!doctype html><meta charset=utf-8>'
-            '<style>.day_other-month,.day_disabled{opacity:.3;pointer-events:none}</style>'
+            f'<style>.{CELL}_disabled{{opacity:.3;pointer-events:none}}</style>'
             '<input id=dt readonly value="19 августа 2026">'
             + grid(2026, 8, today) + grid(2026, 9, today))
     when = datetime(2026, 8, 31, 18, 5, tzinfo=timezone(timedelta(hours=5)))
+    when25 = datetime(2026, 8, 25, 18, 5, tzinfo=timezone(timedelta(hours=5)))
 
     with sync_playwright() as pw:
         try:
@@ -588,11 +592,30 @@ def test_click_day_spillover() -> None:
             page = browser.new_page()
             page.set_content(html)
 
+            # Заголовок как цельный текст действительно не находится – значит
+            # выбор обязан работать и без него.
+            check("заголовок «Август 2026» цельным текстом не ищется",
+                  not zb.calendar_shows(page.evaluate(
+                      "() => document.body.textContent"), when))
+
             cands = zb._day_candidates(page, when)
-            check("нашлись оба «31» – серое и живое", len(cands) == 2, str(len(cands)))
-            check("выбор 31 сработал", zb._click_day_in_month(page, when, "#dt"))
+            check("ячейки «31» нашлись", len(cands) >= 1, str(len(cands)))
+            check("первым кандидатом идёт живая ячейка (не серая)",
+                  "серая" not in zb._cell_note(cands[0]).lower()
+                  and (cands[0].get_attribute("aria-disabled") or "") != "true")
+            check("выбор 31 сработал без заголовка",
+                  zb._click_day_in_month(page, when, "#dt"))
             check("в поле именно 31 августа",
                   page.locator("#dt").first.input_value() == "31 августа 2026")
+
+            # 25-е живое в обоих месяцах – нужный выбирается сверкой поля.
+            page.locator("#dt").first.evaluate("e => e.value = '19 августа 2026'")
+            check("для «25» кандидатов двое (август и сентябрь)",
+                  len(zb._day_candidates(page, when25)) == 2)
+            check("выбор 25 августа сработал",
+                  zb._click_day_in_month(page, when25, "#dt"))
+            check("в поле именно 25 августа",
+                  page.locator("#dt").first.input_value() == "25 августа 2026")
         finally:
             browser.close()
 

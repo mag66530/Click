@@ -237,6 +237,22 @@ def test_inline_format() -> None:
           "_apply_links_native(" in ok_flow)
     check("ОК гасит панель после форматирования (не виснет и не рушит форму)",
           "_drop_selection(" in ok_flow)
+
+    # Точные селекторы окна ссылки ОК (заказчица прислала DOM 19.08.2026):
+    # скрепочка «Ссылка» в панели, поле адреса, кнопка «Добавить». Раньше
+    # жали Ctrl+K вслепую — окно не открывалось.
+    links_src = inspect.getsource(ok._apply_links_native)
+    check("ссылку открываем СКРЕПОЧКОЙ «Ссылка», а не Ctrl+K",
+          'title="Ссылка"' in links_src and "posting_form_media_text_menu_menu_i" in links_src)
+    check("адрес вписываем в js-field_url", "input.js-field_url" in links_src)
+    check("подтверждаем кнопкой «Добавить»",
+          "button.js-posting-link-editor-confirm" in links_src)
+    check("окно закрываем «Отменить», а НЕ Escape (он рушит форму ОК)",
+          "Отменить" in links_src and 'press("Escape")' not in links_src)
+    # Поле читаем устойчиво к перерисовке ОК (иначе «поле опустело» зря).
+    read_src = inspect.getsource(ok._read_field)
+    check("поле читаем с запасными селекторами (перерисовка не «пустота»)",
+          ".js-posting-itx" in read_src)
     # МАКС: ссылка первой (Ctrl+K сбрасывает жирный, кладём жирный поверх).
     mb_fmt = inspect.getsource(mb._apply_max_format)
     check("МАКС: сначала ссылки, потом жирный",

@@ -1428,123 +1428,96 @@ def _apply_links_native(page, text_sel: str, link_spans: list[dict],
                         log: Callable[[str], None],
                         project_id: str = "") -> int:
     """
-    Вшить ссылку в слова РОДНЫМ редактором ссылок ОК, а не execCommand.
+    Вшить ссылку в слова РОДНЫМ редактором ссылок ОК – точно как рукой.
 
-    Почему так. Поле темы – `data-link-labels-enabled="1"`: ОК ведёт ссылки
-    своими «ярлыками» и чужой <a> от execCommand('createLink') молча
-    выбрасывает – оттого «нашем сайте» и не загоралось анкором (проверено по
-    разметке поля 18.08.2026). Человек делает это через окошко «Добавить
-    ссылку»: выделяет слова, вписывает адрес, жмёт «Добавить». Повторяем:
-      1. выделяем слова анкора прямо в поле;
-      2. открываем окно ссылки (Ctrl+K – штатное сочетание rich-редактора);
-      3. вписываем адрес в js-field_url, при пустом тексте – и сами слова;
-      4. «Добавить» (js-posting-link-editor-confirm) и проверяем, что анкор
-         с нашим адресом правда встал.
+    Поле темы – `data-link-labels-enabled="1"`: ОК ведёт ссылки своими
+    «ярлыками», чужой <a> от execCommand он выбрасывает. Человек делает так
+    (заказчица прислала DOM 19.08.2026):
+      1. выделяет слова анкора мышью – всплывает панель форматирования;
+      2. жмёт СКРЕПОЧКУ «Ссылка» в этой панели
+         (a.posting_form_media_text_menu_menu_i[title="Ссылка"]) – НЕ Ctrl+K,
+         который окно не открывал вовсе;
+      3. в окне «Ссылка» вписывает адрес (input.js-field_url), текст уже
+         подставлен, и жмёт «Добавить» (button.js-posting-link-editor-confirm).
 
-    Возвращает, сколько ссылок реально вшилось. Ничего не ломает: если окно не
-    открылось, кусок остаётся обычным текстом (как и было), а вызывающий потом
-    сверит, что текст не пострадал.
+    Всё на ТОЧНЫХ селекторах, без эвристик и клавиш – от них поле «исчезало»
+    и пост падал. Если что-то не открылось – окно закрываем «Отменить» (не
+    Escape: он схлопывает всю форму ОК), кусок остаётся текстом, форма цела.
+    Возвращает, сколько ссылок реально вшилось.
     """
+    LINK_BTN = 'a.posting_form_media_text_menu_menu_i[title="Ссылка"]'
+    URL_FIELD = "input.js-field_url"
+    ADD_BTN = "button.js-posting-link-editor-confirm"
+
+    def _close_dialog() -> None:
+        # Закрыть окно «Ссылка» без Escape: кнопкой «Отменить» или крестиком.
+        for sel in ('button:has-text("Отменить")',
+                    '.posting-link-editor button:has-text("Отменить")'):
+            try:
+                b = page.locator(sel).last
+                if b.count() and b.is_visible():
+                    b.click(timeout=1_500)
+                    page.wait_for_timeout(200)
+                    return
+            except Exception:  # noqa: BLE001
+                continue
+
     done = 0
-    # Кнопку, что ОТКРЫВАЕТ окно ссылки, ещё не знаем: Ctrl+K его не открыл, а
-    # Escape после него закрывал всю форму поста (живой прогон 18.08.2026) –
-    # оттого ОК и падал. Пока триггера нет, окно НЕ трогаем ни одной клавишей:
-    # кусок остаётся обычным текстом (адрес есть в блоке контактов и кликается),
-    # а форма цела. Как только пришлют скрин панельки при выделении текста –
-    # включим _open_link_editor() и вставку через js-field_url заработает.
-    warned = False
     for span in link_spans:
         try:
-            # Панель форматирования капризна – выделяем и пробуем открыть окно
-            # ссылки до трёх раз, каждый раз заново наводя выделение.
+            # 1. Выделить слова анкора настоящей мышью – всплывёт панель.
+            if not _select(page, text_sel, span["text"]):
+                continue
+            page.wait_for_timeout(500)                 # дать панели всплыть
+
+            # 2. Нажать скрепочку «Ссылка». Панель капризна – до трёх заходов,
+            #    каждый раз заново наводя выделение.
             opened = False
             for _ in range(3):
-                if not _select(page, text_sel, span["text"]):
-                    break
-                page.wait_for_timeout(450)            # дать панельке всплыть
-                if _open_link_editor(page, project_id, log):
-                    opened = True
-                    break
+                try:
+                    btn = page.locator(LINK_BTN).first
+                    if btn.count() and btn.is_visible():
+                        btn.click(timeout=2_000)
+                        opened = True
+                        break
+                except Exception:  # noqa: BLE001
+                    pass
                 page.wait_for_timeout(300)
+                _select(page, text_sel, span["text"])
+                page.wait_for_timeout(400)
             if not opened:
-                if not warned:
-                    log("  окно «Добавить ссылку» не открылось – панельку выделения "
-                        "сохранил (ok-linktoolbar.html), пришлите, привяжу кнопку точно")
-                    warned = True
+                log("  панель «Ссылка» не всплыла над выделением – кусок остаётся текстом")
+                if project_id:
+                    _save_editor_markup(page, text_sel, project_id, log)
                 continue
+
+            # 3. Окно «Ссылка»: вписать адрес, нажать «Добавить».
             try:
-                page.wait_for_selector("input.js-field_url", state="visible", timeout=2500)
+                page.wait_for_selector(URL_FIELD, state="visible", timeout=2_500)
             except Exception:  # noqa: BLE001
+                log("  окно «Ссылка» не открылось – закрываю, кусок остаётся текстом")
+                _close_dialog()
                 continue
-            page.locator("input.js-field_url").last.fill(span["url"])
-            txt = page.locator("input.js-field_txt").last
+            page.locator(URL_FIELD).last.fill(span["url"])
+            page.wait_for_timeout(200)
             try:
-                if not (txt.input_value() or "").strip():
-                    txt.fill(span["text"])
+                page.locator(ADD_BTN).last.click(timeout=3_000)
             except Exception:  # noqa: BLE001
-                pass
-            page.click(".js-posting-link-editor-confirm")
+                _close_dialog()
+                continue
             page.wait_for_timeout(600)
+
             host = span["url"].split("://")[-1].strip("/").split("/")[0]
             if page.evaluate(_HAS_LINK_JS, {"sel": text_sel, "host": host}):
                 done += 1
+                log(f"  ссылка: «{span['text'][:24]}» → {span['url']}")
+            else:
+                log(f"  «{span['text'][:24]}» ссылкой не подтвердилась")
         except Exception as e:  # noqa: BLE001 – ссылка не должна ронять прогон
             log(f"  ссылку вставить не вышло: {e}")
+            _close_dialog()
             continue
-    # Страховка: если окно ссылки осталось открытым, оно перекрыло бы поле и
-    # повесило следующий шаг (так ОК и упал 12:55). Закрываем его БЕЗ Escape
-    # (Escape у ОК схлопывает всю форму) – мягким кликом обратно в поле: у ОК
-    # всплывашка ссылки закрывается кликом вне её. Коротко и без падения.
-    try:
-        page.click(text_sel, timeout=2_500)
-    except Exception:  # noqa: BLE001
-        pass
     return done
-
-
-# Открыть окно «Добавить ссылку» ОК: выделение уже стоит, над ним всплывает
-# панелька форматирования (B I U ¶ H « » 🔗 – иконка ссылки последняя). Находим
-# эту панель (небольшая, стоит ВПЛОТНУЮ НАД выделением) и жмём кнопку ссылки,
-# опознавая её по подписи/классу/иконке. Escape/Ctrl+K не трогаем – они
-# закрывали всю форму. Не опознали кнопку – сохраняем разметку панели, чтобы
-# привязать её точно, и ничего не ломаем.
-_OPEN_LINK_JS = r"""
-() => {
-  const sel = window.getSelection();
-  if (!sel || !sel.rangeCount) return {ok: false, reason: 'нет выделения'};
-  const rect = sel.getRangeAt(0).getBoundingClientRect();
-  let bar = null, barR = null;
-  for (const el of document.querySelectorAll('div, span, ul, nav')) {
-    let btns;
-    try { btns = el.querySelectorAll('button, [role="button"], a'); } catch (e) { continue; }
-    if (btns.length < 4 || btns.length > 14) continue;
-    const r = el.getBoundingClientRect();
-    if (!r.width || !r.height || r.height > 80) continue;
-    const st = getComputedStyle(el);
-    if (st.visibility === 'hidden' || st.display === 'none' || +st.opacity === 0) continue;
-    // панель форматирования стоит НАД выделением, вплотную и по центру
-    const above = r.bottom <= rect.top + 24 && (rect.top - r.bottom) < 160
-      && Math.abs((r.left + r.right) / 2 - (rect.left + rect.right) / 2) < 400;
-    if (!above) continue;
-    if (!bar || (rect.top - r.bottom) < (rect.top - barR.bottom)) { bar = el; barR = r; }
-  }
-  if (!bar) return {ok: false, reason: 'панель форматирования не найдена'};
-  const html = (bar.outerHTML || '').slice(0, 6000);
-  const btns = [...bar.querySelectorAll('button, [role="button"], a')];
-  const isLink = (b) => {
-    const t = ((b.getAttribute('title') || '') + ' ' + (b.getAttribute('aria-label') || '')
-               + ' ' + (b.className || '')).toLowerCase();
-    if (t.includes('сылк') || /\blink\b/.test(t)) return true;
-    const u = b.querySelector('use');
-    const href = u ? (u.getAttribute('href') || u.getAttribute('xlink:href') || '') : '';
-    return /link/i.test(href);
-  };
-  const target = btns.find(isLink);
-  if (!target) return {ok: false, reason: 'кнопка ссылки не опознана', html};
-  target.click();
-  return {ok: true, html};
-}
-"""
 
 
 def _open_link_editor(page, project_id: str = "",
@@ -1664,6 +1637,26 @@ def _apply_bold(page, text_sel: str, bold_spans: list[dict],
     return done
 
 
+def _read_field(page, text_sel: str) -> str:
+    """
+    Текст поля темы, устойчиво к перерисовке.
+
+    ОК после форматирования иногда пересобирает поле, и ТОЧНЫЙ селектор
+    (`.js-posting-itx[contenteditable="true"]`) на миг перестаёт совпадать –
+    поле выглядит «пустым», и пост падал на ровном месте (прогон 13:40).
+    Пробуем точный селектор, потом более широкие: сам текст поля никуда не
+    девается, меняется только его обёртка.
+    """
+    for sel in (text_sel, ".js-posting-itx", '[contenteditable="true"]'):
+        try:
+            v = page.eval_on_selector(sel, "el => el.innerText || el.textContent || ''")
+            if v is not None:
+                return v or ""
+        except Exception:  # noqa: BLE001
+            continue
+    return ""
+
+
 def _type_post_text(page, text_sel: str, text: str,
                     log: Callable[[str], None] | None = None,
                     project_id: str = "") -> str:
@@ -1697,10 +1690,7 @@ def _type_post_text(page, text_sel: str, text: str,
     letters = _letters          # общая сверка по буквам – одна на модуль
 
     def in_field() -> str:
-        try:
-            return page.eval_on_selector(text_sel, "el => el.innerText || el.textContent || ''") or ""
-        except Exception:  # noqa: BLE001
-            return ""
+        return _read_field(page, text_sel)
 
     bold_spans = [{"kind": "bold", "text": t} for t in bold_texts]
     link_spans = [{"kind": "link", "text": t, "url": u} for t, u in anchor_texts]
@@ -1743,7 +1733,16 @@ def _type_post_text(page, text_sel: str, text: str,
     #    исчезало, прогон 13:17). Больше не разрушаем: пишем и публикуем как есть.
     got = in_field()
     if not letters(got):
-        # Поле опустело – публиковать нечего, это настоящая поломка.
+        # Поле МОГЛО просто перерисоваться – читаем ещё несколько раз, прежде
+        # чем решить, что текста нет. Раньше первый же пустой ответ (поле
+        # пересобиралось после форматирования) валил ОК зря (прогон 13:40).
+        for _ in range(4):
+            page.wait_for_timeout(500)
+            got = in_field()
+            if letters(got):
+                break
+    if not letters(got):
+        # Поле правда пустое – публиковать нечего, это настоящая поломка.
         log("  поле темы опустело – текст не набрался, останавливаюсь по ОК")
         if project_id:
             _save_editor_markup(page, text_sel, project_id, log)
@@ -2226,7 +2225,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
             yb.drop_link_card(page, yb.text_domains(text), log,
                               diag_dir=_diag_dir(project_id))
-            typed = (page.eval_on_selector(text_sel, "el => el.textContent || ''") or "")
+            typed = _read_field(page, text_sel)
             if text.strip() and not typed.strip():
                 return {"ok": False, "error": "Текст не попал в поле поста ОК",
                         "shot": _debug_shot(project_id, page, "no-text")}

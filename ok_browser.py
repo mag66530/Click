@@ -1869,6 +1869,64 @@ def _type_post_text(page, text_sel: str, text: str,
     return "bold"
 
 
+# Своё сообщение ОК: «Эта функция временно не работает. Попробуйте еще раз
+# через несколько часов». ОК показывает его, когда сам ПРИТОРМОЗИЛ публикацию
+# в группе после многих попыток подряд, и подсовывает урезанный редактор-
+# комментарий БЕЗ панели форматирования (ok-editor.html 19.08.2026 17:47:
+# comments_add-ceditable, placeholder «Напишите комментарий…»). В нём ни
+# жирный, ни ссылка не встают в принципе – и прогон падал загадочным «лишнее
+# от прошлого черновика». Ловим это состояние и говорим правду.
+_OK_UNAVAILABLE_JS = r"""
+() => {
+  const marks = ['временно не работает', 'через несколько часов',
+                 'попробуйте еще раз через несколько'];
+  for (const el of document.querySelectorAll(
+         '.comments_add-error, .js-comments_add-error, .invalid-fr, .error-fr')) {
+    const t = (el.textContent || '').toLowerCase();
+    const shown = el.offsetParent !== null || (el.getClientRects().length > 0);
+    if (shown && marks.some(m => t.includes(m))) return el.textContent.trim();
+  }
+  return '';
+}
+"""
+
+
+def _ok_temporarily_blocked(page) -> str:
+    """Текст сообщения ОК «функция временно не работает», если оно показано."""
+    try:
+        return (page.evaluate(_OK_UNAVAILABLE_JS) or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+# Урезанный редактор-комментарий вместо полноценного окна темы. У настоящего
+# поля темы есть ярлыки ссылок (data-link-labels-enabled) и класс posting_itx;
+# у подсунутого комментария – comments_add-ceditable без панели. Если попали в
+# комментарий, форматировать нечем – честно об этом говорим, а не молчим.
+_OK_EDITOR_KIND_JS = r"""
+(sel) => {
+  const el = document.querySelector(sel);
+  if (!el) return 'none';
+  const cls = ' ' + (el.className || '') + ' ';
+  if (el.hasAttribute('data-link-labels-enabled')
+      || cls.indexOf('posting_itx') >= 0
+      || cls.indexOf('js-posting-itx') >= 0) return 'rich';
+  if (cls.indexOf('comments_add') >= 0
+      || (el.getAttribute('data-placeholder') || '').toLowerCase().includes('комментар'))
+    return 'comment';
+  return 'other';
+}
+"""
+
+
+def _ok_editor_kind(page, text_sel: str) -> str:
+    """'rich' – полноценное окно темы, 'comment' – урезанный комментарий."""
+    try:
+        return page.evaluate(_OK_EDITOR_KIND_JS, text_sel) or "other"
+    except Exception:  # noqa: BLE001
+        return "other"
+
+
 def _clear_editor(page, text_sel: str) -> int:
     """
     Опустошить поле темы. Возвращает, сколько знаков было убрано.
@@ -2308,6 +2366,33 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                 shot = _debug_shot(project_id, page, "no-editor")
                 return {"ok": False, "error": "Окно новой темы не открылось", "shot": shot}
             page.wait_for_timeout(800)
+
+            # ОК сам приторможен? Он показывает «Эта функция временно не
+            # работает…» и подсовывает урезанный редактор-комментарий без
+            # панели форматирования – тогда ни жирный, ни ссылка не встанут, а
+            # прогон падал непонятным «лишнее от прошлого черновика». Говорим
+            # правду и не мучаем форму (и группу – лишними попытками).
+            blocked = _ok_temporarily_blocked(page)
+            kind = _ok_editor_kind(page, text_sel)
+            if blocked or kind == "comment":
+                if project_id:
+                    _save_editor_markup(page, text_sel, project_id, log)
+                shot = _debug_shot(project_id, page, "ok-blocked")
+                if blocked:
+                    log(f"  ОК ответил: «{blocked[:120]}»")
+                    return {"ok": False,
+                            "error": "ОК временно заблокировал публикацию в этой группе "
+                                     f"(«{blocked[:120]}»). Это ограничение самого ОК после "
+                                     "многих попыток подряд, а не Click. Подождите несколько "
+                                     "часов и повторите – текст, жирный и ссылка не изменились.",
+                            "shot": shot}
+                return {"ok": False,
+                        "error": "ОК открыл урезанное поле комментария вместо окна новой "
+                                 "темы – в нём нет панели форматирования, поэтому жирный и "
+                                 "ссылка невозможны. Обычно так бывает, когда ОК притормозил "
+                                 "группу после многих попыток: подождите несколько часов и "
+                                 "повторите. Разметку поля сохранил рядом с логом.",
+                        "shot": shot}
 
             # ОК восстанавливает недописанный черновик прошлого раза. Без
             # чистки наш текст приписывается к нему: заказчица получила

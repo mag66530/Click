@@ -257,6 +257,19 @@ def test_inline_format() -> None:
     check("детектор ссылки ОК видит ярлык js-custom-link-text / data-href",
           "js-custom-link-text" in ok._HAS_LINK_JS and "data-href" in ok._HAS_LINK_JS)
 
+    # ОК сам тормозит группу («функция временно не работает») и подсовывает
+    # урезанный редактор-комментарий — Click ловит это и говорит правду, а не
+    # роняет прогон непонятным «лишнее от прошлого черновика».
+    sched2 = inspect.getsource(ok.schedule_postponed_post)
+    check("Click ловит блокировку ОК «функция временно не работает»",
+          "временно не работает" in ok._OK_UNAVAILABLE_JS
+          and "_ok_temporarily_blocked(" in sched2)
+    check("Click распознаёт урезанный редактор-комментарий ОК",
+          "comments_add" in ok._OK_EDITOR_KIND_JS and "_ok_editor_kind(" in sched2)
+    check("проверка блокировки идёт ДО сверки на черновик",
+          sched2.index("_ok_temporarily_blocked(")
+          < sched2.index("очистите её вручную"))
+
     # Точные селекторы окна ссылки ОК (заказчица прислала DOM 19.08.2026):
     # скрепочка «Ссылка» в панели, поле адреса, кнопка «Добавить». Раньше
     # жали Ctrl+K вслепую — окно не открывалось.

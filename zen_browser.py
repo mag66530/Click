@@ -792,6 +792,59 @@ def _marker_center(page, token: str):
         return None
 
 
+def _pick_first_cover(page, log: Callable[[str], None]) -> None:
+    """В окне публикации выбрать обложкой ПЕРВЫЙ эскиз (картинку из документа).
+    Дзен по умолчанию берёт обложкой не ту картинку; заглавная всегда идёт в
+    статье первой, её и ставим. Шаг необязательный – не вышло, статья всё
+    равно уйдёт, просто обложку Дзен выберет сам."""
+    try:
+        thumbs = page.evaluate(
+            """() => {
+                const els = [...document.querySelectorAll('[class*="cover-picker__cover"]')]
+                    .filter(e => {
+                        const s = getComputedStyle(e);
+                        return s && s.backgroundImage && s.backgroundImage !== 'none'
+                            && (e.offsetParent || e.getClientRects().length);
+                    });
+                return els.map(e => {
+                    const r = e.getBoundingClientRect();
+                    return {x: r.x + r.width / 2, y: r.y + r.height / 2,
+                            bg: (getComputedStyle(e).backgroundImage || '').slice(0, 70)};
+                });
+            }""")
+    except Exception:  # noqa: BLE001
+        thumbs = []
+    if not thumbs:
+        log("🔬 обложек-эскизов в окне не нашёл – Дзен выберет обложку сам")
+        return
+    log(f"🔬 обложек-эскизов: {len(thumbs)} – ставлю первую (заглавную из документа)")
+    try:
+        page.mouse.click(thumbs[0]["x"], thumbs[0]["y"])
+        page.wait_for_timeout(900)
+        log("✓ обложкой выбрал первую картинку")
+    except Exception as e:  # noqa: BLE001
+        log(f"🔬 по первой обложке кликнуть не вышло – {type(e).__name__}: {e}")
+
+
+def _select_marker_line(page, token: str) -> bool:
+    """Выделить ТЕКСТ строки-метки настоящей мышью и клавишами: клик в метку,
+    Home, Shift+End. Так берём ровно текст метки, не трогая границу абзаца –
+    иначе замена/удаление сливали следующий подзаголовок наверх."""
+    center = _marker_center(page, token)
+    if not center:
+        return False
+    page.mouse.click(center["x"], center["y"])
+    page.wait_for_timeout(120)
+    page.keyboard.press("Home")
+    page.keyboard.press("Shift+End")
+    page.wait_for_timeout(120)
+    try:
+        sel = page.evaluate("() => (window.getSelection().toString() || '').trim()")
+    except Exception:  # noqa: BLE001
+        sel = ""
+    return token in sel
+
+
 def _dispatch_image_paste(handle, data: str) -> None:
     """Отправить в выделенное место настоящее событие вставки с картинкой-File.
     Дзен разбирает вставку сам и ставит картинку туда, где стоит курсор."""
@@ -832,19 +885,12 @@ def _paste_image_into(page, field, path: str, log: Callable[[str], None],
 
         placed = False
         if token:
-            center = _marker_center(page, token)
-            if center:
-                # Тройной клик выделяет весь абзац-метку по-настоящему.
-                page.mouse.click(center["x"], center["y"], click_count=3)
-                page.wait_for_timeout(200)
-                try:
-                    sel = page.evaluate("() => (window.getSelection().toString() || '').trim()")
-                except Exception:  # noqa: BLE001
-                    sel = ""
-                placed = token in sel or sel == token
-                log(f"🔬 выделил метку {token}: выделено «{sel[:20]}»"
-                    f"{' ✓' if placed else ' (не точно)'}")
-            else:
+            # Выделяем ТОЛЬКО текст строки-метки: клик в неё, Home → Shift+End.
+            # Тройной клик хватал и границу абзаца, и вставка/удаление сливали
+            # следующий подзаголовок наверх – оттого H2 после картинки «слетал».
+            placed = _select_marker_line(page, token)
+            log(f"🔬 выделил метку {token}: {'✓' if placed else 'не точно'}")
+            if not placed:
                 log(f"🔬 метку {token} на странице не нашёл – картинка встанет не на месте")
         else:
             try:
@@ -862,21 +908,15 @@ def _paste_image_into(page, field, path: str, log: Callable[[str], None],
                 break
 
         # Метка могла уцелеть (картинку вставили рядом, а выделение не съелось).
-        # Убираем её настоящим выделением и Delete – так же, как это сделал бы
-        # человек: программное удаление узла редактор Дзена откатывает.
+        # Убираем её выделением строки и Delete – БЕЗ Backspace: он подтягивал
+        # соседний подзаголовок и ломал его.
         if token:
             for _ in range(2):
-                center = _marker_center(page, token)
-                if not center:
+                if not _select_marker_line(page, token):
                     break
-                page.mouse.click(center["x"], center["y"], click_count=3)
-                page.wait_for_timeout(150)
                 page.keyboard.press("Delete")
                 page.wait_for_timeout(150)
-                page.keyboard.press("Backspace")
-                page.wait_for_timeout(150)
-            left = _marker_center(page, token)
-            if left:
+            if _marker_center(page, token):
                 log(f"🔬 метку {token} убрать полностью не вышло – удалите строку руками")
 
         return ok or page.locator("img").count() > before_imgs
@@ -1618,6 +1658,12 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
                 return {"ok": False, "error": "Не нашли кнопку «Опубликовать»",
                         "shot": _debug_shot(project_id, page, "no-publish")}
             page.wait_for_timeout(2_500)
+
+            # Обложку статьи ставим на ПЕРВУЮ картинку (она из документа и идёт
+            # выше в тексте). Иначе Дзен нередко берёт обложкой картинку
+            # таблицы, а нужна заглавная.
+            if [b for b in blocks if b["kind"] in ("image", "table")]:
+                _pick_first_cover(page, log)
 
             why = _turn_on_later(page, log)
             if why:

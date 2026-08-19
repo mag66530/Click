@@ -756,6 +756,11 @@ def test_image_at_marker() -> None:
                 }""")
             check("картинка стоит выше подзаголовка (на месте метки)",
                   0 <= pos["img"] < pos["h2"], str(pos))
+            # H2 после картинки должен остаться подзаголовком – его нельзя
+            # утянуть Backspace'ом при чистке метки (на этом «слетал» заголовок).
+            check("подзаголовок H2 уцелел",
+                  page.locator("#ed h2").count() == 1
+                  and "Главный секрет" in page.locator("#ed h2").inner_text())
         finally:
             browser.close()
 

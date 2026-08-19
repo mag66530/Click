@@ -18,4 +18,4 @@ build.py – метка сборки Click. Одна на всё приложе�
 меняет поведение модулей или вёрстку.
 """
 
-BUILD = "2026-08-19-zen-marker-click-window"
+BUILD = "2026-08-19-zen-h2-and-cover"

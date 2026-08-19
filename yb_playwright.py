@@ -743,17 +743,38 @@ _RANGE_RECT_JS = r"""
   if (!a || !b) return null;
   const r = document.createRange();
   r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]);
-  // Подтянуть кусок в видимую часть. Две разные прокрутки, и обе важны:
-  //   1) страница – если само поле уехало за окно (scrollIntoView поля);
-  //   2) ВНУТРЕННЯЯ прокрутка поля – у МАКС поле растёт и прокручивается
-  //      само, и слово внизу мышью не достать. scrollIntoView поле бы не
-  //      сдвинуло его собственную прокрутку, поэтому двигаем el.scrollTop
-  //      руками, по разнице краёв поля и куска.
-  try { el.scrollIntoView({block: 'nearest', inline: 'nearest'}); } catch (e) {}
-  const fr = el.getBoundingClientRect();
-  const rr = r.getBoundingClientRect();
-  if (rr.height > 0 && (rr.top < fr.top || rr.bottom > fr.bottom)) {
-    el.scrollTop += (rr.top - fr.top) - Math.max(0, (fr.height - rr.height) / 2);
+
+  // Подтянуть кусок в ВИДИМУЮ часть. Это и была беда МАКС: длинный пост не
+  // помещается, поле после набора прокручено ВНИЗ, и верхние куски —
+  // заголовок, «Главные», «Многоуровневый» — за кадром сверху. Мышь до них
+  // не дотягивалась: «низ выделил жирным, верх нет».
+  //
+  // Прокручивает у МАКС НЕ само поле, а его родитель-контейнер (тот ползунок
+  // справа). Поэтому:
+  //   1) scrollIntoView на элементе с куском — он сам находит нужный
+  //      прокручиваемый предок и листает его (и вверх, и вниз);
+  //   2) на всякий случай ещё двигаем прокрутку найденного предка руками —
+  //      если родной scrollIntoView не довёл кусок до видимой зоны.
+  const anchorEl = (a[0].nodeType === 3 ? a[0].parentElement : a[0]) || el;
+  try { anchorEl.scrollIntoView({block: 'center', inline: 'nearest'}); } catch (e) {}
+
+  const scroller = (node) => {
+    let e = node;
+    while (e && e !== document.body && e !== document.documentElement) {
+      const st = getComputedStyle(e);
+      if (/(auto|scroll|overlay)/.test(st.overflowY) && e.scrollHeight > e.clientHeight + 4)
+        return e;
+      e = e.parentElement;
+    }
+    return null;
+  };
+  const sc = scroller(anchorEl);
+  if (sc) {
+    const sr = sc.getBoundingClientRect();
+    const rr = r.getBoundingClientRect();
+    if (rr.height > 0 && (rr.top < sr.top + 4 || rr.bottom > sr.bottom - 4)) {
+      sc.scrollTop += (rr.top - sr.top) - Math.max(0, (sr.height - rr.height) / 2);
+    }
   }
   let rects = [...r.getClientRects()].filter(rc => rc.width > 0 && rc.height > 0);
   if (!rects.length) {

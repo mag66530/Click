@@ -1959,7 +1959,13 @@ def test_mouse_selection_wiring() -> None:
           "_selection_text" in sel_src)
     rect_src = yb._RANGE_RECT_JS
     check("координаты берём из getClientRects", "getClientRects" in rect_src)
-    check("учтена внутренняя прокрутка поля (МАКС)", "scrollTop" in rect_src)
+    # МАКС не помещает длинный пост целиком: верхние куски за кадром сверху.
+    # Листаем кусок в вид — и родным scrollIntoView, и прокруткой найденного
+    # прокручиваемого ПРЕДКА (у МАКС прокручивается не поле, а его обёртка).
+    check("кусок листаем в вид (scrollIntoView)", "scrollIntoView" in rect_src)
+    check("ищем прокручиваемого предка, а не только поле",
+          "scrollHeight" in rect_src and "clientHeight" in rect_src)
+    check("двигаем прокрутку предка", "scrollTop" in rect_src)
 
     # ОК: и жирный, и ссылка выделяются мышью (через _select → мышь).
     ok_select = inspect.getsource(ok_browser._select)

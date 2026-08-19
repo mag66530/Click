@@ -1387,6 +1387,29 @@ def _select(page, text_sel: str, text: str, from_index: int = -1) -> bool:
         return False
 
 
+def _drop_selection(page, text_sel: str) -> None:
+    """
+    Снять выделение – курсор в конец поля.
+
+    Панель форматирования ОК всплывает ТОЛЬКО пока текст выделен, и, оставшись
+    после жирного/попытки ссылки, перекрывает поле: тогда фото, время и
+    сохранение бьют мимо, а поле «исчезает» (прогон 13:17). Escape нельзя –
+    он схлопывает всю форму ОК. Гасим выделение через JS, панель уходит сама,
+    а фокус остаётся в поле.
+    """
+    try:
+        page.evaluate(
+            "(sel) => { const el = document.querySelector(sel);"
+            " const s = window.getSelection(); if (!s) return;"
+            " if (el) { const r = document.createRange();"
+            " r.selectNodeContents(el); r.collapse(false);"
+            " s.removeAllRanges(); s.addRange(r); } else { s.removeAllRanges(); } }",
+            text_sel)
+        page.wait_for_timeout(250)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 # Проверка, что анкор с нашим адресом реально появился в поле.
 _HAS_LINK_JS = r"""
 (args) => {
@@ -1697,40 +1720,39 @@ def _type_post_text(page, text_sel: str, text: str,
     if not bold_spans and not link_spans:
         return "plain"
 
-    # 2. ПОРЯДОК: сначала ЖИРНЫЙ, потом ссылка – так у ОК проверено рабочим
-    #    прогоном. Обратный порядок (ссылка первой) сломал ОК: окно вставки
-    #    ссылки открывалось на свежем тексте, портило его («разметка изменила
-    #    текст»), оставалось открытым и вешало откат на 30 c (прогон 12:55).
-    #    Ссылка у ОК всё равно пока не встаёт (0 из 1) и падает мягко, а
-    #    «нашем сайте» жирным делает шаг ниже – заказчице этого и надо.
-    #    (У МАКС наоборот – ссылка первой; там она встаёт и сбрасывает жирный,
-    #    поэтому жирный кладём поверх. Площадки разные, порядок у них разный.)
+    # 2. Жирный – выделяем кусок мышью и жмём Ctrl+B / кнопку «Ж», как рукой.
     bold_done = _apply_bold(page, text_sel, bold_spans, log) if bold_spans else 0
 
-    # 2б. Ссылки – родным редактором ссылок ОК (свой <a> он выбрасывает).
+    # 2б. Ссылка – родным редактором ссылок ОК. Заказчице ссылка НУЖНА, поэтому
+    #     пытаемся. Но её неудача больше НЕ должна ронять форму (прогоны 12:55
+    #     и 13:17 падали именно из-за неё): после попытки гасим выделение и
+    #     любую всплывшую панель (шаг ниже), а сверка текста стала мягкой.
     links_done = _apply_links_native(page, text_sel, link_spans, log, project_id) \
         if link_spans else 0
 
-    # 3. Проверка по факту: и текст цел, и разметка на месте.
+    # Погасить выделение и панель форматирования ОК. Она всплывает на любое
+    # выделение (и от жирного, и от попытки ссылки) и, оставшись, перекрывает
+    # поле – тогда фото/время/сохранение бьют мимо, а поле «исчезает». Снятие
+    # выделения убирает панель БЕЗ Escape (Escape схлопывает всю форму ОК).
+    _drop_selection(page, text_sel)
+
+    # 3. Проверка по факту. Жирный наложен МЫШЬЮ – текст он не портит. Если
+    #    расхождение и есть, оно косметическое (автоссылка ОК на адрес,
+    #    лишний перенос). РАНЬШЕ здесь текст стирали и перепечатывали – и
+    #    если поверх поля висела панель, набор бил мимо и УБИВАЛ форму (поле
+    #    исчезало, прогон 13:17). Больше не разрушаем: пишем и публикуем как есть.
     got = in_field()
-    if letters(got) != letters(plain) or _lines(got) != _lines(plain):
-        log("  разметка изменила текст – убираю её, оставляю обычный текст")
-        _clear_editor(page, text_sel)
-        # Клик по полю с КОРОТКИМ ожиданием: если окно ссылки осталось поверх
-        # и перекрыло поле, ждать его 30 c бессмысленно – прогон падал именно
-        # тут (прогон 12:55). Не докликались – набираем через клавиатуру: она
-        # печатает в тот элемент, что в фокусе, поле кликать необязательно.
-        try:
-            page.click(text_sel, timeout=4_000)
-        except Exception:  # noqa: BLE001
-            log("  поле перекрыто – печатаю без клика по нему")
-        try:
-            page.keyboard.type(plain, delay=8)
-        except Exception:  # noqa: BLE001
-            page.type(text_sel, plain, delay=8)
+    if not letters(got):
+        # Поле опустело – публиковать нечего, это настоящая поломка.
+        log("  поле темы опустело – текст не набрался, останавливаюсь по ОК")
         if project_id:
             _save_editor_markup(page, text_sel, project_id, log)
         return "plain"
+    if letters(got) != letters(plain) or _lines(got) != _lines(plain):
+        log("  текст в поле чуть отличается от исходного – публикую как есть, "
+            "форму не трогаю (жирный на месте)")
+        if project_id:
+            _save_editor_markup(page, text_sel, project_id, log)
 
     want_bold = len(bold_spans)
     want_links = len(link_spans)
@@ -2098,6 +2120,16 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
     сейчас, сохраняется снимок формы, ошибка объясняет, что прислать.
     """
     log = log or (lambda m: None)
+    # Помним ПОСЛЕДНИЙ шаг: если ОК упадёт, ошибка назовёт, после чего именно.
+    # Заказчица: «пусть показывает, на каком моменте падает». Раньше вылетала
+    # сырая «Page.eval_on_selector: Failed to find element…» без места.
+    _last = {"step": "старт"}
+    _base_log = log
+
+    def log(m: str) -> None:            # noqa: A001 – намеренно затеняем параметр
+        _last["step"] = m.strip()
+        _base_log(m)
+
     if not has_saved_session(project_id):
         return {"ok": False, "error": "Нет сессии ОК – войдите в «Настройках» («Вход в ОК»)"}
     if not group_url:
@@ -2332,8 +2364,10 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             return {"ok": True}
         except Exception as e:  # noqa: BLE001
             # Снимок и здесь: неожиданный сбой без картинки – это тупик,
-            # разбирать его по одной строке исключения нечем.
-            return {"ok": False, "error": str(e),
+            # разбирать его по одной строке исключения нечем. И называем ШАГ,
+            # на котором упали – по последней строке лога.
+            return {"ok": False,
+                    "error": f"упал на шаге «{_last['step']}»: {e}",
                     "shot": _debug_shot(project_id, page, "error") if page else None}
         finally:
             browser.close()

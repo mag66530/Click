@@ -233,8 +233,10 @@ def test_inline_format() -> None:
     check("ОК: сначала жирный, потом ссылка",
           ok_flow.index("_apply_bold(page") < ok_flow.index("_apply_links_native"))
     check("ОК берёт подготовку из inline_format", "inline_format(" in ok_flow)
-    check("ОК: откат по полю с коротким ожиданием (не виснет 30 c)",
-          "timeout=4_000" in ok_flow)
+    check("ОК всё ещё ПЫТАЕТСЯ вставить ссылку (заказчице она нужна)",
+          "_apply_links_native(" in ok_flow)
+    check("ОК гасит панель после форматирования (не виснет и не рушит форму)",
+          "_drop_selection(" in ok_flow)
     # МАКС: ссылка первой (Ctrl+K сбрасывает жирный, кладём жирный поверх).
     mb_fmt = inspect.getsource(mb._apply_max_format)
     check("МАКС: сначала ссылки, потом жирный",
@@ -1971,8 +1973,10 @@ def test_link_card_and_report() -> None:
     # Главное правило после 14.08.2026: жирный не стоит поломанного текста.
     check("сверяются и буквы, и разбивка по строкам",
           "_lines(got) != _lines(plain)" in ok_src)
-    check("разметка, изменившая текст, откатывается",
-          "разметка изменила текст" in ok_src)
+    check("расхождение текста НЕ рушит форму (публикуем как есть)",
+          "публикую как есть" in ok_src and "_clear_editor" not in ok_src)
+    check("панель ОК после форматирования гасим (иначе перекроет поле)",
+          "_drop_selection(" in ok_src)
     ok_lines = ok_browser._lines("Диаметр\n: 0,25 мм;Длина волокна:")
     check("строки считаются по буквам", ok_lines == ["диаметр", "025ммдлинаволокна"], str(ok_lines))
     check("поломанная разбивка не равна целой",
@@ -2075,8 +2079,8 @@ def test_ok_bold_and_probe() -> None:
           pt.anchor_spans("[a.ru](https://a.ru)") == [])
 
     src = inspect.getsource(ok_browser._type_post_text)
-    check("текст цел при любом исходе разметки",
-          "разметка изменила текст" in src and "_clear_editor" in src)
+    check("расхождение текста не рушит форму, публикуем как есть",
+          "публикую как есть" in src and "_clear_editor" not in src)
     check("про жирный больше не врём",
           "жирный редактор ОК не принял" in src and "жирных кусков" in src)
     check("ОК и МАКС получают разметку, а не плоский текст",

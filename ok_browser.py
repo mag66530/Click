@@ -1412,45 +1412,56 @@ def _drop_selection(page, text_sel: str) -> None:
 
 # Убрать лишний пробел ПЕРЕД знаком препинания («…нашем сайте .» → «…сайте.»).
 #
-# ОК, вшивая ссылку своим «ярлыком», вставляет за ней служебный пробел – и в
-# тексте «…на нашем сайте.» получается «…на нашем сайте .» (заказчица прислала
-# скрин 19.08.2026). Прошлая версия срезала пробел ТОЛЬКО когда узел стоял
-# сразу за <a> и только под условием links_done>0 – а в прогоне 16:24 ссылка
-# «не подтвердилась» (наш детектор промахнулся), пробел ОК всё равно поставил,
-# и чистка не сработала («не помогло»).
+# ОК, вшивая ссылку своим «ярлыком», оставляет за ней служебный пробел – и в
+# тексте «…на нашем сайте.» выходит «…на нашем сайте .» (скрины заказчицы
+# 19.08.2026). Пробел живучий: ОК подставляет его заново, когда после набора
+# дорисовывает карточку сайта и пересобирает поле, поэтому чистить надо не
+# только сразу после ссылки, но и ПОСЛЕДНИМ шагом перед сохранением.
 #
-# Теперь бьём проще и надёжнее: в русском тексте пробела перед «. , ! ? …»
-# не бывает НИКОГДА, поэтому срезаем его по всему полю, не завися от того,
-# распознали мы ссылку ОК или нет и как ОК разбил DOM. Двоеточие и точку-с-
-# запятой не трогаем (время «11:00», смайлы). Ловим два случая: пробел перед
-# знаком в том же узле и «пробельный» узел, за которым идёт узел со знака.
+# Чистим по СКЛЕЕННОМУ тексту всех текстовых узлов, а не поузельно: ОК рвёт
+# ссылку/пробел/точку по соседним узлам («нашем сайте␠» + «.»), и поузельная
+# проверка их не ловила. Строим общий текст с картой «символ → узел», находим
+# каждый пробел, что стоит вплотную перед «. , ! ? …», и удаляем именно эти
+# символы из их узлов. В русском тексте пробела перед этими знаками не бывает
+# никогда; двоеточие/время «11:00» и обычные пробелы между словами не трогаем.
 _FIX_SPACE_JS = r"""
 (sel) => {
   const el = document.querySelector(sel);
   if (!el) return 0;
-  const RE = /[ \u00A0\t]+(?=[.,!?\u2026])/g;
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
   const nodes = [];
-  let n;
-  while ((n = walker.nextNode())) nodes.push(n);
-  let changed = 0;
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i];
-    const v = node.nodeValue || '';
-    // случай А: пробел(ы) перед знаком в том же текстовом узле — «сайте .»
-    const nv = v.replace(RE, '');
-    if (nv !== v) { node.nodeValue = nv; changed++; continue; }
-    // случай Б: узел целиком из пробелов, а СЛЕДУЮЩИЙ текст начинается со знака
-    // (ОК разложил ссылку/пробел/точку по соседним узлам) — «сайте»[ ][.].
-    if (v && !v.trim()) {
-      const nxt = nodes[i + 1];
-      if (nxt && /^[.,!?\u2026]/.test(nxt.nodeValue || '')) {
-        node.nodeValue = '';
-        changed++;
-      }
+  let w;
+  while ((w = walker.nextNode())) nodes.push(w);
+  let full = '';
+  const owner = [];   // owner[k] = индекс узла символа k
+  const off = [];     // off[k]   = позиция символа внутри узла
+  for (let ni = 0; ni < nodes.length; ni++) {
+    const v = nodes[ni].nodeValue || '';
+    for (let o = 0; o < v.length; o++) { full += v[o]; owner.push(ni); off.push(o); }
+  }
+  const isSpace = (c) => c === ' ' || c === '\u00A0' || c === '\t';
+  const isPunct = (c) => c === '.' || c === ',' || c === '!' || c === '?' || c === '\u2026';
+  const perNode = new Map();   // ni -> [позиции на удаление]
+  let total = 0;
+  for (let k = 0; k < full.length; k++) {
+    if (!isPunct(full[k])) continue;
+    let j = k - 1;
+    while (j >= 0 && isSpace(full[j])) {
+      const ni = owner[j];
+      if (!perNode.has(ni)) perNode.set(ni, []);
+      perNode.get(ni).push(off[j]);
+      total++;
+      j--;
     }
   }
-  return changed;
+  if (!total) return 0;
+  for (const [ni, offs] of perNode) {
+    offs.sort((a, b) => b - a);   // с конца, чтобы позиции не сползали
+    let v = nodes[ni].nodeValue || '';
+    for (const o of offs) v = v.slice(0, o) + v.slice(o + 1);
+    nodes[ni].nodeValue = v;
+  }
+  return total;
 }
 """
 
@@ -1467,12 +1478,21 @@ def _fix_space_before_punct(page, text_sel: str,
 
 
 # Проверка, что анкор с нашим адресом реально появился в поле.
+#
+# ОК кладёт ссылку НЕ тегом <a>, а своим «ярлыком»:
+#   <span class="pform_name al js-custom-link-text" data-href="https://…">…</span>
+# (DOM заказчицы 19.08.2026, ok-editor.html). Прежняя проверка искала только
+# <a href> и потому честную ссылку объявляла непринятой («ссылкой не
+# подтвердилась», links_done=0) – хотя ссылка стояла. Теперь смотрим и на
+# <a>, и на ярлык ОК: любой элемент с href/data-href/data-link на наш хост.
 _HAS_LINK_JS = r"""
 (args) => {
   const el = document.querySelector(args.sel);
   if (!el) return false;
-  for (const a of el.querySelectorAll('a')) {
-    const h = a.getAttribute('href') || a.getAttribute('data-link') || '';
+  const sel = 'a, [data-href], [data-link], .js-custom-link-text';
+  for (const node of el.querySelectorAll(sel)) {
+    const h = node.getAttribute('href') || node.getAttribute('data-href')
+            || node.getAttribute('data-link') || '';
     if (h && h.indexOf(args.host) >= 0) return true;
   }
   return false;
@@ -2401,6 +2421,16 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                 page.wait_for_timeout(600)
 
             page.wait_for_timeout(800)
+            # ПОСЛЕДНИЙ проход чистки пробела перед знаком: к этому моменту ОК
+            # уже дорисовал карточку сайта и пересобрал поле, а он-то и
+            # возвращал пробел после ссылки (правки в _type_post_text гасли).
+            # Здесь поле окончательное – сохраняем его разметку для разбора и
+            # срезаем пробел прямо перед кнопкой «Сохранить».
+            if project_id:
+                _save_editor_markup(page, text_sel, project_id, log)
+            _fix_space_before_punct(page, text_sel, log)
+            page.wait_for_timeout(200)
+
             log("Сохраняю отложку")
             if not _click_first(page, SEL["submit_scheduled"], timeout=10_000):
                 shot = _debug_shot(project_id, page, "no-save")

@@ -3741,6 +3741,33 @@ def _crosspost_form_log_path(project_id: str):
     return d / "form-last.log"
 
 
+def _crosspost_last_result_banner(project_id: str) -> None:
+    """
+    Плашка с исходом последнего формирования – вверху раздела, сразу после
+    прогона. Формирование блокирует поток Streamlit на минуты, а сам отчёт
+    лежит во вкладке «Отчёты и журналы» в глубине; после долгого прогона
+    перерисовка его не показывает, и заказчице приходилось обновлять страницу.
+    Итог кладётся в session_state в конце run() – показываем его здесь, где
+    человек и так смотрит. Крестик убирает плашку; следующий прогон заменит.
+    """
+    key = f"cp-last-result-{project_id}"
+    res = st.session_state.get(key)
+    if not res:
+        return
+    ok, bad, at = res.get("ok", 0), res.get("bad", 0), res.get("at", "")
+    left, right = st.columns([12, 1])
+    with left:
+        text = f"Формирование завершено в {at}: запланировано {ok}" \
+            + (f", с ошибками {bad}" if bad else "")
+        (st.error if bad else st.success)(
+            text + ". Подробнее – ниже во вкладке «📊 Отчёты и журналы».")
+    with right:
+        if st.button("✕", key=f"cp-last-result-x-{project_id}",
+                     help="Убрать плашку"):
+            st.session_state.pop(key, None)
+            st.rerun()
+
+
 def _crosspost_report_block(project_id: str, posts: list[dict], state: dict) -> None:
     """
     Отчёт: что и куда реально ушло – только факты от площадок.
@@ -3986,6 +4013,7 @@ def tab_crosspost(project_id: str, config: dict) -> None:
     formable = {cps.post_key(c["post"]) for c in _crosspost_form_choices(todo)}
 
     _crosspost_bar(project_id, config, posts, upcoming, state, horizon)
+    _crosspost_last_result_banner(project_id)
     _crosspost_attention(project_id, upcoming, state)
     picked_keys = _crosspost_plan_table(project_id, config, posts, state, today, horizon,
                                         formable=formable)
@@ -4404,6 +4432,16 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
         box.update(label=(f"Готово: запланировано {ok}"
                           + (f", с ошибками {bad}" if bad else "")),
                    state="error" if bad else "complete")
+        # Итог формирования кладём в session_state и показываем ПЛАШКОЙ вверху
+        # раздела после перерисовки. Заказчица: «отчёт всё равно приходится
+        # обновлять». Формирование идёт минуты (браузер блокирует поток
+        # Streamlit), сам отчёт лежит в глубине во вкладке «Отчёты», и после
+        # долгого прогона перерисовка его не показывает. Плашка выносит исход
+        # туда, куда человек и так смотрит, – сразу, без обновления страницы.
+        st.session_state[f"cp-last-result-{project_id}"] = {
+            "ok": ok, "bad": bad,
+            "at": apptime.now().strftime("%H:%M"),
+        }
         time.sleep(1.2)
         st.rerun()
 

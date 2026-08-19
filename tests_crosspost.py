@@ -242,10 +242,20 @@ def test_inline_format() -> None:
     # в прогоне 16:24 ссылка «не подтвердилась», а пробел ОК всё равно ставил.
     check("ОК срезает пробел перед знаком (при попытке ссылки)",
           "_fix_space_before_punct(" in ok_flow and "if link_spans:" in ok_flow)
+    # И ПОСЛЕДНИМ шагом перед сохранением отложки: ОК возвращает пробел, когда
+    # после набора дорисовывает карточку сайта и пересобирает поле (прогон
+    # 16:24, DOM ok-editor.html: <span js-custom-link-text>…</span>&nbsp;.).
+    sched_src = inspect.getsource(ok.schedule_postponed_post)
+    check("ОК чистит пробел ещё раз перед самим сохранением отложки",
+          sched_src.index("_fix_space_before_punct(")
+          < sched_src.index("Сохраняю отложку"))
     fix_src = ok._FIX_SPACE_JS
     check("чистка бьёт по пробелу перед знаком «. , ! ?» (не двоеточие/время)",
-          "[.,!?" in fix_src and ":" not in "".join(
-              ln for ln in fix_src.splitlines() if "RE =" in ln))
+          "isPunct" in fix_src and "':'" not in fix_src and "isSpace" in fix_src)
+    # Детектор ссылки ОК понимает её ЯРЛЫК (js-custom-link-text/data-href),
+    # а не только <a href> — иначе честную ссылку зовёт непринятой.
+    check("детектор ссылки ОК видит ярлык js-custom-link-text / data-href",
+          "js-custom-link-text" in ok._HAS_LINK_JS and "data-href" in ok._HAS_LINK_JS)
 
     # Точные селекторы окна ссылки ОК (заказчица прислала DOM 19.08.2026):
     # скрепочка «Ссылка» в панели, поле адреса, кнопка «Добавить». Раньше

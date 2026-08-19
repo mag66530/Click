@@ -1608,6 +1608,9 @@ def _apply_bold(page, text_sel: str, bold_spans: list[dict],
     Возвращает, сколько кусков реально стали жирными.
     """
     done = 0
+    # Сколько текста в поле ДО жирного – по нему ловим момент, если какой-то
+    # шаг вдруг опустошит поле (прогон 14:03: текст пропал во время жирного).
+    base_len = len(_read_field(page, text_sel))
     for span in bold_spans:
         t = span["text"]
         try:
@@ -1618,20 +1621,20 @@ def _apply_bold(page, text_sel: str, bold_spans: list[dict],
             page.keyboard.press("Control+b")
             page.wait_for_timeout(160)
             if not _is_bold(page, text_sel, t):
-                # Не принял Ctrl+B – жмём родную кнопку «Ж» панели форматирования.
-                if _select(page, text_sel, t):
-                    page.wait_for_timeout(220)       # дать панельке всплыть
-                    try:
-                        page.evaluate(_CLICK_BOLD_JS)
-                    except Exception:  # noqa: BLE001
-                        pass
-                    page.wait_for_timeout(160)
-            if not _is_bold(page, text_sel, t):
-                # Последний запас – execCommand на то же выделение.
+                # Не принял Ctrl+B – execCommand на то же выделение. Кнопку «Ж»
+                # эвристикой БОЛЬШЕ НЕ ЖМЁМ: она могла попасть по соседней
+                # («Подзаголовок», «Цитата») и перекроить/опустошить абзац.
                 _select(page, text_sel, t)
                 _apply_marks(page, text_sel, [{"kind": "bold", "text": t}])
             if _is_bold(page, text_sel, t):
                 done += 1
+            # Стоп-кран: если поле после этого куска резко опустело – значит
+            # именно на нём что-то пошло не так. Не продолжаем добивать.
+            now_len = len(_read_field(page, text_sel))
+            if base_len > 40 and now_len < base_len * 0.5:
+                log(f"  ⚠️ после жирного «{t[:30]}» текст в поле просел "
+                    f"({base_len}→{now_len}) – прекращаю жирнить, чтобы не потерять пост")
+                break
         except Exception:  # noqa: BLE001 – жирный не должен ронять прогон
             continue
     return done
@@ -1647,14 +1650,25 @@ def _read_field(page, text_sel: str) -> str:
     Пробуем точный селектор, потом более широкие: сам текст поля никуда не
     девается, меняется только его обёртка.
     """
-    for sel in (text_sel, ".js-posting-itx", '[contenteditable="true"]'):
-        try:
-            v = page.eval_on_selector(sel, "el => el.innerText || el.textContent || ''")
-            if v is not None:
-                return v or ""
-        except Exception:  # noqa: BLE001
-            continue
-    return ""
+    # Берём САМЫЙ ДЛИННЫЙ текст среди всех кандидатов. Иначе пустой служебный
+    # contenteditable (форма комментария, заглушка), попавшийся раньше в DOM,
+    # выдавал «поле пустое», хотя наш текст был на месте – пост падал зря.
+    try:
+        return page.evaluate(
+            """(sel) => {
+                const seen = new Set(); let best = '';
+                for (const s of [sel, '.js-posting-itx', '[contenteditable="true"]']) {
+                    let list; try { list = document.querySelectorAll(s); } catch (e) { continue; }
+                    for (const el of list) {
+                        if (seen.has(el)) continue; seen.add(el);
+                        const t = el.innerText || el.textContent || '';
+                        if (t.length > best.length) best = t;
+                    }
+                }
+                return best;
+            }""", text_sel) or ""
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _type_post_text(page, text_sel: str, text: str,
@@ -1743,7 +1757,8 @@ def _type_post_text(page, text_sel: str, text: str,
                 break
     if not letters(got):
         # Поле правда пустое – публиковать нечего, это настоящая поломка.
-        log("  поле темы опустело – текст не набрался, останавливаюсь по ОК")
+        log(f"  поле темы опустело (в нём {len(got)} знаков) – текст не "
+            "удержался после форматирования, останавливаюсь по ОК")
         if project_id:
             _save_editor_markup(page, text_sel, project_id, log)
         return "plain"

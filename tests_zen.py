@@ -84,6 +84,76 @@ def make_docx() -> bytes:
     return buf.getvalue()
 
 
+def make_docx_with_image() -> bytes:
+    """Документ с картинкой на своём месте – как у заказчика: вводный абзац,
+    затем картинка, затем подзаголовок и текст."""
+    W2 = ('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+          'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
+          'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"')
+    # Абзац с картинкой: <w:drawing> с <a:blip r:embed="rId6">.
+    pic = ('<w:p><w:r><w:drawing><a:blip r:embed="rId6"/>'
+           '</w:drawing></w:r></w:p>')
+    body = (_p("Латунь это сплав каких металлов?", "Heading2", bold=True)
+            + _p("Увидели блестящий самовар? За блеском скрывается больше.")
+            + pic
+            + _p("Главный секрет", "Heading3", bold=True)
+            + _p("В основе латуни союз двух металлов."))
+    doc = f'<?xml version="1.0"?><w:document {W2}><w:body>{body}</w:body></w:document>'
+    rels = ('<?xml version="1.0"?><Relationships '
+            'xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId6" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
+            'Target="media/image1.png"/></Relationships>')
+    png = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+           b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00"
+           b"\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82")
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("word/document.xml", doc)
+        z.writestr("word/_rels/document.xml.rels", rels)
+        z.writestr("word/media/image1.png", png)
+    return buf.getvalue()
+
+
+def test_doc_image() -> None:
+    print("Картинка из документа: разбор и метки на своих местах")
+    art = zen_doc.parse_docx(make_docx_with_image())
+    kinds = [b["kind"] for b in art["blocks"]]
+    check("картинка стала отдельным блоком", kinds.count("image") == 1, str(kinds))
+    check("картинка стоит между вводным абзацем и подзаголовком",
+          kinds[:3] == ["para", "image", "head"], str(kinds))
+    img = next(b for b in art["blocks"] if b["kind"] == "image")
+    check("у картинки есть данные и формат", bool(img.get("data_b64")) and img.get("ext") == "png")
+
+    try:
+        import zen_browser as zb
+    except ImportError as e:
+        print(f"  ⏭ дальше пропускаю (нет browser-части): {e}")
+        return
+
+    # Метки в HTML и список медиа идут в одном порядке и совпадают токенами.
+    html = zb.blocks_to_html(art["blocks"])
+    media = zb.media_items(art["blocks"])
+    check("в тексте одна метка медиа", html.count("⟦МЕДИА-1⟧") == 1, html[:200])
+    check("медиа-элемент один, с тем же токеном",
+          len(media) == 1 and media[0]["token"] == zb.media_token(1), str(media[:1]))
+    check("метка стоит после вводного абзаца, до подзаголовка",
+          html.index("Увидели") < html.index("⟦МЕДИА-1⟧") < html.index("Главный секрет"))
+
+    # Таблица тоже получает свою метку и идёт следующим номером.
+    with2 = {"blocks": [{"kind": "para", "markup": "а"},
+                        {"kind": "image", "data_b64": "x", "ext": "png"},
+                        {"kind": "para", "markup": "б"},
+                        {"kind": "table", "rows": [["к"]]}]}
+    media2 = zb.media_items(with2["blocks"])
+    check("две метки: картинка ⟦1⟧ и таблица ⟦2⟧",
+          [m["token"] for m in media2] == [zb.media_token(1), zb.media_token(2)],
+          str([m["token"] for m in media2]))
+    html2 = zb.blocks_to_html(with2["blocks"])
+    check("метки в тексте по порядку",
+          html2.index("⟦МЕДИА-1⟧") < html2.index("⟦МЕДИА-2⟧"))
+
+
 # ─── Разбор документа ───────────────────────────────────────────────
 def test_parse_docx() -> None:
     print("Статья из документа Word")
@@ -810,6 +880,7 @@ def test_registry_wiring() -> None:
 def main() -> int:
     print("═" * 60)
     test_parse_docx()
+    test_doc_image()
     test_parse_plain()
     test_doc_links()
     test_long_title()

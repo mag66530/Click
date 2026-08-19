@@ -44,6 +44,12 @@ import post_text
 from build import BUILD  # noqa: F401
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+# Картинки в .docx: сама картинка лежит в word/media, а в тексте на неё
+# ссылается <a:blip r:embed="rId…"> внутри <w:drawing>. rId → файл берём из
+# word/_rels/document.xml.rels.
+A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+RELS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 GOOGLE_DOC_MIME = "application/vnd.google-apps.document"
@@ -201,6 +207,44 @@ def _heading_level(style: str) -> int:
     return int(m.group(1))
 
 
+def _image_rels(z: zipfile.ZipFile) -> dict:
+    """rId → путь к файлу картинки внутри архива (word/media/imageN.png)."""
+    try:
+        rels = ET.fromstring(z.read("word/_rels/document.xml.rels"))
+    except (KeyError, ET.ParseError):
+        return {}
+    out: dict[str, str] = {}
+    for rel in rels.findall(RELS + "Relationship"):
+        target = rel.get("Target") or ""
+        if "image" in (rel.get("Type") or "").lower() or "/media/" in target:
+            # Target вида «media/image1.png» относительно word/.
+            path = target if target.startswith("word/") else "word/" + target.lstrip("./")
+            out[rel.get("Id") or ""] = path
+    return out
+
+
+def _para_images(para: ET.Element, rels: dict, z: zipfile.ZipFile,
+                 warnings: list[str]) -> list[dict]:
+    """Картинки этого абзаца → блоки {"kind":"image", "data_b64":…, "ext":…}."""
+    import base64
+    out: list[dict] = []
+    for blip in para.iter(A + "blip"):
+        rid = blip.get(R + "embed") or blip.get(R + "link") or ""
+        path = rels.get(rid)
+        if not path:
+            continue
+        try:
+            raw = z.read(path)
+        except KeyError:
+            continue
+        ext = path.rsplit(".", 1)[-1].lower() if "." in path else "png"
+        if ext not in ("png", "jpg", "jpeg", "gif", "webp"):
+            ext = "png"
+        out.append({"kind": "image", "data_b64": base64.b64encode(raw).decode(),
+                    "ext": ext})
+    return out
+
+
 def _table_rows(tbl: ET.Element) -> list[list[str]]:
     """Таблица → строки ячеек простым текстом (для картинки разметка не нужна)."""
     rows: list[list[str]] = []
@@ -241,6 +285,7 @@ def parse_docx(raw: bytes) -> dict:
     if body is None:
         raise RuntimeError("В документе нет текста.")
 
+    rels = _image_rels(z)
     title = ""
     blocks: list[dict] = []
     warnings: list[str] = []
@@ -263,6 +308,14 @@ def parse_docx(raw: bytes) -> dict:
 
         if tag != "p":
             continue
+
+        # Картинка идёт на своём месте в тексте – блоком там же, где стоит в
+        # документе. Абзац с картинкой обычно без текста; если текст есть,
+        # картинка встаёт перед ним.
+        imgs = _para_images(el, rels, z, warnings) if rels else []
+        if imgs:
+            flush_list()
+            blocks.extend(imgs)
 
         runs = _runs(el)
         markup = post_text.runs_to_markup(runs).strip()
@@ -393,7 +446,7 @@ def plain_preview(article: dict, limit: int = 400) -> str:
 
 def counts(article: dict) -> dict:
     """Сколько чего в статье – для лога: «12 абзацев, 2 списка, 1 таблица»."""
-    out = {"para": 0, "head": 0, "list": 0, "table": 0, "chars": 0}
+    out = {"para": 0, "head": 0, "list": 0, "table": 0, "image": 0, "chars": 0}
     for b in article.get("blocks", []):
         out[b["kind"]] = out.get(b["kind"], 0) + 1
     out["chars"] = len(plain_preview(article, limit=10 ** 9))

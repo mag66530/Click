@@ -544,15 +544,38 @@ def ensure_studio(page, editor_url: str, email: str, log: Callable[[str], None])
 #  ТЕЛО СТАТЬИ: HTML И КАРТИНКИ ТАБЛИЦ
 # ════════════════════════════════════════════════════════════════════
 
+def media_token(idx: int) -> str:
+    """Метка-заполнитель на месте картинки/таблицы в тексте. Символы редкие,
+    чтобы не совпасть со словами статьи; по ней потом находим место и ставим
+    туда картинку."""
+    return f"⟦МЕДИА-{idx}⟧"
+
+
+def media_items(blocks: list[dict]) -> list[dict]:
+    """Картинки и таблицы статьи по порядку с их номером метки. Один и тот же
+    порядок и в blocks_to_html, и при вставке – значит метки совпадают."""
+    out: list[dict] = []
+    idx = 0
+    for b in blocks:
+        if b["kind"] in ("table", "image"):
+            idx += 1
+            item = dict(b)
+            item["token"] = media_token(idx)
+            out.append(item)
+    return out
+
+
 def blocks_to_html(blocks: list[dict]) -> str:
     """
     Блоки статьи → HTML для вставки в редактор.
 
-    Таблицы сюда НЕ попадают: редактор статей Дзена их не умеет, они уходят
-    картинками отдельным шагом. На месте таблицы остаётся пустой абзац-метка,
-    чтобы картинка встала именно туда, где таблица была в документе.
+    Картинки и таблицы сами по себе в HTML не идут (таблиц редактор Дзена не
+    умеет вовсе, картинку он принимает только вставкой файла). На их месте
+    остаётся абзац-метка ⟦МЕДИА-N⟧ – по ней отдельным шагом ставим картинку
+    ровно туда, где она стояла в документе.
     """
     out: list[str] = []
+    idx = 0
     for b in blocks:
         if b["kind"] == "para":
             out.append(f"<p>{post_text.to_html(b['markup'])}</p>")
@@ -562,6 +585,9 @@ def blocks_to_html(blocks: list[dict]) -> str:
         elif b["kind"] == "list":
             items = "".join(f"<li>{post_text._esc_html(i)}</li>" for i in b["items"])
             out.append(f"<ul>{items}</ul>")
+        elif b["kind"] in ("table", "image"):
+            idx += 1
+            out.append(f"<p>{post_text._esc_html(media_token(idx))}</p>")
     return "".join(out)
 
 
@@ -696,6 +722,7 @@ def _type_blocks_into(page, field, blocks: list[dict]) -> None:
         page.wait_for_timeout(300)
     except Exception:  # noqa: BLE001
         pass
+    idx = 0
     for b in blocks:
         if b["kind"] == "para":
             text = post_text.strip_markup(b["markup"])
@@ -703,6 +730,10 @@ def _type_blocks_into(page, field, blocks: list[dict]) -> None:
             text = b["text"]
         elif b["kind"] == "list":
             text = "\n".join(f"• {i}" for i in b["items"])
+        elif b["kind"] in ("table", "image"):
+            # Метка на месте картинки/таблицы – по ней потом встанет картинка.
+            idx += 1
+            text = media_token(idx)
         else:
             continue
         page.keyboard.type(text, delay=1)
@@ -742,10 +773,16 @@ def _image_insert_controls(page, log: Callable[[str], None]) -> None:
         pass
 
 
-def _paste_image_into(page, field, path: str, log: Callable[[str], None]) -> bool:
+def _paste_image_into(page, field, path: str, log: Callable[[str], None],
+                      token: str = "") -> bool:
     """Вставить картинку в поле как Ctrl+V из буфера – через DataTransfer с
     настоящим File. Многие редакторы (в т.ч. дзеновский) картинку из вставки
-    разбирают сами, и файловое поле для этого не нужно."""
+    разбирают сами, и файловое поле для этого не нужно.
+
+    Если задан `token` (метка ⟦МЕДИА-N⟧), сначала ВЫДЕЛЯЕМ этот абзац-метку и
+    вставку шлём в него – картинка встаёт ровно на место метки и заменяет её.
+    Так таблица-картинка и картинка из документа оказываются там же, где были
+    в исходнике, а не в начале статьи."""
     if field is None:
         return False
     try:
@@ -754,59 +791,90 @@ def _paste_image_into(page, field, path: str, log: Callable[[str], None]) -> boo
         handle = field.element_handle()
         if handle is None:
             return False
-        before = _field_text(field)
-        handle.evaluate(
-            """(el, b64) => {
+        before_imgs = page.locator("img").count()
+        placed = handle.evaluate(
+            """(el, args) => {
+                const [b64, token] = args;
                 el.focus();
+                let atToken = false;
+                if (token) {
+                    // Ищем абзац-метку и выделяем его целиком – вставка заменит.
+                    const all = [...el.querySelectorAll('*')];
+                    const mark = all.find(n => (n.textContent || '').trim() === token);
+                    if (mark) {
+                        const range = document.createRange();
+                        range.selectNodeContents(mark);
+                        const sel = window.getSelection();
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                        atToken = true;
+                    }
+                }
                 const bin = atob(b64);
                 const arr = new Uint8Array(bin.length);
                 for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-                const file = new File([arr], 'table.png', { type: 'image/png' });
+                const file = new File([arr], 'image.png', { type: 'image/png' });
                 const dt = new DataTransfer();
                 dt.items.add(file);
                 const ev = new ClipboardEvent('paste', {
                     bubbles: true, cancelable: true, clipboardData: dt });
                 el.dispatchEvent(ev);
-            }""", data)
-        # Картинка грузится на сервер Дзена – ждём, пока в поле что-то прибавится.
-        for _ in range(10):
+                return atToken;
+            }""", [data, token])
+        if token and not placed:
+            log(f"🔬 метку {token} в тексте не нашёл – картинка встанет, но не на своём месте")
+        # Картинка грузится на сервер Дзена – ждём, пока появится новый <img>.
+        ok = False
+        for _ in range(12):
             page.wait_for_timeout(600)
-            if page.locator("img").count() and _field_text(field) != before:
-                return True
-        return bool(page.locator("img").count())
+            if page.locator("img").count() > before_imgs:
+                ok = True
+                break
+        # Подчистим метку, если она осталась (вставка не «съела» выделение).
+        if token:
+            try:
+                handle.evaluate(
+                    """(el, token) => {
+                        for (const n of [...el.querySelectorAll('*')])
+                            if ((n.textContent || '').trim() === token) n.remove();
+                    }""", token)
+            except Exception:  # noqa: BLE001
+                pass
+        return ok or page.locator("img").count() > before_imgs
     except Exception as e:  # noqa: BLE001
         log(f"🔬 вставка картинкой из буфера не прошла – {type(e).__name__}: {e}")
         return False
 
 
 def _attach_image(page, path: str, log: Callable[[str], None] | None = None,
-                  field=None) -> bool:
+                  field=None, token: str = "") -> bool:
     """
     Отдать картинку редактору. У статей Дзена нет открытого <input type=file>
-    (живой прогон 19.08: «файловых полей 0»), поэтому идём несколькими путями:
-    сперва существующее файловое поле, затем вставкой из буфера прямо в текст.
-    Что нашли по дороге – пишем в лог, чтобы доводить прицельно.
+    (живой прогон 19.08: «файловых полей 0»), поэтому вставляем картинку прямо
+    в текст через буфер, на место метки ⟦МЕДИА-N⟧ (token) – туда, где она была
+    в документе. Файловое поле пробуем первым, если вдруг появится.
     """
     log = log or (lambda m: None)
-    # 1) Готовое файловое поле, если вдруг есть.
-    try:
-        inputs = page.locator(SEL["file_input"][0])
-        cnt = inputs.count()
-        log(f"🔬 _attach_image: файловых полей на странице: {cnt}")
-        if cnt:
-            inputs.first.set_input_files(path)
-            page.wait_for_timeout(3_000)
-            return True
-    except Exception as e:  # noqa: BLE001
-        log(f"🔬 _attach_image: файловое поле не сработало – {type(e).__name__}: {e}")
+    # 1) Готовое файловое поле, если вдруг есть (в текст на место метки его не
+    #    направить, поэтому пользуемся только когда метки нет).
+    if not token:
+        try:
+            inputs = page.locator(SEL["file_input"][0])
+            cnt = inputs.count()
+            log(f"🔬 _attach_image: файловых полей на странице: {cnt}")
+            if cnt:
+                inputs.first.set_input_files(path)
+                page.wait_for_timeout(3_000)
+                return True
+        except Exception as e:  # noqa: BLE001
+            log(f"🔬 _attach_image: файловое поле не сработало – {type(e).__name__}: {e}")
+        _image_insert_controls(page, log)
 
-    # 2) Смотрим, чем редактор вообще вставляет картинку (для лога и разбора).
-    _image_insert_controls(page, log)
-
-    # 3) Вставка картинкой из буфера прямо в тело статьи.
-    log("🔬 _attach_image: пробую вставить картинку в текст как Ctrl+V")
-    if _paste_image_into(page, field, path, log):
-        log("🔬 _attach_image: картинка ушла вставкой в текст")
+    # 2) Вставка картинкой из буфера прямо в тело статьи (на место метки).
+    where = f"на место {token}" if token else "в текст"
+    log(f"🔬 _attach_image: вставляю картинку {where} через буфер")
+    if _paste_image_into(page, field, path, log, token):
+        log(f"🔬 _attach_image: картинка вставлена {where}")
         return True
     return False
 
@@ -1373,14 +1441,24 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
 
     with sync_playwright() as pw:
         import vk_social as _vk
-        browser = yb._launch(pw, engine, headless=headless, extra_args=_vk.ANTIBOT_ARGS)
+        # Когда человек смотрит (headless=False), окно раскрываем на весь экран
+        # и не навязываем свой размер вьюпорта – иначе окно публикации Дзена не
+        # помещается и «ничего не видно». В облаке (headless) размер задаём сами.
+        extra = list(_vk.ANTIBOT_ARGS)
+        if not headless:
+            extra += ["--start-maximized", "--window-position=0,0"]
+        browser = yb._launch(pw, engine, headless=headless, extra_args=extra)
         page = None
         try:
-            context = browser.new_context(
-                storage_state=str(src),
-                viewport={"width": 1440, "height": 950}, user_agent=yb.UA,
+            ctx_kwargs = dict(
+                storage_state=str(src), user_agent=yb.UA,
                 locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS,
                 timezone_id=TIMEZONE_ID)
+            if headless:
+                ctx_kwargs["viewport"] = {"width": 1600, "height": 1000}
+            else:
+                ctx_kwargs["no_viewport"] = True   # окно во весь экран
+            context = browser.new_context(**ctx_kwargs)
             context.add_init_script(_vk.ANTIBOT_INIT)
             page = context.new_page()
 
@@ -1445,7 +1523,8 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
             html = blocks_to_html(blocks)
             info = zen_doc.counts(article)
             log(f"Вставляю текст: {info['chars']} знаков, {info['para']} абзацев, "
-                f"{info['head']} подзаголовков, {info['list']} списков")
+                f"{info['head']} подзаголовков, {info['list']} списков, "
+                f"{info.get('table', 0)} таблиц, {info.get('image', 0)} картинок")
             body.click()
             page.wait_for_timeout(400)
             if not _paste_html_into(page, body, html):
@@ -1454,26 +1533,37 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
                 _type_blocks_into(page, body, blocks)
             page.wait_for_timeout(2_500)
 
-            # ─── Таблицы картинками ───
-            tables = [b for b in blocks if b["kind"] == "table"]
-            for n, tbl in enumerate(tables, 1):
-                rows = tbl.get("rows") or []
-                log(f"Таблица {n} из {len(tables)}: {len(rows)} строк – рисую картинкой")
-                shot_path = temp / f"zen-table-{n}.png"
-                made = render_table_png(context, rows, shot_path, log)
-                if not made:
-                    log(f"🔬 Таблица {n}: картинку снять НЕ удалось (см. причину выше)")
-                    warnings.append(f"Таблицу {n} вставить не удалось – "
-                                    "добавьте её картинкой руками в черновике.")
-                    log(f"⚠️ Таблица {n} не вставилась")
-                    continue
-                log(f"🔬 Таблица {n}: картинка готова ({shot_path.name}), отдаю редактору")
-                if not _attach_image(page, made, log, field=body):
-                    warnings.append(f"Таблицу {n} вставить не удалось – "
-                                    "добавьте её картинкой руками в черновике.")
-                    log(f"⚠️ Таблица {n} не вставилась")
+            # ─── Картинки и таблицы на свои места ───
+            # Идём по метке каждого медиа-блока (⟦МЕДИА-N⟧) в тексте: таблицу
+            # рисуем картинкой, картинку из документа раскодируем – и ставим
+            # ровно туда, где стояла метка. Обратный порядок не важен: каждая
+            # метка своя.
+            import base64 as _b64
+            media = media_items(blocks)
+            if media:
+                log(f"Картинок и таблиц в статье: {len(media)} – ставлю на свои места")
+            for k, m in enumerate(media, 1):
+                token = m["token"]
+                if m["kind"] == "table":
+                    rows = m.get("rows") or []
+                    log(f"Таблица ({len(rows)} строк) → картинкой на место {token}")
+                    made = render_table_png(context, rows, temp / f"zen-media-{k}.png", log)
+                    what = "Таблицу"
                 else:
-                    log(f"✓ Таблица {n} отдана редактору картинкой")
+                    log(f"Картинка из документа → на место {token}")
+                    made = str(temp / f"zen-media-{k}.{m.get('ext', 'png')}")
+                    try:
+                        Path(made).write_bytes(_b64.b64decode(m["data_b64"]))
+                    except Exception as e:  # noqa: BLE001
+                        log(f"🔬 картинку из документа не раскодировал – {type(e).__name__}: {e}")
+                        made = ""
+                    what = "Картинку"
+                if not made or not _attach_image(page, made, log, field=body, token=token):
+                    warnings.append(f"{what} на месте {token} вставить не удалось – "
+                                    "добавьте её руками в черновике.")
+                    log(f"⚠️ {what} на месте {token} не вставилась")
+                else:
+                    log(f"✓ {what} поставил на место {token}")
 
             page.wait_for_timeout(1_500)
 

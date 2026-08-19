@@ -1468,6 +1468,14 @@ def _apply_links_native(page, text_sel: str, link_spans: list[dict],
         except Exception as e:  # noqa: BLE001 – ссылка не должна ронять прогон
             log(f"  ссылку вставить не вышло: {e}")
             continue
+    # Страховка: если окно ссылки осталось открытым, оно перекрыло бы поле и
+    # повесило следующий шаг (так ОК и упал 12:55). Закрываем его БЕЗ Escape
+    # (Escape у ОК схлопывает всю форму) – мягким кликом обратно в поле: у ОК
+    # всплывашка ссылки закрывается кликом вне её. Коротко и без падения.
+    try:
+        page.click(text_sel, timeout=2_500)
+    except Exception:  # noqa: BLE001
+        pass
     return done
 
 
@@ -1689,23 +1697,37 @@ def _type_post_text(page, text_sel: str, text: str,
     if not bold_spans and not link_spans:
         return "plain"
 
-    # 2. ПОРЯДОК: сначала ссылки, потом жирный. Родной редактор ссылок ОК,
-    #    вешая <a>, сбрасывает уже наложенный жирный – и «нашем сайте»
-    #    выходило ссылкой, но не жирным. Жирный ПОСЛЕ ссылки ложится поверх и
-    #    уцелевает; на остальные куски порядок не влияет.
+    # 2. ПОРЯДОК: сначала ЖИРНЫЙ, потом ссылка – так у ОК проверено рабочим
+    #    прогоном. Обратный порядок (ссылка первой) сломал ОК: окно вставки
+    #    ссылки открывалось на свежем тексте, портило его («разметка изменила
+    #    текст»), оставалось открытым и вешало откат на 30 c (прогон 12:55).
+    #    Ссылка у ОК всё равно пока не встаёт (0 из 1) и падает мягко, а
+    #    «нашем сайте» жирным делает шаг ниже – заказчице этого и надо.
+    #    (У МАКС наоборот – ссылка первой; там она встаёт и сбрасывает жирный,
+    #    поэтому жирный кладём поверх. Площадки разные, порядок у них разный.)
+    bold_done = _apply_bold(page, text_sel, bold_spans, log) if bold_spans else 0
+
+    # 2б. Ссылки – родным редактором ссылок ОК (свой <a> он выбрасывает).
     links_done = _apply_links_native(page, text_sel, link_spans, log, project_id) \
         if link_spans else 0
-
-    # 2б. Жирный – выделяем кусок мышью и жмём Ctrl+B / кнопку «Ж», как рукой.
-    bold_done = _apply_bold(page, text_sel, bold_spans, log) if bold_spans else 0
 
     # 3. Проверка по факту: и текст цел, и разметка на месте.
     got = in_field()
     if letters(got) != letters(plain) or _lines(got) != _lines(plain):
         log("  разметка изменила текст – убираю её, оставляю обычный текст")
         _clear_editor(page, text_sel)
-        page.click(text_sel)
-        page.type(text_sel, plain, delay=8)
+        # Клик по полю с КОРОТКИМ ожиданием: если окно ссылки осталось поверх
+        # и перекрыло поле, ждать его 30 c бессмысленно – прогон падал именно
+        # тут (прогон 12:55). Не докликались – набираем через клавиатуру: она
+        # печатает в тот элемент, что в фокусе, поле кликать необязательно.
+        try:
+            page.click(text_sel, timeout=4_000)
+        except Exception:  # noqa: BLE001
+            log("  поле перекрыто – печатаю без клика по нему")
+        try:
+            page.keyboard.type(plain, delay=8)
+        except Exception:  # noqa: BLE001
+            page.type(text_sel, plain, delay=8)
         if project_id:
             _save_editor_markup(page, text_sel, project_id, log)
         return "plain"

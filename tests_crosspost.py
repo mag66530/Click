@@ -228,9 +228,14 @@ def test_inline_format() -> None:
     import max_browser as mb
     import ok_browser as ok
     ok_flow = inspect.getsource(ok._type_post_text)
-    check("ОК: сначала ссылки, потом жирный",
-          ok_flow.index("_apply_links_native") < ok_flow.index("_apply_bold(page"))
+    # ОК: ЖИРНЫЙ первым, ссылка второй. Обратный порядок ломал ОК — окно
+    # ссылки на свежем тексте портило его и вешало откат на 30 c.
+    check("ОК: сначала жирный, потом ссылка",
+          ok_flow.index("_apply_bold(page") < ok_flow.index("_apply_links_native"))
     check("ОК берёт подготовку из inline_format", "inline_format(" in ok_flow)
+    check("ОК: откат по полю с коротким ожиданием (не виснет 30 c)",
+          "timeout=4_000" in ok_flow)
+    # МАКС: ссылка первой (Ctrl+K сбрасывает жирный, кладём жирный поверх).
     mb_fmt = inspect.getsource(mb._apply_max_format)
     check("МАКС: сначала ссылки, потом жирный",
           mb_fmt.index("_add_max_link") < mb_fmt.index('press("Control+b")'))

@@ -233,6 +233,17 @@ def test_inline_format() -> None:
     check("ссылка ИМП уцелела как цель",
           a4 == [("нашем сайте", "https://inmetprom.ru")], str(a4))
 
+    # Анкор из реестра ставим «также»: сайтовую фразу «нашем сайте» держим
+    # жирной по договорённости, а произвольный анкор («сеткой кладочной»)
+    # жирним ТОЛЬКО если он и в реестре жирный.
+    p5, b5, a5 = pt.inline_format("пополнился [сеткой кладочной](https://a.ru/cat) разных")
+    check("непомеченный анкор из реестра — ссылка без жирного",
+          b5 == [] and a5 == [("сеткой кладочной", "https://a.ru/cat")], f"{b5} {a5}")
+    p6, b6, a6 = pt.inline_format("Заказ на [нашем сайте](https://a.ru).")
+    check("сайтовая фраза «нашем сайте» жирная всегда", b6 == ["нашем сайте"], str(b6))
+    p7, b7, a7 = pt.inline_format("**[сеткой кладочной](https://a.ru/cat)** тут")
+    check("помеченный жирным в реестре анкор — жирный", b7 == ["сеткой кладочной"], str(b7))
+
     # ОК и МАКС применяют формат в порядке «ссылка → жирный».
     import inspect
     import max_browser as mb
@@ -439,6 +450,41 @@ def test_google_bold_utf16() -> None:
                                       {"startIndex": 7, "format": {"bold": True}},
                                       {"startIndex": 10, "format": {"bold": False}}]})
           is not None)
+
+    # ── Анкор ИЗ РЕЕСТРА: заказчица помечает слово гиперссылкой прямо в
+    # таблице, и Click ставит ровно её (не угадывает адрес). Читается из тех
+    # же textFormatRuns, что и жирное (format.link.uri).
+    b = "пополнился сеткой кладочной разных"
+    i, j = b.index("сеткой кладочной"), b.index("сеткой кладочной") + len("сеткой кладочной")
+    linkcell = {
+        "userEnteredValue": {"stringValue": b},
+        "textFormatRuns": [
+            {"startIndex": 0, "format": {}},
+            {"startIndex": i, "format": {"link": {"uri": "https://a.ru/cat"}}},
+            {"startIndex": j, "format": {}},
+        ],
+    }
+    mk = cp._google_cell_markup(linkcell)
+    check("ссылка из реестра стала анкором [слово](адрес)",
+          "[сеткой кладочной](https://a.ru/cat)" in mk, mk)
+    check("не помеченное жирным ссылкой — НЕ жирное",
+          "**[сеткой кладочной]" not in mk, mk)
+    # Жирное И ссылка на одном слове → **[слово](адрес)**.
+    linkbold = {
+        "userEnteredValue": {"stringValue": b},
+        "textFormatRuns": [
+            {"startIndex": 0, "format": {}},
+            {"startIndex": i, "format": {"bold": True, "link": {"uri": "https://a.ru/cat"}}},
+            {"startIndex": j, "format": {}},
+        ],
+    }
+    check("жирная ссылка из реестра → **[слово](адрес)**",
+          "**[сеткой кладочной](https://a.ru/cat)**" in cp._google_cell_markup(linkbold))
+    # Обычный пост без единой ссылки в ячейке — разметка не изменилась.
+    plaincell = {"userEnteredValue": {"stringValue": "Просто текст без ссылок"},
+                 "textFormatRuns": [{"startIndex": 0, "format": {"bold": False}}]}
+    check("ячейка без ссылок остаётся как была",
+          cp._google_cell_markup(plaincell) == "Просто текст без ссылок")
 
 
 def test_vk_domain() -> None:

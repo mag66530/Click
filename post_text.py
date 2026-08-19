@@ -269,13 +269,26 @@ def drop_trailing_bare(markup: str) -> str:
     return "".join(out)
 
 
-def bold_anchors(markup: str) -> str:
+def bold_anchors(markup: str, phrases: tuple[str, ...] = AUTOLINK_PHRASES) -> str:
     """
-    Анкор сделать ещё и жирным: «нашем сайте» должно гореть и жирным. Уже
-    жирные (**…**) второй раз не оборачиваем.
+    Сайтовую фразу-анкор сделать ещё и жирной: «нашем сайте» горит и жирным –
+    это давняя договорённость, её держим всегда, откуда бы ссылка ни пришла.
+
+    А вот ОСТАЛЬНЫЕ анкоры, размеченные прямо в реестре (например «сеткой
+    кладочной»), жирными НЕ делаем принудительно: заказчица размечает в
+    таблице отдельно жирное и отдельно ссылку, и Click должен ставить «также»
+    – линк линком, а жирный только там, где он в реестре и стоит (такой анкор
+    приходит уже как **[…](…)** и трогать его не надо).
+
+    Уже жирные (**…**) второй раз не оборачиваем.
     """
-    rx = re.compile(r"(?<!\*)\[[^\]\n]+\]\((https?://[^\s)]+)\)(?!\*)")
-    return rx.sub(lambda m: f"**{m.group(0)}**", markup)
+    rx = re.compile(r"(?<!\*)\[([^\]\n]+)\]\((https?://[^\s)]+)\)(?!\*)")
+    low = tuple(p.lower() for p in phrases)
+
+    def wrap(m: "re.Match") -> str:
+        return f"**{m.group(0)}**" if m.group(1).strip().lower() in low else m.group(0)
+
+    return rx.sub(wrap, markup)
 
 
 def inline_format(markup: str) -> tuple[str, list[str], list[tuple[str, str]]]:

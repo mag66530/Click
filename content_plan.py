@@ -296,18 +296,59 @@ def _u16_index_map(base: str) -> list[int]:
     return m
 
 
+def _run_link_uri(fmt: dict) -> str:
+    """Адрес ссылки этого куска, если на нём в таблице стоит гиперссылка."""
+    uri = ((fmt or {}).get("link") or {}).get("uri") or ""
+    return uri.strip()
+
+
+def _rich_runs_to_markup(runs: list[tuple[str, bool, str]]) -> str:
+    """
+    Куски (текст, жирный, адрес) → разметка `**[ярлык](адрес)**`.
+
+    Пока ни на одном куске нет ссылки – отдаём ровно как раньше
+    (post_text.runs_to_markup), чтобы обычные посты не менялись ни на символ.
+    Как только появляется хоть одна ссылка, собираем разметку сами: слово-
+    анкор из таблицы становится `[слово](адрес)`, а если оно ещё и жирное –
+    `**[слово](адрес)**`. Ведущие и хвостовые пробелы выносим за маркеры,
+    иначе они попадут внутрь ярлыка/жирного и «съедут» при вставке.
+    """
+    import post_text
+    if not any(uri for _, _, uri in runs):
+        return post_text.runs_to_markup([(t, b) for t, b, _ in runs])
+    out: list[str] = []
+    for text, bold, uri in runs:
+        if not text:
+            continue
+        core = text.strip()
+        if not core:                       # кусок из одних пробелов
+            out.append(text)
+            continue
+        lead = text[:len(text) - len(text.lstrip())]
+        trail = text[len(text.rstrip()):]
+        seg = f"[{core}]({uri})" if uri else core
+        if bold:
+            seg = f"**{seg}**"
+        out.append(lead + seg + trail)
+    return "".join(out)
+
+
 def _google_cell_markup(v: dict) -> str:
     """
-    Ячейка из сетки Sheets API → строка с разметкой жирного.
+    Ячейка из сетки Sheets API → строка с разметкой жирного И ссылок.
 
-    Жирные куски Google отдаёт как textFormatRuns: каждый кусок начинается со
-    startIndex и тянется до начала следующего. Текст до первого куска (и
-    ячейка вовсе без кусков) живёт форматом самой ячейки –
-    effectiveFormat.textFormat.bold.
+    Жирные куски и гиперссылки Google отдаёт одним списком textFormatRuns:
+    каждый кусок начинается со startIndex и тянется до начала следующего, а
+    его формат несёт и `bold`, и `link.uri`. Текст до первого куска (и ячейка
+    вовсе без кусков) живёт форматом самой ячейки – effectiveFormat.textFormat.
+
+    Ссылки читаем ОТТУДА ЖЕ, что и жирное: заказчица отмечает анкор прямо в
+    реестре гиперссылкой на слове («сеткой кладочной», «нашем сайте»), и Click
+    ставит ровно её – а не угадывает адрес и не тащит его голым в скобках.
 
     ВАЖНО: startIndex – в единицах UTF-16, а не питоновских символах. Перед
-    нарезкой переводим их через _u16_index_map, иначе после эмодзи у жирных
-    кусков отваливается первая буква (см. её докстринг).
+    нарезкой переводим их через _u16_index_map, иначе после эмодзи у кусков
+    отваливается первая буква (см. её докстринг).
     """
     import post_text
     base = ((v.get("userEnteredValue") or {}).get("stringValue"))
@@ -330,17 +371,19 @@ def _google_cell_markup(v: dict) -> str:
             return len(base)
         return u16[u16_idx]
 
-    runs: list[tuple[str, bool]] = []
+    runs: list[tuple[str, bool, str]] = []
     first = fmt_runs[0].get("startIndex", 0)
     if first > 0:
-        runs.append((base[:py_at(first)], cell_bold))
+        runs.append((base[:py_at(first)], cell_bold, ""))
     for i, run in enumerate(fmt_runs):
         start = py_at(run.get("startIndex", 0))
         end = (py_at(fmt_runs[i + 1].get("startIndex", 0))
                if i + 1 < len(fmt_runs) else len(base))
-        bold = (run.get("format") or {}).get("bold")
-        runs.append((base[start:end], cell_bold if bold is None else bool(bold)))
-    return post_text.runs_to_markup(runs)
+        fmt = run.get("format") or {}
+        bold = fmt.get("bold")
+        runs.append((base[start:end], cell_bold if bold is None else bool(bold),
+                     _run_link_uri(fmt)))
+    return _rich_runs_to_markup(runs)
 
 
 def load_from_google(sheet_url: str, brand: str) -> list[dict]:
@@ -392,9 +435,12 @@ def load_from_google(sheet_url: str, brand: str) -> list[dict]:
 
     grid = requests.get(base, params={
         "ranges": f"'{title}'",
+        # textFormatRuns несёт и жирное, и ссылку (format.link.uri) – просим
+        # оба явно, чтобы анкоры из реестра точно приезжали, а не «иногда».
         "fields": ("sheets.data.rowData.values("
                    "formattedValue,userEnteredValue.stringValue,"
-                   "textFormatRuns,effectiveFormat.textFormat.bold)"),
+                   "textFormatRuns(startIndex,format(bold,link)),"
+                   "effectiveFormat.textFormat.bold)"),
     }, headers=headers, timeout=90)
     if grid.status_code != 200:
         raise RuntimeError(f"Не удалось прочитать лист «{title}»: HTTP {grid.status_code}")

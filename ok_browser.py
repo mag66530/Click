@@ -1410,6 +1410,53 @@ def _drop_selection(page, text_sel: str) -> None:
         pass
 
 
+# Убрать лишний пробел ПЕРЕД точкой (или иным знаком) сразу за ссылкой.
+#
+# ОК, вшивая ссылку своим «ярлыком», вставляет за ней служебный пробел –
+# и в тексте «…на нашем сайте.» получается «…на нашем сайте .» (заказчица
+# 19.08.2026). Убираем ровно этот пробел: берём текстовый узел, что идёт
+# сразу за ссылкой и начинается с пробелов + знака препинания, и срезаем
+# у него ведущие пробелы. Трогаем ТОЛЬКО текст после ссылки и ТОЛЬКО когда
+# следом знак препинания – обычные пробелы между словами не задеваем.
+_FIX_SPACE_JS = r"""
+(sel) => {
+  const el = document.querySelector(sel);
+  if (!el) return 0;
+  const isLink = (n) => n && n.nodeType === 1 &&
+    (n.tagName === 'A' || n.hasAttribute('data-link') ||
+     n.hasAttribute('data-link-id') || !!n.querySelector('a,[data-link]'));
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+  const fixed = [];
+  let node;
+  while ((node = walker.nextNode())) {
+    const m = /^[  \t]+(?=[.,;:!?…»)])/.exec(node.nodeValue || '');
+    if (!m) continue;
+    let prev = node.previousSibling;
+    while (prev && prev.nodeType === 3 && !(prev.nodeValue || '').trim()) {
+      prev = prev.previousSibling;
+    }
+    if (!isLink(prev)) continue;
+    fixed.push(node);
+  }
+  for (const n of fixed) {
+    n.nodeValue = n.nodeValue.replace(/^[  \t]+(?=[.,;:!?…»)])/, '');
+  }
+  return fixed.length;
+}
+"""
+
+
+def _fix_space_before_punct(page, text_sel: str,
+                            log: Callable[[str], None]) -> None:
+    """Срезать пробел, что ОК ставит между ссылкой и следующим знаком."""
+    try:
+        n = page.evaluate(_FIX_SPACE_JS, text_sel)
+    except Exception:  # noqa: BLE001
+        return
+    if n:
+        log(f"  убрал лишний пробел перед знаком после ссылки ({n})")
+
+
 # Проверка, что анкор с нашим адресом реально появился в поле.
 _HAS_LINK_JS = r"""
 (args) => {
@@ -1733,6 +1780,11 @@ def _type_post_text(page, text_sel: str, text: str,
     #     любую всплывшую панель (шаг ниже), а сверка текста стала мягкой.
     links_done = _apply_links_native(page, text_sel, link_spans, log, project_id) \
         if link_spans else 0
+
+    # После ссылки ОК оставляет служебный пробел перед точкой
+    # («…нашем сайте .») – срезаем его, пока текст ещё не сохранён.
+    if links_done:
+        _fix_space_before_punct(page, text_sel, log)
 
     # Погасить выделение и панель форматирования ОК. Она всплывает на любое
     # выделение (и от жирного, и от попытки ссылки) и, оставшись, перекрывает

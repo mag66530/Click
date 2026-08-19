@@ -129,6 +129,23 @@ def _has_ok(cookies: list) -> bool:
     return bool(names & set(OK_AUTH) or names - OK_GUEST)
 
 
+def _has_tg(state: dict) -> bool:
+    """
+    Есть ли в снимке вход в Телеграм (Web A).
+
+    Как у МАКС: вход живёт в localStorage домена web.telegram.org (ключи
+    dcN_auth_key, user_auth), а не в куках. Смотрим и раздел origins.
+    """
+    for o in state.get("origins") or []:
+        if "web.telegram.org" in str(o.get("origin", "")) and o.get("localStorage"):
+            return True
+    for c in state.get("cookies") or []:
+        if "telegram.org" in str(c.get("domain", "")) and c.get("value"):
+            if str(c.get("name", "")) not in ("stel_ln", "stel_dt"):
+                return True
+    return False
+
+
 def _open_like_human(context, url: str):
     """
     Открыть адрес КЛИКОМ ПО ССЫЛКЕ, а не командой перехода.
@@ -264,7 +281,7 @@ def main() -> int:
         # ШАГ 3 – МАКС. Отложка там родная (у бота её нет вовсе), поэтому
         # сессия нужна такая же, как у ВК и ОК.
         print("\n" + "─" * 62)
-        print("ШАГ 3 из 3. Открываю МАКС в третьей вкладке.")
+        print("ШАГ 3 из 4. Открываю МАКС в третьей вкладке.")
         print("Войдите по номеру телефона: кнопка под QR-кодом, галочка")
         print("«я не робот», код из СМС. Не нужен МАКС? Просто Enter.")
         print()
@@ -281,6 +298,25 @@ def main() -> int:
             print("   Откройте web.max.ru сами в этом же окне.")
 
         input("\nВошли в МАКС (или он не нужен)? Нажмите Enter… ")
+
+        # ШАГ 4 – ТЕЛЕГРАМ. Отложка родная (у бота её нет), пишем во ВСЕ каналы
+        # с одного аккаунта-админа. Важно: именно веб-версия /a/ – заказчица
+        # входит по QR с телефона. Вход Телеграма живёт в localStorage, и
+        # storage_state его заберёт, как у МАКС.
+        print("\n" + "─" * 62)
+        print("ШАГ 4 из 4. Открываю Телеграм (веб-версия /a/) в четвёртой вкладке.")
+        print("Войдите по QR-коду: в приложении на телефоне «Настройки» →")
+        print("«Устройства» → «Подключить устройство» и наведите на QR.")
+        print("Аккаунт должен быть АДМИНОМ каналов, куда планируем посты.")
+        print("Не нужен Телеграм? Просто Enter.")
+        print("─" * 62)
+        try:
+            _open_like_human(context, "https://web.telegram.org/a/")
+        except Exception as exc:          # noqa: BLE001 – ВК/ОК/МАКС уже добыты
+            print(f"\n⚠️  Вкладку с Телеграмом открыть не вышло ({exc}).")
+            print("   Откройте web.telegram.org/a/ сами в этом же окне.")
+
+        input("\nВошли в Телеграм (или он не нужен)? Нажмите Enter… ")
 
         try:
             state = context.storage_state()
@@ -320,6 +356,13 @@ def main() -> int:
         print("   ℹ️  МАКС: входа не видно. Если проверка «я не робот» так и не")
         print("      показала галочку – обновите страницу МАКС (F5) и повторите:")
         print("      виджет проверки иногда не рисуется с первого раза.")
+
+    if _has_tg(state):
+        print("   Телеграм: вход есть")
+    else:
+        print("   ℹ️  Телеграм: входа не видно. Убедитесь, что открыли именно")
+        print("      web.telegram.org/a/ и увидели свои чаты после QR. Если")
+        print("      осталась страница с QR – вход не завершился, повторите.")
 
     print("\nТеперь загрузите ЭТОТ ОДИН файл в Click:")
     print("  «Настройки» → «Файл сессий ВК и ОК» → «Загрузить»")

@@ -1,19 +1,21 @@
 """
-social_session.py – один файл сессий на обе сети, ВК и ОК.
+social_session.py – один файл сессий на все сети: ВК, ОК, МАКС и Телеграм.
 
-Зачем. Куки ВК и ОК снимаются ОДНИМ браузером за ОДИН заход: вошли в ВК,
-следом в ОК (он и пускает-то через ВК) – и всё лежит в одном storage_state.
-Делить это на два файла и заставлять человека вставлять их в два разных
-окошка – работа на ровном месте. Предложение заказчицы: «может, одним
-входом оба куки собирать, в один файлик, и один раз вставлять».
+Зачем. Куки снимаются ОДНИМ браузером за ОДИН заход: вошли в ВК, следом в
+ОК (он и пускает-то через ВК), в МАКС и в Телеграм – и всё лежит в одном
+storage_state. Делить это на четыре файла и заставлять человека вставлять
+их в четыре разных окошка – работа на ровном месте. Предложение заказчицы:
+«может, одним входом все куки собирать, в один файлик, и один раз вставлять».
 
 Так и делаем. Файл принимается один, а Click сам раскладывает куки по
-сетям и говорит, что нашёл: «ВК принят, ОК принят» либо честно – чего в
-файле не оказалось.
+сетям и говорит, что нашёл: «ВК принят, ОК принят…» либо честно – чего в
+файле не оказалось. Один аккаунт – админ всех каналов – пишет во все сети.
 
 Разбор по домену, а не по именам кук: имена площадки меняют, домены – нет.
 Куки VK ID (id.vk, login.vk, connect.vk) кладём В ОБА набора: через них ОК
-и пускает, и без них его сессия живёт недолго.
+и пускает, и без них его сессия живёт недолго. У МАКС и Телеграма вход живёт
+в localStorage (раздел origins), а не в куках, – поэтому origins тоже
+раскладываем по сетям.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from build import BUILD  # noqa: F401
 VK_DOMAINS = ("vk.ru", "vk.com", "vkontakte", "userapi.com")
 OK_DOMAINS = ("ok.ru", "odnoklassniki")
 MAX_DOMAINS = ("max.ru", "oneme.ru")
+TG_DOMAINS = ("web.telegram.org", "telegram.org")
 # Общий вход: VK ID. Нужен обеим сетям – ОК входит через него.
 SHARED_DOMAINS = ("id.vk", "login.vk", "connect.vk", "oauth.vk")
 
@@ -34,9 +37,9 @@ def _has(domain: str, marks) -> bool:
     return any(m in domain for m in marks)
 
 
-def split_state(state: dict) -> tuple[dict, dict, dict]:
+def split_state(state: dict) -> tuple[dict, dict, dict, dict]:
     """
-    Общий storage_state → (сессия ВК, сессия ОК, сессия МАКС).
+    Общий storage_state → (сессия ВК, сессия ОК, сессия МАКС, сессия Телеграма).
 
     Куки, не относящиеся ни к одной сети (счётчики, реклама), отбрасываем:
     в файле сессии им делать нечего, а размер они раздувают.
@@ -44,6 +47,7 @@ def split_state(state: dict) -> tuple[dict, dict, dict]:
     vk: dict = {"cookies": [], "origins": []}
     ok: dict = {"cookies": [], "origins": []}
     mx: dict = {"cookies": [], "origins": []}
+    tg: dict = {"cookies": [], "origins": []}
     for cookie in state.get("cookies") or []:
         domain = str(cookie.get("domain", "")).lower()
         if _has(domain, SHARED_DOMAINS):
@@ -56,17 +60,21 @@ def split_state(state: dict) -> tuple[dict, dict, dict]:
             ok["cookies"].append(cookie)
         if _has(domain, MAX_DOMAINS):
             mx["cookies"].append(cookie)
+        if _has(domain, TG_DOMAINS):
+            tg["cookies"].append(cookie)
     for origin in state.get("origins") or []:
         where = str(origin.get("origin", "")).lower()
-        if _has(where, MAX_DOMAINS):
-            # У МАКС вход живёт в localStorage, а не только в куках –
-            # без origins его сессия выглядела бы пустой.
+        if _has(where, TG_DOMAINS):
+            # У Телеграма (Web A) вход живёт в localStorage, а не в куках –
+            # без origins его сессия выглядела бы пустой, как у МАКС.
+            tg["origins"].append(origin)
+        elif _has(where, MAX_DOMAINS):
             mx["origins"].append(origin)
         elif _has(where, OK_DOMAINS):
             ok["origins"].append(origin)
         elif _has(where, VK_DOMAINS + SHARED_DOMAINS):
             vk["origins"].append(origin)
-    return vk, ok, mx
+    return vk, ok, mx, tg
 
 
 def import_combined(project_id: str, raw: bytes) -> tuple[bool, str]:
@@ -79,6 +87,7 @@ def import_combined(project_id: str, raw: bytes) -> tuple[bool, str]:
     """
     import max_browser
     import ok_browser
+    import tg_browser
     import vk_social
 
     try:
@@ -89,13 +98,14 @@ def import_combined(project_id: str, raw: bytes) -> tuple[bool, str]:
         return False, ("В файле нет раздела cookies. Нужен storage_state "
                        "Playwright – его сохраняет VHOD-VK-i-OK.py.")
 
-    vk_state, ok_state, max_state = split_state(data)
+    vk_state, ok_state, max_state, tg_state = split_state(data)
     said = []
     took = False
 
     for label, state, importer in (("ВК", vk_state, vk_social.import_session),
                                    ("ОК", ok_state, ok_browser.import_session),
-                                   ("МАКС", max_state, max_browser.import_session)):
+                                   ("МАКС", max_state, max_browser.import_session),
+                                   ("Телеграм", tg_state, tg_browser.import_session)):
         if not state["cookies"] and not state["origins"]:
             said.append(f"{label}: куки этой сети в файле не найдены")
             continue

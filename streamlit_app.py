@@ -58,7 +58,7 @@ _OWN_MODULES = ("build", "apptime", "paths", "projects_data", "repo_store", "ui_
                 "content_plan", "crosspost_plan", "crosspost_state",
                 "crosspost_form", "post_text",
                 "scheduler", "social_session", "vk_social", "ok_browser",
-                "ok_social", "tg_social", "max_social", "max_browser",
+                "ok_social", "tg_social", "tg_browser", "max_social", "max_browser",
                 # Дзен: студия автора (браузер) и разбор статьи из документа.
                 "zen_browser", "zen_doc")
 
@@ -390,6 +390,7 @@ def _session_files(project_id: str) -> tuple[tuple[str, Path], ...]:
     """
     import max_browser
     import ok_browser
+    import tg_browser
     import vk_social
 
     return ((f"session-{project_id}", yb.session_path(project_id)),
@@ -397,7 +398,8 @@ def _session_files(project_id: str) -> tuple[tuple[str, Path], ...]:
             (f"session-gis-{project_id}", gis.session_path(project_id)),
             (f"session-vk-{project_id}", vk_social.session_path(project_id)),
             (f"session-ok-{project_id}", ok_browser.session_path(project_id)),
-            (f"session-max-{project_id}", max_browser.session_path(project_id)))
+            (f"session-max-{project_id}", max_browser.session_path(project_id)),
+            (f"session-tg-{project_id}", tg_browser.session_path(project_id)))
 
 
 def _push_session(project_id: str) -> None:
@@ -406,6 +408,7 @@ def _push_session(project_id: str) -> None:
         return
     import max_browser
     import ok_browser
+    import tg_browser
     import vk_social
 
     alive_by_name = {
@@ -414,8 +417,9 @@ def _push_session(project_id: str) -> None:
         f"session-vk-{project_id}": vk_social.has_saved_session,
         f"session-ok-{project_id}": ok_browser.has_saved_session,
         f"session-max-{project_id}": max_browser.has_saved_session,
+        f"session-tg-{project_id}": tg_browser.has_saved_session,
     }
-    where_by_name = {"gis": "2ГИС", "vk": "ВК", "ok": "ОК", "max": "МАКС"}
+    where_by_name = {"gis": "2ГИС", "vk": "ВК", "ok": "ОК", "max": "МАКС", "tg": "Телеграма"}
     for name, path in _session_files(project_id):
         alive = alive_by_name.get(name)
         if not path.exists() or (alive and not alive(project_id)):
@@ -4057,19 +4061,19 @@ def _crosspost_forget_block(project_id: str, upcoming: list[dict], state: dict) 
 
 def _crosspost_channels_block(project_id: str, config: dict) -> None:
     """Каналы мессенджеров бренда. Токены ботов – в «Ключах к веб-сервисам»."""
-    import tg_social
-
     with st.expander("💬 Каналы Телеграма и МАКС"):
-        st.warning("Телеграм сейчас выключен: Click его не формирует и в час "
-                   "выхода в него ничего не отправляет – в плане он помечен "
-                   "«вручную». Каналы храним, чтобы не вводить заново, когда "
-                   "Телеграм доделаем.", icon="⏸")
+        st.caption("Телеграм ставится **родной отложкой** через веб-версию под "
+                   "аккаунтом-админом – как ВК, ОК и МАКС: время держит сам "
+                   "Телеграм, Click в час выхода не нужен. Вход – в «Файл сессий» "
+                   "(один аккаунт на все сети), каналы бренда – здесь. Адрес "
+                   "канала: @имя для публичного или ссылка-приглашение t.me/+… "
+                   "для закрытого (аккаунт должен быть админом канала).")
         c1, c2, c3 = st.columns(3)
         vals = {
             "tgChannelClient": c1.text_input("ТГ клиенты", value=config.get("tgChannelClient", ""),
                                              key=f"cp-tgc-{project_id}", placeholder="@stalmetural"),
             "tgChannelStaff": c2.text_input("ТГ сотрудники", value=config.get("tgChannelStaff", ""),
-                                            key=f"cp-tgs-{project_id}", placeholder="@SMUdaily"),
+                                            key=f"cp-tgs-{project_id}", placeholder="@SMUdaily или t.me/+…"),
             "maxChatId": c3.text_input("МАКС: id канала для бота (не обязательно)",
                                        value=config.get("maxChatId", ""),
                                        key=f"cp-max-{project_id}"),
@@ -4098,39 +4102,30 @@ def _crosspost_channels_block(project_id: str, config: dict) -> None:
         if any(vals[k].strip() != (config.get(k) or "") for k in vals):
             config.update({k: v.strip() for k, v in vals.items()})
             save_config(project_id)
-        if not tg_social.is_configured() and (vals["tgChannelClient"] or vals["tgChannelStaff"]):
-            st.caption("Токен бота Телеграма не заполнен – «Настройки» → «Ключи к веб-сервисам».")
-        _tg_access_check(project_id, config)
+        _tg_session_hint(project_id, config)
 
 
-def _tg_access_check(project_id: str, config: dict) -> None:
+def _tg_session_hint(project_id: str, config: dict) -> None:
     """
-    «Проверит ли бот каналы» – до часа выхода, а не в него.
+    Готов ли Телеграм к отложке: есть ли вход аккаунта и заданы ли каналы.
 
-    Публикация в Телеграм идёт ботом, и для неё мало токена: бот обязан
-    быть АДМИНИСТРАТОРОМ канала с правом отправки сообщений. Пока это не
-    сделано, пост просто не уйдёт – и узнать об этом в 11:00, когда он
-    должен был выйти, поздно. Кнопка спрашивает у Телеграма заранее.
+    Отложку теперь ставит браузер под аккаунтом (не бот), поэтому важен не
+    токен, а сохранённая сессия – та же, что у ВК/ОК/МАКС. Пробную отложку и
+    выверку доступа делает «🧪 Проверка отложки» соответствующего канала.
     """
-    import tg_social
+    import tg_browser
 
-    channels = [("клиенты", (config.get("tgChannelClient") or "").strip()),
-                ("сотрудники", (config.get("tgChannelStaff") or "").strip())]
-    channels = [(who, chat) for who, chat in channels if chat]
+    channels = [c for c in ((config.get("tgChannelClient") or "").strip(),
+                            (config.get("tgChannelStaff") or "").strip()) if c]
     if not channels:
         return
-    if not st.button("Проверить доступ бота в каналы", key=f"cp-tg-check-{project_id}"):
-        return
-    if not tg_social.is_configured():
-        st.error("Сначала заполните токен бота: «Настройки» → «Ключи к веб-сервисам» "
-                 "→ «Телеграм: токен бота». Берётся у @BotFather.")
-        return
-    for who, chat in channels:
-        why = tg_social.access_advice(chat)
-        if why:
-            st.error(f"{chat} ({who}): {why}")
-        else:
-            st.success(f"{chat} ({who}): бот на месте, публиковать может.")
+    if tg_browser.has_saved_session(project_id):
+        st.caption("✅ Вход в Телеграм есть – отложку можно ставить. Проверить "
+                   "механику одним постом: вкладка «🧪 Проверка отложки».")
+    else:
+        st.caption("⏸ Вход в Телеграм не сохранён. Соберите файл сессий "
+                   "(VHOD-VK-i-OK.py, шаг 4 – Телеграм по QR) и загрузите его в "
+                   "«Настройки» → «Файл сессий». Один аккаунт-админ – на все сети.")
 
 
 def _crosspost_scheduler_state(project_id: str) -> dict:
@@ -4186,6 +4181,7 @@ def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
     import crosspost_form
     import max_browser
     import ok_browser
+    import tg_browser
     import vk_social
     import zen_browser
 
@@ -4202,20 +4198,26 @@ def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
     # пускает сессия Яндекса, та же, что публикует Яндекс.Бизнес.
     zen_ready = bool(zen_browser.has_saved_session(project_id)
                      and (config.get("zenStudioUrl") or "").strip())
-    msg_by_net = {net: crosspost_form.pending_for(upcoming, state, net)
-                  for net, chat in channels.items() if chat}
+    # Телеграм – теперь тоже родной отложкой через веб. Сессия одна на аккаунт
+    # (тот же файл сессий, что ВК/ОК/МАКС), а каналов два – клиенты и сотрудники.
+    tg_ready = tg_browser.has_saved_session(project_id)
+    tg_nets = {net: chat for net, chat in channels.items()
+               if net in ("tg-client", "tg-staff") and chat}
+    msg_by_net = ({net: crosspost_form.pending_for(upcoming, state, net)
+                   for net in tg_nets} if tg_ready else {})
     return {
         "channels": channels,
         "vk_ready": vk_ready,
         "ok_ready": ok_ready,
         "max_ready": max_ready,
         "zen_ready": zen_ready,
+        "tg_ready": tg_ready,
         "vk": crosspost_form.pending_for(upcoming, state, "vk") if vk_ready else [],
         "ok": crosspost_form.pending_for(upcoming, state, "ok") if ok_ready else [],
         "max": crosspost_form.pending_for(upcoming, state, "max") if max_ready else [],
         "zen": crosspost_form.pending_for(upcoming, state, "zen") if zen_ready else [],
-        # Плоским списком – для счётчика «ТГ: 6» (пост×площадка), по сетям –
-        # чтобы у выбора постов было видно, куда именно поедет этот пост.
+        # Плоским списком – для счётчика «ТГ: 6» (пост×канал), по сетям –
+        # чтобы у выбора постов было видно, в какой канал поедет этот пост.
         "msg_by_net": msg_by_net,
         "msg": [p for posts in msg_by_net.values() for p in posts],
     }
@@ -4278,21 +4280,23 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
     channels = todo["channels"]
     vk_ready, ok_ready, max_ready = todo["vk_ready"], todo["ok_ready"], todo["max_ready"]
     zen_ready = todo["zen_ready"]
+    tg_ready = todo.get("tg_ready", False)
     vk_todo, ok_todo, max_todo, msg_todo = todo["vk"], todo["ok"], todo["max"], todo["msg"]
     zen_todo = todo["zen"]
     if not vk_todo and not ok_todo and not max_todo and not zen_todo and not msg_todo:
         # Рядом с кнопками объяснение не живёт: hints=False зовут из строки
         # состояния, где нужна одна кнопка и ничего больше. Подсказка про вход
         # показывается в «Подключениях», где её и ищут.
-        if hints and not (vk_ready or ok_ready or max_ready or zen_ready):
-            st.caption("Формирование ВК, ОК, МАКС и Дзена появится после входа: "
-                       "«Настройки» → блоки входа в соцсети.")
+        if hints and not (vk_ready or ok_ready or max_ready or zen_ready or tg_ready):
+            st.caption("Формирование ВК, ОК, МАКС, Дзена и Телеграма появится после "
+                       "входа: «Настройки» → блоки входа в соцсети и «Файл сессий».")
         return
 
     parts = _crosspost_form_parts(todo)
-    # Дзен тоже ходит браузером, поэтому занятость прогоном касается и его.
+    # ВК, ОК, МАКС, Дзен и Телеграм ходят браузером, поэтому занятость прогоном
+    # касается их всех.
     busy = (runner.busy_reason(project_id, "publish")
-            if (vk_todo or ok_todo or max_todo or zen_todo) else "")
+            if (vk_todo or ok_todo or max_todo or zen_todo or msg_todo) else "")
     if busy:
         st.caption(f"Поставить отложенные посты ({', '.join(parts)}): сейчас нельзя – {busy}.")
         return
@@ -4351,11 +4355,17 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
         # несколько аккаунтов, и паспорт спрашивает, каким входить.
         zen_former = functools.partial(crosspost_form.form_zen_all,
                                        email=(config.get("email") or "").strip())
+        msg_by_net = what.get("msg_by_net") or {}
         for net_name, net_todo, former, url_key in (
                 ("ВК", what["vk"], crosspost_form.form_vk_all, "vkGroupUrl"),
                 ("ОК", what["ok"], crosspost_form.form_ok_all, "okGroupUrl"),
                 ("МАКС", what["max"], crosspost_form.form_max_all, "maxWebUrl"),
-                ("Дзен", what.get("zen") or [], zen_former, "zenStudioUrl")):
+                ("Дзен", what.get("zen") or [], zen_former, "zenStudioUrl"),
+                # Телеграм – два канала, оба родной отложкой через веб-версию.
+                ("ТГ клиенты", msg_by_net.get("tg-client") or [],
+                 crosspost_form.form_tg_client_all, "tgChannelClient"),
+                ("ТГ сотрудники", msg_by_net.get("tg-staff") or [],
+                 crosspost_form.form_tg_staff_all, "tgChannelStaff")):
             if not net_todo:
                 continue
             say(f"— {net_name}: постов к формированию {len(net_todo)}")
@@ -4495,6 +4505,17 @@ PROBE_NETWORKS = {
             "probe_hint": "Можно вставить ссылку на Google Документ – Click разберёт "
                           "его на заголовок, абзацы, списки и таблицы. Или оставить "
                           "текст: первая строка станет заголовком статьи."},
+    # Телеграм – два канала, но проба у обоих одна механика: сессия аккаунта
+    # (тот же файл сессий) и адрес канала. Отдельные записи – чтобы можно было
+    # проверить каждый канал по отдельности.
+    "tg-staff": {"ru": "Телеграм (сотрудники)", "module": "tg_browser",
+                 "url_key": "tgChannelStaff",
+                 "where": "«Настройки» → «Файл сессий» и поле «ТГ сотрудники»",
+                 "shelf": "«Отложенные сообщения» канала"},
+    "tg-client": {"ru": "Телеграм (клиенты)", "module": "tg_browser",
+                  "url_key": "tgChannelClient",
+                  "where": "«Настройки» → «Файл сессий» и поле «ТГ клиенты»",
+                  "shelf": "«Отложенные сообщения» канала"},
 }
 
 

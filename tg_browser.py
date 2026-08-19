@@ -1,0 +1,876 @@
+"""
+tg_browser.py – Телеграм: вход с сохранением сессии и РОДНАЯ отложка поста
+через веб-версию (web.telegram.org/a/, «Web A»).
+
+Зачем браузер, если есть бот (tg_social.py). У бота Телеграма отложки нет
+вовсе: бот шлёт «сейчас», а время держит планировщик Click – значит Click
+обязан работать в час выхода, и пост уходил не в том виде (13.08.2026,
+из-за этого публикацию ботом и выключили). Через веб-версию под аккаунтом
+отложка РОДНАЯ: пост держит и публикует сам Телеграм, а Click в это время
+может быть выключен. Ровно как у ВК, ОК, МАКС и Дзена – их родные отложки
+Click ставит браузером и в час выхода не притрагивается.
+
+Как это делает человек (веб-версия /a/, со слов заказчицы 19.08.2026):
+  1. открыть web.telegram.org/a/, папка «Соц сети» → нужный канал
+  2. вписать текст в поле поста, выделить жирным, вставить анкор
+  3. картинку – скрепкой, лишнюю карточку ссылки убрать крестиком
+  4. ПРАВОЙ кнопкой по кружку «Отправить» → «Отправить позже»
+     (левой нельзя: пост уйдёт сразу)
+  5. в календаре выбрать день, затем часы и минуты
+  6. нажать «Отправить <дата> в ЧЧ:ММ» / «Отправить сегодня в ЧЧ:ММ»
+  7. Телеграм уводит в «Отложенные сообщения» – пост там
+
+Селекторы – из исходников Web A (проект telegram-tt): там классы читаемые
+и устойчивые (`.CalendarModal`, `.calendar-grid .day-button`, `.timepicker`,
+`#editable-message-text`), не хешированные. Всё равно держимся за role,
+id и текст, а не за оформление: у сборки может смениться что угодно.
+
+Правило то же, что у ВК/ОК/МАКС: успех считаем по ответу площадки (окно
+отложки закрылось, открылись «Отложенные»), а не по тому, что «клик прошёл».
+И главное правило поля чата: НИ ОДНОЙ клавиши, которая может отправить, –
+текст вставляем одним insert_text, переносы строк не печатаем.
+"""
+
+from __future__ import annotations
+
+import re
+from datetime import datetime
+from pathlib import Path
+from typing import Callable
+from urllib.parse import quote
+
+import paths
+import yb_playwright as yb
+
+# Метка сборки – одна на всё приложение (см. build.py).
+from build import BUILD  # noqa: F401
+
+BASE = "https://web.telegram.org"
+APP = f"{BASE}/a/"                       # «Web A»: заказчица входит именно сюда
+TIMEZONE_ID = "Asia/Yekaterinburg"
+
+SEL = {
+    # Поле поста – contenteditable. У Web A устойчивый id, за него и держимся.
+    "text": ("#editable-message-text",
+             'div[contenteditable="true"][role="textbox"]',
+             '.message-input-wrapper [contenteditable="true"]',
+             '.Composer [contenteditable="true"]'),
+    # Кружок «Отправить». ЛЕВОЙ кнопкой не жмём никогда – пост уйдёт сразу.
+    "send": ("button.send", ".Composer button.send", ".send-button",
+             'button[aria-label*="Отправить"]', 'button[aria-label*="Send"]'),
+    # Пункт меню под правым кликом по «Отправить».
+    "schedule_item": ('.MenuItem:has-text("Отправить позже")',
+                      '[role="menuitem"]:has-text("Отправить позже")',
+                      'text="Отправить позже"',
+                      '.MenuItem:has-text("Schedule")',
+                      'text="Schedule Message"'),
+    # Скрепка вложений.
+    "attach": ('.Composer button[aria-label*="Attach"]',
+               'button[aria-label*="Прикрепить"]',
+               '.Composer .icon-attach', 'button:has(.icon-attach)'),
+    "file_input": 'input[type="file"]',
+    # Окно календаря отложки Web A.
+    "modal": (".CalendarModal",),
+    "modal_header": (".CalendarModal h4", ".CalendarModal .modal-header"),
+    "month_prev": (".CalendarModal button:has(.icon-previous)",),
+    "month_next": (".CalendarModal button:has(.icon-next)",),
+    "time_inputs": (".CalendarModal .timepicker input",
+                    ".CalendarModal input.form-control"),
+    # Куда Телеграм уводит после успеха.
+    "scheduled_page": ("Отложенные сообщения", "Отложенные", "Scheduled"),
+}
+
+# Экран входа/QR – по нему видно, что сессия не действует.
+LOGIN_MARKS = ("Log in by QR", "Log in by phone", "Войти по номеру",
+               "Отсканируйте", "Scan the QR", "QR-код", "Открыть Telegram",
+               "Please scan")
+# Аккаунт не в канале (для админа канала не появляется, но пусть будет).
+JOIN_MARKS = ("Вступить", "Join Channel", "Подписаться", "Join Group")
+
+# Куки, которые web.telegram.org отдаёт кому угодно. Признак входа определяем
+# от обратного – как у ОК и МАКС: угадывать имена бесполезно, их меняют, а
+# вход у Web A всё равно живёт в localStorage, а не в куках.
+GUEST_COOKIES = frozenset({"stel_ln", "stel_dt"})
+
+
+def session_path(project_id: str) -> Path:
+    d = paths.data_root() / project_id / "session"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "tg-state.json"
+
+
+def cookie_names(cookies: list) -> list[str]:
+    return sorted({str(c.get("name", "")) for c in cookies or [] if c.get("value")})
+
+
+def looks_logged_in(state: dict) -> bool:
+    """
+    Похоже ли, что в файле сессия вошедшего.
+
+    У Web A вход, как и у МАКС, живёт в localStorage (ключи dcN_auth_key,
+    user_auth и подобные), а не в куках. Playwright сохраняет localStorage в
+    разделе origins – туда и смотрим, иначе живая сессия выглядела бы пустой.
+    """
+    cookies = state.get("cookies") or []
+    if set(cookie_names(cookies)) - GUEST_COOKIES:
+        return True
+    for origin in state.get("origins") or []:
+        if "web.telegram.org" in str(origin.get("origin", "")) and origin.get("localStorage"):
+            return True
+    return False
+
+
+def has_saved_session(project_id: str) -> bool:
+    fp = session_path(project_id)
+    if not fp.exists():
+        return False
+    try:
+        import json
+        return looks_logged_in(json.loads(fp.read_text(encoding="utf-8")))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def import_session(project_id: str, raw: bytes) -> tuple[bool, str]:
+    """Принять готовый файл сессии Телеграма (storage_state Playwright)."""
+    import json
+
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except Exception as e:  # noqa: BLE001
+        return False, f"Это не файл сессии: {e}"
+    if not isinstance(data, dict) or "cookies" not in data:
+        return False, "В файле нет раздела cookies – нужен storage_state Playwright."
+    if not looks_logged_in(data):
+        found = ", ".join(cookie_names(data.get("cookies") or [])[:12]) or "ни одной"
+        return False, ("В файле нет признаков входа в Телеграм – похоже, он снят у "
+                       f"гостя. Что нашли: {found}. Войдите в Телеграм по QR "
+                       "(web.telegram.org/a/) в окне из VHOD-VK-i-OK.py и "
+                       "сохраните сессию заново.")
+    session_path(project_id).write_text(json.dumps(data, ensure_ascii=False),
+                                        encoding="utf-8")
+    return True, f"Сессия Телеграма принята: {len(data.get('cookies') or [])} куки."
+
+
+# ─── Адрес канала → чем его открыть в Web A ──────────────────────────
+def canonical_tme(chat: str) -> str:
+    """
+    Значение из «Настроек» → ссылка t.me, которую понимает deep-link Web A.
+
+    Принимаем всё, чем человек мог записать канал:
+      @stalmetural            → https://t.me/stalmetural   (публичный)
+      t.me/stalmetural        → https://t.me/stalmetural
+      https://t.me/+HASH      → https://t.me/+HASH         (приватный, по инвайту)
+      +HASH / stalmetural     → достраиваем t.me сами
+    Прямой адрес web.telegram.org возвращаем пустым: его открываем как есть.
+    """
+    c = (chat or "").strip()
+    if not c:
+        return ""
+    if "web.telegram.org" in c:
+        return ""
+    if c.startswith(("http://", "https://")):
+        return c
+    if c.startswith("t.me/"):
+        return "https://" + c
+    if c.startswith("@"):
+        return "https://t.me/" + c[1:]
+    # «+HASH», «joinchat/HASH» или голое имя – в любом случае t.me/<как есть>.
+    return "https://t.me/" + c.lstrip("/")
+
+
+def search_token(chat: str) -> str:
+    """
+    Чем искать канал в поиске Web A, если deep-link не открыл его.
+
+    Для @имени и t.me/имени – само имя. Для приватного инвайта (t.me/+HASH,
+    joinchat) поиском не найти – возвращаем пусто. Иначе считаем, что это
+    название канала, и ищем по нему.
+    """
+    tme = canonical_tme(chat)
+    if tme:
+        tail = tme.split("t.me/")[-1] if "t.me/" in tme else ""
+        if tail and not tail.startswith(("+", "joinchat")):
+            return tail.strip("/")
+        if tail:
+            return ""
+    c = (chat or "").strip()
+    if c.startswith("@"):
+        return c[1:]
+    if c.startswith(("+", "http", "t.me/")):
+        return ""
+    return c
+
+
+def deep_link(chat: str) -> str:
+    """Адрес Web A, открывающий нужный канал сразу при загрузке приложения."""
+    if "web.telegram.org" in (chat or ""):
+        return chat.strip()
+    tme = canonical_tme(chat)
+    if not tme:
+        return APP
+    return f"{APP}#?tgaddr=" + quote(tme, safe="")
+
+
+# ─── Мелкие помощники браузера ──────────────────────────────────────
+def _debug_shot(project_id: str, page, name: str) -> bytes | None:
+    """Снимок в момент неудачи – картинкой, чтобы показать её человеку."""
+    try:
+        blob = page.screenshot(type="png", full_page=False)
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        d = paths.data_root() / project_id / "crosspost"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"tg-debug-{name}.png").write_bytes(blob)
+    except OSError:
+        pass
+    return blob
+
+
+def _save_diag(project_id: str, page, name: str) -> None:
+    """Разметку области сохраняем рядом с логом – по ней доводим селекторы."""
+    try:
+        d = paths.data_root() / project_id / "crosspost"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"tg-{name}.html").write_text(
+            page.evaluate("() => document.body.innerHTML.slice(0, 80000)") or "",
+            encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _first_visible(page, candidates) -> str:
+    """Первый кандидат, который ВИДЕН. Пусто – ни одного."""
+    if isinstance(candidates, str):
+        candidates = (candidates,)
+    for sel in candidates:
+        try:
+            if page.locator(sel).first.is_visible(timeout=900):
+                return sel
+        except Exception:  # noqa: BLE001
+            continue
+    return ""
+
+
+def _click_first(page, candidates, timeout: int = 8_000) -> str:
+    if isinstance(candidates, str):
+        candidates = (candidates,)
+    for sel in candidates:
+        try:
+            el = page.locator(sel).first
+            if el.count() and el.is_visible():
+                el.click(timeout=timeout)
+                return sel
+        except Exception:  # noqa: BLE001
+            continue
+    return ""
+
+
+def _body_text(page) -> str:
+    try:
+        return page.evaluate("() => document.body ? (document.body.innerText || '') : ''") or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+# ─── Открыть канал ──────────────────────────────────────────────────
+COMPOSER_WAIT_S = 75            # Web A – SPA: сначала пусто, потом дорисует чат
+
+
+def _wait_for_composer(page, log: Callable[[str], None] | None = None,
+                       timeout_s: int = COMPOSER_WAIT_S) -> str:
+    """Дождаться поля ввода поста, а не заглянуть один раз и уйти."""
+    log = log or (lambda m: None)
+    said = 0
+    for waited in range(timeout_s):
+        sel = _first_visible(page, SEL["text"])
+        if sel:
+            if waited:
+                log(f"Телеграм дорисовал чат за {waited} с")
+            return sel
+        if waited and waited - said >= 15:
+            said = waited
+            log(f"Жду, пока Телеграм загрузится… ({waited} с)")
+        page.wait_for_timeout(1_000)
+    return ""
+
+
+def _why_no_composer(page) -> str:
+    """Почему поля ввода так и не появилось – ответ по тому, ЧТО на экране."""
+    body = _body_text(page)
+    seen = " ".join(body.split())
+    if any(m in body for m in LOGIN_MARKS):
+        return ("Телеграм показывает экран входа (QR/номер) – сессия не "
+                "действует. Соберите файл сессий заново: войдите в "
+                "web.telegram.org/a/ по QR в окне из VHOD-VK-i-OK.py и загрузите "
+                "файл в «Настройках». Пост НЕ отправлен")
+    if any(m in body for m in JOIN_MARKS):
+        return ("Телеграм предлагает вступить в канал – аккаунт в нём не состоит "
+                "или не админ. Добавьте аккаунт администратором канала с правом "
+                "публикации. Пост НЕ отправлен")
+    if len(seen) < 40:
+        return ("Телеграм так и не загрузился – на снимке пустой экран. Из "
+                "облака это бывает: попробуйте сформировать на своём компьютере, "
+                "там же, где делали файл сессий")
+    return ("Не нашли поле ввода поста в Телеграме. На экране было: "
+            f"«{seen[:160]}». Пост НЕ отправлен")
+
+
+def _open_channel(page, chat: str, project_id: str,
+                  log: Callable[[str], None]) -> str:
+    """
+    Открыть канал бренда. Возвращает селектор поля ввода или '' с записью
+    причины в лог (её же вернёт _why_no_composer снаружи).
+
+    Сначала deep-link Web A (#?tgaddr=…) – он открывает и публичный @канал, и
+    приватный по инвайту, если аккаунт уже в нём. Не вышло – заходим через
+    поиск, как руками: печатаем имя канала и открываем первый результат.
+    """
+    target = deep_link(chat)
+    log(f"Открываю канал: {chat}")
+    try:
+        page.goto(target, wait_until="domcontentloaded", timeout=60_000)
+    except Exception as e:  # noqa: BLE001
+        log(f"  deep-link не открылся ({e}) – пробую через поиск")
+
+    sel = _wait_for_composer(page, log)
+    if sel:
+        return sel
+
+    token = search_token(chat)
+    if not token:
+        return ""                        # приватный инвайт: поиском не найти
+    log(f"  канал не открылся напрямую – ищу по имени «{token}»")
+    try:
+        page.goto(APP, wait_until="domcontentloaded", timeout=60_000)
+        page.wait_for_timeout(3_000)
+        search = _first_visible(page, ('input#telegram-search-input',
+                                       '.LeftMain input[type="text"]',
+                                       '#LeftColumn input[type="text"]',
+                                       'input[type="text"]'))
+        if not search:
+            _save_diag(project_id, page, "no-search")
+            return ""
+        page.locator(search).first.click()
+        page.locator(search).first.fill(token)
+        page.wait_for_timeout(2_500)
+        opened = _click_first(page, ('.chat-list .ListItem-button',
+                                     '.LeftSearch .ListItem-button',
+                                     '.ListItem-button', '.chat-item-clickable'),
+                              timeout=6_000)
+        if not opened:
+            _save_diag(project_id, page, "no-search-result")
+            return ""
+    except Exception as e:  # noqa: BLE001
+        log(f"  поиск канала не удался: {e}")
+        return ""
+    return _wait_for_composer(page, log)
+
+
+# ─── Ввод текста и разметки в поле поста ────────────────────────────
+def _letters(s: str) -> str:
+    return re.sub(r"\W", "", s or "", flags=re.U).lower()
+
+
+def _probe(line: str) -> str:
+    return _letters(line)[:32]
+
+
+def _editor_text(page, sel: str) -> str:
+    for _ in range(2):
+        try:
+            return page.eval_on_selector(
+                sel, "el => el.innerText != null ? el.innerText : (el.value || '')") or ""
+        except Exception:  # noqa: BLE001
+            page.wait_for_timeout(250)
+    return ""
+
+
+def _clear_editor(page, sel: str) -> bool:
+    """Опустошить поле перед вводом. Ни одной клавиши, которая может отправить."""
+    for _ in range(3):
+        try:
+            page.locator(sel).first.click(timeout=5_000)
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Backspace")
+        except Exception:  # noqa: BLE001
+            pass
+        if not _editor_text(page, sel).strip():
+            return True
+        page.wait_for_timeout(250)
+    return not _editor_text(page, sel).strip()
+
+
+# Разметка накладывается НА ГОТОВЫЙ текст (жирный/ссылки) – так же, как у ОК:
+# сначала вставляем обычный текст целым, потом выделяем куски и включаем им
+# формат средствами самого редактора. Текст при этом не переписываем, чтобы
+# он не пострадал.
+_MARK_JS = """
+(args) => {
+  const el = document.querySelector(args.sel);
+  if (!el) return {error: 'нет поля'};
+  const build = () => {
+    const nodes = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let full = '';
+    while (w.nextNode()) { nodes.push([w.currentNode, full.length]); full += w.currentNode.nodeValue; }
+    return {nodes, full};
+  };
+  const rangeFor = (map, from, to) => {
+    const at = (pos, end) => {
+      for (const [node, start] of map.nodes) {
+        const len = node.nodeValue.length;
+        if (pos >= start && pos <= start + len) {
+          if (pos === start + len && !end) continue;
+          return [node, pos - start];
+        }
+      }
+      return null;
+    };
+    const a = at(from, false), b = at(to, true);
+    if (!a || !b) return null;
+    const r = document.createRange();
+    r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]);
+    return r;
+  };
+  let done = 0, missed = 0;
+  for (const span of args.spans) {
+    const map = build();
+    const idx = map.full.indexOf(span.text);
+    if (idx < 0) { missed++; continue; }
+    const r = rangeFor(map, idx, idx + span.text.length);
+    if (!r) { missed++; continue; }
+    const sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(r);
+    el.focus();
+    try {
+      if (span.kind === 'link') document.execCommand('createLink', false, span.url);
+      else document.execCommand('bold', false, null);
+      done++;
+    } catch (e) { missed++; }
+  }
+  const sel = window.getSelection();
+  if (sel) sel.removeAllRanges();
+  el.dispatchEvent(new Event('input', {bubbles: true}));
+  return {done, missed,
+          bold: el.querySelectorAll('b, strong').length,
+          links: el.querySelectorAll('a[href]').length,
+          text: el.innerText || el.textContent || ''};
+}
+"""
+
+
+def _fill_post_text(page, sel: str, markup: str,
+                    log: Callable[[str], None]) -> str:
+    """
+    Вписать текст поста и наложить разметку реестра (жирный, анкор).
+    Возвращает '' при успехе, иначе причину отказа словами.
+
+    Порядок – как у человека и как у ОК: сначала обычный текст ОДНИМ куском
+    (insert_text, не печать: в поле чата каждый перевод строки – Enter, то
+    есть «отправить»), потом поверх – формат. Разметку проверяем по факту:
+    легла или нет; не легла – остаётся обычный текст, без звёздочек.
+    """
+    import post_text
+
+    chunks = post_text.plain_chunks(markup)
+    plain = "".join(t for t, _ in chunks)
+    filled = [ln for ln in plain.split("\n") if _probe(ln)]
+
+    if not _clear_editor(page, sel):
+        return ("Поле поста в Телеграме не очистилось – в нём остался текст "
+                "прошлой попытки. Ничего не вводим: иначе пост уйдёт склеенным")
+
+    # 1. Обычный текст – всегда, при любом исходе разметки.
+    page.keyboard.insert_text(plain)
+    page.wait_for_timeout(400)
+    got = _editor_text(page, sel)
+    seen = _letters(got)
+    missing = [what for what, line in (("начало", filled[0] if filled else ""),
+                                       ("конец", filled[-1] if filled else ""))
+               if line and _probe(line) not in seen]
+    if missing:
+        return (f"В поле Телеграма не видно {missing[0]} текста после ввода. "
+                "Отложку не ставим")
+
+    # 2. Разметка поверх готового текста.
+    spans = [{"kind": "bold", "text": t.strip()} for t, bold in chunks
+             if bold and len(t.strip()) > 1]
+    spans += [{"kind": "link", "text": t, "url": u}
+              for t, u in post_text.anchor_spans(markup)]
+    if spans:
+        try:
+            res = page.evaluate(_MARK_JS, {"sel": sel, "spans": spans}) or {}
+        except Exception as e:  # noqa: BLE001 – разметка не должна ронять прогон
+            res = {"error": str(e)}
+        if res.get("error"):
+            log(f"  разметку наложить не вышло ({res['error']}) – текст обычный")
+        else:
+            want_bold = sum(1 for s in spans if s["kind"] == "bold")
+            want_links = sum(1 for s in spans if s["kind"] == "link")
+            log(f"  разметка: жирных {res.get('bold', 0)}/{want_bold}, "
+                f"ссылок {res.get('links', 0)}/{want_links}")
+            # Текст не должен измениться ни на букву – иначе убираем формат.
+            if _letters(res.get("text", "")) != _letters(plain):
+                log("  разметка изменила текст – возвращаю обычный")
+                _clear_editor(page, sel)
+                page.keyboard.insert_text(plain)
+    log(f"  текст вписан ({len([l for l in got.split(chr(10)) if l.strip()])} строк)")
+    return ""
+
+
+# ─── Вложения ───────────────────────────────────────────────────────
+def _attach_photos(page, image_paths: list[str], project_id: str,
+                   log: Callable[[str], None]) -> str:
+    """
+    Прикрепить фото. '' при успехе, иначе причина.
+
+    В Web A самый надёжный путь – отдать файлы скрытому input[type=file],
+    а не гонять меню «Фото или видео»: меню у сборок разное, а скрытый input
+    один. После выбора Телеграм открывает окно предпросмотра с полем подписи
+    и своей кнопкой отправки – её и будем искать дальше.
+    """
+    try:
+        with page.expect_file_chooser(timeout=6_000) as picked:
+            if not _click_first(page, SEL["attach"], timeout=5_000):
+                raise RuntimeError("нет скрепки")
+            # Часть сборок сразу открывает выбор файла, часть – меню с пунктом.
+            _click_first(page, ('text="Photo or Video"', 'text="Фото или видео"',
+                                'text="Фото или Видео"'), timeout=2_500)
+        picked.value.set_files(image_paths)
+    except Exception:  # noqa: BLE001 – пробуем скрытое поле напрямую
+        inp = page.locator(SEL["file_input"])
+        if not inp.count():
+            _save_diag(project_id, page, "no-file-input")
+            return "Не нашли, куда отдать файлы фото в Телеграме"
+        try:
+            inp.first.set_input_files(image_paths)
+        except Exception as e:  # noqa: BLE001
+            return f"Файл фото не принялся: {e}"
+    page.wait_for_timeout(2_000)
+    return ""
+
+
+# ─── Календарь и время ──────────────────────────────────────────────
+_MONTHS = (("январ", 1), ("феврал", 2), ("март", 3), ("апрел", 4),
+           ("мая", 5), ("май", 5), ("июн", 6), ("июл", 7), ("август", 8),
+           ("сентябр", 9), ("октябр", 10), ("ноябр", 11), ("декабр", 12))
+
+
+def month_year(header: str) -> tuple[int, int]:
+    """«Август 2026» / «августа 2026 г.» → (8, 2026). Не разобрали – (0, 0)."""
+    low = (header or "").lower()
+    year = re.search(r"(20\d\d)", low)
+    for prefix, num in _MONTHS:
+        if prefix in low:
+            return num, int(year.group(1)) if year else 0
+    return 0, 0
+
+
+def _modal_header(page) -> str:
+    for sel in SEL["modal_header"]:
+        try:
+            el = page.locator(sel).first
+            if el.count():
+                t = (el.inner_text() or "").strip()
+                if t:
+                    return t
+        except Exception:  # noqa: BLE001
+            continue
+    return ""
+
+
+_CLICK_DAY_JS = r"""
+(day) => {
+  const modal = document.querySelector('.CalendarModal');
+  if (!modal) return {ok: false, why: 'нет окна календаря'};
+  const grid = modal.querySelector('.calendar-grid') || modal;
+  const want = String(day);
+  for (const c of Array.from(grid.querySelectorAll('.day-button'))) {
+    if (c.classList.contains('weekday') || c.classList.contains('faded')
+        || c.classList.contains('disabled')) continue;
+    if (c.hasAttribute('disabled')) continue;
+    if ((c.textContent || '').trim() !== want) continue;
+    const hit = c.closest('button') || c;
+    hit.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+    return {ok: true};
+  }
+  return {ok: false, why: 'нужного числа нет среди кликабельных дней'};
+}
+"""
+
+
+def _pick_day(page, when: datetime,
+              log: Callable[[str], None]) -> tuple[bool, str]:
+    """Долистать календарь до месяца поста и нажать день. (ок, причина)."""
+    for _ in range(15):
+        header = _modal_header(page)
+        month, year = month_year(header)
+        if month and year and (year, month) != (when.year, when.month):
+            forward = (year, month) < (when.year, when.month)
+            log(f"Листаю календарь: с «{header}» на {when.month:02d}.{when.year}")
+            if not _click_first(page, SEL["month_next" if forward else "month_prev"],
+                                timeout=4_000):
+                return False, f"не нашли стрелку перелистывания месяца (на экране «{header}»)"
+            page.wait_for_timeout(500)
+            continue
+        try:
+            res = page.evaluate(_CLICK_DAY_JS, when.day) or {}
+        except Exception as e:  # noqa: BLE001
+            return False, f"не смогли нажать число {when.day}: {e}"
+        if res.get("ok"):
+            return True, ""
+        return False, f"{res.get('why', 'день не выбран')} (на экране «{header}»)"
+    return False, "календарь не долистался до нужного месяца"
+
+
+def _time_inputs(page):
+    for sel in SEL["time_inputs"]:
+        loc = page.locator(sel)
+        try:
+            if loc.count() >= 2:
+                return loc
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+def _set_time(page, when: datetime, log: Callable[[str], None]) -> str:
+    """Вписать часы и минуты в два поля Web A. '' при успехе, иначе причина."""
+    inputs = _time_inputs(page)
+    if inputs is None:
+        return "не нашли поля времени в окне отложки"
+    for i, (what, value) in enumerate((("часы", when.hour), ("минуты", when.minute))):
+        field = inputs.nth(i)
+        want = f"{value:02d}"
+        try:
+            field.click()
+            page.keyboard.press("Control+A")
+            page.keyboard.press("Delete")
+            field.type(want, delay=80)
+            page.wait_for_timeout(200)
+        except Exception as e:  # noqa: BLE001
+            return f"поле «{what}» не принялось: {e}"
+        try:
+            got = "".join(ch for ch in (field.input_value() or "") if ch.isdigit())
+        except Exception:  # noqa: BLE001
+            got = ""
+        if got and int(got) != value:
+            return f"Телеграм показал в поле «{what}» {got}, а нужно {want}"
+    return ""
+
+
+# ─── Сверка кнопки подтверждения ────────────────────────────────────
+def confirm_caption(page) -> str:
+    """Надпись кнопки подтверждения в окне отложки – это ответ самой площадки."""
+    try:
+        return (page.evaluate("""() => {
+            const modal = document.querySelector('.CalendarModal') || document;
+            for (const b of Array.from(modal.querySelectorAll('button'))) {
+                const t = (b.innerText || '').replace(/\\s+/g, ' ').trim();
+                if (!/^(Отправить|Заплан|Send|Schedule)\\b/.test(t)) continue;
+                const r = b.getBoundingClientRect();
+                if (r.width < 4 || r.height < 4) continue;
+                return t;
+            }
+            return '';
+        }""") or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def caption_time_ok(caption: str, when: datetime) -> bool:
+    """
+    Сходится ли время на кнопке с задуманным. Это последняя проверка перед
+    нажатием: Телеграм пишет на кнопке, на какое время он собрался
+    («Отправить сегодня в 20:08»). Нет надписи – не мешаем (нечего сверять).
+    Есть время, и оно другое – жать нельзя, пост уйдёт не тогда.
+    """
+    if not caption:
+        return True
+    return re.search(rf"\b0?{when.hour}:{when.minute:02d}\b", caption) is not None
+
+
+def _click_confirm(page, caption: str) -> bool:
+    """Нажать ровно ту кнопку, чью надпись мы сверили."""
+    if caption:
+        try:
+            if page.evaluate("""(cap) => {
+                const modal = document.querySelector('.CalendarModal') || document;
+                for (const b of Array.from(modal.querySelectorAll('button'))) {
+                    if ((b.innerText || '').replace(/\\s+/g, ' ').trim() !== cap) continue;
+                    const r = b.getBoundingClientRect();
+                    if (r.width < 4 || r.height < 4) continue;
+                    b.click();
+                    return true;
+                }
+                return false;
+            }""", caption):
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+    return bool(_click_first(page, ('.CalendarModal button:has-text("Отправить")',
+                                    '.CalendarModal button:has-text("Заплан")',
+                                    '.CalendarModal .Button.confirm-dialog-button'),
+                             timeout=6_000))
+
+
+def _modal_gone(page) -> bool:
+    try:
+        return page.locator(".CalendarModal").count() == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# ─── Открыть меню отложки правой кнопкой ─────────────────────────────
+def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
+    """Правой кнопкой по «Отправить» → «Отправить позже». (ок, причина)."""
+    send_sel = _first_visible(page, SEL["send"])
+    if not send_sel:
+        return False, "не нашли кнопку отправки"
+    for _ in range(3):
+        try:
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            page.locator(send_sel).first.click(button="right")
+        except Exception:  # noqa: BLE001
+            pass
+        page.wait_for_timeout(1_200)
+        if _click_first(page, SEL["schedule_item"], timeout=5_000):
+            return True, ""
+        page.wait_for_timeout(1_200)
+    return False, ("меню «Отправить позже» не появилось. Пост НЕ отправлен – "
+                   "левой кнопкой мы не жали")
+
+
+# ─── Главная функция ────────────────────────────────────────────────
+def schedule_postponed_post(project_id: str, chat_url: str, text: str,
+                            image_paths: list[str], when: datetime,
+                            log: Callable[[str], None] | None = None,
+                            headless: bool = True) -> dict:
+    """
+    Создать одну отложенную публикацию в канале Телеграма через веб-версию.
+    {"ok": True} либо {"ok": False, "error": "…", "shot": …}.
+
+    `text` – внутренняя разметка Click (**жирный**, [текст](url)); жирный и
+    анкор накладываются в поле редактора, как у ОК.
+    """
+    log = log or (lambda m: None)
+    if not has_saved_session(project_id):
+        return {"ok": False, "error": "Нет сессии Телеграма – войдите в «Настройках»"}
+    if not chat_url:
+        return {"ok": False, "error": "Не указан канал Телеграма для бренда"}
+
+    from playwright.sync_api import sync_playwright
+
+    engine = yb.resolve_engine()
+    with sync_playwright() as pw:
+        import vk_social as _vk
+        browser = yb._launch(pw, engine, headless=headless, extra_args=_vk.ANTIBOT_ARGS)
+        page = None
+        try:
+            context = browser.new_context(
+                storage_state=str(session_path(project_id)),
+                viewport={"width": 1280, "height": 900}, user_agent=yb.UA,
+                locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS,
+                timezone_id=TIMEZONE_ID)
+            context.add_init_script(_vk.ANTIBOT_INIT)
+            page = context.new_page()
+
+            text_sel = _open_channel(page, chat_url, project_id, log)
+            if not text_sel:
+                return {"ok": False,
+                        "shot": _debug_shot(project_id, page, "no-channel"),
+                        "error": _why_no_composer(page)}
+
+            log(f"Ввожу текст ({len(text)} знаков)")
+            why = _fill_post_text(page, text_sel, text, log)
+            if why:
+                return {"ok": False,
+                        "shot": _debug_shot(project_id, page, "bad-text"),
+                        "error": why}
+            page.wait_for_timeout(800)
+            # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
+            yb.drop_link_card(page, yb.text_domains(text), log,
+                              diag_dir=paths.data_root() / project_id / "crosspost")
+
+            if image_paths:
+                log(f"Прикрепляю фото: {len(image_paths)}")
+                why = _attach_photos(page, image_paths, project_id, log)
+                if why:
+                    return {"ok": False,
+                            "shot": _debug_shot(project_id, page, "no-photo"),
+                            "error": why}
+
+            # ПРАВОЙ кнопкой: левая отправит пост сейчас же.
+            log("Открываю «Отправить позже» (правой кнопкой по отправке)")
+            opened, why = _open_schedule_menu(page, log)
+            if not opened:
+                _save_diag(project_id, page, "no-schedule-menu")
+                return {"ok": False,
+                        "shot": _debug_shot(project_id, page, "no-schedule-menu"),
+                        "error": why}
+            page.wait_for_timeout(1_000)
+            if not _first_visible(page, SEL["modal"]):
+                _save_diag(project_id, page, "no-modal")
+                return {"ok": False,
+                        "shot": _debug_shot(project_id, page, "no-modal"),
+                        "error": "Окно отложки Телеграма не открылось"}
+
+            log(f"Ставлю {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
+            picked, why = _pick_day(page, when, log)
+            if not picked:
+                return {"ok": False,
+                        "shot": _debug_shot(project_id, page, "no-day"),
+                        "error": (f"Не смогли выбрать {when.strftime('%d.%m.%Y')} "
+                                  f"в календаре Телеграма: {why}. Пост НЕ отправлен")}
+            page.wait_for_timeout(500)
+
+            why = _set_time(page, when, log)
+            if why:
+                return {"ok": False,
+                        "shot": _debug_shot(project_id, page, "bad-time"),
+                        "error": f"Время отложки: {why}. Пост НЕ отправлен"}
+
+            cap = confirm_caption(page)
+            if cap:
+                log(f"Телеграм пишет на кнопке: «{cap}»")
+            if not caption_time_ok(cap, when):
+                return {"ok": False,
+                        "shot": _debug_shot(project_id, page, "wrong-time"),
+                        "error": (f"Телеграм понял время иначе: на кнопке «{cap}», "
+                                  f"а нужно {when.strftime('%d.%m %H:%M')}. "
+                                  "Ничего не отправили")}
+
+            log("Подтверждаю отложку")
+            if not _click_confirm(page, cap):
+                return {"ok": False,
+                        "shot": _debug_shot(project_id, page, "no-confirm"),
+                        "error": "Не нашли кнопку подтверждения в окне отложки"}
+
+            # Ответ площадки: окно отложки закрылось (подтверждение принято).
+            # Мы жали именно кнопку подтверждения, поэтому закрытие окна – это
+            # успех, а не отмена. Если рядом видно «Отложенные» – скажем и это.
+            for _ in range(30):
+                if _modal_gone(page):
+                    where = ("«Отложенные сообщения»"
+                             if any(m in _body_text(page) for m in SEL["scheduled_page"])
+                             else "окно отложки")
+                    log(f"Телеграм принял отложку: {where}")
+                    yb._save_storage_state(context, session_path(project_id))
+                    return {"ok": True}
+                page.wait_for_timeout(500)
+
+            return {"ok": False,
+                    "shot": _debug_shot(project_id, page, "no-confirmation"),
+                    "error": ("Телеграм не подтвердил отложку: окно календаря не "
+                              "закрылось. Загляните в «Отложенные сообщения» – если "
+                              "пост там есть, формировать заново не нужно")}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e),
+                    "shot": _debug_shot(project_id, page, "error") if page else None}
+        finally:
+            browser.close()

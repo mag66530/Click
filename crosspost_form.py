@@ -63,10 +63,14 @@ def form_messengers(project_id: str, posts: list[dict], site: str,
                     channels: dict[str, str],
                     progress: Callable[[str], None] | None = None) -> list[dict]:
     """
-    Поставить задания планировщику для Телеграма и МАКС.
+    Поставить задания планировщику для МАКС-через-бота (запасной путь).
 
-    channels: {"tg-client": "@канал", "tg-staff": "@канал", "max": "id чата"} –
-    что не заполнено, то молча пропускается (эта площадка ещё не подключена).
+    Телеграм сюда больше не попадает: его отложку Click ставит браузером
+    (form_tg_client_all / form_tg_staff_all), как у ВК/ОК/МАКС – время держит
+    сам Телеграм. Остался только МАКС-бот: он нужен, когда ссылки на канал в
+    веб-версии нет, а id для бота есть (см. _crosspost_channels в UI).
+
+    channels: {"max": "id чата"} – что не заполнено, то молча пропускается.
     Задание идемпотентно по id (ключ поста + сеть): переформирование обновляет
     текст, но выполненное задание вторым разом не поедет.
     """
@@ -75,7 +79,7 @@ def form_messengers(project_id: str, posts: list[dict], site: str,
     progress = progress or (lambda m: None)
     state = cps.load(project_id)
     results: list[dict] = []
-    for network in ("tg-client", "tg-staff", "max"):
+    for network in ("max",):
         chat = (channels.get(network) or "").strip()
         if not chat:
             continue
@@ -148,10 +152,11 @@ def _form_browser_all(project_id: str, network: str, schedule_fn,
 
         progress(f"{label}: готовлю текст и фото")
         markup = social_markup(post, site)
-        # ОК умеет жирный в теме группы и набирает его сам (Ctrl+B), поэтому
-        # ему отдаём разметку. ВК и МАКС жирного в посте не умеют – им
-        # плоский текст, как и было.
-        text = markup if network == "ok" else post_text.render(markup, "plain")
+        # ОК и Телеграм умеют жирный и ссылку-в-слова прямо в поле поста и
+        # набирают их сами (Ctrl+B / createLink) – им отдаём разметку. ВК и
+        # МАКС форматирование в посте не умеют, им – плоский текст, как было.
+        family = network.split("-")[0]
+        text = markup if (network == "ok" or family == "tg") else post_text.render(markup, "plain")
 
         local: list[str] = []
         if post.get("images"):
@@ -279,4 +284,27 @@ def form_max_all(project_id: str, chat_url: str, posts: list[dict], site: str,
     """
     import max_browser
     return _form_browser_all(project_id, "max", max_browser.schedule_postponed_post,
+                             chat_url, posts, site, progress, headless)
+
+
+def form_tg_client_all(project_id: str, chat_url: str, posts: list[dict], site: str,
+                       progress: Callable[[str], None] | None = None,
+                       headless: bool = True) -> list[dict]:
+    """
+    Телеграм (канал клиентов) – родной отложкой через веб-версию под аккаунтом.
+
+    Как у МАКС: у бота Телеграма отложки нет, а через web.telegram.org пост
+    держит и публикует сам Телеграм. Пишем с аккаунта-админа, время – его.
+    """
+    import tg_browser
+    return _form_browser_all(project_id, "tg-client", tg_browser.schedule_postponed_post,
+                             chat_url, posts, site, progress, headless)
+
+
+def form_tg_staff_all(project_id: str, chat_url: str, posts: list[dict], site: str,
+                      progress: Callable[[str], None] | None = None,
+                      headless: bool = True) -> list[dict]:
+    """Телеграм (канал сотрудников) – родной отложкой, тем же аккаунтом-админом."""
+    import tg_browser
+    return _form_browser_all(project_id, "tg-staff", tg_browser.schedule_postponed_post,
                              chat_url, posts, site, progress, headless)

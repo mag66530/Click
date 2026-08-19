@@ -1633,38 +1633,6 @@ def _apply_bold(page, text_sel: str, bold_spans: list[dict],
     return done
 
 
-_ANCHOR_RX = re.compile(r'\[[^\]\n]+\]\((https?://[^\s)]+)\)')
-_ANCHOR_LABEL_RX = re.compile(r'\[([^\]\n]+)\]\((https?://[^\s)]+)\)')
-
-
-def _drop_trailing_bare(markup: str) -> str:
-    """
-    Убрать голый адрес СРАЗУ ПОСЛЕ анкора на тот же адрес (в одной строке).
-
-    Заказчица: «нашем сайте stalmetural.ru.» → анкор на «нашем сайте», а
-    хвост «stalmetural.ru» убрать, точку оставить. Блок контактов (адрес с
-    новой строки, после «🌐») не трогаем: там адрес не идёт вплотную за анкором.
-    """
-    out: list[str] = []
-    i = 0
-    for m in _ANCHOR_RX.finditer(markup):
-        out.append(markup[i:m.end()])
-        bare = re.sub(r'^https?://', '', m.group(1)).rstrip('/')
-        rest = markup[m.end():]
-        mm = re.match(r'[ \t]+(?:https?://)?' + re.escape(bare) + r'(?=[\s.,;:!?)]|$)',
-                      rest, re.I)
-        i = m.end() + mm.end() if mm else m.end()
-    out.append(markup[i:])
-    return "".join(out)
-
-
-def _bold_anchors(markup: str) -> str:
-    """Анкор сделать ещё и жирным: «нашем сайте» должно гореть и жирным (по
-    просьбе заказчицы). Уже жирные (**…**) второй раз не оборачиваем."""
-    rx = re.compile(r'(?<!\*)\[[^\]\n]+\]\((https?://[^\s)]+)\)(?!\*)')
-    return rx.sub(lambda m: f'**{m.group(0)}**', markup)
-
-
 def _type_post_text(page, text_sel: str, text: str,
                     log: Callable[[str], None] | None = None,
                     project_id: str = "") -> str:
@@ -1690,16 +1658,11 @@ def _type_post_text(page, text_sel: str, text: str,
     import post_text
 
     log = log or (lambda m: None)
-    # ОК-подготовка разметки: убрать голый адрес сразу после анкора и сделать
-    # сам анкор жирным (по просьбе заказчицы – «нашем сайте» ссылкой и жирным).
-    text = _bold_anchors(_drop_trailing_bare(text))
-    # Для ПЛОСКОГО текста анкор → просто его ярлык, без дописывания голого
-    # адреса (это делает post_text._links_to_words, когда адреса больше нет в
-    # тексте – и тогда «нашем сайте» снова обрастало «stalmetural.ru»). Ссылку
-    # повесит редактор ОК по anchor_spans, адрес в плоском тексте не нужен.
-    label_only = _ANCHOR_LABEL_RX.sub(r"\1", text)
-    chunks = post_text.plain_chunks(label_only)
-    plain = "".join(t for t, _ in chunks)
+    # Единая с МАКС подготовка (post_text.inline_format): убрать голый адрес
+    # после анкора – даже когда анкор уже жирный (**[…](…)** адрес): прежняя
+    # версия его не убирала, и «stalmetural.ru» доезжало сырым; сделать анкор
+    # «нашем сайте» жирным; отдать плоский текст без адреса и список ссылок.
+    plain, bold_texts, anchor_texts = post_text.inline_format(text)
     letters = _letters          # общая сверка по буквам – одна на модуль
 
     def in_field() -> str:
@@ -1708,10 +1671,8 @@ def _type_post_text(page, text_sel: str, text: str,
         except Exception:  # noqa: BLE001
             return ""
 
-    bold_spans = [{"kind": "bold", "text": t.strip()} for t, bold in chunks
-                  if bold and len(t.strip()) > 1]
-    link_spans = [{"kind": "link", "text": t, "url": u}
-                  for t, u in post_text.anchor_spans(text)]
+    bold_spans = [{"kind": "bold", "text": t} for t in bold_texts]
+    link_spans = [{"kind": "link", "text": t, "url": u} for t, u in anchor_texts]
 
     # 1. Набираем ОБЫЧНЫЙ текст целиком, без форматирования на лету.
     #
@@ -1728,12 +1689,15 @@ def _type_post_text(page, text_sel: str, text: str,
     if not bold_spans and not link_spans:
         return "plain"
 
-    # 2. Жирный – выделяем кусок мышью и жмём Ctrl+B / кнопку «Ж», как рукой.
-    bold_done = _apply_bold(page, text_sel, bold_spans, log) if bold_spans else 0
-
-    # 2б. Ссылки – родным редактором ссылок ОК (свой <a> он выбрасывает).
+    # 2. ПОРЯДОК: сначала ссылки, потом жирный. Родной редактор ссылок ОК,
+    #    вешая <a>, сбрасывает уже наложенный жирный – и «нашем сайте»
+    #    выходило ссылкой, но не жирным. Жирный ПОСЛЕ ссылки ложится поверх и
+    #    уцелевает; на остальные куски порядок не влияет.
     links_done = _apply_links_native(page, text_sel, link_spans, log, project_id) \
         if link_spans else 0
+
+    # 2б. Жирный – выделяем кусок мышью и жмём Ctrl+B / кнопку «Ж», как рукой.
+    bold_done = _apply_bold(page, text_sel, bold_spans, log) if bold_spans else 0
 
     # 3. Проверка по факту: и текст цел, и разметка на месте.
     got = in_field()

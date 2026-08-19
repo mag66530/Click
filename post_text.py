@@ -229,6 +229,70 @@ def plain_chunks(markup: str) -> list[tuple[str, bool]]:
     return [c for c in out if c[0]]
 
 
+def drop_trailing_bare(markup: str) -> str:
+    """
+    Убрать голый адрес СРАЗУ ПОСЛЕ анкора на тот же адрес (в одной строке).
+
+    «нашем сайте stalmetural.ru.» → анкор на «нашем сайте», хвост
+    «stalmetural.ru» убрать, точку оставить. Блок контактов (адрес с новой
+    строки, после «🌐») не трогаем: там адрес не идёт вплотную за анкором.
+
+    ВАЖНО про жирный анкор. Когда «нашем сайте» уже жирное, разметка выглядит
+    как `**[нашем сайте](url)** stalmetural.ru`, и между анкором и голым
+    адресом стоят закрывающие `**`. Прежняя версия (жила в ok_browser) их не
+    учитывала и голый адрес не убирала – он доезжал до ОК и МАКС «сырым»
+    (живой прогон 19.08.2026). Здесь звёздочки сохраняются, а выкидывается
+    только адрес.
+    """
+    out: list[str] = []
+    i = 0
+    for m in ANCHOR_RX.finditer(markup):
+        out.append(markup[i:m.end()])
+        bare = re.sub(r"^https?://", "", m.group(2)).rstrip("/")
+        rest = markup[m.end():]
+        # Между анкором и адресом допускаем закрывающие ** (жирный анкор) –
+        # их сохраняем (group 1), выкидываем только « адрес».
+        mm = re.match(r"(\*{0,2})[ \t]+(?:https?://)?" + re.escape(bare)
+                      + r"(?=[\s.,;:!?)]|$)", rest, re.I)
+        if mm:
+            out.append(mm.group(1))
+            i = m.end() + mm.end()
+        else:
+            i = m.end()
+    out.append(markup[i:])
+    return "".join(out)
+
+
+def bold_anchors(markup: str) -> str:
+    """
+    Анкор сделать ещё и жирным: «нашем сайте» должно гореть и жирным. Уже
+    жирные (**…**) второй раз не оборачиваем.
+    """
+    rx = re.compile(r"(?<!\*)\[[^\]\n]+\]\((https?://[^\s)]+)\)(?!\*)")
+    return rx.sub(lambda m: f"**{m.group(0)}**", markup)
+
+
+def inline_format(markup: str) -> tuple[str, list[str], list[tuple[str, str]]]:
+    """
+    Единая подготовка текста для площадок, что накладывают формат на введённое
+    (ОК и МАКС). Возвращает (plain, bold, anchors):
+
+      plain   – видимый текст для набора: анкор как ЯРЛЫК, БЕЗ голого адреса;
+      bold    – куски, которые надо сделать жирными (анкор «нашем сайте» тоже);
+      anchors – [(текст ссылки, адрес)] для родного редактора ссылок.
+
+    Одна на обе площадки, чтобы МАКС ставил анкор ровно как ОК: и жирным, и
+    ссылкой, и без дублирующего голого адреса в конце.
+    """
+    prepped = bold_anchors(drop_trailing_bare(markup))
+    label = ANCHOR_RX.sub(r"\1", prepped)            # [нашем сайте](url) → нашем сайте (** остаются)
+    chunks = plain_chunks(label)
+    plain = "".join(t for t, _ in chunks)
+    bold = [t.strip() for t, is_bold in chunks if is_bold and len(t.strip()) > 1]
+    anchors = [(t.strip(), u) for t, u in anchor_spans(prepped) if t.strip()]
+    return plain, bold, anchors
+
+
 def render(markup: str, mode: str) -> str:
     """
     mode: 'html'  – Телеграм, МАКС;

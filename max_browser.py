@@ -1074,20 +1074,17 @@ def _apply_max_format(page, text_sel: str, markup: str,
     """
     import post_text
 
-    chunks = post_text.plain_chunks(markup)
-    bold = [t.strip() for t, is_bold in chunks if is_bold and t.strip()]
-    anchors = [(t.strip(), u) for t, u in post_text.anchor_spans(markup) if t.strip()]
+    # Та же подготовка, что у ОК: анкор «нашем сайте» жирным и ссылкой, без
+    # дублирующего голого адреса. Поле уже набрано этим же plain, поэтому
+    # тексты кусков в нём точно есть.
+    _, bold, anchors = post_text.inline_format(markup)
     if not bold and not anchors:
         return
 
-    for t in bold:
-        if yb.select_text_by_mouse(page, text_sel, t, log=log):
-            page.keyboard.press("Control+b")   # безопасно: не Enter, не отправит
-            page.wait_for_timeout(150)
-            log(f"  жирным: «{t[:32]}»")
-        else:
-            log(f"  жирный пропущен – не выделилось «{t[:32]}»")
-
+    # ПОРЯДОК ВАЖЕН: сначала ссылки, потом жирный. Ctrl+K, создавая ссылку,
+    # сбрасывает уже наложенный на кусок жирный – и «нашем сайте» выходило
+    # ссылкой, но не жирным (заказчица: «надо жирным, как в ОК»). Жирный,
+    # наложенный ПОСЛЕ ссылки, ложится поверх неё и уцелевает.
     for t, url in anchors:
         if not yb.select_text_by_mouse(page, text_sel, t, log=log):
             log(f"  ссылка пропущена – не выделилось «{t[:32]}»")
@@ -1096,6 +1093,14 @@ def _apply_max_format(page, text_sel: str, markup: str,
             log(f"  ссылка: «{t[:24]}» → {url}")
         else:
             log(f"  окно «Ссылка» не открылось – «{t[:24]}» осталось текстом")
+
+    for t in bold:
+        if yb.select_text_by_mouse(page, text_sel, t, log=log):
+            page.keyboard.press("Control+b")   # безопасно: не Enter, не отправит
+            page.wait_for_timeout(150)
+            log(f"  жирным: «{t[:32]}»")
+        else:
+            log(f"  жирный пропущен – не выделилось «{t[:32]}»")
 
     _collapse_selection(page, text_sel)
 
@@ -1184,7 +1189,11 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
             # Печатать её буквально нельзя – в поле попали бы звёздочки и
             # скобки. Печатаем видимый текст, разметку накладываем следом.
             import post_text
-            plain = post_text.to_plain(text)
+            # inline_format – та же подготовка, что у ОК: анкор «нашем сайте»
+            # как ярлык (без голого адреса в конце), а жирным и ссылкой его
+            # сделает _apply_max_format. Голый адрес для карточки берём из
+            # полного текста отдельно (там он ещё есть).
+            plain, _, _ = post_text.inline_format(text)
             log(f"Ввожу текст ({len(plain)} знаков)")
             why = _fill_post_text(page, text_sel, plain, log)
             if why:
@@ -1202,7 +1211,8 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
             # искало крестик по всей странице и цепляло ссылку на сайт в
             # ЗАКРЕПЛЁННОМ посте, а «клик из страницы» жал крестик закрепа и
             # схлопывал всё окно («закрыл всё, как будто Escape», 18.08.2026).
-            yb.drop_link_card(page, yb.text_domains(plain), log, scope=".composer",
+            yb.drop_link_card(page, yb.text_domains(post_text.to_plain(text)),
+                              log, scope=".composer",
                               diag_dir=paths.data_root() / project_id / "crosspost")
 
             if image_paths:

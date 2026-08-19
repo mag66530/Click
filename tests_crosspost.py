@@ -192,6 +192,51 @@ def test_state() -> None:
     check("название площадки по-русски", cps.network_ru("tg-staff") == "ТГ сотрудники")
 
 
+def test_inline_format() -> None:
+    """
+    Единая подготовка анкора для ОК и МАКС (post_text.inline_format).
+
+    Заказчица (19.08.2026): «в максе анкор поставил плохо, надо как в ОК; а в
+    ОК ссылку вставляет, но „нашем сайте“ надо жирным». Плюс баг: когда анкор
+    уже жирный (**[…](…)**), голый адрес после него не убирался.
+    """
+    print("\nЕдиная подготовка анкора (ОК = МАКС)")
+    import post_text as pt
+
+    # Анкор УЖЕ жирный + голый адрес следом — самый больной случай.
+    markup = pt.autolink("Смотрите на **нашем сайте** stalmetural.ru.", "stalmetural.ru")
+    plain, bold, anchors = pt.inline_format(markup)
+    check("голый адрес после жирного анкора убран", "stalmetural.ru" not in plain, plain)
+    check("«нашем сайте» жирным", "нашем сайте" in bold, str(bold))
+    check("ссылка «нашем сайте» отдельной целью",
+          anchors == [("нашем сайте", "https://stalmetural.ru")], str(anchors))
+    check("в тексте остался ярлык, точка на месте",
+          plain.strip().endswith("нашем сайте."), repr(plain))
+
+    # Не жирный анкор — тоже без голого адреса.
+    m2 = "Пишите на [нашем сайте](https://a.ru) a.ru за подробностями"
+    p2, b2, a2 = pt.inline_format(m2)
+    check("голый адрес убран и у нежирного анкора", " a.ru " not in p2 and "нашем сайте" in p2, p2)
+    check("нежирный анкор всё равно становится жирным", "нашем сайте" in b2, str(b2))
+
+    # Обычный жирный без ссылок не ломается.
+    p3, b3, a3 = pt.inline_format("**Заголовок** и обычный текст")
+    check("простой жирный сохранён", b3 == ["Заголовок"] and a3 == [], f"{b3} {a3}")
+
+    # ОК и МАКС применяют формат в порядке «ссылка → жирный».
+    import inspect
+    import max_browser as mb
+    import ok_browser as ok
+    ok_flow = inspect.getsource(ok._type_post_text)
+    check("ОК: сначала ссылки, потом жирный",
+          ok_flow.index("_apply_links_native") < ok_flow.index("_apply_bold(page"))
+    check("ОК берёт подготовку из inline_format", "inline_format(" in ok_flow)
+    mb_fmt = inspect.getsource(mb._apply_max_format)
+    check("МАКС: сначала ссылки, потом жирный",
+          mb_fmt.index("_add_max_link") < mb_fmt.index('press("Control+b")'))
+    check("МАКС берёт подготовку из inline_format", "inline_format(" in mb_fmt)
+
+
 def test_post_text() -> None:
     print("Форматирование (post_text)")
     import post_text as pt
@@ -2725,6 +2770,7 @@ def main() -> int:
     test_ok_verify_code()
     test_platform_clients()
     test_post_text()
+    test_inline_format()
     test_google_bold_utf16()
     test_bold_from_real_file()
     test_state()

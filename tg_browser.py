@@ -213,31 +213,72 @@ def deep_link(chat: str) -> str:
 
 
 # ─── Мелкие помощники браузера ──────────────────────────────────────
-def _debug_shot(project_id: str, page, name: str) -> bytes | None:
-    """Снимок в момент неудачи – картинкой, чтобы показать её человеку."""
+def _diag_dir(project_id: str):
+    d = paths.data_root() / project_id / "crosspost"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _debug_shot(project_id: str, page, name: str,
+                log: Callable[[str], None] | None = None) -> bytes | None:
+    """Снимок в момент неудачи – картинкой (и файлом рядом с логом)."""
     try:
         blob = page.screenshot(type="png", full_page=False)
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
+        if log:
+            log(f"  снимок экрана сделать не вышло: {e}")
         return None
     try:
-        d = paths.data_root() / project_id / "crosspost"
-        d.mkdir(parents=True, exist_ok=True)
-        (d / f"tg-debug-{name}.png").write_bytes(blob)
+        fp = _diag_dir(project_id) / f"tg-debug-{name}.png"
+        fp.write_bytes(blob)
+        if log:
+            log(f"  📸 снимок экрана: {fp}")
     except OSError:
         pass
     return blob
 
 
-def _save_diag(project_id: str, page, name: str) -> None:
+def _save_diag(project_id: str, page, name: str,
+               log: Callable[[str], None] | None = None) -> None:
     """Разметку области сохраняем рядом с логом – по ней доводим селекторы."""
     try:
-        d = paths.data_root() / project_id / "crosspost"
-        d.mkdir(parents=True, exist_ok=True)
-        (d / f"tg-{name}.html").write_text(
-            page.evaluate("() => document.body.innerHTML.slice(0, 80000)") or "",
-            encoding="utf-8")
+        fp = _diag_dir(project_id) / f"tg-{name}.html"
+        fp.write_text(page.evaluate("() => document.body.innerHTML.slice(0, 200000)") or "",
+                      encoding="utf-8")
+        if log:
+            log(f"  🧩 разметка страницы сохранена: {fp} (пришлите её – доведём "
+                "селекторы точно)")
+    except Exception as e:  # noqa: BLE001
+        if log:
+            log(f"  разметку сохранить не вышло: {e}")
+
+
+def _dump(project_id: str, page, name: str, log: Callable[[str], None]):
+    """И снимок, и разметку разом – для любого места, где что-то пошло не так."""
+    blob = _debug_shot(project_id, page, name, log)
+    _save_diag(project_id, page, name, log)
+    return blob
+
+
+def _log_screen(page, log: Callable[[str], None], where: str) -> None:
+    """
+    Подробно: где сейчас браузер и что на экране. Это главный ориентир «на
+    каком шаге упало»: в логе видно и адрес, и первые слова страницы, и есть
+    ли уже поле ввода / окно календаря.
+    """
+    try:
+        url = page.url or ""
     except Exception:  # noqa: BLE001
-        pass
+        url = "?"
+    body = " ".join(_body_text(page).split())
+    has_input = bool(_first_visible(page, SEL["text"]))
+    has_modal = bool(_first_visible(page, SEL["modal"]))
+    log(f"  [{where}] адрес: {url}")
+    log(f"  [{where}] поле ввода: {'есть' if has_input else 'нет'}; "
+        f"окно календаря: {'есть' if has_modal else 'нет'}; на экране "
+        f"текста {len(body)} знаков")
+    if body:
+        log(f"  [{where}] начало экрана: «{body[:200]}»")
 
 
 def _first_visible(page, candidates) -> str:
@@ -329,17 +370,24 @@ def _open_channel(page, chat: str, project_id: str,
     """
     target = deep_link(chat)
     log(f"Открываю канал: {chat}")
+    log(f"  адрес открытия (deep-link Web A): {target}")
     try:
         page.goto(target, wait_until="domcontentloaded", timeout=60_000)
+        log("  страница загрузилась (domcontentloaded), жду отрисовки чата…")
     except Exception as e:  # noqa: BLE001
         log(f"  deep-link не открылся ({e}) – пробую через поиск")
 
     sel = _wait_for_composer(page, log)
     if sel:
+        log(f"  поле ввода найдено по селектору: {sel}")
+        _log_screen(page, log, "канал открыт")
         return sel
 
+    log("  поле ввода за отведённое время не появилось")
+    _log_screen(page, log, "после deep-link")
     token = search_token(chat)
     if not token:
+        log("  это приватный инвайт – поиском такой канал не найти, дальше не идём")
         return ""                        # приватный инвайт: поиском не найти
     log(f"  канал не открылся напрямую – ищу по имени «{token}»")
     try:
@@ -350,8 +398,10 @@ def _open_channel(page, chat: str, project_id: str,
                                        '#LeftColumn input[type="text"]',
                                        'input[type="text"]'))
         if not search:
-            _save_diag(project_id, page, "no-search")
+            log("  поле поиска на левой панели не нашли")
+            _save_diag(project_id, page, "no-search", log)
             return ""
+        log(f"  поле поиска найдено ({search}) – печатаю «{token}»")
         page.locator(search).first.click()
         page.locator(search).first.fill(token)
         page.wait_for_timeout(2_500)
@@ -360,12 +410,21 @@ def _open_channel(page, chat: str, project_id: str,
                                      '.ListItem-button', '.chat-item-clickable'),
                               timeout=6_000)
         if not opened:
-            _save_diag(project_id, page, "no-search-result")
+            log("  среди результатов поиска не нашли, что нажать")
+            _save_diag(project_id, page, "no-search-result", log)
             return ""
+        log(f"  открыл первый результат поиска ({opened})")
     except Exception as e:  # noqa: BLE001
         log(f"  поиск канала не удался: {e}")
         return ""
-    return _wait_for_composer(page, log)
+    sel = _wait_for_composer(page, log)
+    if sel:
+        log(f"  поле ввода найдено после поиска: {sel}")
+        _log_screen(page, log, "канал открыт (через поиск)")
+    else:
+        log("  поле ввода не появилось и после поиска")
+        _log_screen(page, log, "после поиска")
+    return sel
 
 
 # ─── Ввод текста и разметки в поле поста ────────────────────────────
@@ -476,22 +535,25 @@ def _fill_post_text(page, sel: str, markup: str,
     chunks = post_text.plain_chunks(markup)
     plain = "".join(t for t, _ in chunks)
     filled = [ln for ln in plain.split("\n") if _probe(ln)]
+    log(f"  текст к вводу: {len(plain)} знаков, строк {len(plain.splitlines())}")
 
     if not _clear_editor(page, sel):
         return ("Поле поста в Телеграме не очистилось – в нём остался текст "
                 "прошлой попытки. Ничего не вводим: иначе пост уйдёт склеенным")
+    log("  поле очищено, вставляю текст одним куском (insert_text)")
 
     # 1. Обычный текст – всегда, при любом исходе разметки.
     page.keyboard.insert_text(plain)
     page.wait_for_timeout(400)
     got = _editor_text(page, sel)
+    log(f"  в поле после вставки: {len(got)} знаков")
     seen = _letters(got)
     missing = [what for what, line in (("начало", filled[0] if filled else ""),
                                        ("конец", filled[-1] if filled else ""))
                if line and _probe(line) not in seen]
     if missing:
-        return (f"В поле Телеграма не видно {missing[0]} текста после ввода. "
-                "Отложку не ставим")
+        return (f"В поле Телеграма не видно {missing[0]} текста после ввода "
+                f"(в поле {len(got)} знаков). Отложку не ставим")
 
     # 2. Разметка поверх готового текста.
     spans = [{"kind": "bold", "text": t.strip()} for t, bold in chunks
@@ -532,22 +594,29 @@ def _attach_photos(page, image_paths: list[str], project_id: str,
     """
     try:
         with page.expect_file_chooser(timeout=6_000) as picked:
-            if not _click_first(page, SEL["attach"], timeout=5_000):
+            hit = _click_first(page, SEL["attach"], timeout=5_000)
+            if not hit:
                 raise RuntimeError("нет скрепки")
+            log(f"  нажал скрепку вложений ({hit})")
             # Часть сборок сразу открывает выбор файла, часть – меню с пунктом.
             _click_first(page, ('text="Photo or Video"', 'text="Фото или видео"',
                                 'text="Фото или Видео"'), timeout=2_500)
         picked.value.set_files(image_paths)
-    except Exception:  # noqa: BLE001 – пробуем скрытое поле напрямую
+        log("  файлы отданы через окно выбора файла")
+    except Exception as e:  # noqa: BLE001 – пробуем скрытое поле напрямую
+        log(f"  окно выбора файла не сработало ({e}) – пробую скрытое поле input")
         inp = page.locator(SEL["file_input"])
         if not inp.count():
-            _save_diag(project_id, page, "no-file-input")
+            _save_diag(project_id, page, "no-file-input", log)
             return "Не нашли, куда отдать файлы фото в Телеграме"
         try:
             inp.first.set_input_files(image_paths)
-        except Exception as e:  # noqa: BLE001
-            return f"Файл фото не принялся: {e}"
+            log("  файлы отданы через скрытое поле input")
+        except Exception as e2:  # noqa: BLE001
+            return f"Файл фото не принялся: {e2}"
     page.wait_for_timeout(2_000)
+    log("  жду окно предпросмотра/подписи Телеграма")
+    _log_screen(page, log, "после вложения фото")
     return ""
 
 
@@ -606,9 +675,10 @@ def _pick_day(page, when: datetime,
     for _ in range(15):
         header = _modal_header(page)
         month, year = month_year(header)
+        log(f"  календарь показывает: «{header}» → месяц {month:02d}.{year}")
         if month and year and (year, month) != (when.year, when.month):
             forward = (year, month) < (when.year, when.month)
-            log(f"Листаю календарь: с «{header}» на {when.month:02d}.{when.year}")
+            log(f"  листаю {'вперёд' if forward else 'назад'} на {when.month:02d}.{when.year}")
             if not _click_first(page, SEL["month_next" if forward else "month_prev"],
                                 timeout=4_000):
                 return False, f"не нашли стрелку перелистывания месяца (на экране «{header}»)"
@@ -619,6 +689,7 @@ def _pick_day(page, when: datetime,
         except Exception as e:  # noqa: BLE001
             return False, f"не смогли нажать число {when.day}: {e}"
         if res.get("ok"):
+            log(f"  нажал число {when.day}")
             return True, ""
         return False, f"{res.get('why', 'день не выбран')} (на экране «{header}»)"
     return False, "календарь не долистался до нужного месяца"
@@ -640,6 +711,7 @@ def _set_time(page, when: datetime, log: Callable[[str], None]) -> str:
     inputs = _time_inputs(page)
     if inputs is None:
         return "не нашли поля времени в окне отложки"
+    log(f"  полей времени найдено: {inputs.count()}")
     for i, (what, value) in enumerate((("часы", when.hour), ("минуты", when.minute))):
         field = inputs.nth(i)
         want = f"{value:02d}"
@@ -655,6 +727,7 @@ def _set_time(page, when: datetime, log: Callable[[str], None]) -> str:
             got = "".join(ch for ch in (field.input_value() or "") if ch.isdigit())
         except Exception:  # noqa: BLE001
             got = ""
+        log(f"  {what}: вписал {want}, в поле стало «{got or '?'}»")
         if got and int(got) != value:
             return f"Телеграм показал в поле «{what}» {got}, а нужно {want}"
     return ""
@@ -728,18 +801,22 @@ def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
     send_sel = _first_visible(page, SEL["send"])
     if not send_sel:
         return False, "не нашли кнопку отправки"
-    for _ in range(3):
+    log(f"  кнопка отправки найдена ({send_sel})")
+    for attempt in range(1, 4):
         try:
             page.keyboard.press("Escape")
             page.wait_for_timeout(300)
         except Exception:  # noqa: BLE001
             pass
+        log(f"  правый клик по отправке (попытка {attempt}/3)")
         try:
             page.locator(send_sel).first.click(button="right")
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            log(f"    правый клик не прошёл: {e}")
         page.wait_for_timeout(1_200)
-        if _click_first(page, SEL["schedule_item"], timeout=5_000):
+        hit = _click_first(page, SEL["schedule_item"], timeout=5_000)
+        if hit:
+            log(f"  нашёл и нажал «Отправить позже» ({hit})")
             return True, ""
         page.wait_for_timeout(1_200)
     return False, ("меню «Отправить позже» не появилось. Пост НЕ отправлен – "
@@ -780,51 +857,54 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
             context.add_init_script(_vk.ANTIBOT_INIT)
             page = context.new_page()
 
+            log(f"Диагностика по шагам сохраняется в: {_diag_dir(project_id)}")
+            log("── ШАГ 1/6: открываю канал ──")
             text_sel = _open_channel(page, chat_url, project_id, log)
             if not text_sel:
                 return {"ok": False,
-                        "shot": _debug_shot(project_id, page, "no-channel"),
+                        "shot": _dump(project_id, page, "no-channel", log),
                         "error": _why_no_composer(page)}
 
-            log(f"Ввожу текст ({len(text)} знаков)")
+            log(f"── ШАГ 2/6: ввожу текст ({len(text)} знаков) ──")
             why = _fill_post_text(page, text_sel, text, log)
             if why:
                 return {"ok": False,
-                        "shot": _debug_shot(project_id, page, "bad-text"),
+                        "shot": _dump(project_id, page, "bad-text", log),
                         "error": why}
             page.wait_for_timeout(800)
             # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
             yb.drop_link_card(page, yb.text_domains(text), log,
-                              diag_dir=paths.data_root() / project_id / "crosspost")
+                              diag_dir=_diag_dir(project_id))
 
             if image_paths:
-                log(f"Прикрепляю фото: {len(image_paths)}")
+                log(f"── ШАГ 3/6: прикрепляю фото ({len(image_paths)}) ──")
                 why = _attach_photos(page, image_paths, project_id, log)
                 if why:
                     return {"ok": False,
-                            "shot": _debug_shot(project_id, page, "no-photo"),
+                            "shot": _dump(project_id, page, "no-photo", log),
                             "error": why}
+            else:
+                log("── ШАГ 3/6: фото нет, пропускаю ──")
 
             # ПРАВОЙ кнопкой: левая отправит пост сейчас же.
-            log("Открываю «Отправить позже» (правой кнопкой по отправке)")
+            log("── ШАГ 4/6: открываю «Отправить позже» (правой кнопкой по отправке) ──")
             opened, why = _open_schedule_menu(page, log)
             if not opened:
-                _save_diag(project_id, page, "no-schedule-menu")
                 return {"ok": False,
-                        "shot": _debug_shot(project_id, page, "no-schedule-menu"),
+                        "shot": _dump(project_id, page, "no-schedule-menu", log),
                         "error": why}
             page.wait_for_timeout(1_000)
             if not _first_visible(page, SEL["modal"]):
-                _save_diag(project_id, page, "no-modal")
                 return {"ok": False,
-                        "shot": _debug_shot(project_id, page, "no-modal"),
+                        "shot": _dump(project_id, page, "no-modal", log),
                         "error": "Окно отложки Телеграма не открылось"}
+            log("  окно отложки (.CalendarModal) открылось")
 
-            log(f"Ставлю {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
+            log(f"── ШАГ 5/6: выбираю дату и время {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург) ──")
             picked, why = _pick_day(page, when, log)
             if not picked:
                 return {"ok": False,
-                        "shot": _debug_shot(project_id, page, "no-day"),
+                        "shot": _dump(project_id, page, "no-day", log),
                         "error": (f"Не смогли выбрать {when.strftime('%d.%m.%Y')} "
                                   f"в календаре Телеграма: {why}. Пост НЕ отправлен")}
             page.wait_for_timeout(500)
@@ -832,23 +912,25 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
             why = _set_time(page, when, log)
             if why:
                 return {"ok": False,
-                        "shot": _debug_shot(project_id, page, "bad-time"),
+                        "shot": _dump(project_id, page, "bad-time", log),
                         "error": f"Время отложки: {why}. Пост НЕ отправлен"}
 
             cap = confirm_caption(page)
             if cap:
-                log(f"Телеграм пишет на кнопке: «{cap}»")
+                log(f"  Телеграм пишет на кнопке: «{cap}»")
+            else:
+                log("  надписи на кнопке подтверждения не нашли (сверять нечего)")
             if not caption_time_ok(cap, when):
                 return {"ok": False,
-                        "shot": _debug_shot(project_id, page, "wrong-time"),
+                        "shot": _dump(project_id, page, "wrong-time", log),
                         "error": (f"Телеграм понял время иначе: на кнопке «{cap}», "
                                   f"а нужно {when.strftime('%d.%m %H:%M')}. "
                                   "Ничего не отправили")}
 
-            log("Подтверждаю отложку")
+            log("── ШАГ 6/6: подтверждаю отложку ──")
             if not _click_confirm(page, cap):
                 return {"ok": False,
-                        "shot": _debug_shot(project_id, page, "no-confirm"),
+                        "shot": _dump(project_id, page, "no-confirm", log),
                         "error": "Не нашли кнопку подтверждения в окне отложки"}
 
             # Ответ площадки: окно отложки закрылось (подтверждение принято).
@@ -859,18 +941,19 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                     where = ("«Отложенные сообщения»"
                              if any(m in _body_text(page) for m in SEL["scheduled_page"])
                              else "окно отложки")
-                    log(f"Телеграм принял отложку: {where}")
+                    log(f"✅ Телеграм принял отложку: {where}")
                     yb._save_storage_state(context, session_path(project_id))
                     return {"ok": True}
                 page.wait_for_timeout(500)
 
             return {"ok": False,
-                    "shot": _debug_shot(project_id, page, "no-confirmation"),
+                    "shot": _dump(project_id, page, "no-confirmation", log),
                     "error": ("Телеграм не подтвердил отложку: окно календаря не "
                               "закрылось. Загляните в «Отложенные сообщения» – если "
                               "пост там есть, формировать заново не нужно")}
         except Exception as e:  # noqa: BLE001
+            log(f"‼️ исключение на прогоне: {e}")
             return {"ok": False, "error": str(e),
-                    "shot": _debug_shot(project_id, page, "error") if page else None}
+                    "shot": _dump(project_id, page, "error", log) if page else None}
         finally:
             browser.close()

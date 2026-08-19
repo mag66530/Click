@@ -690,6 +690,76 @@ def test_click_day_spillover() -> None:
             browser.close()
 
 
+def test_image_at_marker() -> None:
+    """
+    Картинка должна вставать НА МЕСТО метки ⟦МЕДИА-N⟧ и метку убирать. Живой
+    прогон показал: программное выделение редактор Дзена игнорировал, картинка
+    улетала вверх, а метка ⟦МЕДИА-N⟧ оставалась текстом. Теперь метку выделяем
+    настоящим тройным кликом. Проверяем на редакторе-имитаторе: <img> встал
+    между нужными абзацами, а текста метки в поле не осталось.
+    """
+    print("Картинка встаёт на место метки и метку убирает")
+    try:
+        import zen_browser as zb
+        from playwright.sync_api import sync_playwright
+    except ImportError as e:
+        print(f"  ⏭ пропускаю: {e}")
+        return
+    import base64
+
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+    tmp = Path("/tmp/zen-marker-test.png")
+    tmp.write_bytes(png)
+    token = zb.media_token(1)
+    html = ("<div id=ed contenteditable=true>"
+            "<p>Вводный абзац про латунь.</p>"
+            f"<p>{token}</p>"
+            "<h2>Главный секрет</h2>"
+            "<p>Дальше текст статьи.</p></div>"
+            "<script>document.getElementById('ed').addEventListener('paste',e=>{"
+            "const f=e.clipboardData&&e.clipboardData.files[0];"
+            "if(f){e.preventDefault();const img=document.createElement('img');"
+            "img.src=URL.createObjectURL(f);img.className='ins';"
+            "const s=window.getSelection();"
+            "if(s.rangeCount){const r=s.getRangeAt(0);r.deleteContents();r.insertNode(img);}"
+            "else document.getElementById('ed').appendChild(img);}});</script>")
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            try:
+                browser = pw.chromium.launch()
+            except Exception as e:  # noqa: BLE001
+                print(f"  ⏭ пропускаю: браузер не запустился ({e})")
+                return
+        try:
+            page = browser.new_page()
+            page.set_content(html)
+            field = page.locator("#ed")
+
+            ok = zb._paste_image_into(page, field, str(tmp), lambda m: None, token=token)
+            check("вставка удалась", ok)
+            check("картинка появилась в тексте", page.locator("#ed img.ins").count() == 1)
+            check("метки ⟦МЕДИА-1⟧ в тексте не осталось",
+                  token not in page.locator("#ed").inner_text())
+            # img стоит ДО подзаголовка «Главный секрет» – значит на месте метки.
+            pos = page.evaluate(
+                """() => {
+                    const kids = [...document.querySelectorAll('#ed > *')];
+                    const img = kids.findIndex(n => n.querySelector && n.querySelector('img.ins')
+                        || n.classList && n.classList.contains('ins'));
+                    const h2 = kids.findIndex(n => n.tagName === 'H2');
+                    return {img, h2};
+                }""")
+            check("картинка стоит выше подзаголовка (на месте метки)",
+                  0 <= pos["img"] < pos["h2"], str(pos))
+        finally:
+            browser.close()
+
+
 def test_confirm_button() -> None:
     print("Подтверждение отложки: кнопка «Опубликовать позже»")
     try:
@@ -890,6 +960,7 @@ def main() -> int:
     test_paste_detection()
     test_calendar()
     test_click_day_spillover()
+    test_image_at_marker()
     test_date_already_set()
     test_confirm_button()
     test_settle_after_publish()

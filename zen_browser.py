@@ -773,16 +773,53 @@ def _image_insert_controls(page, log: Callable[[str], None]) -> None:
         pass
 
 
+def _marker_center(page, token: str):
+    """Координаты центра абзаца-метки ⟦МЕДИА-N⟧ на экране (или None). Заодно
+    подкручиваем страницу, чтобы метка была на виду – по ней потом кликаем."""
+    try:
+        return page.evaluate(
+            """(token) => {
+                let mark = null;
+                for (const n of document.querySelectorAll('p,div,span,li,h1,h2,h3')) {
+                    if ((n.textContent || '').trim() === token) { mark = n; break; }
+                }
+                if (!mark) return null;
+                mark.scrollIntoView({block: 'center'});
+                const r = mark.getBoundingClientRect();
+                return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+            }""", token)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _dispatch_image_paste(handle, data: str) -> None:
+    """Отправить в выделенное место настоящее событие вставки с картинкой-File.
+    Дзен разбирает вставку сам и ставит картинку туда, где стоит курсор."""
+    handle.evaluate(
+        """(el, b64) => {
+            const bin = atob(b64);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            const file = new File([arr], 'image.png', { type: 'image/png' });
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            const ev = new ClipboardEvent('paste', {
+                bubbles: true, cancelable: true, clipboardData: dt });
+            (document.activeElement || el).dispatchEvent(ev);
+        }""", data)
+
+
 def _paste_image_into(page, field, path: str, log: Callable[[str], None],
                       token: str = "") -> bool:
     """Вставить картинку в поле как Ctrl+V из буфера – через DataTransfer с
-    настоящим File. Многие редакторы (в т.ч. дзеновский) картинку из вставки
-    разбирают сами, и файловое поле для этого не нужно.
+    настоящим File. Дзен вставку с картинкой разбирает сам, файловое поле не
+    нужно.
 
-    Если задан `token` (метка ⟦МЕДИА-N⟧), сначала ВЫДЕЛЯЕМ этот абзац-метку и
-    вставку шлём в него – картинка встаёт ровно на место метки и заменяет её.
-    Так таблица-картинка и картинка из документа оказываются там же, где были
-    в исходнике, а не в начале статьи."""
+    Если задан `token` (метка ⟦МЕДИА-N⟧), НАСТОЯЩИМ тройным кликом выделяем
+    абзац-метку (программное выделение редактор Дзена игнорирует – оттого метка
+    и оставалась в тексте), и вставку шлём в это выделение: картинка заменяет
+    метку и встаёт ровно на её место. Если метка всё же уцелела – убираем её
+    тем же тройным кликом и Delete."""
     if field is None:
         return False
     try:
@@ -792,54 +829,56 @@ def _paste_image_into(page, field, path: str, log: Callable[[str], None],
         if handle is None:
             return False
         before_imgs = page.locator("img").count()
-        placed = handle.evaluate(
-            """(el, args) => {
-                const [b64, token] = args;
-                el.focus();
-                let atToken = false;
-                if (token) {
-                    // Ищем абзац-метку и выделяем его целиком – вставка заменит.
-                    const all = [...el.querySelectorAll('*')];
-                    const mark = all.find(n => (n.textContent || '').trim() === token);
-                    if (mark) {
-                        const range = document.createRange();
-                        range.selectNodeContents(mark);
-                        const sel = window.getSelection();
-                        sel.removeAllRanges();
-                        sel.addRange(range);
-                        atToken = true;
-                    }
-                }
-                const bin = atob(b64);
-                const arr = new Uint8Array(bin.length);
-                for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-                const file = new File([arr], 'image.png', { type: 'image/png' });
-                const dt = new DataTransfer();
-                dt.items.add(file);
-                const ev = new ClipboardEvent('paste', {
-                    bubbles: true, cancelable: true, clipboardData: dt });
-                el.dispatchEvent(ev);
-                return atToken;
-            }""", [data, token])
-        if token and not placed:
-            log(f"🔬 метку {token} в тексте не нашёл – картинка встанет, но не на своём месте")
-        # Картинка грузится на сервер Дзена – ждём, пока появится новый <img>.
+
+        placed = False
+        if token:
+            center = _marker_center(page, token)
+            if center:
+                # Тройной клик выделяет весь абзац-метку по-настоящему.
+                page.mouse.click(center["x"], center["y"], click_count=3)
+                page.wait_for_timeout(200)
+                try:
+                    sel = page.evaluate("() => (window.getSelection().toString() || '').trim()")
+                except Exception:  # noqa: BLE001
+                    sel = ""
+                placed = token in sel or sel == token
+                log(f"🔬 выделил метку {token}: выделено «{sel[:20]}»"
+                    f"{' ✓' if placed else ' (не точно)'}")
+            else:
+                log(f"🔬 метку {token} на странице не нашёл – картинка встанет не на месте")
+        else:
+            try:
+                handle.evaluate("el => el.focus()")
+            except Exception:  # noqa: BLE001
+                pass
+
+        _dispatch_image_paste(handle, data)
+
         ok = False
         for _ in range(12):
             page.wait_for_timeout(600)
             if page.locator("img").count() > before_imgs:
                 ok = True
                 break
-        # Подчистим метку, если она осталась (вставка не «съела» выделение).
+
+        # Метка могла уцелеть (картинку вставили рядом, а выделение не съелось).
+        # Убираем её настоящим выделением и Delete – так же, как это сделал бы
+        # человек: программное удаление узла редактор Дзена откатывает.
         if token:
-            try:
-                handle.evaluate(
-                    """(el, token) => {
-                        for (const n of [...el.querySelectorAll('*')])
-                            if ((n.textContent || '').trim() === token) n.remove();
-                    }""", token)
-            except Exception:  # noqa: BLE001
-                pass
+            for _ in range(2):
+                center = _marker_center(page, token)
+                if not center:
+                    break
+                page.mouse.click(center["x"], center["y"], click_count=3)
+                page.wait_for_timeout(150)
+                page.keyboard.press("Delete")
+                page.wait_for_timeout(150)
+                page.keyboard.press("Backspace")
+                page.wait_for_timeout(150)
+            left = _marker_center(page, token)
+            if left:
+                log(f"🔬 метку {token} убрать полностью не вышло – удалите строку руками")
+
         return ok or page.locator("img").count() > before_imgs
     except Exception as e:  # noqa: BLE001
         log(f"🔬 вставка картинкой из буфера не прошла – {type(e).__name__}: {e}")
@@ -1444,21 +1483,22 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
         # Когда человек смотрит (headless=False), окно раскрываем на весь экран
         # и не навязываем свой размер вьюпорта – иначе окно публикации Дзена не
         # помещается и «ничего не видно». В облаке (headless) размер задаём сами.
+        # Окно большим задаём ЯВНО размером: Playwright с обычным launch не
+        # слушает «--start-maximized» (это умеет только persistent-context), а
+        # no_viewport оставлял маленькое окно – заказчик и заметил «всё равно
+        # маленькое». Поэтому и окно, и вьюпорт делаем крупными.
+        WIN_W, WIN_H = (1680, 1050) if not headless else (1600, 1000)
         extra = list(_vk.ANTIBOT_ARGS)
         if not headless:
-            extra += ["--start-maximized", "--window-position=0,0"]
+            extra += [f"--window-size={WIN_W},{WIN_H}", "--window-position=0,0"]
         browser = yb._launch(pw, engine, headless=headless, extra_args=extra)
         page = None
         try:
-            ctx_kwargs = dict(
+            context = browser.new_context(
                 storage_state=str(src), user_agent=yb.UA,
                 locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS,
-                timezone_id=TIMEZONE_ID)
-            if headless:
-                ctx_kwargs["viewport"] = {"width": 1600, "height": 1000}
-            else:
-                ctx_kwargs["no_viewport"] = True   # окно во весь экран
-            context = browser.new_context(**ctx_kwargs)
+                timezone_id=TIMEZONE_ID,
+                viewport={"width": WIN_W, "height": WIN_H - 120})
             context.add_init_script(_vk.ANTIBOT_INIT)
             page = context.new_page()
 

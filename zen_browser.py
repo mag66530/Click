@@ -768,60 +768,132 @@ def calendar_shows(body_text: str, when: datetime) -> bool:
     return f"{MONTHS_NOM[when.month - 1]} {when.year}" in (body_text or "")
 
 
-def _click_day_in_month(page, when: datetime) -> bool:
+def _day_candidates(page, when: datetime) -> list:
     """
-    Нажать число внутри блока НУЖНОГО месяца.
+    Все ячейки с нужным числом ВНУТРИ блока нужного месяца – по порядку,
+    но «живые» (кликабельные) впереди, а серые (соседний месяц, прошедшая
+    дата) в конце запасным вариантом.
 
-    Почему так сложно. Месяцев на экране два, и четырнадцатое есть в обоих –
-    значит просто «нажать 14» нельзя. Заголовок месяца при этом не
-    обязательно цельный: «Август 2026» вполне может быть собран из двух
-    кусочков, и поиск «элемента, чей текст ровно такой» его не находит –
-    на этом и встал прогон 19:18.
+    Почему так сложно. Месяцев на экране два, и число живёт сразу в
+    нескольких местах – значит просто «нажать 31» нельзя. Хуже того: у
+    крайних чисел месяца ДВА совпадения и в самом блоке нужного месяца.
+    Дзен подрисовывает в первую неделю хвост предыдущего месяца, и на
+    «31 августа 2026» первой ячейкой «31» в блоке «Август 2026» шла не
+    искомая (последняя строка), а «31 июля» из ведущей недели – серая и
+    прошедшая. Прежний код брал её, промахивался и объявлял неудачу.
 
-    Поэтому ищем иначе и надёжнее: находим заголовок как САМЫЙ МЕЛКИЙ
-    элемент, внутри которого есть «Август 2026», а потом берём первую
-    ячейку с нужным числом, идущую ПОСЛЕ него в порядке страницы. Всё, что
-    идёт после сентябрьского заголовка, до нас уже не относится.
+    Заголовок при этом не обязательно цельный: «Август 2026» бывает собран
+    из кусочков, поэтому берём его как САМЫЙ МЕЛКИЙ элемент с этим текстом.
+    Границу справа кладём по заголовку СЛЕДУЮЩЕГО месяца – всё, что за ним,
+    относится уже к соседнему блоку. Внутри границ серые ячейки не
+    выбрасываем, а отодвигаем в конец: клик по нужной сверяется по полю
+    даты, и если живой не окажется, серая останется запасным путём.
     """
     title = f"{MONTHS_NOM[when.month - 1]} {when.year}"
+    nxt = when.year + (1 if when.month == 12 else 0)
+    next_title = f"{MONTHS_NOM[when.month % 12]} {nxt}"
     try:
-        handle = page.evaluate_handle(
-            """([title, day]) => {
+        arr = page.evaluate_handle(
+            """([title, nextTitle, day]) => {
                 const nodes = [...document.querySelectorAll('*')];
                 const shown = (e) => !!(e.offsetParent || e.getClientRects().length);
+                const smallest = (txt) => {
+                    const hs = nodes.filter(e =>
+                        shown(e) && (e.textContent || '').includes(txt));
+                    if (!hs.length) return -1;
+                    hs.sort((a, b) =>
+                        a.querySelectorAll('*').length - b.querySelectorAll('*').length);
+                    return nodes.indexOf(hs[0]);
+                };
 
-                // Заголовок месяца: самый мелкий элемент, содержащий «Август 2026».
-                const heads = nodes.filter(e =>
-                    shown(e) && (e.textContent || '').includes(title));
-                if (!heads.length) return null;
-                heads.sort((a, b) =>
-                    a.querySelectorAll('*').length - b.querySelectorAll('*').length);
-                const head = heads[0];
-                const from = nodes.indexOf(head);
+                const from = smallest(title);
+                if (from < 0) return [];
+                // Граница справа – заголовок следующего месяца, если он показан
+                // и идёт после нашего. Иначе ищем до конца страницы.
+                let to = nodes.length;
+                const ni = smallest(nextTitle);
+                if (ni > from) to = ni;
 
-                // Первая ячейка с нужным числом ПОСЛЕ заголовка: она и есть
-                // день этого месяца, а не соседнего.
-                for (let i = from; i < nodes.length; i++) {
+                // Серая/неактивная ячейка: соседний месяц или прошедший день.
+                // Класс у Дзена свой, поэтому смотрим на любые признаки сразу.
+                const dead = (el) => {
+                    for (let e = el; e && e !== document.body; e = e.parentElement) {
+                        if (e.getAttribute && (e.getAttribute('aria-disabled') === 'true'
+                            || e.hasAttribute('disabled'))) return true;
+                        const c = (e.className && e.className.toString
+                            ? e.className.toString() : '');
+                        if (/disabl|faded|muted|outside|other|adjac|inactive|foreign|sibling|not-?current|another|prev|next-?month|passed|past/i.test(c))
+                            return true;
+                        let st = null;
+                        try { st = getComputedStyle(e); } catch (_) {}
+                        if (st && (st.pointerEvents === 'none'
+                            || parseFloat(st.opacity) < 0.5)) return true;
+                    }
+                    return false;
+                };
+
+                const cells = [];
+                const seen = new Set();
+                for (let i = from; i < to; i++) {
                     const e = nodes[i];
                     if (e.children.length === 0 && shown(e)
                         && e.textContent.trim() === day) {
                         // Нажимать надо по ячейке целиком: сам текст может
                         // лежать в неактивном span внутри кнопки дня.
-                        return e.closest('td,button,[role="button"],[class*="day"]') || e;
+                        const cell = e.closest('td,button,[role="button"],[class*="day"]') || e;
+                        if (seen.has(cell)) continue;
+                        seen.add(cell);
+                        cells.push(cell);
                     }
                 }
-                return null;
-            }""", [title, str(when.day)])
-        el = handle.as_element() if handle else None
-        if el is None:
-            return False
+                // Живые впереди, серые – в конец запасным вариантом.
+                return cells.sort((a, b) => (dead(a) ? 1 : 0) - (dead(b) ? 1 : 0));
+            }""", [title, next_title, str(when.day)])
+        cells = []
+        try:
+            for _, handle in sorted(arr.get_properties().items(),
+                                    key=lambda kv: int(kv[0]) if kv[0].isdigit() else 1 << 30):
+                el = handle.as_element()
+                if el is not None:
+                    cells.append(el)
+        except Exception:  # noqa: BLE001
+            pass
+        return cells
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _click_day_in_month(page, when: datetime, date_sel: str = "") -> bool:
+    """
+    Нажать нужное число в блоке нужного месяца.
+
+    Кандидатов может быть несколько (крайние числа месяца дублируются серой
+    ведущей неделей). Идём по ним – живые сначала – и после каждого клика
+    сверяемся по полю даты: как только оно показало нужный день, дело
+    сделано. Так серая «31 июля» больше не выдаёт себя за «31 августа».
+    """
+    cells = _day_candidates(page, when)
+    if not cells:
+        return False
+    for el in cells:
         try:
             el.click(timeout=5_000)
         except Exception:  # noqa: BLE001 – ячейку могло перекрыть подсказкой
-            el.evaluate("e => e.click()")
-        return True
-    except Exception:  # noqa: BLE001
-        return False
+            try:
+                el.evaluate("e => e.click()")
+            except Exception:  # noqa: BLE001
+                continue
+        # Без поля для сверки верим первому клику (запасной, старый путь).
+        if not date_sel:
+            return True
+        page.wait_for_timeout(700)
+        try:
+            caption = page.locator(date_sel).first.input_value()
+        except Exception:  # noqa: BLE001
+            caption = ""
+        if date_caption_ok(caption, when):
+            return True
+    return False
 
 
 def _open_calendar_and_pick(page, when: datetime, log: Callable[[str], None]) -> str:
@@ -873,7 +945,7 @@ def _open_calendar_and_pick(page, when: datetime, log: Callable[[str], None]) ->
     if not calendar_shows(_body_text(page), when):
         return f"в календаре не видно «{target}»"
 
-    if not _click_day_in_month(page, when):
+    if not _click_day_in_month(page, when, date_sel):
         return f"не удалось нажать {when.day} в блоке «{target}»"
     page.wait_for_timeout(900)
 

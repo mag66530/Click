@@ -529,6 +529,74 @@ def test_calendar() -> None:
           len(zb.MONTHS_RU) == 12 and len(zb.MONTHS_NOM) == 12)
 
 
+def test_click_day_spillover() -> None:
+    """
+    Крайнее число месяца в календаре Дзена дублируется серой ведущей неделей
+    соседнего месяца – и на «31 августа 2026» прежний код брал первую «31»,
+    а ею шла прошедшая «31 июля» (серая, pointer-events:none). Playwright по
+    такой ячейке кликнуть не может, отсюда и «не удалось нажать 31 в блоке
+    Август 2026. Статья осталась черновиком».
+
+    Строим ровно такой календарь – два месяца рядом, у каждого ведущая
+    неделя-хвост соседнего серым и прошедшие дни неактивны, поле даты
+    readonly обновляется только при клике по живому дню – и проверяем, что
+    выбирается именно живое «31 августа», а не серое «31 июля».
+    """
+    print("Календарь: крайнее число не путаем с серым хвостом соседнего месяца")
+    try:
+        import zen_browser as zb
+        from playwright.sync_api import sync_playwright
+    except ImportError as e:
+        print(f"  ⏭ пропускаю: {e}")
+        return
+    import calendar as _cal
+
+    def grid(year: int, month: int, today) -> str:
+        cells = []
+        for d in _cal.Calendar(firstweekday=0).itermonthdates(year, month):
+            adj = d.month != month
+            past = d < today
+            cls = "day" + (" day_other-month" if adj else "") + \
+                  (" day_disabled" if past and not adj else "")
+            dis = 'aria-disabled="true"' if (adj or past) else ""
+            cap = f"{d.day} {zb.MONTHS_RU[month - 1]} {year}"
+            live = "" if (adj or past) else \
+                f"onclick=\"document.getElementById('dt').value='{cap}'\""
+            cells.append(f'<button class="{cls}" {dis} {live}><span>{d.day}</span></button>')
+        title = f"{zb.MONTHS_NOM[month - 1]} {year}"
+        head = f'<div class="cap"><span>{title.split()[0]}</span> <span>{title.split()[1]}</span></div>'
+        return f'<div class="cal">{head}{"".join(cells)}</div>'
+
+    today = datetime(2026, 8, 19).date()
+    html = ('<!doctype html><meta charset=utf-8>'
+            '<style>.day_other-month,.day_disabled{opacity:.3;pointer-events:none}</style>'
+            '<input id=dt readonly value="19 августа 2026">'
+            + grid(2026, 8, today) + grid(2026, 9, today))
+    when = datetime(2026, 8, 31, 18, 5, tzinfo=timezone(timedelta(hours=5)))
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001 – в CI лежит по этому пути, локально – как есть
+            try:
+                browser = pw.chromium.launch()
+            except Exception as e:  # noqa: BLE001 – браузера нет вовсе
+                print(f"  ⏭ пропускаю: браузер не запустился ({e})")
+                return
+        try:
+            page = browser.new_page()
+            page.set_content(html)
+
+            cands = zb._day_candidates(page, when)
+            check("нашлись оба «31» – серое и живое", len(cands) == 2, str(len(cands)))
+            check("выбор 31 сработал", zb._click_day_in_month(page, when, "#dt"))
+            check("в поле именно 31 августа",
+                  page.locator("#dt").first.input_value() == "31 августа 2026")
+        finally:
+            browser.close()
+
+
 def test_confirm_button() -> None:
     print("Подтверждение отложки: кнопка «Опубликовать позже»")
     try:
@@ -727,6 +795,7 @@ def main() -> int:
     test_popups_and_fields()
     test_paste_detection()
     test_calendar()
+    test_click_day_spillover()
     test_date_already_set()
     test_confirm_button()
     test_settle_after_publish()

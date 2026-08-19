@@ -544,15 +544,38 @@ def ensure_studio(page, editor_url: str, email: str, log: Callable[[str], None])
 #  ТЕЛО СТАТЬИ: HTML И КАРТИНКИ ТАБЛИЦ
 # ════════════════════════════════════════════════════════════════════
 
+def media_token(idx: int) -> str:
+    """Метка-заполнитель на месте картинки/таблицы в тексте. Символы редкие,
+    чтобы не совпасть со словами статьи; по ней потом находим место и ставим
+    туда картинку."""
+    return f"⟦МЕДИА-{idx}⟧"
+
+
+def media_items(blocks: list[dict]) -> list[dict]:
+    """Картинки и таблицы статьи по порядку с их номером метки. Один и тот же
+    порядок и в blocks_to_html, и при вставке – значит метки совпадают."""
+    out: list[dict] = []
+    idx = 0
+    for b in blocks:
+        if b["kind"] in ("table", "image"):
+            idx += 1
+            item = dict(b)
+            item["token"] = media_token(idx)
+            out.append(item)
+    return out
+
+
 def blocks_to_html(blocks: list[dict]) -> str:
     """
     Блоки статьи → HTML для вставки в редактор.
 
-    Таблицы сюда НЕ попадают: редактор статей Дзена их не умеет, они уходят
-    картинками отдельным шагом. На месте таблицы остаётся пустой абзац-метка,
-    чтобы картинка встала именно туда, где таблица была в документе.
+    Картинки и таблицы сами по себе в HTML не идут (таблиц редактор Дзена не
+    умеет вовсе, картинку он принимает только вставкой файла). На их месте
+    остаётся абзац-метка ⟦МЕДИА-N⟧ – по ней отдельным шагом ставим картинку
+    ровно туда, где она стояла в документе.
     """
     out: list[str] = []
+    idx = 0
     for b in blocks:
         if b["kind"] == "para":
             out.append(f"<p>{post_text.to_html(b['markup'])}</p>")
@@ -562,6 +585,9 @@ def blocks_to_html(blocks: list[dict]) -> str:
         elif b["kind"] == "list":
             items = "".join(f"<li>{post_text._esc_html(i)}</li>" for i in b["items"])
             out.append(f"<ul>{items}</ul>")
+        elif b["kind"] in ("table", "image"):
+            idx += 1
+            out.append(f"<p>{post_text._esc_html(media_token(idx))}</p>")
     return "".join(out)
 
 
@@ -592,13 +618,18 @@ def table_html(rows: list[list[str]]) -> str:
 <table id="t"><thead><tr>{th}</tr></thead><tbody>{trs}</tbody></table>"""
 
 
-def render_table_png(context, rows: list[list[str]], out_path: Path) -> str:
+def render_table_png(context, rows: list[list[str]], out_path: Path,
+                     log: Callable[[str], None] | None = None) -> str:
     """
     Нарисовать таблицу и снять её в PNG. Возвращает путь или пустую строку.
 
     Рисуем ТЕМ ЖЕ браузером, что публикует: второй движок ради картинки –
     лишние полгигабайта памяти в облаке, на этом Click уже падал.
     """
+    log = log or (lambda m: None)
+    if not rows:
+        log("🔬 render_table_png: строк нет – рисовать нечего")
+        return ""
     page = None
     try:
         page = context.new_page()
@@ -607,7 +638,8 @@ def render_table_png(context, rows: list[list[str]], out_path: Path) -> str:
         page.wait_for_timeout(300)
         page.locator("#t").screenshot(path=str(out_path))
         return str(out_path)
-    except Exception:  # noqa: BLE001 – без картинки статья всё равно выйдет
+    except Exception as e:  # noqa: BLE001 – без картинки статья всё равно выйдет
+        log(f"🔬 render_table_png: не получилось – {type(e).__name__}: {e}")
         return ""
     finally:
         try:
@@ -690,6 +722,7 @@ def _type_blocks_into(page, field, blocks: list[dict]) -> None:
         page.wait_for_timeout(300)
     except Exception:  # noqa: BLE001
         pass
+    idx = 0
     for b in blocks:
         if b["kind"] == "para":
             text = post_text.strip_markup(b["markup"])
@@ -697,23 +730,232 @@ def _type_blocks_into(page, field, blocks: list[dict]) -> None:
             text = b["text"]
         elif b["kind"] == "list":
             text = "\n".join(f"• {i}" for i in b["items"])
+        elif b["kind"] in ("table", "image"):
+            # Метка на месте картинки/таблицы – по ней потом встанет картинка.
+            idx += 1
+            text = media_token(idx)
         else:
             continue
         page.keyboard.type(text, delay=1)
         page.keyboard.press("Enter")
 
 
-def _attach_image(page, path: str) -> bool:
-    """Отдать картинку редактору через файловое поле (их у него несколько)."""
+def _image_insert_controls(page, log: Callable[[str], None]) -> None:
+    """Выписать в лог кнопки, похожие на «вставить изображение» – чтобы по
+    живому прогону узнать, чем Дзен на самом деле добавляет картинку."""
     try:
-        inputs = page.locator(SEL["file_input"][0])
-        if not inputs.count():
-            return False
-        inputs.first.set_input_files(path)
-        page.wait_for_timeout(3_000)
-        return True
+        found = page.evaluate(
+            """() => {
+                const out = [];
+                const nodes = [...document.querySelectorAll(
+                    'button,[role="button"],[aria-label],[title],svg,use')];
+                const key = /изображ|картин|фото|image|photo|media|добав|вставит|\\+/i;
+                for (const e of nodes) {
+                    const lab = (e.getAttribute && (e.getAttribute('aria-label')
+                        || e.getAttribute('title') || '')) || '';
+                    const txt = (e.textContent || '').trim().slice(0, 24);
+                    const hay = lab + ' ' + txt
+                        + ' ' + (e.className && e.className.toString ? e.className.toString() : '');
+                    if (key.test(hay) && (e.offsetParent || e.getClientRects().length)) {
+                        out.push(((e.tagName || '').toLowerCase())
+                            + (lab ? ' aria«' + lab.slice(0, 24) + '»' : '')
+                            + (txt ? ' txt«' + txt + '»' : ''));
+                        if (out.length >= 10) break;
+                    }
+                }
+                return out;
+            }""")
+        if found:
+            log("🔬 похоже на вставку картинки: " + " | ".join(found))
+        else:
+            log("🔬 кнопок «вставить изображение» не видно на странице")
     except Exception:  # noqa: BLE001
+        pass
+
+
+def _marker_center(page, token: str):
+    """Координаты центра абзаца-метки ⟦МЕДИА-N⟧ на экране (или None). Заодно
+    подкручиваем страницу, чтобы метка была на виду – по ней потом кликаем."""
+    try:
+        return page.evaluate(
+            """(token) => {
+                let mark = null;
+                for (const n of document.querySelectorAll('p,div,span,li,h1,h2,h3')) {
+                    if ((n.textContent || '').trim() === token) { mark = n; break; }
+                }
+                if (!mark) return null;
+                mark.scrollIntoView({block: 'center'});
+                const r = mark.getBoundingClientRect();
+                return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+            }""", token)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _pick_first_cover(page, log: Callable[[str], None]) -> None:
+    """В окне публикации выбрать обложкой ПЕРВЫЙ эскиз (картинку из документа).
+    Дзен по умолчанию берёт обложкой не ту картинку; заглавная всегда идёт в
+    статье первой, её и ставим. Шаг необязательный – не вышло, статья всё
+    равно уйдёт, просто обложку Дзен выберет сам."""
+    try:
+        thumbs = page.evaluate(
+            """() => {
+                const els = [...document.querySelectorAll('[class*="cover-picker__cover"]')]
+                    .filter(e => {
+                        const s = getComputedStyle(e);
+                        return s && s.backgroundImage && s.backgroundImage !== 'none'
+                            && (e.offsetParent || e.getClientRects().length);
+                    });
+                return els.map(e => {
+                    const r = e.getBoundingClientRect();
+                    return {x: r.x + r.width / 2, y: r.y + r.height / 2,
+                            bg: (getComputedStyle(e).backgroundImage || '').slice(0, 70)};
+                });
+            }""")
+    except Exception:  # noqa: BLE001
+        thumbs = []
+    if not thumbs:
+        log("🔬 обложек-эскизов в окне не нашёл – Дзен выберет обложку сам")
+        return
+    log(f"🔬 обложек-эскизов: {len(thumbs)} – ставлю первую (заглавную из документа)")
+    try:
+        page.mouse.click(thumbs[0]["x"], thumbs[0]["y"])
+        page.wait_for_timeout(900)
+        log("✓ обложкой выбрал первую картинку")
+    except Exception as e:  # noqa: BLE001
+        log(f"🔬 по первой обложке кликнуть не вышло – {type(e).__name__}: {e}")
+
+
+def _select_marker_line(page, token: str) -> bool:
+    """Выделить ТЕКСТ строки-метки настоящей мышью и клавишами: клик в метку,
+    Home, Shift+End. Так берём ровно текст метки, не трогая границу абзаца –
+    иначе замена/удаление сливали следующий подзаголовок наверх."""
+    center = _marker_center(page, token)
+    if not center:
         return False
+    page.mouse.click(center["x"], center["y"])
+    page.wait_for_timeout(120)
+    page.keyboard.press("Home")
+    page.keyboard.press("Shift+End")
+    page.wait_for_timeout(120)
+    try:
+        sel = page.evaluate("() => (window.getSelection().toString() || '').trim()")
+    except Exception:  # noqa: BLE001
+        sel = ""
+    return token in sel
+
+
+def _dispatch_image_paste(handle, data: str) -> None:
+    """Отправить в выделенное место настоящее событие вставки с картинкой-File.
+    Дзен разбирает вставку сам и ставит картинку туда, где стоит курсор."""
+    handle.evaluate(
+        """(el, b64) => {
+            const bin = atob(b64);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            const file = new File([arr], 'image.png', { type: 'image/png' });
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            const ev = new ClipboardEvent('paste', {
+                bubbles: true, cancelable: true, clipboardData: dt });
+            (document.activeElement || el).dispatchEvent(ev);
+        }""", data)
+
+
+def _paste_image_into(page, field, path: str, log: Callable[[str], None],
+                      token: str = "") -> bool:
+    """Вставить картинку в поле как Ctrl+V из буфера – через DataTransfer с
+    настоящим File. Дзен вставку с картинкой разбирает сам, файловое поле не
+    нужно.
+
+    Если задан `token` (метка ⟦МЕДИА-N⟧), НАСТОЯЩИМ тройным кликом выделяем
+    абзац-метку (программное выделение редактор Дзена игнорирует – оттого метка
+    и оставалась в тексте), и вставку шлём в это выделение: картинка заменяет
+    метку и встаёт ровно на её место. Если метка всё же уцелела – убираем её
+    тем же тройным кликом и Delete."""
+    if field is None:
+        return False
+    try:
+        import base64
+        data = base64.b64encode(Path(path).read_bytes()).decode()
+        handle = field.element_handle()
+        if handle is None:
+            return False
+        before_imgs = page.locator("img").count()
+
+        placed = False
+        if token:
+            # Выделяем ТОЛЬКО текст строки-метки: клик в неё, Home → Shift+End.
+            # Тройной клик хватал и границу абзаца, и вставка/удаление сливали
+            # следующий подзаголовок наверх – оттого H2 после картинки «слетал».
+            placed = _select_marker_line(page, token)
+            log(f"🔬 выделил метку {token}: {'✓' if placed else 'не точно'}")
+            if not placed:
+                log(f"🔬 метку {token} на странице не нашёл – картинка встанет не на месте")
+        else:
+            try:
+                handle.evaluate("el => el.focus()")
+            except Exception:  # noqa: BLE001
+                pass
+
+        _dispatch_image_paste(handle, data)
+
+        ok = False
+        for _ in range(12):
+            page.wait_for_timeout(600)
+            if page.locator("img").count() > before_imgs:
+                ok = True
+                break
+
+        # Метка могла уцелеть (картинку вставили рядом, а выделение не съелось).
+        # Убираем её выделением строки и Delete – БЕЗ Backspace: он подтягивал
+        # соседний подзаголовок и ломал его.
+        if token:
+            for _ in range(2):
+                if not _select_marker_line(page, token):
+                    break
+                page.keyboard.press("Delete")
+                page.wait_for_timeout(150)
+            if _marker_center(page, token):
+                log(f"🔬 метку {token} убрать полностью не вышло – удалите строку руками")
+
+        return ok or page.locator("img").count() > before_imgs
+    except Exception as e:  # noqa: BLE001
+        log(f"🔬 вставка картинкой из буфера не прошла – {type(e).__name__}: {e}")
+        return False
+
+
+def _attach_image(page, path: str, log: Callable[[str], None] | None = None,
+                  field=None, token: str = "") -> bool:
+    """
+    Отдать картинку редактору. У статей Дзена нет открытого <input type=file>
+    (живой прогон 19.08: «файловых полей 0»), поэтому вставляем картинку прямо
+    в текст через буфер, на место метки ⟦МЕДИА-N⟧ (token) – туда, где она была
+    в документе. Файловое поле пробуем первым, если вдруг появится.
+    """
+    log = log or (lambda m: None)
+    # 1) Готовое файловое поле, если вдруг есть (в текст на место метки его не
+    #    направить, поэтому пользуемся только когда метки нет).
+    if not token:
+        try:
+            inputs = page.locator(SEL["file_input"][0])
+            cnt = inputs.count()
+            log(f"🔬 _attach_image: файловых полей на странице: {cnt}")
+            if cnt:
+                inputs.first.set_input_files(path)
+                page.wait_for_timeout(3_000)
+                return True
+        except Exception as e:  # noqa: BLE001
+            log(f"🔬 _attach_image: файловое поле не сработало – {type(e).__name__}: {e}")
+        _image_insert_controls(page, log)
+
+    # 2) Вставка картинкой из буфера прямо в тело статьи (на место метки).
+    where = f"на место {token}" if token else "в текст"
+    log(f"🔬 _attach_image: вставляю картинку {where} через буфер")
+    if _paste_image_into(page, field, path, log, token):
+        log(f"🔬 _attach_image: картинка вставлена {where}")
+        return True
+    return False
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -768,60 +1010,261 @@ def calendar_shows(body_text: str, when: datetime) -> bool:
     return f"{MONTHS_NOM[when.month - 1]} {when.year}" in (body_text or "")
 
 
-def _click_day_in_month(page, when: datetime) -> bool:
+def _day_candidates(page, when: datetime) -> list:
     """
-    Нажать число внутри блока НУЖНОГО месяца.
+    Ячейки календаря с нужным числом – «живые» (кликабельные) впереди, серые
+    (соседний месяц, прошедшая дата) в конце запасным вариантом.
 
-    Почему так сложно. Месяцев на экране два, и четырнадцатое есть в обоих –
-    значит просто «нажать 14» нельзя. Заголовок месяца при этом не
-    обязательно цельный: «Август 2026» вполне может быть собран из двух
-    кусочков, и поиск «элемента, чей текст ровно такой» его не находит –
-    на этом и встал прогон 19:18.
+    Живой прогон 19.08 показал, на чём всё стояло. Заголовок Дзен рисует НЕ
+    цельным текстом: «Август» и «2026» – разные узлы без пробела между, и
+    `textContent.includes("Август 2026")` не находит его никогда. Прежняя
+    версия на этом сдавалась (`заголовок не найден → 0 кандидатов`), хотя
+    нужная ячейка «31» была тут же и ЖИВАЯ. Поэтому от заголовка отказались
+    вовсе: берём ячейки прямо из блока календаря (класс/предок со словом
+    datepicker или calendar), а нужный месяц отсекаем не по заголовку, а по
+    сверке поля даты после клика – это делает _click_day_in_month.
 
-    Поэтому ищем иначе и надёжнее: находим заголовок как САМЫЙ МЕЛКИЙ
-    элемент, внутри которого есть «Август 2026», а потом берём первую
-    ячейку с нужным числом, идущую ПОСЛЕ него в порядке страницы. Всё, что
-    идёт после сентябрьского заголовка, до нас уже не относится.
+    Показаны сразу два месяца, и одно и то же число живёт в обоих (25 августа
+    и 25 сентября – оба «живые»). Поэтому кандидатов может быть несколько;
+    идём по ним по порядку страницы (текущий месяц раньше следующего) и
+    оставляем выбор за сверкой поля. Серые уходят в конец: по прошедшей дате
+    или соседнему месяцу всё равно не кликнуть.
     """
-    title = f"{MONTHS_NOM[when.month - 1]} {when.year}"
     try:
-        handle = page.evaluate_handle(
-            """([title, day]) => {
+        arr = page.evaluate_handle(
+            """(day) => {
                 const nodes = [...document.querySelectorAll('*')];
                 const shown = (e) => !!(e.offsetParent || e.getClientRects().length);
+                const cls = (e) => (e.className && e.className.toString
+                    ? e.className.toString() : '');
 
-                // Заголовок месяца: самый мелкий элемент, содержащий «Август 2026».
-                const heads = nodes.filter(e =>
-                    shown(e) && (e.textContent || '').includes(title));
-                if (!heads.length) return null;
-                heads.sort((a, b) =>
-                    a.querySelectorAll('*').length - b.querySelectorAll('*').length);
-                const head = heads[0];
-                const from = nodes.indexOf(head);
+                // Ячейка календаря: она сама или предок помечены как
+                // datepicker/calendar. Так отсекаем посторонние числа на
+                // странице (чипы времени, счётчики и прочее).
+                const inCal = (el) => {
+                    for (let e = el; e && e !== document.body; e = e.parentElement)
+                        if (/datepicker|calendar/i.test(cls(e))) return true;
+                    return false;
+                };
 
-                // Первая ячейка с нужным числом ПОСЛЕ заголовка: она и есть
-                // день этого месяца, а не соседнего.
-                for (let i = from; i < nodes.length; i++) {
-                    const e = nodes[i];
+                // Серая/неактивная: соседний месяц или прошедший день. Слова
+                // datepicker/calendar тут НЕ считаем – это имя самого блока.
+                const dead = (el) => {
+                    for (let e = el; e && e !== document.body; e = e.parentElement) {
+                        if (e.getAttribute && (e.getAttribute('aria-disabled') === 'true'
+                            || e.hasAttribute('disabled'))) return true;
+                        const c = cls(e);
+                        if (/disabl|faded|muted|outside|other|adjac|inactive|foreign|sibling|not-?current|another|weekend-off|prev-|next-month|passed|_past|-past/i.test(c))
+                            return true;
+                        let st = null;
+                        try { st = getComputedStyle(e); } catch (_) {}
+                        if (st && (st.pointerEvents === 'none'
+                            || parseFloat(st.opacity) < 0.5)) return true;
+                    }
+                    return false;
+                };
+
+                const cells = [];
+                const seen = new Set();
+                for (const e of nodes) {
                     if (e.children.length === 0 && shown(e)
-                        && e.textContent.trim() === day) {
-                        // Нажимать надо по ячейке целиком: сам текст может
-                        // лежать в неактивном span внутри кнопки дня.
-                        return e.closest('td,button,[role="button"],[class*="day"]') || e;
+                        && (e.textContent || '').trim() === day) {
+                        // Кликаем по ячейке целиком: число может лежать в
+                        // неактивном span внутри кнопки/ячейки дня.
+                        const cell = e.closest(
+                            'td,button,[role="button"],[class*="day"],[class*="cell"]') || e;
+                        if (!inCal(cell)) continue;
+                        if (seen.has(cell)) continue;
+                        seen.add(cell);
+                        cells.push(cell);
                     }
                 }
-                return null;
-            }""", [title, str(when.day)])
-        el = handle.as_element() if handle else None
-        if el is None:
-            return False
+                // Живые впереди, серые – в конец запасным вариантом (стабильно,
+                // поэтому текущий месяц остаётся раньше следующего).
+                return cells.sort((a, b) => (dead(a) ? 1 : 0) - (dead(b) ? 1 : 0));
+            }""", str(when.day))
+        cells = []
+        try:
+            for _, handle in sorted(arr.get_properties().items(),
+                                    key=lambda kv: int(kv[0]) if kv[0].isdigit() else 1 << 30):
+                el = handle.as_element()
+                if el is not None:
+                    cells.append(el)
+        except Exception:  # noqa: BLE001
+            pass
+        return cells
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _cell_note(el) -> str:
+    """Коротко о ячейке дня для лога: тег, класс, aria-disabled, размер."""
+    try:
+        tag = (el.evaluate("e => e.tagName") or "?").lower()
+    except Exception:  # noqa: BLE001
+        tag = "?"
+    try:
+        cls = (el.get_attribute("class") or "").strip()
+    except Exception:  # noqa: BLE001
+        cls = ""
+    try:
+        aria = el.get_attribute("aria-disabled") or ""
+    except Exception:  # noqa: BLE001
+        aria = ""
+    try:
+        box = el.bounding_box() or {}
+        size = f"{int(box.get('width', 0))}×{int(box.get('height', 0))}@{int(box.get('x', 0))},{int(box.get('y', 0))}"
+    except Exception:  # noqa: BLE001
+        size = "?"
+    bits = [tag]
+    if cls:
+        bits.append("." + cls.replace(" ", ".")[:60])
+    if aria:
+        bits.append(f"aria-disabled={aria}")
+    bits.append(size)
+    return " ".join(bits)
+
+
+def _click_day_in_month(page, when: datetime, date_sel: str = "",
+                        log: Callable[[str], None] | None = None) -> bool:
+    """
+    Нажать нужное число в блоке нужного месяца.
+
+    Кандидатов может быть несколько (крайние числа месяца дублируются серой
+    ведущей неделей). Идём по ним – живые сначала – и после каждого клика
+    сверяемся по полю даты: как только оно показало нужный день, дело
+    сделано. Так серая «31 июля» больше не выдаёт себя за «31 августа».
+
+    Каждый шаг подробно пишем в лог: сколько нашли ячеек, по какой кликаем,
+    что стало в поле даты после клика. По этим строкам видно, где именно
+    ломается выбор, а не только итоговое «не удалось нажать».
+    """
+    log = log or (lambda m: None)
+    cells = _day_candidates(page, when)
+    log(f"🔬 Ячеек «{when.day}» в блоке месяца: {len(cells)}")
+    if not cells:
+        log("🔬 Ни одной ячейки с этим числом не нашли внутри блока месяца – "
+            "смотрите дамп календаря выше")
+        return False
+    for i, el in enumerate(cells, 1):
+        note = _cell_note(el)
+        log(f"🔬 Кандидат {i}/{len(cells)}: {note}")
+        clicked = "реальным кликом"
         try:
             el.click(timeout=5_000)
-        except Exception:  # noqa: BLE001 – ячейку могло перекрыть подсказкой
-            el.evaluate("e => e.click()")
-        return True
+        except Exception as e:  # noqa: BLE001 – серую/перекрытую так не нажать
+            log(f"🔬   реальный клик не прошёл ({type(e).__name__}) – пробую JS-клик")
+            try:
+                el.evaluate("e => e.click()")
+                clicked = "JS-кликом"
+            except Exception as e2:  # noqa: BLE001
+                log(f"🔬   и JS-клик не прошёл ({type(e2).__name__}) – к следующему")
+                continue
+        # Без поля для сверки верим первому клику (запасной, старый путь).
+        if not date_sel:
+            log(f"🔬   нажал {clicked}, поля для сверки нет – считаю удачей")
+            return True
+        page.wait_for_timeout(700)
+        try:
+            caption = page.locator(date_sel).first.input_value()
+        except Exception:  # noqa: BLE001
+            caption = ""
+        ok = date_caption_ok(caption, when)
+        log(f"🔬   нажал {clicked}, в поле даты теперь «{caption or 'пусто'}» – "
+            f"{'то что нужно ✓' if ok else 'не то, пробую следующего'}")
+        if ok:
+            return True
+    log("🔬 Ни один кандидат не выставил нужную дату в поле")
+    return False
+
+
+def _dump_calendar(page, when: datetime, log: Callable[[str], None],
+                   tag: str = "") -> None:
+    """
+    Подробно осмотреть календарь и выписать в лог его устройство: нашлись ли
+    заголовки месяцев, сколько ячеек-чисел видно, что именно за ячейки с
+    нужным числом (тег, класс, aria-disabled, «серость», координаты) и кусок
+    исходного HTML блока. По этому видно, ПОЧЕМУ выбор дня не сработал, даже
+    когда картинки нет – в облаке скриншот не всегда доходит.
+    """
+    title = f"{MONTHS_NOM[when.month - 1]} {when.year}"
+    nxt_year = when.year + (1 if when.month == 12 else 0)
+    next_title = f"{MONTHS_NOM[when.month % 12]} {nxt_year}"
+    head = f"🔬 Осмотр календаря{(' [' + tag + ']') if tag else ''}:"
+    try:
+        info = page.evaluate(
+            """([title, day]) => {
+                const nodes = [...document.querySelectorAll('*')];
+                const shown = e => !!(e.offsetParent || e.getClientRects().length);
+                const cls = e => (e.className && e.className.toString
+                    ? e.className.toString() : '');
+                const inCal = (el) => {
+                    for (let e = el; e && e !== document.body; e = e.parentElement)
+                        if (/datepicker|calendar/i.test(cls(e))) return true;
+                    return false;
+                };
+                const deadWhy = (el) => {
+                    for (let e = el; e && e !== document.body; e = e.parentElement) {
+                        if (e.getAttribute && (e.getAttribute('aria-disabled') === 'true'
+                            || e.hasAttribute('disabled'))) return 'disabled';
+                        const c = cls(e);
+                        if (/disabl|faded|muted|outside|other|adjac|inactive|foreign|sibling|not-?current|another|weekend-off|prev-|next-month|passed|_past|-past/i.test(c))
+                            return 'class«' + c.slice(0, 40) + '»';
+                        let st = null; try { st = getComputedStyle(e); } catch (_) {}
+                        if (st && st.pointerEvents === 'none') return 'pointer-events:none';
+                        if (st && parseFloat(st.opacity) < 0.5) return 'opacity:' + st.opacity;
+                    }
+                    return '';
+                };
+                // Есть ли где-то на странице цельный «Август 2026» (innerText со
+                // склейкой пробела) – чтобы видеть, что месяц реально показан.
+                const bodyTxt = (document.body && document.body.innerText) || '';
+                const headSeen = bodyTxt.includes(title);
+                const hits = [], sample = [];
+                let dayCells = 0, box = null;
+                for (const e of nodes) {
+                    if (e.children.length !== 0 || !shown(e)) continue;
+                    if (!/^\\d{1,2}$/.test((e.textContent || '').trim())) continue;
+                    const cell = e.closest(
+                        'td,button,[role="button"],[class*="day"],[class*="cell"]') || e;
+                    if (!inCal(cell)) continue;   // только ячейки календаря
+                    dayCells++;
+                    if (!box) box = cell.closest('[class*="datepicker"],[class*="calendar"]');
+                    const t = e.textContent.trim();
+                    const r = cell.getBoundingClientRect();
+                    const rec = t + ':' + cell.tagName.toLowerCase()
+                        + (cls(cell) ? '.' + cls(cell).replace(/\\s+/g, '.').slice(0, 40) : '')
+                        + (deadWhy(cell) ? ' серая(' + deadWhy(cell) + ')' : ' ЖИВАЯ')
+                        + ' [' + Math.round(r.x) + ',' + Math.round(r.y) + ']';
+                    if (sample.length < 14) sample.push(rec);
+                    if (t === day) hits.push(rec);
+                }
+                const html = box ? box.outerHTML.replace(/\\s+/g, ' ') : '';
+                return {
+                    headSeen, dayCells, hits, sample,
+                    htmlLen: html.length, htmlSample: html.slice(0, 1200),
+                };
+            }""", [title, str(when.day)])
+    except Exception as e:  # noqa: BLE001
+        log(f"{head} осмотреть не удалось – {type(e).__name__}: {e}")
+        return
+
+    try:
+        field = page.locator(_first_visible(page, SEL["date_input"], 2_000) or "input").first.input_value()
     except Exception:  # noqa: BLE001
-        return False
+        field = ""
+    log(head)
+    log(f"🔬 поле даты сейчас: «{field or 'пусто'}»")
+    log(f"🔬 «{title}» на странице (innerText): {'виден' if info.get('headSeen') else 'НЕ виден'}")
+    log(f"🔬 ячеек-дней в календаре: {info.get('dayCells', 0)}; "
+        f"из них «{when.day}»: {len(info.get('hits') or [])}")
+    for h in (info.get("hits") or []):
+        log(f"🔬   «{when.day}» → {h}")
+    if info.get("sample"):
+        log("🔬 ячейки календаря: " + " | ".join(info["sample"]))
+    if info.get("htmlSample"):
+        log(f"🔬 HTML календаря ({info.get('htmlLen', 0)} симв.), начало:")
+        log("🔬 " + info["htmlSample"])
 
 
 def _open_calendar_and_pick(page, when: datetime, log: Callable[[str], None]) -> str:
@@ -853,27 +1296,37 @@ def _open_calendar_and_pick(page, when: datetime, log: Callable[[str], None]) ->
         log(f"Дата уже стоит нужная: {already}")
         return ""
 
+    log(f"Открываю календарь (в поле стоит «{already or 'пусто'}», нужно "
+        f"{when.day} {MONTHS_RU[when.month - 1]} {when.year})")
     page.locator(date_sel).first.click()
     page.wait_for_timeout(900)
 
     target = f"{MONTHS_NOM[when.month - 1]} {when.year}"
     if not calendar_shows(_body_text(page), when):
+        log(f"Месяца «{target}» пока не видно – листаю вперёд")
         for step in range(1, 13):
             if not _click_first(page, ['[class*="calendar"] [class*="next"]',
                                        '[aria-label*="Следующий"]',
                                        '[class*="arrow"][class*="right"]'], timeout=2_000):
+                log(f"🔬 стрелку «вперёд» не нашёл на шаге {step} – листать нечем")
                 break
             page.wait_for_timeout(600)
             if calendar_shows(_body_text(page), when):
                 log(f"Пролистал календарь до «{target}» ({step} шаг(ов))")
                 break
         else:
+            _dump_calendar(page, when, log, tag="после листания")
             return (f"в календаре не нашёлся «{target}» – пролистал год вперёд "
                     "и остановился, чтобы не уехать в чужой год")
     if not calendar_shows(_body_text(page), when):
+        _dump_calendar(page, when, log, tag="месяц не виден")
         return f"в календаре не видно «{target}»"
 
-    if not _click_day_in_month(page, when):
+    # Перед выбором числа осматриваем блок – в лог попадает, из каких ячеек
+    # выбираем. Если клик не сработает, дамп уже будет под рукой.
+    _dump_calendar(page, when, log, tag="перед выбором дня")
+    if not _click_day_in_month(page, when, date_sel, log):
+        _dump_calendar(page, when, log, tag="после неудачного клика")
         return f"не удалось нажать {when.day} в блоке «{target}»"
     page.wait_for_timeout(900)
 
@@ -1046,6 +1499,7 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
     Дзене – её видно в студии, и доделать её можно руками.
     """
     log = log or (lambda m: None)
+    log(f"Дзен: сборка {BUILD}")
     warnings: list[str] = list(article.get("warnings") or [])
 
     src = source_session(project_id)
@@ -1066,14 +1520,25 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
 
     with sync_playwright() as pw:
         import vk_social as _vk
-        browser = yb._launch(pw, engine, headless=headless, extra_args=_vk.ANTIBOT_ARGS)
+        # Когда человек смотрит (headless=False), окно раскрываем на весь экран
+        # и не навязываем свой размер вьюпорта – иначе окно публикации Дзена не
+        # помещается и «ничего не видно». В облаке (headless) размер задаём сами.
+        # Окно большим задаём ЯВНО размером: Playwright с обычным launch не
+        # слушает «--start-maximized» (это умеет только persistent-context), а
+        # no_viewport оставлял маленькое окно – заказчик и заметил «всё равно
+        # маленькое». Поэтому и окно, и вьюпорт делаем крупными.
+        WIN_W, WIN_H = (1680, 1050) if not headless else (1600, 1000)
+        extra = list(_vk.ANTIBOT_ARGS)
+        if not headless:
+            extra += [f"--window-size={WIN_W},{WIN_H}", "--window-position=0,0"]
+        browser = yb._launch(pw, engine, headless=headless, extra_args=extra)
         page = None
         try:
             context = browser.new_context(
-                storage_state=str(src),
-                viewport={"width": 1440, "height": 950}, user_agent=yb.UA,
+                storage_state=str(src), user_agent=yb.UA,
                 locale=yb.LOCALE, extra_http_headers=yb.LANG_HEADERS,
-                timezone_id=TIMEZONE_ID)
+                timezone_id=TIMEZONE_ID,
+                viewport={"width": WIN_W, "height": WIN_H - 120})
             context.add_init_script(_vk.ANTIBOT_INIT)
             page = context.new_page()
 
@@ -1138,7 +1603,8 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
             html = blocks_to_html(blocks)
             info = zen_doc.counts(article)
             log(f"Вставляю текст: {info['chars']} знаков, {info['para']} абзацев, "
-                f"{info['head']} подзаголовков, {info['list']} списков")
+                f"{info['head']} подзаголовков, {info['list']} списков, "
+                f"{info.get('table', 0)} таблиц, {info.get('image', 0)} картинок")
             body.click()
             page.wait_for_timeout(400)
             if not _paste_html_into(page, body, html):
@@ -1147,16 +1613,37 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
                 _type_blocks_into(page, body, blocks)
             page.wait_for_timeout(2_500)
 
-            # ─── Таблицы картинками ───
-            tables = [b for b in blocks if b["kind"] == "table"]
-            for n, tbl in enumerate(tables, 1):
-                log(f"Таблица {n} из {len(tables)}: рисую картинкой")
-                shot_path = temp / f"zen-table-{n}.png"
-                made = render_table_png(context, tbl["rows"], shot_path)
-                if not made or not _attach_image(page, made):
-                    warnings.append(f"Таблицу {n} вставить не удалось – "
-                                    "добавьте её картинкой руками в черновике.")
-                    log(f"⚠️ Таблица {n} не вставилась")
+            # ─── Картинки и таблицы на свои места ───
+            # Идём по метке каждого медиа-блока (⟦МЕДИА-N⟧) в тексте: таблицу
+            # рисуем картинкой, картинку из документа раскодируем – и ставим
+            # ровно туда, где стояла метка. Обратный порядок не важен: каждая
+            # метка своя.
+            import base64 as _b64
+            media = media_items(blocks)
+            if media:
+                log(f"Картинок и таблиц в статье: {len(media)} – ставлю на свои места")
+            for k, m in enumerate(media, 1):
+                token = m["token"]
+                if m["kind"] == "table":
+                    rows = m.get("rows") or []
+                    log(f"Таблица ({len(rows)} строк) → картинкой на место {token}")
+                    made = render_table_png(context, rows, temp / f"zen-media-{k}.png", log)
+                    what = "Таблицу"
+                else:
+                    log(f"Картинка из документа → на место {token}")
+                    made = str(temp / f"zen-media-{k}.{m.get('ext', 'png')}")
+                    try:
+                        Path(made).write_bytes(_b64.b64decode(m["data_b64"]))
+                    except Exception as e:  # noqa: BLE001
+                        log(f"🔬 картинку из документа не раскодировал – {type(e).__name__}: {e}")
+                        made = ""
+                    what = "Картинку"
+                if not made or not _attach_image(page, made, log, field=body, token=token):
+                    warnings.append(f"{what} на месте {token} вставить не удалось – "
+                                    "добавьте её руками в черновике.")
+                    log(f"⚠️ {what} на месте {token} не вставилась")
+                else:
+                    log(f"✓ {what} поставил на место {token}")
 
             page.wait_for_timeout(1_500)
 
@@ -1171,6 +1658,12 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
                 return {"ok": False, "error": "Не нашли кнопку «Опубликовать»",
                         "shot": _debug_shot(project_id, page, "no-publish")}
             page.wait_for_timeout(2_500)
+
+            # Обложку статьи ставим на ПЕРВУЮ картинку (она из документа и идёт
+            # выше в тексте). Иначе Дзен нередко берёт обложкой картинку
+            # таблицы, а нужна заглавная.
+            if [b for b in blocks if b["kind"] in ("image", "table")]:
+                _pick_first_cover(page, log)
 
             why = _turn_on_later(page, log)
             if why:

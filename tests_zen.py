@@ -84,6 +84,76 @@ def make_docx() -> bytes:
     return buf.getvalue()
 
 
+def make_docx_with_image() -> bytes:
+    """Документ с картинкой на своём месте – как у заказчика: вводный абзац,
+    затем картинка, затем подзаголовок и текст."""
+    W2 = ('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+          'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
+          'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"')
+    # Абзац с картинкой: <w:drawing> с <a:blip r:embed="rId6">.
+    pic = ('<w:p><w:r><w:drawing><a:blip r:embed="rId6"/>'
+           '</w:drawing></w:r></w:p>')
+    body = (_p("Латунь это сплав каких металлов?", "Heading2", bold=True)
+            + _p("Увидели блестящий самовар? За блеском скрывается больше.")
+            + pic
+            + _p("Главный секрет", "Heading3", bold=True)
+            + _p("В основе латуни союз двух металлов."))
+    doc = f'<?xml version="1.0"?><w:document {W2}><w:body>{body}</w:body></w:document>'
+    rels = ('<?xml version="1.0"?><Relationships '
+            'xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId6" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
+            'Target="media/image1.png"/></Relationships>')
+    png = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+           b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00"
+           b"\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82")
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("word/document.xml", doc)
+        z.writestr("word/_rels/document.xml.rels", rels)
+        z.writestr("word/media/image1.png", png)
+    return buf.getvalue()
+
+
+def test_doc_image() -> None:
+    print("Картинка из документа: разбор и метки на своих местах")
+    art = zen_doc.parse_docx(make_docx_with_image())
+    kinds = [b["kind"] for b in art["blocks"]]
+    check("картинка стала отдельным блоком", kinds.count("image") == 1, str(kinds))
+    check("картинка стоит между вводным абзацем и подзаголовком",
+          kinds[:3] == ["para", "image", "head"], str(kinds))
+    img = next(b for b in art["blocks"] if b["kind"] == "image")
+    check("у картинки есть данные и формат", bool(img.get("data_b64")) and img.get("ext") == "png")
+
+    try:
+        import zen_browser as zb
+    except ImportError as e:
+        print(f"  ⏭ дальше пропускаю (нет browser-части): {e}")
+        return
+
+    # Метки в HTML и список медиа идут в одном порядке и совпадают токенами.
+    html = zb.blocks_to_html(art["blocks"])
+    media = zb.media_items(art["blocks"])
+    check("в тексте одна метка медиа", html.count("⟦МЕДИА-1⟧") == 1, html[:200])
+    check("медиа-элемент один, с тем же токеном",
+          len(media) == 1 and media[0]["token"] == zb.media_token(1), str(media[:1]))
+    check("метка стоит после вводного абзаца, до подзаголовка",
+          html.index("Увидели") < html.index("⟦МЕДИА-1⟧") < html.index("Главный секрет"))
+
+    # Таблица тоже получает свою метку и идёт следующим номером.
+    with2 = {"blocks": [{"kind": "para", "markup": "а"},
+                        {"kind": "image", "data_b64": "x", "ext": "png"},
+                        {"kind": "para", "markup": "б"},
+                        {"kind": "table", "rows": [["к"]]}]}
+    media2 = zb.media_items(with2["blocks"])
+    check("две метки: картинка ⟦1⟧ и таблица ⟦2⟧",
+          [m["token"] for m in media2] == [zb.media_token(1), zb.media_token(2)],
+          str([m["token"] for m in media2]))
+    html2 = zb.blocks_to_html(with2["blocks"])
+    check("метки в тексте по порядку",
+          html2.index("⟦МЕДИА-1⟧") < html2.index("⟦МЕДИА-2⟧"))
+
+
 # ─── Разбор документа ───────────────────────────────────────────────
 def test_parse_docx() -> None:
     print("Статья из документа Word")
@@ -529,6 +599,172 @@ def test_calendar() -> None:
           len(zb.MONTHS_RU) == 12 and len(zb.MONTHS_NOM) == 12)
 
 
+def test_click_day_spillover() -> None:
+    """
+    Ровно тот календарь, на котором Дзен падал (по живому дампу 19.08):
+    два месяца рядом, ячейки – <td class="…datepicker-calendar-cell…">,
+    заголовок «Август» и «2026» РАЗНЫМИ узлами без пробела (значит
+    textContent.includes('Август 2026') не находит его – на этом и стоял
+    прежний выбор дня), прошедшие и соседние дни серые с aria-disabled.
+
+    Проверяем: выбор больше не зависит от заголовка, живое «31 августа»
+    находится и нажимается, а число, живое СРАЗУ в двух месяцах (25 августа
+    и 25 сентября), выбирается по нужному месяцу за счёт сверки поля даты.
+    """
+    print("Календарь: выбираем живой день без опоры на заголовок месяца")
+    try:
+        import zen_browser as zb
+        from playwright.sync_api import sync_playwright
+    except ImportError as e:
+        print(f"  ⏭ пропускаю: {e}")
+        return
+    import calendar as _cal
+
+    CELL = "article-editor-desktop--datepicker-calendar-cell"
+
+    def grid(year: int, month: int, today) -> str:
+        cells = []
+        for d in _cal.Calendar(firstweekday=0).itermonthdates(year, month):
+            adj = d.month != month
+            past = d < today
+            cls = CELL + ((" " + CELL + "_disabled") if (adj or past) else "")
+            dis = 'aria-disabled="true"' if (adj or past) else ""
+            cap = f"{d.day} {zb.MONTHS_RU[month - 1]} {year}"
+            live = "" if (adj or past) else \
+                f"onclick=\"document.getElementById('dt').value='{cap}'\""
+            cells.append(f'<td class="{cls}" {dis} {live}><span>{d.day}</span></td>')
+        m = zb.MONTHS_NOM[month - 1]
+        # Заголовок нарочно РАЗБИТ: между «Август» и «2026» нет текстового
+        # пробела – ровно как у Дзена, где includes('Август 2026') не срабатывает.
+        head = f'<div class="cap"><span>{m}</span><span>{year}</span></div>'
+        return (f'<table class="article-editor-desktop--datepicker-calendar">'
+                f'<caption>{head}</caption><tbody><tr>{"".join(cells)}</tr></tbody></table>')
+
+    today = datetime(2026, 8, 19).date()
+    html = ('<!doctype html><meta charset=utf-8>'
+            f'<style>.{CELL}_disabled{{opacity:.3;pointer-events:none}}</style>'
+            '<input id=dt readonly value="19 августа 2026">'
+            + grid(2026, 8, today) + grid(2026, 9, today))
+    when = datetime(2026, 8, 31, 18, 5, tzinfo=timezone(timedelta(hours=5)))
+    when25 = datetime(2026, 8, 25, 18, 5, tzinfo=timezone(timedelta(hours=5)))
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001 – в CI лежит по этому пути, локально – как есть
+            try:
+                browser = pw.chromium.launch()
+            except Exception as e:  # noqa: BLE001 – браузера нет вовсе
+                print(f"  ⏭ пропускаю: браузер не запустился ({e})")
+                return
+        try:
+            page = browser.new_page()
+            page.set_content(html)
+
+            # Заголовок как цельный текст действительно не находится – значит
+            # выбор обязан работать и без него.
+            check("заголовок «Август 2026» цельным текстом не ищется",
+                  not zb.calendar_shows(page.evaluate(
+                      "() => document.body.textContent"), when))
+
+            cands = zb._day_candidates(page, when)
+            check("ячейки «31» нашлись", len(cands) >= 1, str(len(cands)))
+            check("первым кандидатом идёт живая ячейка (не серая)",
+                  "серая" not in zb._cell_note(cands[0]).lower()
+                  and (cands[0].get_attribute("aria-disabled") or "") != "true")
+            check("выбор 31 сработал без заголовка",
+                  zb._click_day_in_month(page, when, "#dt"))
+            check("в поле именно 31 августа",
+                  page.locator("#dt").first.input_value() == "31 августа 2026")
+
+            # 25-е живое в обоих месяцах – нужный выбирается сверкой поля.
+            page.locator("#dt").first.evaluate("e => e.value = '19 августа 2026'")
+            check("для «25» кандидатов двое (август и сентябрь)",
+                  len(zb._day_candidates(page, when25)) == 2)
+            check("выбор 25 августа сработал",
+                  zb._click_day_in_month(page, when25, "#dt"))
+            check("в поле именно 25 августа",
+                  page.locator("#dt").first.input_value() == "25 августа 2026")
+        finally:
+            browser.close()
+
+
+def test_image_at_marker() -> None:
+    """
+    Картинка должна вставать НА МЕСТО метки ⟦МЕДИА-N⟧ и метку убирать. Живой
+    прогон показал: программное выделение редактор Дзена игнорировал, картинка
+    улетала вверх, а метка ⟦МЕДИА-N⟧ оставалась текстом. Теперь метку выделяем
+    настоящим тройным кликом. Проверяем на редакторе-имитаторе: <img> встал
+    между нужными абзацами, а текста метки в поле не осталось.
+    """
+    print("Картинка встаёт на место метки и метку убирает")
+    try:
+        import zen_browser as zb
+        from playwright.sync_api import sync_playwright
+    except ImportError as e:
+        print(f"  ⏭ пропускаю: {e}")
+        return
+    import base64
+
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+    tmp = Path("/tmp/zen-marker-test.png")
+    tmp.write_bytes(png)
+    token = zb.media_token(1)
+    html = ("<div id=ed contenteditable=true>"
+            "<p>Вводный абзац про латунь.</p>"
+            f"<p>{token}</p>"
+            "<h2>Главный секрет</h2>"
+            "<p>Дальше текст статьи.</p></div>"
+            "<script>document.getElementById('ed').addEventListener('paste',e=>{"
+            "const f=e.clipboardData&&e.clipboardData.files[0];"
+            "if(f){e.preventDefault();const img=document.createElement('img');"
+            "img.src=URL.createObjectURL(f);img.className='ins';"
+            "const s=window.getSelection();"
+            "if(s.rangeCount){const r=s.getRangeAt(0);r.deleteContents();r.insertNode(img);}"
+            "else document.getElementById('ed').appendChild(img);}});</script>")
+
+    with sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(executable_path="/opt/pw-browsers/chromium",
+                                         args=["--no-sandbox"])
+        except Exception:  # noqa: BLE001
+            try:
+                browser = pw.chromium.launch()
+            except Exception as e:  # noqa: BLE001
+                print(f"  ⏭ пропускаю: браузер не запустился ({e})")
+                return
+        try:
+            page = browser.new_page()
+            page.set_content(html)
+            field = page.locator("#ed")
+
+            ok = zb._paste_image_into(page, field, str(tmp), lambda m: None, token=token)
+            check("вставка удалась", ok)
+            check("картинка появилась в тексте", page.locator("#ed img.ins").count() == 1)
+            check("метки ⟦МЕДИА-1⟧ в тексте не осталось",
+                  token not in page.locator("#ed").inner_text())
+            # img стоит ДО подзаголовка «Главный секрет» – значит на месте метки.
+            pos = page.evaluate(
+                """() => {
+                    const kids = [...document.querySelectorAll('#ed > *')];
+                    const img = kids.findIndex(n => n.querySelector && n.querySelector('img.ins')
+                        || n.classList && n.classList.contains('ins'));
+                    const h2 = kids.findIndex(n => n.tagName === 'H2');
+                    return {img, h2};
+                }""")
+            check("картинка стоит выше подзаголовка (на месте метки)",
+                  0 <= pos["img"] < pos["h2"], str(pos))
+            # H2 после картинки должен остаться подзаголовком – его нельзя
+            # утянуть Backspace'ом при чистке метки (на этом «слетал» заголовок).
+            check("подзаголовок H2 уцелел",
+                  page.locator("#ed h2").count() == 1
+                  and "Главный секрет" in page.locator("#ed h2").inner_text())
+        finally:
+            browser.close()
+
+
 def test_confirm_button() -> None:
     print("Подтверждение отложки: кнопка «Опубликовать позже»")
     try:
@@ -719,6 +955,7 @@ def test_registry_wiring() -> None:
 def main() -> int:
     print("═" * 60)
     test_parse_docx()
+    test_doc_image()
     test_parse_plain()
     test_doc_links()
     test_long_title()
@@ -727,6 +964,8 @@ def main() -> int:
     test_popups_and_fields()
     test_paste_detection()
     test_calendar()
+    test_click_day_spillover()
+    test_image_at_marker()
     test_date_already_set()
     test_confirm_button()
     test_settle_after_publish()

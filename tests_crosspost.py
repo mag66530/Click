@@ -223,6 +223,16 @@ def test_inline_format() -> None:
     p3, b3, a3 = pt.inline_format("**Заголовок** и обычный текст")
     check("простой жирный сохранён", b3 == ["Заголовок"] and a3 == [], f"{b3} {a3}")
 
+    # Адрес В СКОБКАХ после анкора: реестр ИМП «на нашем сайте
+    # (https://inmetprom.ru/).» (живой прогон 19.08.2026 18:54) — скобочный
+    # адрес доезжал сырым рядом с готовой ссылкой. Должен убираться.
+    m4 = pt.autolink("на нашем сайте (https://inmetprom.ru/).", "https://inmetprom.ru")
+    p4, b4, a4 = pt.inline_format(m4)
+    check("скобочный адрес после анкора убран",
+          "inmetprom.ru" not in p4 and p4.strip().endswith("нашем сайте."), repr(p4))
+    check("ссылка ИМП уцелела как цель",
+          a4 == [("нашем сайте", "https://inmetprom.ru")], str(a4))
+
     # ОК и МАКС применяют формат в порядке «ссылка → жирный».
     import inspect
     import max_browser as mb

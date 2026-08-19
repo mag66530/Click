@@ -592,13 +592,18 @@ def table_html(rows: list[list[str]]) -> str:
 <table id="t"><thead><tr>{th}</tr></thead><tbody>{trs}</tbody></table>"""
 
 
-def render_table_png(context, rows: list[list[str]], out_path: Path) -> str:
+def render_table_png(context, rows: list[list[str]], out_path: Path,
+                     log: Callable[[str], None] | None = None) -> str:
     """
     Нарисовать таблицу и снять её в PNG. Возвращает путь или пустую строку.
 
     Рисуем ТЕМ ЖЕ браузером, что публикует: второй движок ради картинки –
     лишние полгигабайта памяти в облаке, на этом Click уже падал.
     """
+    log = log or (lambda m: None)
+    if not rows:
+        log("🔬 render_table_png: строк нет – рисовать нечего")
+        return ""
     page = None
     try:
         page = context.new_page()
@@ -607,7 +612,8 @@ def render_table_png(context, rows: list[list[str]], out_path: Path) -> str:
         page.wait_for_timeout(300)
         page.locator("#t").screenshot(path=str(out_path))
         return str(out_path)
-    except Exception:  # noqa: BLE001 – без картинки статья всё равно выйдет
+    except Exception as e:  # noqa: BLE001 – без картинки статья всё равно выйдет
+        log(f"🔬 render_table_png: не получилось – {type(e).__name__}: {e}")
         return ""
     finally:
         try:
@@ -703,16 +709,22 @@ def _type_blocks_into(page, field, blocks: list[dict]) -> None:
         page.keyboard.press("Enter")
 
 
-def _attach_image(page, path: str) -> bool:
+def _attach_image(page, path: str, log: Callable[[str], None] | None = None) -> bool:
     """Отдать картинку редактору через файловое поле (их у него несколько)."""
+    log = log or (lambda m: None)
     try:
         inputs = page.locator(SEL["file_input"][0])
-        if not inputs.count():
+        cnt = inputs.count()
+        log(f"🔬 _attach_image: файловых полей на странице: {cnt}")
+        if not cnt:
+            log("🔬 _attach_image: ни одного <input type=file> – редактор мог "
+                "спрятать поле до нажатия «＋»; картинку так не отдать")
             return False
         inputs.first.set_input_files(path)
         page.wait_for_timeout(3_000)
         return True
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
+        log(f"🔬 _attach_image: не получилось – {type(e).__name__}: {e}")
         return False
 
 
@@ -863,7 +875,36 @@ def _day_candidates(page, when: datetime) -> list:
         return []
 
 
-def _click_day_in_month(page, when: datetime, date_sel: str = "") -> bool:
+def _cell_note(el) -> str:
+    """Коротко о ячейке дня для лога: тег, класс, aria-disabled, размер."""
+    try:
+        tag = (el.evaluate("e => e.tagName") or "?").lower()
+    except Exception:  # noqa: BLE001
+        tag = "?"
+    try:
+        cls = (el.get_attribute("class") or "").strip()
+    except Exception:  # noqa: BLE001
+        cls = ""
+    try:
+        aria = el.get_attribute("aria-disabled") or ""
+    except Exception:  # noqa: BLE001
+        aria = ""
+    try:
+        box = el.bounding_box() or {}
+        size = f"{int(box.get('width', 0))}×{int(box.get('height', 0))}@{int(box.get('x', 0))},{int(box.get('y', 0))}"
+    except Exception:  # noqa: BLE001
+        size = "?"
+    bits = [tag]
+    if cls:
+        bits.append("." + cls.replace(" ", ".")[:60])
+    if aria:
+        bits.append(f"aria-disabled={aria}")
+    bits.append(size)
+    return " ".join(bits)
+
+
+def _click_day_in_month(page, when: datetime, date_sel: str = "",
+                        log: Callable[[str], None] | None = None) -> bool:
     """
     Нажать нужное число в блоке нужного месяца.
 
@@ -871,29 +912,141 @@ def _click_day_in_month(page, when: datetime, date_sel: str = "") -> bool:
     ведущей неделей). Идём по ним – живые сначала – и после каждого клика
     сверяемся по полю даты: как только оно показало нужный день, дело
     сделано. Так серая «31 июля» больше не выдаёт себя за «31 августа».
+
+    Каждый шаг подробно пишем в лог: сколько нашли ячеек, по какой кликаем,
+    что стало в поле даты после клика. По этим строкам видно, где именно
+    ломается выбор, а не только итоговое «не удалось нажать».
     """
+    log = log or (lambda m: None)
     cells = _day_candidates(page, when)
+    log(f"🔬 Ячеек «{when.day}» в блоке месяца: {len(cells)}")
     if not cells:
+        log("🔬 Ни одной ячейки с этим числом не нашли внутри блока месяца – "
+            "смотрите дамп календаря выше")
         return False
-    for el in cells:
+    for i, el in enumerate(cells, 1):
+        note = _cell_note(el)
+        log(f"🔬 Кандидат {i}/{len(cells)}: {note}")
+        clicked = "реальным кликом"
         try:
             el.click(timeout=5_000)
-        except Exception:  # noqa: BLE001 – ячейку могло перекрыть подсказкой
+        except Exception as e:  # noqa: BLE001 – серую/перекрытую так не нажать
+            log(f"🔬   реальный клик не прошёл ({type(e).__name__}) – пробую JS-клик")
             try:
                 el.evaluate("e => e.click()")
-            except Exception:  # noqa: BLE001
+                clicked = "JS-кликом"
+            except Exception as e2:  # noqa: BLE001
+                log(f"🔬   и JS-клик не прошёл ({type(e2).__name__}) – к следующему")
                 continue
         # Без поля для сверки верим первому клику (запасной, старый путь).
         if not date_sel:
+            log(f"🔬   нажал {clicked}, поля для сверки нет – считаю удачей")
             return True
         page.wait_for_timeout(700)
         try:
             caption = page.locator(date_sel).first.input_value()
         except Exception:  # noqa: BLE001
             caption = ""
-        if date_caption_ok(caption, when):
+        ok = date_caption_ok(caption, when)
+        log(f"🔬   нажал {clicked}, в поле даты теперь «{caption or 'пусто'}» – "
+            f"{'то что нужно ✓' if ok else 'не то, пробую следующего'}")
+        if ok:
             return True
+    log("🔬 Ни один кандидат не выставил нужную дату в поле")
     return False
+
+
+def _dump_calendar(page, when: datetime, log: Callable[[str], None],
+                   tag: str = "") -> None:
+    """
+    Подробно осмотреть календарь и выписать в лог его устройство: нашлись ли
+    заголовки месяцев, сколько ячеек-чисел видно, что именно за ячейки с
+    нужным числом (тег, класс, aria-disabled, «серость», координаты) и кусок
+    исходного HTML блока. По этому видно, ПОЧЕМУ выбор дня не сработал, даже
+    когда картинки нет – в облаке скриншот не всегда доходит.
+    """
+    title = f"{MONTHS_NOM[when.month - 1]} {when.year}"
+    nxt_year = when.year + (1 if when.month == 12 else 0)
+    next_title = f"{MONTHS_NOM[when.month % 12]} {nxt_year}"
+    head = f"🔬 Осмотр календаря{(' [' + tag + ']') if tag else ''}:"
+    try:
+        info = page.evaluate(
+            """([title, nextTitle, day]) => {
+                const nodes = [...document.querySelectorAll('*')];
+                const shown = e => !!(e.offsetParent || e.getClientRects().length);
+                const cls = e => (e.className && e.className.toString
+                    ? e.className.toString() : '');
+                const smallest = (txt) => {
+                    const hs = nodes.filter(e => shown(e) && (e.textContent || '').includes(txt));
+                    if (!hs.length) return null;
+                    hs.sort((a, b) =>
+                        a.querySelectorAll('*').length - b.querySelectorAll('*').length);
+                    return hs[0];
+                };
+                const head = smallest(title), nhead = smallest(nextTitle);
+                const from = head ? nodes.indexOf(head) : -1;
+                let to = nodes.length;
+                if (nhead) { const ni = nodes.indexOf(nhead); if (ni > from) to = ni; }
+                const deadWhy = (el) => {
+                    for (let e = el; e && e !== document.body; e = e.parentElement) {
+                        if (e.getAttribute && (e.getAttribute('aria-disabled') === 'true'
+                            || e.hasAttribute('disabled'))) return 'disabled';
+                        const c = cls(e);
+                        if (/disabl|faded|muted|outside|other|adjac|inactive|foreign|sibling|not-?current|another|prev|next-?month|passed|past/i.test(c))
+                            return 'class«' + c.slice(0, 30) + '»';
+                        let st = null; try { st = getComputedStyle(e); } catch (_) {}
+                        if (st && st.pointerEvents === 'none') return 'pointer-events:none';
+                        if (st && parseFloat(st.opacity) < 0.5) return 'opacity:' + st.opacity;
+                    }
+                    return '';
+                };
+                const hits = [], sample = [];
+                let digits = 0;
+                for (let i = (from < 0 ? 0 : from); i < to; i++) {
+                    const e = nodes[i];
+                    if (e.children.length === 0 && shown(e)
+                        && /^\\d{1,2}$/.test((e.textContent || '').trim())) {
+                        digits++;
+                        const t = e.textContent.trim();
+                        const cell = e.closest('td,button,[role="button"],[class*="day"]') || e;
+                        const r = cell.getBoundingClientRect();
+                        const rec = t + ':' + cell.tagName.toLowerCase()
+                            + (cls(cell) ? '.' + cls(cell).replace(/\\s+/g, '.').slice(0, 40) : '')
+                            + (deadWhy(cell) ? ' серая(' + deadWhy(cell) + ')' : ' ЖИВАЯ')
+                            + ' [' + Math.round(r.x) + ',' + Math.round(r.y) + ']';
+                        if (sample.length < 12) sample.push(rec);
+                        if (t === day) hits.push(rec);
+                    }
+                }
+                let box = head;
+                for (let k = 0; k < 4 && box && box.parentElement; k++) box = box.parentElement;
+                const html = box ? box.outerHTML.replace(/\\s+/g, ' ') : '';
+                return {
+                    head: !!head, next: !!nhead, digits, hits, sample,
+                    htmlLen: html.length, htmlSample: html.slice(0, 900),
+                };
+            }""", [title, next_title, str(when.day)])
+    except Exception as e:  # noqa: BLE001
+        log(f"{head} осмотреть не удалось – {type(e).__name__}: {e}")
+        return
+
+    try:
+        field = page.locator(_first_visible(page, SEL["date_input"], 2_000) or "input").first.input_value()
+    except Exception:  # noqa: BLE001
+        field = ""
+    log(head)
+    log(f"🔬 поле даты сейчас: «{field or 'пусто'}»")
+    log(f"🔬 заголовок «{title}»: {'найден' if info.get('head') else 'НЕ найден'}; "
+        f"«{next_title}»: {'найден' if info.get('next') else 'НЕ найден'}")
+    log(f"🔬 ячеек-чисел в блоке месяца: {info.get('digits', 0)}; "
+        f"из них «{when.day}»: {len(info.get('hits') or [])}")
+    for h in (info.get("hits") or []):
+        log(f"🔬   «{when.day}» → {h}")
+    if info.get("sample"):
+        log("🔬 первые ячейки блока: " + " | ".join(info["sample"]))
+    if info.get("htmlSample"):
+        log(f"🔬 HTML блока ({info.get('htmlLen', 0)} симв.), начало:")
+        log("🔬 " + info["htmlSample"])
 
 
 def _open_calendar_and_pick(page, when: datetime, log: Callable[[str], None]) -> str:
@@ -925,27 +1078,37 @@ def _open_calendar_and_pick(page, when: datetime, log: Callable[[str], None]) ->
         log(f"Дата уже стоит нужная: {already}")
         return ""
 
+    log(f"Открываю календарь (в поле стоит «{already or 'пусто'}», нужно "
+        f"{when.day} {MONTHS_RU[when.month - 1]} {when.year})")
     page.locator(date_sel).first.click()
     page.wait_for_timeout(900)
 
     target = f"{MONTHS_NOM[when.month - 1]} {when.year}"
     if not calendar_shows(_body_text(page), when):
+        log(f"Месяца «{target}» пока не видно – листаю вперёд")
         for step in range(1, 13):
             if not _click_first(page, ['[class*="calendar"] [class*="next"]',
                                        '[aria-label*="Следующий"]',
                                        '[class*="arrow"][class*="right"]'], timeout=2_000):
+                log(f"🔬 стрелку «вперёд» не нашёл на шаге {step} – листать нечем")
                 break
             page.wait_for_timeout(600)
             if calendar_shows(_body_text(page), when):
                 log(f"Пролистал календарь до «{target}» ({step} шаг(ов))")
                 break
         else:
+            _dump_calendar(page, when, log, tag="после листания")
             return (f"в календаре не нашёлся «{target}» – пролистал год вперёд "
                     "и остановился, чтобы не уехать в чужой год")
     if not calendar_shows(_body_text(page), when):
+        _dump_calendar(page, when, log, tag="месяц не виден")
         return f"в календаре не видно «{target}»"
 
-    if not _click_day_in_month(page, when, date_sel):
+    # Перед выбором числа осматриваем блок – в лог попадает, из каких ячеек
+    # выбираем. Если клик не сработает, дамп уже будет под рукой.
+    _dump_calendar(page, when, log, tag="перед выбором дня")
+    if not _click_day_in_month(page, when, date_sel, log):
+        _dump_calendar(page, when, log, tag="после неудачного клика")
         return f"не удалось нажать {when.day} в блоке «{target}»"
     page.wait_for_timeout(900)
 
@@ -1118,6 +1281,7 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
     Дзене – её видно в студии, и доделать её можно руками.
     """
     log = log or (lambda m: None)
+    log(f"Дзен: сборка {BUILD}")
     warnings: list[str] = list(article.get("warnings") or [])
 
     src = source_session(project_id)
@@ -1222,13 +1386,23 @@ def schedule_article(project_id: str, editor_url: str, article: dict,
             # ─── Таблицы картинками ───
             tables = [b for b in blocks if b["kind"] == "table"]
             for n, tbl in enumerate(tables, 1):
-                log(f"Таблица {n} из {len(tables)}: рисую картинкой")
+                rows = tbl.get("rows") or []
+                log(f"Таблица {n} из {len(tables)}: {len(rows)} строк – рисую картинкой")
                 shot_path = temp / f"zen-table-{n}.png"
-                made = render_table_png(context, tbl["rows"], shot_path)
-                if not made or not _attach_image(page, made):
+                made = render_table_png(context, rows, shot_path, log)
+                if not made:
+                    log(f"🔬 Таблица {n}: картинку снять НЕ удалось (см. причину выше)")
                     warnings.append(f"Таблицу {n} вставить не удалось – "
                                     "добавьте её картинкой руками в черновике.")
                     log(f"⚠️ Таблица {n} не вставилась")
+                    continue
+                log(f"🔬 Таблица {n}: картинка готова ({shot_path.name}), отдаю редактору")
+                if not _attach_image(page, made, log):
+                    warnings.append(f"Таблицу {n} вставить не удалось – "
+                                    "добавьте её картинкой руками в черновике.")
+                    log(f"⚠️ Таблица {n} не вставилась")
+                else:
+                    log(f"✓ Таблица {n} отдана редактору картинкой")
 
             page.wait_for_timeout(1_500)
 

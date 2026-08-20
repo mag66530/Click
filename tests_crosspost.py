@@ -2539,6 +2539,17 @@ def test_tg_browser_logic() -> None:
           tg.caption_time_ok("Отправить 19 августа в 9:05", datetime(2026, 8, 19, 9, 5)))
     check("нет надписи – не мешаем", tg.caption_time_ok("", when))
 
+    # Прокси для Телеграма (у части провайдеров он заблокирован).
+    p = tg.parse_proxy("socks5://user:pass@1.2.3.4:1080")
+    check("socks5 с логином разобран",
+          p == {"server": "socks5://1.2.3.4:1080", "username": "user", "password": "pass"}, str(p))
+    check("http без логина разобран",
+          tg.parse_proxy("http://1.2.3.4:8080") == {"server": "http://1.2.3.4:8080"})
+    check("голый host:port достраивается до socks5",
+          tg.parse_proxy("1.2.3.4:1080") == {"server": "socks5://1.2.3.4:1080"})
+    check("пусто – прокси нет", tg.parse_proxy("") is None and tg.parse_proxy("  ") is None)
+    check("без порта – не прокси", tg.parse_proxy("socks5://1.2.3.4") is None)
+
     # Признак входа: вход Web A живёт в localStorage (как у МАКС), а не в куках.
     check("вход по localStorage распознан",
           tg.looks_logged_in({"cookies": [], "origins": [

@@ -37,7 +37,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlparse
 
 import paths
 import yb_playwright as yb
@@ -91,6 +91,44 @@ JOIN_MARKS = ("Вступить", "Join Channel", "Подписаться", "Joi
 # от обратного – как у ОК и МАКС: угадывать имена бесполезно, их меняют, а
 # вход у Web A всё равно живёт в localStorage, а не в куках.
 GUEST_COOKIES = frozenset({"stel_ln", "stel_dt"})
+
+
+def parse_proxy(raw: str) -> dict | None:
+    """
+    Строка прокси из «Настроек» → настройки Playwright ({"server", "username",
+    "password"}) или None, если пусто/непонятно.
+
+    Телеграм у части провайдеров заблокирован (web.telegram.org не
+    открывается вовсе – ERR_CONNECTION_TIMED_OUT), и до него нужно ходить
+    через прокси. Принимаем привычные форматы:
+      socks5://user:pass@1.2.3.4:1080
+      http://1.2.3.4:8080
+      1.2.3.4:1080            (схему достроим до socks5)
+    Логин/пароль Playwright требует отдельно от адреса, поэтому вытаскиваем их.
+    """
+    s = (raw or "").strip()
+    if not s:
+        return None
+    if "://" not in s:
+        s = "socks5://" + s
+    try:
+        u = urlparse(s)
+    except Exception:  # noqa: BLE001
+        return None
+    if not u.hostname or not u.port:
+        return None
+    cfg = {"server": f"{u.scheme}://{u.hostname}:{u.port}"}
+    if u.username:
+        cfg["username"] = unquote(u.username)
+    if u.password:
+        cfg["password"] = unquote(u.password)
+    return cfg
+
+
+def proxy_config() -> dict | None:
+    """Прокси для Телеграма из «Настроек» (secrets_local, ключ tg_proxy)."""
+    import secrets_local
+    return parse_proxy(secrets_local.get("tg_proxy"))
 
 
 def session_path(project_id: str) -> Path:
@@ -844,9 +882,14 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
     from playwright.sync_api import sync_playwright
 
     engine = yb.resolve_engine()
+    proxy = proxy_config()
     with sync_playwright() as pw:
         import vk_social as _vk
-        browser = yb._launch(pw, engine, headless=headless, extra_args=_vk.ANTIBOT_ARGS)
+        if proxy:
+            log(f"Телеграм через прокси: {proxy.get('server')}"
+                + (" (с логином)" if proxy.get("username") else ""))
+        browser = yb._launch(pw, engine, headless=headless, extra_args=_vk.ANTIBOT_ARGS,
+                             proxy=proxy)
         page = None
         try:
             context = browser.new_context(

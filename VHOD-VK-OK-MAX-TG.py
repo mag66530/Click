@@ -176,6 +176,75 @@ def _open_like_human(context, url: str):
     return page
 
 
+def _parse_proxy(raw: str):
+    """
+    Строка прокси → настройки Playwright ({"server","username","password"})
+    или None. Принимаем socks5://user:pass@host:port, http://host:port и
+    просто host:port (схему достроим до socks5). То же, что tg_browser.parse_proxy.
+    """
+    from urllib.parse import unquote, urlparse
+    s = (raw or "").strip()
+    if not s:
+        return None
+    if "://" not in s:
+        s = "socks5://" + s
+    try:
+        u = urlparse(s)
+    except Exception:  # noqa: BLE001
+        return None
+    if not u.hostname or not u.port:
+        return None
+    cfg = {"server": f"{u.scheme}://{u.hostname}:{u.port}"}
+    if u.username:
+        cfg["username"] = unquote(u.username)
+    if u.password:
+        cfg["password"] = unquote(u.password)
+    return cfg
+
+
+def _saved_tg_proxy():
+    """Прокси Телеграма из «Настроек» Click (secrets_local, ключ tg_proxy)."""
+    try:
+        import secrets_local
+        return _parse_proxy(secrets_local.get("tg_proxy"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _capture_telegram(pw, proxy: dict):
+    """
+    Снять сессию Телеграма в ОТДЕЛЬНОМ окне под прокси (ВК/ОК/МАКС остаются
+    напрямую). Возвращает storage_state этого окна или None.
+
+    Отдельное окно нужно, потому что прокси в Playwright задаётся на весь
+    браузер, а гнать через заграничный прокси ещё и ВК с ОК незачем – они и
+    так открываются, а через чужую страну могут насторожиться.
+    """
+    browser = None
+    for channel in CHANNELS:
+        try:
+            kw = dict(headless=False, args=ANTIBOT_ARGS, proxy=proxy)
+            if channel:
+                kw["channel"] = channel
+            browser = pw.chromium.launch(**kw)
+            break
+        except Exception:  # noqa: BLE001 – нет такого браузера, пробуем следующий
+            browser = None
+    if browser is None:
+        raise RuntimeError("не удалось запустить браузер с прокси")
+    try:
+        ctx = browser.new_context(locale="ru-RU", timezone_id="Asia/Yekaterinburg",
+                                  viewport={"width": 1280, "height": 900})
+        ctx.add_init_script(ANTIBOT_INIT)
+        page = ctx.new_page()
+        page.goto("https://web.telegram.org/a/", wait_until="domcontentloaded",
+                  timeout=60_000)
+        input("\nВошли в Телеграм по QR (в этом отдельном окне)? Нажмите Enter здесь… ")
+        return ctx.storage_state()
+    finally:
+        browser.close()
+
+
 def _profile_dir() -> Path:
     """
     Своя папка профиля браузера – рядом с данными Click, не в проекте.
@@ -304,23 +373,48 @@ def main() -> int:
         input("\nВошли в МАКС (или он не нужен)? Нажмите Enter… ")
 
         # ШАГ 4 – ТЕЛЕГРАМ. Отложка родная (у бота её нет), пишем во ВСЕ каналы
-        # с одного аккаунта-админа. Важно: именно веб-версия /a/ – заказчица
-        # входит по QR с телефона. Вход Телеграма живёт в localStorage, и
-        # storage_state его заберёт, как у МАКС.
+        # с одного аккаунта-админа. Вход по QR в веб-версии /a/, живёт в
+        # localStorage. ВАЖНО: у многих провайдеров web.telegram.org
+        # ЗАБЛОКИРОВАН (ERR_CONNECTION_TIMED_OUT) – тогда нужен ПРОКСИ. Его
+        # используем ТОЛЬКО для Телеграма, в отдельном окне; ВК/ОК/МАКС –
+        # напрямую. Куки этого окна подмешаем в общий файл.
         print("\n" + "─" * 62)
-        print("ШАГ 4 из 4. Открываю Телеграм (веб-версия /a/) в четвёртой вкладке.")
-        print("Войдите по QR-коду: в приложении на телефоне «Настройки» →")
-        print("«Устройства» → «Подключить устройство» и наведите на QR.")
-        print("Аккаунт должен быть АДМИНОМ каналов, куда планируем посты.")
-        print("Не нужен Телеграм? Просто Enter.")
-        print("─" * 62)
-        try:
-            _open_like_human(context, "https://web.telegram.org/a/")
-        except Exception as exc:          # noqa: BLE001 – ВК/ОК/МАКС уже добыты
-            print(f"\n⚠️  Вкладку с Телеграмом открыть не вышло ({exc}).")
-            print("   Откройте web.telegram.org/a/ сами в этом же окне.")
+        print("ШАГ 4 из 4. Телеграм (веб-версия /a/).")
+        print("Если Телеграм у вас заблокирован (сайт не открывается) – нужен ПРОКСИ.")
+        print("Формат: socks5://user:pass@host:port  или  http://host:port")
+        default_proxy = _saved_tg_proxy()
+        if default_proxy:
+            print(f"Из «Настроек» Click взят прокси: {default_proxy.get('server')}")
+        raw = input("Прокси для Телеграма (Enter – взять из «Настроек» / открыть "
+                    "напрямую, если не задан): ").strip()
+        proxy = _parse_proxy(raw) if raw else default_proxy
 
-        input("\nВошли в Телеграм (или он не нужен)? Нажмите Enter… ")
+        tg_state = None
+        if proxy:
+            print(f"\nОткрываю Телеграм через прокси {proxy.get('server')} в ОТДЕЛЬНОМ окне.")
+            print("Войдите по QR-коду: в приложении «Настройки» → «Устройства» →")
+            print("«Подключить устройство». Аккаунт должен быть АДМИНОМ каналов.")
+            print("─" * 62)
+            try:
+                tg_state = _capture_telegram(pw, proxy)
+                if tg_state and _has_tg(tg_state):
+                    print("   Телеграм: вход снят через прокси ✔")
+                else:
+                    print("   ⚠️  Телеграм: входа в снятом окне не видно – "
+                          "проверьте, что QR прошёл, и повторите при необходимости.")
+            except Exception as exc:      # noqa: BLE001 – ВК/ОК/МАКС уже добыты
+                print(f"\n⚠️  Через прокси Телеграм открыть не вышло ({exc}).")
+                print("   Проверьте, что прокси живой и адрес верный.")
+        else:
+            print("\nПрокси не задан – открываю Телеграм напрямую (сработает,")
+            print("только если он у вас НЕ заблокирован). Не нужен Телеграм? Enter.")
+            print("─" * 62)
+            try:
+                _open_like_human(context, "https://web.telegram.org/a/")
+            except Exception as exc:      # noqa: BLE001 – ВК/ОК/МАКС уже добыты
+                print(f"\n⚠️  Вкладку с Телеграмом открыть не вышло ({exc}).")
+                print("   Откройте web.telegram.org/a/ сами в этом же окне.")
+            input("\nВошли в Телеграм (или он не нужен)? Нажмите Enter… ")
 
         try:
             state = context.storage_state()
@@ -330,6 +424,12 @@ def main() -> int:
             input("\nНажмите Enter, чтобы закрыть… ")
             return 1
         context.close()
+
+        # Куки/localStorage Телеграма, снятые через прокси в отдельном окне,
+        # подмешиваем в общий storage_state – дальше Click разложит их сам.
+        if tg_state:
+            state = {"cookies": (state.get("cookies") or []) + (tg_state.get("cookies") or []),
+                     "origins": (state.get("origins") or []) + (tg_state.get("origins") or [])}
 
     # ОДИН файл на обе сети. Раньше их было два, и вставлять их приходилось
     # в два разных окошка – работа на ровном месте: куки-то снимаются одним

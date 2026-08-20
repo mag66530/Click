@@ -338,15 +338,23 @@ _ENGINE: str | None = None
 CHROMIUM_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
 
 
-def _launch(pw, engine: str, headless: bool = True, extra_args: list[str] | None = None):
+def _launch(pw, engine: str, headless: bool = True, extra_args: list[str] | None = None,
+            proxy: dict | None = None):
     """
     Запустить браузер. `extra_args` – дополнительные ключи для конкретного
     вызова; по умолчанию пусто, то есть Яндекс и 2ГИС стартуют ровно как
     раньше. Нужен соцсетям: ВК показывает проверку «вы не робот» скрытому
     браузеру заметно чаще, и один ключ (см. vk_social) её приглушает.
+
+    `proxy` – настройки прокси Playwright ({"server": …, "username": …,
+    "password": …}) или None. Нужен только Телеграму: он у части провайдеров
+    заблокирован, и до него ходим через прокси; остальные сети – напрямую.
     """
     args = (CHROMIUM_ARGS if engine == "chromium" else []) + list(extra_args or [])
-    return getattr(pw, engine).launch(headless=headless, args=args)
+    kw = {"headless": headless, "args": args}
+    if proxy:
+        kw["proxy"] = proxy
+    return getattr(pw, engine).launch(**kw)
 
 
 def _short_error(exc: object) -> str:

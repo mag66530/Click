@@ -380,8 +380,9 @@ APP_SHELL_WAIT_S = 30          # столько ждём загрузку при
 SEARCH_SEL = ('input#telegram-search-input', '#telegram-search-input',
               '.LeftMain input[type="text"]', '#LeftColumn input[type="text"]',
               'input[type="text"]')
-RESULT_SEL = ('.chat-list .ListItem-button', '.LeftSearch .ListItem-button',
-              '.ListItem-button', '.chat-item-clickable')
+RESULT_SEL = ('.LeftSearch .ListItem-button', '#LeftColumn .ListItem-button',
+              '.chat-list .ListItem-button', '.ListItem-button',
+              '.chat-item-clickable', '#LeftColumn [role="button"].ListItem-button')
 # Признаки, что приложение прогрузилось (есть список чатов / поиск).
 SHELL_SEL = ('input#telegram-search-input', '.chat-list', '.ListItem-button',
              '#LeftColumn')
@@ -441,11 +442,23 @@ def _why_no_composer(page) -> str:
             "t.me/+… — тогда Click найдёт его поиском. Пост НЕ отправлен")
 
 
+def _try_click_result(page, log: Callable[[str], None], seconds: int) -> str:
+    """Подождать результаты поиска и нажать первый. Возвращает селектор или ''."""
+    for _ in range(seconds):
+        page.wait_for_timeout(1_000)
+        opened = _click_first(page, RESULT_SEL, timeout=3_000)
+        if opened:
+            log(f"  нажал первый результат ({opened})")
+            return opened
+    return ""
+
+
 def _open_by_search(page, query: str, project_id: str,
                     log: Callable[[str], None]) -> str:
     """
     Открыть канал ПОИСКОМ, как руками: загрузить приложение, напечатать имя в
-    поиск и нажать первый результат. Возвращает селектор поля ввода или ''.
+    поиск (настоящим набором, чтобы поиск запустился), подождать результаты и
+    нажать первый. Если под вкладкой «Chats» пусто – переходим на «Channels».
     """
     log(f"  открываю приложение и ищу канал по имени «{query}»")
     try:
@@ -462,21 +475,32 @@ def _open_by_search(page, query: str, project_id: str,
         log("  поле поиска на левой панели не нашли")
         _save_diag(project_id, page, "no-search", log)
         return ""
-    log(f"  поле поиска: {search} — печатаю «{query}»")
+    log(f"  поле поиска: {search} — набираю «{query}»")
     try:
         page.locator(search).first.click()
-        page.locator(search).first.fill(query)
+        page.keyboard.press("Control+A")
+        page.keyboard.press("Delete")
+        # НАСТОЯЩИЙ набор: fill не всегда запускает поиск Телеграма.
+        page.keyboard.type(query, delay=60)
     except Exception as e:  # noqa: BLE001
         log(f"  не смог напечатать в поиск: {e}")
         return ""
-    page.wait_for_timeout(3_000)
-    opened = _click_first(page, RESULT_SEL, timeout=6_000)
-    if not opened:
-        log("  среди результатов поиска не нашли, что нажать")
-        _save_diag(project_id, page, "no-search-result", log)
-        return ""
-    log(f"  открыл первый результат поиска ({opened})")
-    return _wait_for_composer(page, log)
+
+    # Результаты через прокси приходят не мгновенно – ждём подольше.
+    if _try_click_result(page, log, seconds=10):
+        return _wait_for_composer(page, log)
+
+    # Под «Chats» пусто – канал часто под вкладкой «Channels» («Каналы»).
+    if _click_first(page, ('button:has-text("Channels")', 'text="Channels"',
+                           'button:has-text("Каналы")', 'text="Каналы"',
+                           '[role="tab"]:has-text("Channels")'), timeout=3_000):
+        log("  переключился на вкладку «Channels», жду результаты")
+        if _try_click_result(page, log, seconds=8):
+            return _wait_for_composer(page, log)
+
+    log("  среди результатов поиска не нашли, что нажать")
+    _save_diag(project_id, page, "no-search-result", log)
+    return ""
 
 
 def _open_channel(page, chat: str, project_id: str,
@@ -503,19 +527,40 @@ def _open_channel(page, chat: str, project_id: str,
             return ""
         return _wait_for_composer(page, log)
 
+    low = chat.strip().lower()
+    looks_like_link = ("t.me/" in low) or low.startswith("@")
+    is_invite = ("t.me/+" in low) or ("joinchat" in low)
     token = search_token(chat)
-    if token:
-        # @имя или название — открываем поиском.
-        sel = _open_by_search(page, token, project_id, log)
+
+    # Публичный @канал/ссылка (не приглашение): надёжнее всего – прямой
+    # deep-link. Не открылся – пробуем поиском.
+    if token and looks_like_link and not is_invite:
+        target = deep_link(chat)
+        log(f"  публичный канал – пробую прямой адрес: {target}")
+        try:
+            page.goto(target, wait_until="domcontentloaded", timeout=60_000)
+        except Exception as e:  # noqa: BLE001
+            log(f"  прямой адрес не открылся: {e}")
+        _wait_app_shell(page, log)
+        page.wait_for_timeout(2_000)
+        sel = _wait_for_composer(page, log, timeout_s=18)
         if sel:
-            _log_screen(page, log, "канал открыт")
-        else:
-            _log_screen(page, log, "канал не открылся")
+            _log_screen(page, log, "канал открыт (прямой адрес)")
+            return sel
+        log("  прямой адрес не открыл чат – пробую поиском")
+        sel = _open_by_search(page, token, project_id, log)
+        _log_screen(page, log, "канал открыт" if sel else "канал не открылся")
+        return sel
+
+    # Название канала (без ссылки/@) – только поиск.
+    if token and not is_invite:
+        sel = _open_by_search(page, token, project_id, log)
+        _log_screen(page, log, "канал открыт" if sel else "канал не открылся")
         return sel
 
     # Ссылка-приглашение: имени нет, только deep-link (без долгого ожидания).
     target = deep_link(chat)
-    log(f"  канал задан ссылкой-приглашением (имени в ней нет).")
+    log("  канал задан ссылкой-приглашением (имени в ней нет).")
     log(f"  пробую deep-link Web A: {target}")
     try:
         page.goto(target, wait_until="domcontentloaded", timeout=60_000)

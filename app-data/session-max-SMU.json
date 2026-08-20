@@ -1,1 +1,42 @@
-{}
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "https://web.max.ru",
+      "localStorage": [
+        {
+          "name": "__oneme-persistent-cache-enabled",
+          "value": "true"
+        },
+        {
+          "name": "__oneme_auth",
+          "value": "{\"token\":\"An_Sx6HQ9HDil_ngzgwzelcQdjGZWaJzVqQB7RYUSPORMZ3DjWJP84mkchNbwGgnfIqLDpyremHy4gawOfaFkTl4Hgp2j4XAh5NOR-H4FryA1olmWJleP1ATwMCEZHJsKJZeOxKib8mLcqXqM3AgyBjjW9OJ9YK6w3xIW4eKfq9EjbFDhwcp6XAhJ4F_V-gXMpfsxhl9fAPvTKt0nN8guTyGUcxN6Onk8MbQ_Vofjl2jbkRhBwhrueDZcum5fRu2KhAyZ7JV4iwZEd8sHhwZNuGspg7pR57DMLOtpjIe0-v1ObohhEFalX1yIvtNk2iwpNjOu58Z6hQOfpUEhv0Ggx1jFSwQAZ6EjGmLJfPB8eotyAxlOGfNBOgbzBqquR-Hn5OgWxZwz9M98Tngg45TOwbAHDiT4RcgtUb-hejizxAsPIFLEvQJGHnlT8j0HOnu27E5KHaMRgCskr3iGHx8ZGqgeUcAF5sz8TiE3Dv_sm7_UXubWRb4IITuJXjMSofjpCO7SEQgjsK9xVb953InzP0YcUWNyakoHdak5uAMpGdA3QLFMrpK1xdY5fGzohUWqSCmISmQ2C3jG8QMfrlIT8i_I8vU6eSFopju6By4Axu04wKjE4SfRrTphq5bSI0byrgNH4DuwzXsqVP5qYIcUb4fYzNnTfGyeG_KjdfHvppGTHHxPFLfyGd1eehSFeqdm9Lwv_k\",\"viewerId\":158791662}"
+        },
+        {
+          "name": "__server_config_overrides__",
+          "value": "{}"
+        },
+        {
+          "name": "__oneme_theme",
+          "value": "{\"colorScheme\":\"system\",\"colorTheme\":\"space\",\"fontScale\":\"large\"}"
+        },
+        {
+          "name": "__oneme_device_id",
+          "value": "dc76d18e-2ad7-4bb9-a3e6-be6c72973f52"
+        },
+        {
+          "name": "__oneme_aside_width",
+          "value": "393"
+        },
+        {
+          "name": "tracer-device-id",
+          "value": "f890e38e-91e9-457a-938f-e0cc69cd309a"
+        },
+        {
+          "name": "__oneme_informer",
+          "value": "{\"lastShowedBannerId\":null,\"banners\":{}}"
+        }
+      ]
+    }
+  ]
+}

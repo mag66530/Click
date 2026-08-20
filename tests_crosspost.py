@@ -2592,12 +2592,19 @@ def test_tg_browser_logic() -> None:
           "_MARK_SEND_JS" in sm_src and 'data-click-send' in sm_src)
     check("клик правой по самой кнопке (не по координатам вслепую)",
           'click(button="right"' in sm_src)
-    check("есть запасной путь через меню ⋮ (More actions)",
-          "data-click-more" in sm_src)
+    check("меню ⋮ больше не жмём (в нём нет Schedule и оно блокирует повтор)",
+          "data-click-more" not in sm_src)
     check("скрипт метит кнопку primary с иконкой",
           "primary" in tg._MARK_SEND_JS and "data-click-send" in tg._MARK_SEND_JS)
-    check("скрипт ищет и «More actions»", "more actions" in tg._MARK_SEND_JS.lower())
     check("на провале выводим кнопки окна в лог", "кнопки окна отправки" in sm_src)
+
+    # Длинная подпись: считаем перебор по счётчику Телеграма («-40»).
+    check("перебор подписи из отрицательного счётчика 0", tg.caption_overflow is not None)
+    sched_src = _insp.getsource(tg.schedule_postponed_post)
+    check("успех подтверждаем реальным наличием отложки", "_scheduled_present" in sched_src)
+    check("предупреждаем про длину подписи", "caption_overflow" in sched_src)
+    check("держим паузу в конце, чтобы видеть экран", "человек смотрит на результат" in sched_src)
+    check("на видимом браузере не схлопываем окно сразу", "not headless" in sched_src)
 
     # Разбор заголовка календаря Web A (h4: «Август 2026», «августа 2026 г.»).
     check("«Август 2026» разобран", tg.month_year("Август 2026") == (8, 2026))

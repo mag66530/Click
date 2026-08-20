@@ -1116,6 +1116,48 @@ def _right_click_at(page, x: int, y: int) -> None:
     page.mouse.click(x, y, button="right")
 
 
+# Счётчик подписи Телеграма. Когда подпись длиннее лимита (1024 у обычного
+# аккаунта, 2048 у Premium), Телеграм рисует ОСТАТОК отрицательным числом
+# («-40»). Ловим самое маленькое такое число на экране.
+_CAPTION_COUNTER_JS = r"""
+() => {
+  let val = null;
+  for (const e of document.querySelectorAll('div, span, p')) {
+    if (e.children.length) continue;
+    const t = (e.textContent || '').trim();
+    if (/^-\d{1,4}$/.test(t)) {
+      const n = parseInt(t, 10);
+      if (val === null || n < val) val = n;
+    }
+  }
+  return val;
+}
+"""
+
+
+def caption_overflow(page) -> int:
+    """Насколько подпись длиннее лимита (0 – в порядке). Ошибки глушим."""
+    try:
+        val = page.evaluate(_CAPTION_COUNTER_JS)
+        return -int(val) if isinstance(val, (int, float)) and val < 0 else 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _scheduled_present(page) -> bool:
+    """Есть ли признак, что у канала появились отложенные сообщения."""
+    marks = ('button[aria-label*="Scheduled"]', 'button[aria-label*="Отложен"]',
+             '[title*="Scheduled"]', '[title*="Отложен"]')
+    for sel in marks:
+        try:
+            if page.locator(sel).first.is_visible(timeout=600):
+                return True
+        except Exception:  # noqa: BLE001
+            continue
+    body = _body_text(page)
+    return any(m in body for m in SEL["scheduled_page"])
+
+
 # ─── Открыть меню отложки правой кнопкой ─────────────────────────────
 def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
     """
@@ -1152,20 +1194,11 @@ def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
                 log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit})")
                 return True, ""
 
-        # 2) Меню «More actions» (⋮) — в нём тоже есть «Schedule».
-        if info.get("more"):
-            log(f"  пробую меню «More actions» (⋮), попытка {attempt}/3")
-            try:
-                page.locator('[data-click-more="1"]').first.click(timeout=4_000)
-            except Exception:  # noqa: BLE001
-                pass
-            page.wait_for_timeout(800)
-            hit = _click_first(page, SEL["schedule_item"], timeout=4_000)
-            if hit:
-                log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit})")
-                return True, ""
+        # (Меню ⋮ «More actions» НЕ трогаем: в нём нет «Schedule» — только Add /
+        # Move Caption / Send as Files и т.п., а открытое меню ещё и перекрывает
+        # кнопку на следующей попытке. Отложку даёт только правый клик по отправке.)
 
-        # 3) Совсем запасной: старый точный класс Web K, если вдруг он.
+        # 2) Совсем запасной: старый точный класс Web K, если вдруг он.
         sel, el = _visible_media_send(page)
         if el is not None:
             log(f"  запасная кнопка ({sel}), правый клик, попытка {attempt}/3")
@@ -1269,8 +1302,19 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                     return {"ok": False,
                             "shot": _dump(project_id, page, "no-photo", log),
                             "error": why}
+                page.wait_for_timeout(1_500)   # дать окну «Send Photo» устояться
             else:
                 log("── ШАГ 3/6: фото нет, пропускаю ──")
+
+            # Подпись длиннее лимита Телеграма? Тогда отложка может «принять» окно,
+            # а сообщение не создать. Пишем это в лог явно (счётчик «-40» на экране
+            # человек не успевает разглядеть).
+            over = caption_overflow(page)
+            if over:
+                log(f"  ⚠️ подпись длиннее лимита Телеграма на {over} знаков "
+                    f"(счётчик показывает -{over}). Обычный аккаунт держит 1024 "
+                    "знака в подписи к фото, Premium — 2048. Если отложка не "
+                    "встанет — причина здесь: сократите пост или включите Premium")
 
             # ПРАВОЙ кнопкой: левая отправит пост сейчас же.
             log("── ШАГ 4/6: открываю «Отправить позже» (правой кнопкой по отправке) ──")
@@ -1319,27 +1363,53 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "shot": _dump(project_id, page, "no-confirm", log),
                         "error": "Не нашли кнопку подтверждения в окне отложки"}
 
-            # Ответ площадки: окно отложки закрылось (подтверждение принято).
-            # Мы жали именно кнопку подтверждения, поэтому закрытие окна – это
-            # успех, а не отмена. Если рядом видно «Отложенные» – скажем и это.
+            # Окно отложки закрылось – подтверждение принято. Но «закрылось» ещё
+            # не значит «сообщение создано»: при длинной подписи Телеграм окно
+            # закрывает, а отложку не ставит. Поэтому ПРОВЕРЯЕМ, что отложенное
+            # сообщение реально появилось, и держим паузу – чтобы человек успел
+            # увидеть экран и возможную ошибку.
+            closed = False
             for _ in range(30):
                 if _modal_gone(page):
-                    where = ("«Отложенные сообщения»"
-                             if any(m in _body_text(page) for m in SEL["scheduled_page"])
-                             else "окно отложки")
-                    log(f"✅ Телеграм принял отложку: {where}")
-                    yb._save_storage_state(context, session_path(project_id))
-                    return {"ok": True}
+                    closed = True
+                    break
                 page.wait_for_timeout(500)
+            if not closed:
+                return {"ok": False,
+                        "shot": _dump(project_id, page, "no-confirmation", log),
+                        "error": ("Телеграм не подтвердил отложку: окно календаря не "
+                                  "закрылось. Загляните в «Отложенные сообщения»")}
 
+            log("  окно закрылось, проверяю, что отложка реально появилась…")
+            page.wait_for_timeout(2_500)          # дать Телеграму создать сообщение
+            ok_sched = _scheduled_present(page)
+            log("  держу паузу, чтобы было видно экран…")
+            page.wait_for_timeout(4_000)          # человек смотрит на результат
+            yb._save_storage_state(context, session_path(project_id))
+
+            if ok_sched:
+                log("✅ Телеграм принял отложку: сообщение в «Отложенных»")
+                return {"ok": True}
+            # Окно закрылось, а признака отложки нет. Чаще всего – длинная подпись.
+            _dump(project_id, page, "no-scheduled", log)
+            hint = (f" Скорее всего из-за длины подписи (было на {over} знаков "
+                    "больше лимита) — сократите пост или включите Premium."
+                    if over else
+                    " Загляните в «Отложенные сообщения» вручную: если пост там "
+                    "есть — всё в порядке, если нет — отложка не встала.")
             return {"ok": False,
-                    "shot": _dump(project_id, page, "no-confirmation", log),
-                    "error": ("Телеграм не подтвердил отложку: окно календаря не "
-                              "закрылось. Загляните в «Отложенные сообщения» – если "
-                              "пост там есть, формировать заново не нужно")}
+                    "error": "Окно отложки закрылось, но отложенного сообщения не "
+                             "видно — Телеграм его не создал." + hint}
         except Exception as e:  # noqa: BLE001
             log(f"‼️ исключение на прогоне: {e}")
             return {"ok": False, "error": str(e),
                     "shot": _dump(project_id, page, "error", log) if page else None}
         finally:
+            # Когда человек смотрит на браузер (не headless) – держим окно ещё
+            # пару секунд на ЛЮБОМ исходе, чтобы ошибку не «схлопнуло» мгновенно.
+            if page is not None and not headless:
+                try:
+                    page.wait_for_timeout(2_500)
+                except Exception:  # noqa: BLE001
+                    pass
             browser.close()

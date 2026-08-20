@@ -636,7 +636,19 @@ _MARK_JS = """
     const nodes = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     let full = '';
     while (w.nextNode()) { nodes.push([w.currentNode, full.length]); full += w.currentNode.nodeValue; }
-    return {nodes, full};
+    // Нормализованная копия: любые пробелы/переводы строк схлопнуты в один
+    // пробел. nmap[i] — индекс i-го символа norm в исходном full. Так длинные
+    // жирные куски находятся, даже если в поле Телеграма пробелы и переносы
+    // расставлены иначе, чем в реестре (была причина «наложено 3/7»).
+    let norm = '', nmap = [];
+    for (let i = 0; i < full.length; i++) {
+      const ch = full[i];
+      if (/\s/.test(ch)) {
+        if (norm.length && norm[norm.length - 1] === ' ') continue;
+        norm += ' '; nmap.push(i);
+      } else { norm += ch; nmap.push(i); }
+    }
+    return {nodes, full, norm, nmap};
   };
   const rangeFor = (map, from, to) => {
     const at = (pos, end) => {
@@ -656,17 +668,19 @@ _MARK_JS = """
     return r;
   };
   // Куски идут в порядке текста. Ищем каждый ВПЕРЁД от конца прошлого
-  // (cursor), чтобы жирное слово не село на свой же более ранний повтор
-  // без выделения (была причина «жирных 2/6»). Не нашли впереди – пробуем
-  // с начала: вдруг реестр расставил куски не по порядку.
-  let done = 0, missed = 0, cursor = 0;
+  // (ncursor), чтобы жирное слово не село на свой же более ранний повтор
+  // без выделения. Поиск — по нормализованному тексту (пробелы схлопнуты).
+  let done = 0, missed = 0, ncursor = 0;
   for (const span of args.spans) {
     const map = build();
-    let idx = map.full.indexOf(span.text, cursor);
-    if (idx < 0) idx = map.full.indexOf(span.text);
-    if (idx < 0) { missed++; continue; }
-    const from = idx, to = idx + span.text.length;
-    cursor = to;
+    const needle = (span.text || '').replace(/\s+/g, ' ').trim();
+    if (!needle) { missed++; continue; }
+    let nidx = map.norm.indexOf(needle, ncursor);
+    if (nidx < 0) nidx = map.norm.indexOf(needle);
+    if (nidx < 0) { missed++; continue; }
+    const from = map.nmap[nidx];
+    const to = map.nmap[nidx + needle.length - 1] + 1;
+    ncursor = nidx + needle.length;
     const r = rangeFor(map, from, to);
     if (!r) { missed++; continue; }
     const sel = window.getSelection();

@@ -636,17 +636,25 @@ _MARK_JS = """
     const nodes = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     let full = '';
     while (w.nextNode()) { nodes.push([w.currentNode, full.length]); full += w.currentNode.nodeValue; }
-    // Нормализованная копия: любые пробелы/переводы строк схлопнуты в один
-    // пробел. nmap[i] — индекс i-го символа norm в исходном full. Так длинные
-    // жирные куски находятся, даже если в поле Телеграма пробелы и переносы
-    // расставлены иначе, чем в реестре (была причина «наложено 3/7»).
-    let norm = '', nmap = [];
-    for (let i = 0; i < full.length; i++) {
-      const ch = full[i];
+    // Нормализованная копия: пробелы/переводы строк схлопнуты в один пробел,
+    // ЭМОДЗИ выкинуты. nmap[k] — индекс k-го символа norm в исходном full.
+    // Эмодзи в поле Телеграма — это картинки (в тексте их нет), а в реестре
+    // жирным часто помечен кусок с эмодзи в начале («❔ Почему…») — из-за
+    // этого длинные куски не находились (была причина «наложено 3/7»).
+    const isEmoji = ch => /\p{Extended_Pictographic}/u.test(ch)
+                       || ch === '️' || ch === '‍';
+    let norm = '', nmap = [], i = 0;
+    while (i < full.length) {
+      const cp = full.codePointAt(i);
+      const len = cp > 0xFFFF ? 2 : 1;
+      const ch = full.substr(i, len);
+      if (isEmoji(ch)) { i += len; continue; }         // эмодзи выкидываем
       if (/\s/.test(ch)) {
-        if (norm.length && norm[norm.length - 1] === ' ') continue;
-        norm += ' '; nmap.push(i);
-      } else { norm += ch; nmap.push(i); }
+        if (!(norm.length && norm[norm.length - 1] === ' ')) { norm += ' '; nmap.push(i); }
+      } else {
+        for (let k = 0; k < len; k++) { norm += ch[k]; nmap.push(i); }
+      }
+      i += len;
     }
     return {nodes, full, norm, nmap};
   };
@@ -673,7 +681,9 @@ _MARK_JS = """
   let done = 0, missed = 0, ncursor = 0;
   for (const span of args.spans) {
     const map = build();
-    const needle = (span.text || '').replace(/\s+/g, ' ').trim();
+    const needle = (span.text || '')
+      .replace(/[\p{Extended_Pictographic}️‍]/gu, ' ')
+      .replace(/\s+/g, ' ').trim();
     if (!needle) { missed++; continue; }
     let nidx = map.norm.indexOf(needle, ncursor);
     if (nidx < 0) nidx = map.norm.indexOf(needle);
@@ -1162,18 +1172,30 @@ def caption_overflow(page) -> int:
         return 0
 
 
-def _scheduled_present(page) -> bool:
-    """Есть ли признак, что у канала появились отложенные сообщения."""
-    marks = ('button[aria-label*="Scheduled"]', 'button[aria-label*="Отложен"]',
-             '[title*="Scheduled"]', '[title*="Отложен"]')
-    for sel in marks:
+def _schedule_error(page) -> str:
+    """
+    Текст попапа-ошибки Телеграма, если отложку отклонили (напр. «Слишком
+    длинная подпись»). '' – ошибки нет. Проверяем видимые всплывашки/диалоги,
+    а не весь body: слова вроде «длинн» могут быть и в самом посте.
+    """
+    zones = (".Modal", ".confirm-dialog", '[class*="Notification"]',
+             '[class*="Toast"]', '[class*="popup"]', '[role="dialog"]')
+    needles = ("слишком длинн", "длинная подпись", "укоротите", "too long",
+               "caption is too long", "limit")
+    for sel in zones:
         try:
-            if page.locator(sel).first.is_visible(timeout=600):
-                return True
+            loc = page.locator(sel)
+            for i in range(min(loc.count(), 6)):
+                el = loc.nth(i)
+                if not el.is_visible():
+                    continue
+                t = (el.inner_text(timeout=500) or "").strip()
+                low = t.lower()
+                if any(n in low for n in needles):
+                    return t.replace("\n", " ")[:120]
         except Exception:  # noqa: BLE001
             continue
-    body = _body_text(page)
-    return any(m in body for m in SEL["scheduled_page"])
+    return ""
 
 
 # ─── Открыть меню отложки правой кнопкой ─────────────────────────────
@@ -1381,43 +1403,36 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "shot": _dump(project_id, page, "no-confirm", log),
                         "error": "Не нашли кнопку подтверждения в окне отложки"}
 
-            # Окно отложки закрылось – подтверждение принято. Но «закрылось» ещё
-            # не значит «сообщение создано»: при длинной подписи Телеграм окно
-            # закрывает, а отложку не ставит. Поэтому ПРОВЕРЯЕМ, что отложенное
-            # сообщение реально появилось, и держим паузу – чтобы человек успел
-            # увидеть экран и возможную ошибку.
+            # Окно отложки закрылось – подтверждение принято. «Закрылось» = успех,
+            # ЕСЛИ рядом нет попапа-ошибки (Телеграм при длинной подписи не даёт
+            # поставить и пишет «Слишком длинная подпись»). Держим паузу, чтобы
+            # человек успел увидеть экран.
             closed = False
             for _ in range(30):
                 if _modal_gone(page):
                     closed = True
                     break
                 page.wait_for_timeout(500)
+            page.wait_for_timeout(2_000)
+            err = _schedule_error(page)
+            log("  держу паузу, чтобы было видно экран…")
+            page.wait_for_timeout(3_500)          # человек смотрит на результат
+            yb._save_storage_state(context, session_path(project_id))
+
+            if err:
+                _dump(project_id, page, "schedule-error", log)
+                extra = (f" (подпись длиннее лимита на {over} знаков — сократите "
+                         "пост или включите Premium)" if over else "")
+                return {"ok": False,
+                        "error": f"Телеграм отклонил отложку: «{err}»{extra}"}
             if not closed:
                 return {"ok": False,
                         "shot": _dump(project_id, page, "no-confirmation", log),
-                        "error": ("Телеграм не подтвердил отложку: окно календаря не "
-                                  "закрылось. Загляните в «Отложенные сообщения»")}
-
-            log("  окно закрылось, проверяю, что отложка реально появилась…")
-            page.wait_for_timeout(2_500)          # дать Телеграму создать сообщение
-            ok_sched = _scheduled_present(page)
-            log("  держу паузу, чтобы было видно экран…")
-            page.wait_for_timeout(4_000)          # человек смотрит на результат
-            yb._save_storage_state(context, session_path(project_id))
-
-            if ok_sched:
-                log("✅ Телеграм принял отложку: сообщение в «Отложенных»")
-                return {"ok": True}
-            # Окно закрылось, а признака отложки нет. Чаще всего – длинная подпись.
-            _dump(project_id, page, "no-scheduled", log)
-            hint = (f" Скорее всего из-за длины подписи (было на {over} знаков "
-                    "больше лимита) — сократите пост или включите Premium."
-                    if over else
-                    " Загляните в «Отложенные сообщения» вручную: если пост там "
-                    "есть — всё в порядке, если нет — отложка не встала.")
-            return {"ok": False,
-                    "error": "Окно отложки закрылось, но отложенного сообщения не "
-                             "видно — Телеграм его не создал." + hint}
+                        "error": ("Окно отложки не закрылось. Загляните в "
+                                  "«Отложенные сообщения»: если пост там есть — всё "
+                                  "в порядке")}
+            log("✅ Телеграм принял отложку")
+            return {"ok": True}
         except Exception as e:  # noqa: BLE001
             log(f"‼️ исключение на прогоне: {e}")
             return {"ok": False, "error": str(e),

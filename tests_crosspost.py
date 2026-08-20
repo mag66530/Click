@@ -2610,10 +2610,15 @@ def test_tg_browser_logic() -> None:
     # Длинная подпись: считаем перебор по счётчику Телеграма («-40»).
     check("перебор подписи из отрицательного счётчика 0", tg.caption_overflow is not None)
     sched_src = _insp.getsource(tg.schedule_postponed_post)
-    check("успех подтверждаем реальным наличием отложки", "_scheduled_present" in sched_src)
+    check("успех = окно закрылось и нет попапа-ошибки", "_schedule_error" in sched_src)
     check("предупреждаем про длину подписи", "caption_overflow" in sched_src)
     check("держим паузу в конце, чтобы видеть экран", "человек смотрит на результат" in sched_src)
     check("на видимом браузере не схлопываем окно сразу", "not headless" in sched_src)
+    err_src = _insp.getsource(tg._schedule_error)
+    check("ловим ошибку «слишком длинная подпись»",
+          "длинн" in err_src and "too long" in err_src)
+    check("жирное ищем без эмодзи (❔ в начале не мешает)",
+          "Extended_Pictographic" in tg._MARK_JS)
 
     # Разбор заголовка календаря Web A (h4: «Август 2026», «августа 2026 г.»).
     check("«Август 2026» разобран", tg.month_year("Август 2026") == (8, 2026))

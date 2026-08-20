@@ -3034,7 +3034,6 @@ def _kp_sheet_settings_block(project_id: str, config: dict) -> None:
     Теперь выбор один, здесь, и сохраняется в конфиге – «Города» и «Сверка»
     просто читают то, что тут выбрано.
     """
-    html('<div class="card-title">📊 Источник городов – Google-таблица КП</div>')
     saved_url = (config.get("kpSheetUrl") or "").strip()
     saved_title = (config.get("kpSheetTitle") or "").strip()
     effective = kp_sheet.sheet_url(project_id, saved_url)
@@ -4899,7 +4898,8 @@ _SETTINGS_GROUPS = [
 
 
 def tab_settings(project_id: str, config: dict) -> None:
-    _settings_status_ribbon(project_id)
+    статус = _settings_statuses(project_id, config)
+    _settings_status_ribbon(статус)
 
     labels = [название for название, _, _ in _SETTINGS_GROUPS]
     counts = {название: n for название, _, n in _SETTINGS_GROUPS}
@@ -4915,52 +4915,62 @@ def tab_settings(project_id: str, config: dict) -> None:
                              format_func=lambda l: f"{l}  {counts[l]}")
     индекс = labels.index(выбор)
 
+    OK, ВНИМ, СЕРВ = ("ok", "готово"), ("warn", "внимание"), ("muted", "сервис")
+
+    def s(готов):
+        return OK if готов else ВНИМ
+
     with right:
         st.caption(_SETTINGS_GROUPS[индекс][1])
 
         if индекс == 0:            # Публикация
-            _yandex_access_block(project_id, config)
-            st.divider()
-            _yandex_login_block(project_id, config)
+            if _panel("ya-access", "🔑 Доступ к Яндекс.Бизнесу",
+                      s(статус["email"]), attention=not статус["email"]):
+                _yandex_access_block(project_id, config)
+            if _panel("ya-login", "🔐 Вход в Яндекс",
+                      s(статус["yandex"]), attention=not статус["yandex"]):
+                _yandex_login_block(project_id, config)
 
         elif индекс == 1:          # Кросспостинг
-            _vk_login_block(project_id, config)
-            st.divider()
-            _ok_login_block(project_id, config)
-            st.divider()
-            _max_login_block(project_id, config)
-            st.divider()
-            _both_sessions_block(project_id)
+            if _panel("vk", "🔐 Вход в ВК", s(статус["vk"]), attention=not статус["vk"]):
+                _vk_login_block(project_id, config)
+            if _panel("ok", "🔐 Вход в ОК", s(статус["ok"]), attention=not статус["ok"]):
+                _ok_login_block(project_id, config)
+            if _panel("max", "🔒 МАКС", s(статус["max"]), attention=not статус["max"]):
+                _max_login_block(project_id, config)
+            if _panel("sessions", "🔑 Файл сессий: ВК, ОК и МАКС", СЕРВ, attention=False):
+                _both_sessions_block(project_id)
 
         elif индекс == 2:          # Актуализация и города
-            _kp_sheet_settings_block(project_id, config)
+            if _panel("kp", "📊 Источник городов — таблица КП", СЕРВ, attention=True):
+                _kp_sheet_settings_block(project_id, config)
 
         elif индекс == 3:          # Сверка · отзывы
-            _gis_login_block(project_id, config)
-            st.divider()
-            _reviews_settings_block(project_id)
+            if _panel("gis", "🔐 Вход в 2ГИС", s(статус["gis"]), attention=not статус["gis"]):
+                _gis_login_block(project_id, config)
+            if _panel("reviews", "💬 Ответы на отзывы", СЕРВ, attention=False):
+                _reviews_settings_block(project_id)
 
         elif индекс == 4:          # Ключи и данные
-            _web_keys_block()
+            if _panel("keys", "🌐 Ключи к веб-сервисам",
+                      s(статус["keys"]), attention=not статус["keys"]):
+                _web_keys_block()
 
         else:                      # Обслуживание
-            _free_memory_block()
-            st.divider()
-            _browser_check_block()
-            st.divider()
-            _storage_note_block()
-            st.divider()
-            _logout_block()
+            if _panel("mem", "🧹 Память приложения", СЕРВ, attention=False):
+                _free_memory_block()
+            if _panel("browser", "🖥 Проверить браузер", СЕРВ, attention=False):
+                _browser_check_block()
+            if _panel("storage", "💾 Хранилище проекта", СЕРВ, attention=False):
+                _storage_note_block()
+            if _panel("logout", "🚪 Выйти из проекта", ("danger", "выход"), attention=False):
+                _logout_block()
 
     _settings_legend()
 
 
-def _settings_status_ribbon(project_id: str) -> None:
-    """
-    Лента статуса сверху: что уже настроено, а что просит внимания. Раньше
-    это можно было понять, только зайдя в каждый раздел по очереди; теперь
-    видно с порога – зелёная пилюля «готово», жёлтая «нужен вход».
-    """
+def _settings_statuses(project_id: str, config: dict) -> dict:
+    """Готовность каждой площадки – одним словарём: и для ленты, и для карточек."""
     import max_browser
     import ok_browser
     import vk_social
@@ -4971,13 +4981,47 @@ def _settings_status_ribbon(project_id: str) -> None:
         except Exception:  # noqa: BLE001
             return False
 
+    return {
+        "yandex": ready(lambda: yb.has_saved_session(project_id)),
+        "gis": ready(lambda: gis.has_saved_session(project_id)),
+        "vk": ready(lambda: vk_social.has_saved_session(project_id)),
+        "ok": ready(lambda: ok_browser.has_saved_session(project_id)),
+        "max": ready(lambda: max_browser.has_saved_session(project_id)),
+        "keys": ready(llm.is_configured),
+        "email": bool((config.get("email") or "").strip()),
+    }
+
+
+def _panel(key: str, title: str, status: tuple[str, str], attention: bool) -> bool:
+    """
+    Складная карточка раздела: заголовок с чипом статуса, по клику
+    раскрывается содержимое (логин, поля, кнопки). Это НЕ st.expander –
+    внутри блоков живут свои экспандеры, а их вкладывать нельзя. Состояние
+    открыт/закрыт держим в session_state; то, что просит внимания (нет входа,
+    не задан ключ), показываем сразу раскрытым, готовое – свёрнутым.
+    """
+    open_key = f"setpanel-{key}"
+    if open_key not in st.session_state:
+        st.session_state[open_key] = attention
+    is_open = bool(st.session_state[open_key])
+
+    cls, text = status
+    chip = f'<span class="panel-chip panel-{cls}">{text}</span>' if text else ""
+    chev = "▾" if is_open else "▸"
+    with st.container(key=f"panelrow-{key}"):
+        c1, c2 = st.columns([5, 1], vertical_alignment="center")
+        if c1.button(f"{chev} {title}", key=f"panelbtn-{key}", use_container_width=True):
+            st.session_state[open_key] = not is_open
+            st.rerun()
+        c2.markdown(f'<div class="panel-chip-wrap">{chip}</div>', unsafe_allow_html=True)
+    return is_open
+
+
+def _settings_status_ribbon(статус: dict) -> None:
+    """Лента статуса сверху: что уже настроено, а что просит внимания."""
     проверки = [
-        ("Яндекс", ready(lambda: yb.has_saved_session(project_id))),
-        ("2ГИС", ready(lambda: gis.has_saved_session(project_id))),
-        ("ВК", ready(lambda: vk_social.has_saved_session(project_id))),
-        ("ОК", ready(lambda: ok_browser.has_saved_session(project_id))),
-        ("МАКС", ready(lambda: max_browser.has_saved_session(project_id))),
-        ("Ключи", ready(llm.is_configured)),
+        ("Яндекс", статус["yandex"]), ("2ГИС", статус["gis"]), ("ВК", статус["vk"]),
+        ("ОК", статус["ok"]), ("МАКС", статус["max"]), ("Ключи", статус["keys"]),
     ]
     пилюли = "".join(
         f'<span class="pill pill-{"ok" if готово else "warn"}">'
@@ -5002,7 +5046,6 @@ def _yandex_access_block(project_id: str, config: dict) -> None:
     """Email и пароль аккаунта Яндекса – с ними и работают публикация и вход."""
     project = PROJECTS[project_id]
 
-    html('<div class="card-title">🔑 Доступ к Яндекс.Бизнесу</div>')
     c1, c2 = st.columns(2)
     email = c1.text_input("Email аккаунта Яндекса", value=config.get("email", ""), key="set-email")
     password = c2.text_input("Пароль (нужен только для авто-входа)", value=config.get("password", ""),
@@ -5031,7 +5074,6 @@ def _yandex_access_block(project_id: str, config: dict) -> None:
 
 def _browser_check_block() -> None:
     """Проверка, что браузер вообще запускается – раньше жила в конце свитка."""
-    html('<div class="card-title">🖥 Проверить браузер</div>')
     engine = yb.current_engine()
     c1, c2 = st.columns([1, 3])
     if c1.button("Проверить браузер", key="btn-check-browser", use_container_width=True):
@@ -5046,7 +5088,6 @@ def _browser_check_block() -> None:
 
 def _storage_note_block() -> None:
     """Где живут сессия и отчёты – одна строчка про хранилище."""
-    html('<div class="card-title">💾 Хранилище проекта</div>')
     if repo_store.is_configured():
         st.caption("💾 Сессия Яндекса хранится в приватном хранилище проекта – "
                    "переживает перезапуски облака. Сбросить: «Войти заново». "
@@ -5058,7 +5099,6 @@ def _storage_note_block() -> None:
 
 def _logout_block() -> None:
     """Выход из проекта – опасное действие, оттого и красная кнопка."""
-    html('<div class="card-title">🚪 Выйти из проекта</div>')
     with st.container(key="danger-logout"):
         if st.button("Выйти из проекта", key="btn-logout"):
             st.query_params.clear()
@@ -5079,7 +5119,6 @@ def _free_memory_block() -> None:
     Пока идёт прогон, кнопка отказывается работать: его браузер выглядит
     точно так же, и закрыть его – значит оборвать работу на середине.
     """
-    html('<div class="card-title">🧹 Память приложения</div>')
     used = runner.memory_mb()
     _, _, hard = runner.mem_gates()
     strays = runner.stray_browsers()
@@ -5125,7 +5164,6 @@ def _web_keys_block() -> None:
     не могут. Секреты и переменные окружения остаются главнее: в облаке
     всё работает как раньше, а поля показывают, что ключ уже задан оттуда.
     """
-    html('<div class="card-title">🌐 Ключи к веб-сервисам</div>')
 
     сервисы = (
         ("Gemini – черновики ответов на отзывы", llm.is_configured(),
@@ -5233,7 +5271,6 @@ def _forget_caches() -> None:
 
 def _reviews_settings_block(project_id: str) -> None:
     """Промпт ответов на отзывы – по проекту, рядом с остальными настройками."""
-    html('<div class="card-title">💬 Ответы на отзывы</div>')
     st.caption("Промпт один на обе площадки: правила ответа у Яндекса и 2ГИС одинаковые.")
 
     keys = llm.api_keys()
@@ -5347,7 +5384,6 @@ def _gis_login_block(project_id: str, config: dict) -> None:
     поэтому после перезапуска облака вход обычно не нужен.
     """
     worker = get_worker()
-    html('<div class="card-title">🔐 Вход в 2ГИС</div>')
 
     c1, c2 = st.columns(2)
     email = c1.text_input("Почта кабинета 2ГИС", value=config.get("gisEmail", ""),
@@ -5451,7 +5487,6 @@ def _max_login_block(project_id: str, config: dict) -> None:
     """
     import max_browser
 
-    html('<div class="card-title">🔒 МАКС (кросспостинг)</div>')
     url = st.text_input("Ссылка на канал МАКС в веб-версии",
                         value=config.get("maxWebUrl", ""),
                         key=f"set-maxweb-{project_id}",
@@ -5504,7 +5539,6 @@ def _both_sessions_block(project_id: str) -> None:
     import social_session
     import vk_social
 
-    html('<div class="card-title">🔑 Файл сессий: ВК, ОК и МАКС</div>')
     сети = ((" ВК", vk_social.has_saved_session(project_id)),
             ("ОК", ok_browser.has_saved_session(project_id)),
             ("МАКС", max_browser.has_saved_session(project_id)))
@@ -5571,7 +5605,6 @@ def _vk_login_block(project_id: str, config: dict) -> None:
     import vk_social
 
     worker = get_worker()
-    html('<div class="card-title">🔐 Вход в ВК (кросспостинг)</div>')
 
     group_url = st.text_input(
         "Ссылка на сообщество ВК этого бренда", value=config.get("vkGroupUrl", ""),
@@ -5756,7 +5789,6 @@ def _ok_login_block(project_id: str, config: dict) -> None:
     import vk_social
 
     worker = get_worker()
-    html('<div class="card-title">🔐 Вход в ОК (кросспостинг)</div>')
 
     group_url = st.text_input("Ссылка на группу ОК бренда", value=config.get("okGroupUrl", ""),
                               key=f"ok-group-{project_id}",
@@ -5940,7 +5972,6 @@ def _yandex_login_block(project_id: str, config: dict) -> None:
     в приложении – тогда показываем снимок экрана и обычные поля.
     """
     worker = get_worker()
-    html('<div class="card-title">🔐 Вход в Яндекс</div>')
     headless_login = bool(get_settings(project_id)["headless"])
 
     if can_show_browser():

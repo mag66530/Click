@@ -382,16 +382,16 @@ hr {{ border-color: var(--border) !important; }}
    строка на всю ширину, выбранная подсвечена и с полоской слева. Рейка
    «липкая» – остаётся на месте, пока справа листается длинный раздел. */
 .st-key-settings-rail {{
-  background: var(--bg-1); border: 1px solid var(--border);
+  background: var(--bg-2); border: 1px solid var(--border);
   border-radius: var(--r-md); padding: 6px; box-shadow: var(--shadow-sm);
   position: sticky; top: 12px;
 }}
 .st-key-settings-rail [role="radiogroup"] {{
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: column; gap: 3px;
   border: none; margin: 0; padding: 0;
 }}
 .st-key-settings-rail [role="radiogroup"] label {{
-  padding: 10px 12px !important; margin: 0 !important;
+  padding: 11px 13px !important; margin: 0 !important; width: 100%;
   border: 1px solid transparent; border-radius: var(--r-sm);
   background: transparent; cursor: pointer; transition: all .15s var(--ease);
 }}
@@ -399,14 +399,56 @@ hr {{ border-color: var(--border) !important; }}
   font-size: 13.5px !important; font-weight: 600 !important; color: var(--muted) !important;
   text-transform: none !important; letter-spacing: 0 !important;
 }}
-.st-key-settings-rail [role="radiogroup"] label:hover {{ background: var(--bg-2); }}
+.st-key-settings-rail [role="radiogroup"] label:hover {{ background: var(--bg-1); }}
 .st-key-settings-rail [role="radiogroup"] label:hover p {{ color: var(--text) !important; }}
+/* Выбранный пункт – приподнят: белый на фоне рейки, акцентная рамка и
+   полоска слева «по линейке». */
 .st-key-settings-rail [role="radiogroup"] label:has(input:checked) {{
-  background: var(--acc-bg); border-color: var(--acc);
+  background: var(--bg-1); border-color: var(--acc);
+  border-left: 3px solid var(--acc); box-shadow: var(--shadow-sm);
 }}
-.st-key-settings-rail [role="radiogroup"] label:has(input:checked) p {{ color: var(--acc) !important; }}
+.st-key-settings-rail [role="radiogroup"] label:has(input:checked) p {{
+  color: var(--acc) !important; font-weight: 700 !important;
+}}
 /* Прячем кружок радио – остаётся только подпись раздела. */
 .st-key-settings-rail [data-testid="stRadioOption"] > div > div > div:first-child {{ display: none !important; }}
+
+/* ─── Настройки: складные карточки разделов (_panel) ────────────── */
+/* Заголовок-карточка: кнопка-название слева, чип статуса справа. Внутри –
+   обычное содержимое блока, раскрывается по клику. */
+[class*="st-key-panelrow-"] {{ margin-bottom: 8px; }}
+[class*="st-key-panelrow-"] [data-testid="stHorizontalBlock"] {{
+  align-items: center; gap: 0;
+  background: var(--bg-1); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: var(--shadow-sm); overflow: hidden;
+}}
+[class*="st-key-panelbtn-"] button {{
+  background: transparent !important; border: none !important; box-shadow: none !important;
+  border-radius: 0 !important; justify-content: flex-start !important; text-align: left !important;
+  padding: 13px 16px !important;
+}}
+[class*="st-key-panelbtn-"] button:hover {{ background: var(--bg-2) !important; transform: none !important; }}
+/* Streamlit центрирует подпись кнопки внутренним flex-контейнером –
+   для заголовка карточки прижимаем влево и его тоже. */
+[class*="st-key-panelbtn-"] button > div {{
+  width: 100% !important; justify-content: flex-start !important; text-align: left !important;
+}}
+[class*="st-key-panelbtn-"] button [data-testid="stMarkdownContainer"] {{
+  width: 100% !important; text-align: left !important;
+}}
+[class*="st-key-panelbtn-"] button p {{
+  font-size: 14px !important; font-weight: 700 !important; color: var(--text) !important;
+  text-align: left !important; width: 100% !important; margin: 0 !important;
+}}
+.panel-chip-wrap {{ display: flex; justify-content: flex-end; padding-right: 14px; }}
+.panel-chip {{
+  display: inline-flex; align-items: center; padding: 3px 12px;
+  border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap;
+}}
+.panel-ok {{ background: var(--grn-bg); color: var(--grn); }}
+.panel-warn {{ background: var(--yel-bg); color: var(--yel); }}
+.panel-muted {{ background: var(--bg-4); color: var(--muted); }}
+.panel-danger {{ background: var(--red-bg); color: var(--red); }}
 
 /* ─── Настройки: лента статуса сверху и легенда снизу ──────────── */
 .settings-ribbon {{

@@ -423,7 +423,16 @@ def main() -> int:
                 page.get_by_text(tab, exact=True).first.click()
                 page.wait_for_timeout(4000)
 
+            def expand_yandex() -> None:
+                # Галочка живёт в складной карточке «Вход в Яндекс»: если вход
+                # уже выполнен, карточка свёрнута – раскрываем её кликом по
+                # заголовку, как это сделал бы человек.
+                if page.get_by_role("checkbox", name=box, exact=False).count() == 0:
+                    page.get_by_role("button", name="Вход в Яндекс", exact=False).first.click()
+                    page.wait_for_timeout(2000)
+
             go("⚙️ Настройки")
+            expand_yandex()
             cb = page.get_by_role("checkbox", name=box, exact=False)
             if cb.count() == 0:
                 check("галочка есть в «Настройках»", False, "чекбокс не найден")
@@ -435,6 +444,7 @@ def main() -> int:
                 check("галочка встала", cb.first.is_checked())
                 go("📤 Публикация")
                 go("⚙️ Настройки")
+                expand_yandex()
                 cb = page.get_by_role("checkbox", name=box, exact=False)
                 check("галочка пережила переход на «Публикацию»",
                       cb.count() > 0 and cb.first.is_checked(), "сбросилась")
@@ -579,6 +589,11 @@ def main() -> int:
             # выбираем нужный пункт меню, как это сделал бы человек.
             page.locator("label").filter(has_text="Ключи и данные").first.click()
             page.wait_for_timeout(3000)
+            # Блок ключей – в складной карточке; если ключи уже заданы, она
+            # свёрнута. Раскрываем кликом по заголовку, чтобы увидеть поля.
+            if page.get_by_text("Gemini – черновики", exact=False).count() == 0:
+                page.get_by_role("button", name="Ключи к веб-сервисам", exact=False).first.click()
+                page.wait_for_timeout(2000)
             check("раздел «Ключи к веб-сервисам» есть",
                   page.get_by_text("Ключи к веб-сервисам", exact=False).count() > 0)
             check("Gemini среди сервисов",

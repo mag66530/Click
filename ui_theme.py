@@ -377,6 +377,37 @@ hr {{ border-color: var(--border) !important; }}
 .st-key-compose-type [role="radiogroup"] label:has(input:checked) p {{ color: var(--acc) !important; }}
 .st-key-compose-type [data-testid="stRadioOption"] > div > div > div:first-child {{ display: none !important; }}
 
+/* ─── Настройки: боковое меню разделов (вертикальный radio) ─────── */
+/* Рейка слева в «⚙️ Настройки». radio превращаем в список-меню: каждая
+   строка на всю ширину, выбранная подсвечена и с полоской слева. Рейка
+   «липкая» – остаётся на месте, пока справа листается длинный раздел. */
+.st-key-settings-rail {{
+  background: var(--bg-1); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 6px; box-shadow: var(--shadow-sm);
+  position: sticky; top: 12px;
+}}
+.st-key-settings-rail [role="radiogroup"] {{
+  display: flex; flex-direction: column; gap: 2px;
+  border: none; margin: 0; padding: 0;
+}}
+.st-key-settings-rail [role="radiogroup"] label {{
+  padding: 10px 12px !important; margin: 0 !important;
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  background: transparent; cursor: pointer; transition: all .15s var(--ease);
+}}
+.st-key-settings-rail [role="radiogroup"] label p {{
+  font-size: 13.5px !important; font-weight: 600 !important; color: var(--muted) !important;
+  text-transform: none !important; letter-spacing: 0 !important;
+}}
+.st-key-settings-rail [role="radiogroup"] label:hover {{ background: var(--bg-2); }}
+.st-key-settings-rail [role="radiogroup"] label:hover p {{ color: var(--text) !important; }}
+.st-key-settings-rail [role="radiogroup"] label:has(input:checked) {{
+  background: var(--acc-bg); border-color: var(--acc);
+}}
+.st-key-settings-rail [role="radiogroup"] label:has(input:checked) p {{ color: var(--acc) !important; }}
+/* Прячем кружок радио – остаётся только подпись раздела. */
+.st-key-settings-rail [data-testid="stRadioOption"] > div > div > div:first-child {{ display: none !important; }}
+
 /* ─── Экспандеры → .country-section ────────────────────────────── */
 [data-testid="stExpander"] {{
   border: 1px solid var(--border) !important; border-radius: var(--r-sm) !important;

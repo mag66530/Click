@@ -4877,8 +4877,76 @@ def _day_logs(project_id: str) -> None:
 #  РАЗДЕЛ: НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════════════
 
+# Настройки – боковое меню слева, содержимое справа.
+#
+# Раньше это был один длинный свиток: полтора десятка блоков подряд через
+# st.divider(). Чтобы дойти до «Выйти» или «Память», человек прокручивал
+# мимо всех форм входа, а похожее лежало вперемешку с разным – заказчица
+# жаловалась, что «всё размыто». Теперь блоки разложены по разделам, а сами
+# разделы идут в том же порядке, что и вкладки приложения (Публикация →
+# Кросспостинг → Актуализация → …), чтобы не пришлось держать в голове две
+# разные логики. Каждый _*_block живёт как жил – меняется только то, КАК их
+# собирают: не всё сразу, а раздел, выбранный в меню слева.
+_SETTINGS_GROUPS = [
+    ("📤 Публикация", "Вход в Яндекс.Бизнес – им Click публикует посты."),
+    ("🗓 Кросспостинг", "Соцсети для кросспостинга: ВК, ОК, МАКС и общий файл сессий."),
+    ("🔄 Актуализация и города", "Откуда берутся города для прогонов и актуализации."),
+    ("🔎 Сверка · отзывы", "Вход в 2ГИС и промпт ответов на отзывы."),
+    ("🔌 Ключи и данные", "Ключи к веб-сервисам: Gemini, Google, GitHub."),
+    ("⚙️ Обслуживание", "Память, проверка браузера, хранилище и выход из проекта."),
+]
+
+
 def tab_settings(project_id: str, config: dict) -> None:
-    settings = get_settings(project_id)
+    labels = [название for название, _ in _SETTINGS_GROUPS]
+
+    left, right = st.columns([1, 3.1], gap="large")
+    with left:
+        with st.container(key="settings-rail"):
+            выбор = st.radio("Раздел настроек", labels, label_visibility="collapsed",
+                             key="settings-group")
+    индекс = labels.index(выбор)
+
+    with right:
+        st.caption(_SETTINGS_GROUPS[индекс][1])
+
+        if индекс == 0:            # Публикация
+            _yandex_access_block(project_id, config)
+            st.divider()
+            _yandex_login_block(project_id, config)
+
+        elif индекс == 1:          # Кросспостинг
+            _vk_login_block(project_id, config)
+            st.divider()
+            _ok_login_block(project_id, config)
+            st.divider()
+            _max_login_block(project_id, config)
+            st.divider()
+            _both_sessions_block(project_id)
+
+        elif индекс == 2:          # Актуализация и города
+            _kp_sheet_settings_block(project_id, config)
+
+        elif индекс == 3:          # Сверка · отзывы
+            _gis_login_block(project_id, config)
+            st.divider()
+            _reviews_settings_block(project_id)
+
+        elif индекс == 4:          # Ключи и данные
+            _web_keys_block()
+
+        else:                      # Обслуживание
+            _free_memory_block()
+            st.divider()
+            _browser_check_block()
+            st.divider()
+            _storage_note_block()
+            st.divider()
+            _logout_block()
+
+
+def _yandex_access_block(project_id: str, config: dict) -> None:
+    """Email и пароль аккаунта Яндекса – с ними и работают публикация и вход."""
     project = PROJECTS[project_id]
 
     html('<div class="card-title">🔑 Доступ к Яндекс.Бизнесу</div>')
@@ -4907,37 +4975,10 @@ def tab_settings(project_id: str, config: dict) -> None:
             save_config(project_id)
             st.rerun()
 
-    st.divider()
-    _yandex_login_block(project_id, config)
 
-    st.divider()
-    _gis_login_block(project_id, config)
-
-    st.divider()
-    _both_sessions_block(project_id)
-
-    st.divider()
-    _vk_login_block(project_id, config)
-
-    st.divider()
-    _ok_login_block(project_id, config)
-
-    st.divider()
-    _max_login_block(project_id, config)
-
-    st.divider()
-    _kp_sheet_settings_block(project_id, config)
-
-    st.divider()
-    _web_keys_block()
-
-    st.divider()
-    _reviews_settings_block(project_id)
-
-    st.divider()
-    _free_memory_block()
-
-    st.divider()
+def _browser_check_block() -> None:
+    """Проверка, что браузер вообще запускается – раньше жила в конце свитка."""
+    html('<div class="card-title">🖥 Проверить браузер</div>')
     engine = yb.current_engine()
     c1, c2 = st.columns([1, 3])
     if c1.button("Проверить браузер", key="btn-check-browser", use_container_width=True):
@@ -4949,6 +4990,10 @@ def tab_settings(project_id: str, config: dict) -> None:
             _browser_error(e)
     c2.caption(f"Браузер: **{engine}**" if engine else "Браузер ещё не запускался.")
 
+
+def _storage_note_block() -> None:
+    """Где живут сессия и отчёты – одна строчка про хранилище."""
+    html('<div class="card-title">💾 Хранилище проекта</div>')
     if repo_store.is_configured():
         st.caption("💾 Сессия Яндекса хранится в приватном хранилище проекта – "
                    "переживает перезапуски облака. Сбросить: «Войти заново». "
@@ -4957,6 +5002,10 @@ def tab_settings(project_id: str, config: dict) -> None:
         st.caption("⚠️ В облаке файловая система временная: при перезапуске приложения пропадут "
                    "сессия Яндекса и отчёты.")
 
+
+def _logout_block() -> None:
+    """Выход из проекта – опасное действие, оттого и красная кнопка."""
+    html('<div class="card-title">🚪 Выйти из проекта</div>')
     with st.container(key="danger-logout"):
         if st.button("Выйти из проекта", key="btn-logout"):
             st.query_params.clear()

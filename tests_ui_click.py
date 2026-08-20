@@ -574,6 +574,11 @@ def main() -> int:
             print("\n▸ Настройки: ключи к веб-сервисам")
             page.get_by_text("⚙️ Настройки", exact=False).first.click()
             page.wait_for_timeout(4000)
+            # Настройки теперь с боковым меню разделов; ключи – в «Ключи и
+            # данные». По умолчанию открыт другой раздел, поэтому сначала
+            # выбираем нужный пункт меню, как это сделал бы человек.
+            page.locator("label").filter(has_text="Ключи и данные").first.click()
+            page.wait_for_timeout(3000)
             check("раздел «Ключи к веб-сервисам» есть",
                   page.get_by_text("Ключи к веб-сервисам", exact=False).count() > 0)
             check("Gemini среди сервисов",

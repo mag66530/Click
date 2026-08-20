@@ -4901,69 +4901,87 @@ def tab_settings(project_id: str, config: dict) -> None:
     статус = _settings_statuses(project_id, config)
     _settings_status_ribbon(статус)
 
-    labels = [название for название, _, _ in _SETTINGS_GROUPS]
-    counts = {название: n for название, _, n in _SETTINGS_GROUPS}
+    idx = int(st.session_state.get("settings-idx", 0))
+    idx = max(0, min(idx, len(_SETTINGS_GROUPS) - 1))
 
     left, right = st.columns([1, 3.1], gap="large")
     with left:
         with st.container(key="settings-rail"):
-            # format_func добавляет счётчик только К ПОКАЗУ – само значение
-            # (ключ раздела) остаётся прежним, поэтому сохранённый выбор не
-            # слетает при смене вёрстки.
-            выбор = st.radio("Раздел настроек", labels, label_visibility="collapsed",
-                             key="settings-group",
-                             format_func=lambda l: f"{l}  {counts[l]}")
-    индекс = labels.index(выбор)
+            # Пункт меню – HTML (иконка+название слева, счётчик справа, ровно
+            # по сетке), а клик ловит прозрачная кнопка поверх него.
+            for i, (название, _desc, n) in enumerate(_SETTINGS_GROUPS):
+                sel = " sel" if i == idx else ""
+                with st.container(key=f"railrow-{i}"):
+                    html(f'<div class="rail-item{sel}">'
+                         f'<span class="rail-name">{название}</span>'
+                         f'<span class="rail-count">{n}</span></div>')
+                    if st.button(название, key=f"railbtn-{i}", use_container_width=True):
+                        st.session_state["settings-idx"] = i
+                        st.rerun()
 
     OK, ВНИМ, СЕРВ = ("ok", "готово"), ("warn", "внимание"), ("muted", "сервис")
 
     def s(готов):
         return OK if готов else ВНИМ
 
-    with right:
-        st.caption(_SETTINGS_GROUPS[индекс][1])
+    def вход(готов):
+        return "Сессия активна" if готов else "Требуется вход"
 
-        if индекс == 0:            # Публикация
-            if _panel("ya-access", "🔑 Доступ к Яндекс.Бизнесу",
+    with right:
+        st.caption(_SETTINGS_GROUPS[idx][1])
+
+        if idx == 0:               # Публикация
+            if _panel("ya-access", "🔑", "Доступ к Яндекс.Бизнесу", "Email и пароль аккаунта",
                       s(статус["email"]), attention=not статус["email"]):
                 _yandex_access_block(project_id, config)
-            if _panel("ya-login", "🔐 Вход в Яндекс",
+            if _panel("ya-login", "🔐", "Вход в Яндекс", вход(статус["yandex"]),
                       s(статус["yandex"]), attention=not статус["yandex"]):
                 _yandex_login_block(project_id, config)
 
-        elif индекс == 1:          # Кросспостинг
-            if _panel("vk", "🔐 Вход в ВК", s(статус["vk"]), attention=not статус["vk"]):
+        elif idx == 1:             # Кросспостинг
+            if _panel("vk", "🔐", "Вход в ВК", вход(статус["vk"]),
+                      s(статус["vk"]), attention=not статус["vk"]):
                 _vk_login_block(project_id, config)
-            if _panel("ok", "🔐 Вход в ОК", s(статус["ok"]), attention=not статус["ok"]):
+            if _panel("ok", "🔐", "Вход в ОК", вход(статус["ok"]),
+                      s(статус["ok"]), attention=not статус["ok"]):
                 _ok_login_block(project_id, config)
-            if _panel("max", "🔒 МАКС", s(статус["max"]), attention=not статус["max"]):
+            if _panel("max", "🔒", "МАКС", вход(статус["max"]),
+                      s(статус["max"]), attention=not статус["max"]):
                 _max_login_block(project_id, config)
-            if _panel("sessions", "🔑 Файл сессий: ВК, ОК и МАКС", СЕРВ, attention=False):
+            if _panel("sessions", "🔑", "Файл сессий: ВК, ОК и МАКС",
+                      "Резервный вход, если форма не проходит", СЕРВ, attention=False):
                 _both_sessions_block(project_id)
 
-        elif индекс == 2:          # Актуализация и города
-            if _panel("kp", "📊 Источник городов — таблица КП", СЕРВ, attention=True):
+        elif idx == 2:             # Актуализация и города
+            if _panel("kp", "🏙", "Источник городов (таблица КП)",
+                      "Google-таблица и выбранный лист", СЕРВ, attention=True):
                 _kp_sheet_settings_block(project_id, config)
 
-        elif индекс == 3:          # Сверка · отзывы
-            if _panel("gis", "🔐 Вход в 2ГИС", s(статус["gis"]), attention=not статус["gis"]):
+        elif idx == 3:             # Сверка · отзывы
+            if _panel("gis", "🔐", "Вход в 2ГИС", вход(статус["gis"]),
+                      s(статус["gis"]), attention=not статус["gis"]):
                 _gis_login_block(project_id, config)
-            if _panel("reviews", "💬 Ответы на отзывы", СЕРВ, attention=False):
+            if _panel("reviews", "💬", "Ответы на отзывы",
+                      "Промпт ответа для Яндекса и 2ГИС", СЕРВ, attention=False):
                 _reviews_settings_block(project_id)
 
-        elif индекс == 4:          # Ключи и данные
-            if _panel("keys", "🌐 Ключи к веб-сервисам",
+        elif idx == 4:             # Ключи и данные
+            if _panel("keys", "🌐", "Ключи к веб-сервисам", "Gemini · Google · GitHub",
                       s(статус["keys"]), attention=not статус["keys"]):
                 _web_keys_block()
 
         else:                      # Обслуживание
-            if _panel("mem", "🧹 Память приложения", СЕРВ, attention=False):
+            if _panel("mem", "🧹", "Память приложения",
+                      "Освободить память от брошенных браузеров", СЕРВ, attention=False):
                 _free_memory_block()
-            if _panel("browser", "🖥 Проверить браузер", СЕРВ, attention=False):
+            if _panel("browser", "🖥", "Проверить браузер", "Тест запуска браузера",
+                      СЕРВ, attention=False):
                 _browser_check_block()
-            if _panel("storage", "💾 Хранилище проекта", СЕРВ, attention=False):
+            if _panel("storage", "💾", "Хранилище проекта", "Где живут сессия и отчёты",
+                      СЕРВ, attention=False):
                 _storage_note_block()
-            if _panel("logout", "🚪 Выйти из проекта", ("danger", "выход"), attention=False):
+            if _panel("logout", "🚪", "Выйти из проекта", "Сбросить вход в приложение",
+                      ("danger", "выход"), attention=False):
                 _logout_block()
 
     _settings_legend()
@@ -4992,13 +5010,14 @@ def _settings_statuses(project_id: str, config: dict) -> dict:
     }
 
 
-def _panel(key: str, title: str, status: tuple[str, str], attention: bool) -> bool:
+def _panel(key: str, icon: str, title: str, subtitle: str,
+           status: tuple[str, str], attention: bool) -> bool:
     """
-    Складная карточка раздела: заголовок с чипом статуса, по клику
-    раскрывается содержимое (логин, поля, кнопки). Это НЕ st.expander –
-    внутри блоков живут свои экспандеры, а их вкладывать нельзя. Состояние
-    открыт/закрыт держим в session_state; то, что просит внимания (нет входа,
-    не задан ключ), показываем сразу раскрытым, готовое – свёрнутым.
+    Складная карточка раздела: иконка, название и подпись слева, чип статуса
+    справа. По клику раскрывается содержимое (логин, поля, кнопки). Это НЕ
+    st.expander – внутри блоков живут свои экспандеры, а их вкладывать нельзя.
+    Сама карточка – HTML (ровная сетка), а клик ловит прозрачная кнопка
+    поверх неё. То, что просит внимания, показываем сразу раскрытым.
     """
     open_key = f"setpanel-{key}"
     if open_key not in st.session_state:
@@ -5007,13 +5026,17 @@ def _panel(key: str, title: str, status: tuple[str, str], attention: bool) -> bo
 
     cls, text = status
     chip = f'<span class="panel-chip panel-{cls}">{text}</span>' if text else ""
-    chev = "▾" if is_open else "▸"
     with st.container(key=f"panelrow-{key}"):
-        c1, c2 = st.columns([5, 1], vertical_alignment="center")
-        if c1.button(f"{chev} {title}", key=f"panelbtn-{key}", use_container_width=True):
+        html(
+            f'<div class="scard{" open" if is_open else ""}">'
+            f'<div class="scard-ico">{icon}</div>'
+            f'<div class="scard-main"><div class="scard-title">{title}</div>'
+            f'<div class="scard-sub">{subtitle}</div></div>'
+            f'{chip}<span class="scard-caret"></span></div>'
+        )
+        if st.button(title, key=f"panelbtn-{key}", use_container_width=True):
             st.session_state[open_key] = not is_open
             st.rerun()
-        c2.markdown(f'<div class="panel-chip-wrap">{chip}</div>', unsafe_allow_html=True)
     return is_open
 
 

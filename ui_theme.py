@@ -377,70 +377,69 @@ hr {{ border-color: var(--border) !important; }}
 .st-key-compose-type [role="radiogroup"] label:has(input:checked) p {{ color: var(--acc) !important; }}
 .st-key-compose-type [data-testid="stRadioOption"] > div > div > div:first-child {{ display: none !important; }}
 
-/* ─── Настройки: боковое меню разделов (вертикальный radio) ─────── */
-/* Рейка слева в «⚙️ Настройки». radio превращаем в список-меню: каждая
-   строка на всю ширину, выбранная подсвечена и с полоской слева. Рейка
-   «липкая» – остаётся на месте, пока справа листается длинный раздел. */
+/* ─── Настройки: боковое меню разделов (HTML-пункты) ───────────── */
+/* Рейка слева: у пункта иконка+название слева, счётчик справа – ровно по
+   сетке. Клик по пункту ловит прозрачная кнопка поверх него. */
 .st-key-settings-rail {{
   background: var(--bg-2); border: 1px solid var(--border);
   border-radius: var(--r-md); padding: 6px; box-shadow: var(--shadow-sm);
   position: sticky; top: 12px;
 }}
-.st-key-settings-rail [role="radiogroup"] {{
-  display: flex; flex-direction: column; gap: 3px;
-  border: none; margin: 0; padding: 0;
-}}
-.st-key-settings-rail [role="radiogroup"] label {{
-  padding: 11px 13px !important; margin: 0 !important; width: 100%;
+.st-key-settings-rail > div > [data-testid="stVerticalBlock"] {{ gap: 3px; }}
+[class*="st-key-railrow-"] {{ position: relative; }}
+[class*="st-key-railrow-"] [data-testid="stMarkdownContainer"] {{ margin: 0; }}
+[class*="st-key-railrow-"] > div > [data-testid="stVerticalBlock"] {{ gap: 0; }}
+.rail-item {{
+  display: flex; align-items: center; gap: 8px; padding: 11px 13px;
   border: 1px solid transparent; border-radius: var(--r-sm);
-  background: transparent; cursor: pointer; transition: all .15s var(--ease);
+  transition: background .15s var(--ease);
 }}
-.st-key-settings-rail [role="radiogroup"] label p {{
-  font-size: 13.5px !important; font-weight: 600 !important; color: var(--muted) !important;
-  text-transform: none !important; letter-spacing: 0 !important;
-}}
-.st-key-settings-rail [role="radiogroup"] label:hover {{ background: var(--bg-1); }}
-.st-key-settings-rail [role="radiogroup"] label:hover p {{ color: var(--text) !important; }}
-/* Выбранный пункт – приподнят: белый на фоне рейки, акцентная рамка и
-   полоска слева «по линейке». */
-.st-key-settings-rail [role="radiogroup"] label:has(input:checked) {{
+.rail-name {{ flex: 1 1 auto; font-size: 13.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }}
+.rail-count {{ flex: none; font-size: 12px; font-weight: 700; color: var(--dim); }}
+[class*="st-key-railrow-"]:hover .rail-item:not(.sel) {{ background: var(--bg-1); }}
+[class*="st-key-railrow-"]:hover .rail-item:not(.sel) .rail-name {{ color: var(--text); }}
+/* Выбранный пункт – приподнят: белый, акцентная рамка и полоска слева. */
+.rail-item.sel {{
   background: var(--bg-1); border-color: var(--acc);
   border-left: 3px solid var(--acc); box-shadow: var(--shadow-sm);
 }}
-.st-key-settings-rail [role="radiogroup"] label:has(input:checked) p {{
-  color: var(--acc) !important; font-weight: 700 !important;
-}}
-/* Прячем кружок радио – остаётся только подпись раздела. */
-.st-key-settings-rail [data-testid="stRadioOption"] > div > div > div:first-child {{ display: none !important; }}
+.rail-item.sel .rail-name {{ color: var(--acc); font-weight: 700; }}
+.rail-item.sel .rail-count {{ color: var(--acc); }}
 
 /* ─── Настройки: складные карточки разделов (_panel) ────────────── */
-/* Заголовок-карточка: кнопка-название слева, чип статуса справа. Внутри –
-   обычное содержимое блока, раскрывается по клику. */
-[class*="st-key-panelrow-"] {{ margin-bottom: 8px; }}
-[class*="st-key-panelrow-"] [data-testid="stHorizontalBlock"] {{
-  align-items: center; gap: 0;
+/* Карточка – HTML: иконка слева, название+подпись стопкой, чип и каретка
+   справа. Клик по всей карточке ловит прозрачная кнопка поверх неё. */
+[class*="st-key-panelrow-"] {{ position: relative; margin-bottom: 8px; }}
+[class*="st-key-panelrow-"] [data-testid="stMarkdownContainer"] {{ margin: 0; }}
+[class*="st-key-panelrow-"] > div > [data-testid="stVerticalBlock"] {{ gap: 0; }}
+.scard {{
+  display: flex; align-items: center; gap: 14px; padding: 13px 16px;
   background: var(--bg-1); border: 1px solid var(--border);
-  border-radius: var(--r-md); box-shadow: var(--shadow-sm); overflow: hidden;
+  border-radius: var(--r-md); box-shadow: var(--shadow-sm); transition: background .15s var(--ease);
 }}
-[class*="st-key-panelbtn-"] button {{
-  background: transparent !important; border: none !important; box-shadow: none !important;
-  border-radius: 0 !important; justify-content: flex-start !important; text-align: left !important;
-  padding: 13px 16px !important;
+.scard-ico {{ font-size: 19px; line-height: 1; flex: none; width: 22px; text-align: center; }}
+.scard-main {{ flex: 1 1 auto; min-width: 0; }}
+.scard-title {{ font-size: 14px; font-weight: 600; color: var(--text); letter-spacing: -.01em; }}
+.scard-sub {{ font-size: 12px; color: var(--muted); margin-top: 2px; }}
+.scard-caret {{
+  flex: none; width: 7px; height: 7px; margin-left: 4px;
+  border-right: 2px solid var(--dim); border-bottom: 2px solid var(--dim);
+  transform: rotate(-45deg); transition: transform .15s var(--ease);
 }}
-[class*="st-key-panelbtn-"] button:hover {{ background: var(--bg-2) !important; transform: none !important; }}
-/* Streamlit центрирует подпись кнопки внутренним flex-контейнером –
-   для заголовка карточки прижимаем влево и его тоже. */
-[class*="st-key-panelbtn-"] button > div {{
-  width: 100% !important; justify-content: flex-start !important; text-align: left !important;
+.scard.open .scard-caret {{ transform: rotate(45deg); }}
+[class*="st-key-panelrow-"]:hover .scard {{ background: var(--bg-2); }}
+
+/* Прозрачная кнопка-оверлей поверх пункта/карточки – ловит клик по всей площади. */
+[class*="st-key-railbtn-"], [class*="st-key-panelbtn-"] {{
+  position: absolute; inset: 0; z-index: 3; margin: 0 !important;
 }}
-[class*="st-key-panelbtn-"] button [data-testid="stMarkdownContainer"] {{
-  width: 100% !important; text-align: left !important;
+[class*="st-key-railbtn-"] > div, [class*="st-key-panelbtn-"] > div,
+[class*="st-key-railbtn-"] .stButton, [class*="st-key-panelbtn-"] .stButton {{ height: 100%; }}
+[class*="st-key-railbtn-"] button, [class*="st-key-panelbtn-"] button {{
+  width: 100%; height: 100%; min-height: 0 !important; opacity: 0;
+  padding: 0 !important; border: none !important; box-shadow: none !important; cursor: pointer;
 }}
-[class*="st-key-panelbtn-"] button p {{
-  font-size: 14px !important; font-weight: 700 !important; color: var(--text) !important;
-  text-align: left !important; width: 100% !important; margin: 0 !important;
-}}
-.panel-chip-wrap {{ display: flex; justify-content: flex-end; padding-right: 14px; }}
+
 .panel-chip {{
   display: inline-flex; align-items: center; padding: 3px 12px;
   border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap;

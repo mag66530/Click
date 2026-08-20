@@ -237,35 +237,38 @@ hr {{ border-color: var(--border) !important; }}
 .badge-warn {{ background: var(--yel-bg); color: var(--yel); }}
 
 /* ─── Кнопки Streamlit → .btn оригинала ────────────────────────── */
-.stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {{
+.stButton button, .stDownloadButton button, .stFormSubmitButton button {{
   font-family: var(--font); font-size: 13px; font-weight: 600;
   padding: 10px 18px; border-radius: var(--r-sm);
   background: var(--bg-3); color: var(--text); border: 1px solid var(--border);
   transition: all .15s var(--ease); box-shadow: none;
 }}
-.stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover {{
+.stButton button:hover, .stDownloadButton button:hover, .stFormSubmitButton button:hover {{
   background: var(--bg-4); border-color: var(--border-hi); color: var(--text); transform: translateY(-1px);
 }}
-.stButton > button:active {{ transform: translateY(0); }}
-.stButton > button:focus, .stButton > button:focus-visible {{
+.stButton button:active {{ transform: translateY(0); }}
+.stButton button:focus, .stButton button:focus-visible {{
   box-shadow: 0 0 0 3px var(--acc-bg) !important; outline: none !important; color: var(--text);
 }}
-.stButton > button:disabled {{ opacity: .45; transform: none !important; }}
-.stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"],
-.stDownloadButton > button[kind="primary"] {{
+.stButton button:disabled {{ opacity: .45; transform: none !important; }}
+.stButton button[kind="primary"], .stFormSubmitButton button[kind="primary"],
+.stDownloadButton button[kind="primary"] {{
   /* Сочный горизонтальный градиент: на широких кнопках (вход) оба цвета
-     читаются так же ярко, как на узких CTA в других вкладках. */
-  background: linear-gradient(100deg, #5b7cfa 0%, #7d6bf6 46%, #a855f7 100%);
-  color: #fff; border-color: transparent;
+     читаются так же ярко, как на узких CTA в других вкладках. !important —
+     иначе Streamlit красит primary-кнопку своим плоским primaryColor из
+     config.toml и градиент не виден (см. тот же приём у stat-плашек ниже). */
+  background: linear-gradient(100deg, #5b7cfa 0%, #7d6bf6 46%, #a855f7 100%) !important;
+  background-image: linear-gradient(100deg, #5b7cfa 0%, #7d6bf6 46%, #a855f7 100%) !important;
+  color: #fff !important; border-color: transparent !important;
   box-shadow: 0 6px 18px rgba(124,92,246,.35);
 }}
-.stButton > button[kind="primary"]:hover {{ box-shadow: 0 6px 20px rgba(91,124,250,.45); color: #fff; }}
-.stButton > button[kind="primary"]:disabled, .stFormSubmitButton > button[kind="primary"]:disabled {{
+.stButton button[kind="primary"]:hover {{ box-shadow: 0 6px 20px rgba(91,124,250,.45); color: #fff; }}
+.stButton button[kind="primary"]:disabled, .stFormSubmitButton button[kind="primary"]:disabled {{
   background: var(--bg-3); color: var(--muted); box-shadow: none; border-color: var(--border);
 }}
 
 /* Кнопка темы в шапке – компактная, вровень с топбаром */
-.st-key-btn-theme .stButton > button, .st-key-btn-theme button {{
+.st-key-btn-theme .stButton button, .st-key-btn-theme button {{
   height: 46px; width: 46px; min-width: 46px; font-size: 18px; padding: 0;
   background: var(--bg-2); border-color: var(--border); border-radius: 10px;
 }}
@@ -275,20 +278,20 @@ hr {{ border-color: var(--border) !important; }}
 .st-key-btn-theme {{ width: fit-content !important; margin-right: auto !important; }}
 
 /* Опасные действия – красные (по ключу виджета) */
-[class*="st-key-danger-"] .stButton > button,
+[class*="st-key-danger-"] .stButton button,
 [class*="st-key-danger-"] button {{ background: var(--red-bg); color: var(--red); border-color: transparent; }}
-[class*="st-key-danger-"] .stButton > button:hover,
+[class*="st-key-danger-"] .stButton button:hover,
 [class*="st-key-danger-"] button:hover {{ background: var(--red); color: #fff; }}
 
 /* Цвет подписи кнопки задаём явно: внутри неё markdown-контейнер, которому
    общее правило даёт приглушённый цвет – на светлой теме это нечитаемо. */
-.stButton > button p, .stButton > button div, .stButton > button span,
-.stDownloadButton > button p, .stFormSubmitButton > button p {{ color: inherit !important; }}
-.stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {{
+.stButton button p, .stButton button div, .stButton button span,
+.stDownloadButton button p, .stFormSubmitButton button p {{ color: inherit !important; }}
+.stButton button, .stDownloadButton button, .stFormSubmitButton button {{
   color: var(--text) !important;
 }}
-.stButton > button[kind="primary"], .stButton > button[kind="primary"] p {{ color: #fff !important; }}
-.stButton > button:disabled, .stButton > button:disabled p {{ color: var(--muted) !important; }}
+.stButton button[kind="primary"], .stButton button[kind="primary"] p {{ color: #fff !important; }}
+.stButton button:disabled, .stButton button:disabled p {{ color: var(--muted) !important; }}
 
 /* ─── Поля ввода ───────────────────────────────────────────────── */
 .stTextInput input, .stTextArea textarea, .stNumberInput input,
@@ -628,37 +631,37 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 
 /* Кликабельная плашка отчёта: она же и фильтр. Раньше под цветными плашками
    стоял второй ряд кнопок с теми же названиями – одно и то же дважды. */
-[class*="st-key-tile-stat-"] .stButton > button {{
+[class*="st-key-tile-stat-"] .stButton button {{
   flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px;
   padding: 12px 15px; min-height: 78px; text-align: left;
   border: 1px solid var(--stat-bd, var(--border));
   background-color: var(--stat-bg, var(--bg-3)) !important;
 }}
-[class*="st-key-tile-stat-"] .stButton > button p,
-[class*="st-key-tile-stat-"] .stButton > button[kind="primary"] p {{
+[class*="st-key-tile-stat-"] .stButton button p,
+[class*="st-key-tile-stat-"] .stButton button[kind="primary"] p {{
   font-size: 10.5px !important; font-weight: 700 !important; letter-spacing: .05em;
   text-transform: uppercase; line-height: 1.2 !important;
   color: var(--stat-c, var(--muted)) !important; opacity: .85;
 }}
-[class*="st-key-tile-stat-"] .stButton > button::after {{
+[class*="st-key-tile-stat-"] .stButton button::after {{
   content: var(--val, ""); font-family: var(--mono); font-size: 24px; font-weight: 800;
   line-height: 1.05; color: var(--stat-c, var(--text));
 }}
 /* Выбранная плашка: Streamlit красит primary-кнопку СВОИМ градиентом через
    сокращение background – background-color его не перебивает, и плашка
    становилась фиолетовой, а подпись на ней пропадала. */
-[class*="st-key-tile-stat-"] .stButton > button[kind="primary"] {{
+[class*="st-key-tile-stat-"] .stButton button[kind="primary"] {{
   background: var(--stat-bg, var(--bg-3)) !important;
   background-image: none !important;
   box-shadow: inset 0 0 0 2px var(--stat-c, var(--acc)) !important;
   border-color: var(--stat-c, var(--acc)) !important;
 }}
-[class*="st-key-tile-stat-"] .stButton > button[kind="primary"] p {{ opacity: 1; }}
+[class*="st-key-tile-stat-"] .stButton button[kind="primary"] p {{ opacity: 1; }}
 /* Плашка «Время» кликать нечего – но выглядеть должна как остальные. */
-[class*="st-key-tile-stat-"] .stButton > button:disabled {{
+[class*="st-key-tile-stat-"] .stButton button:disabled {{
   opacity: 1 !important; cursor: default; transform: none !important;
 }}
-[class*="st-key-tile-stat-"] .stButton > button:disabled:hover {{
+[class*="st-key-tile-stat-"] .stButton button:disabled:hover {{
   border-color: var(--stat-bd, var(--border)); transform: none !important;
 }}
 
@@ -724,57 +727,59 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
    («76 гор.», «✓ все 76», «изменить ▸») – ровно как в .country-tile оригинала.
    Значения подставляются переменными --flag / --meta / --mark / --act. */
 [class*="st-key-tile-"] .stButton {{ width: 100%; }}
-[class*="st-key-tile-"] .stButton > button {{
+[class*="st-key-tile-"] .stButton button {{
   width: 100%; display: flex; align-items: center; justify-content: center;
   background-color: var(--bg-2); border: 1.5px solid var(--border);
   border-radius: var(--r-md); color: var(--text) !important;
   transition: all .15s var(--ease);
 }}
-[class*="st-key-tile-"] .stButton > button:hover {{
+[class*="st-key-tile-"] .stButton button:hover {{
   border-color: var(--border-hi); background-color: var(--bg-3); transform: translateY(-1px);
 }}
-[class*="st-key-tile-"] .stButton > button[kind="primary"] {{
-  border-color: var(--acc); background-color: var(--acc-bg);
+[class*="st-key-tile-"] .stButton button[kind="primary"] {{
+  /* Плитки (выбор поста/страны) остаются светлыми – глушим общий градиент
+     primary через background-image: none, иначе плитка заливается фиолетовым. */
+  border-color: var(--acc); background: var(--acc-bg) !important; background-image: none !important;
   color: var(--acc) !important; box-shadow: 0 0 0 2px var(--acc-bg);
 }}
-[class*="st-key-tile-"] .stButton > button[kind="primary"] p {{ color: var(--acc) !important; }}
-[class*="st-key-tile-"] .stButton > button [data-testid="stMarkdownContainer"] {{ min-width: 0; }}
+[class*="st-key-tile-"] .stButton button[kind="primary"] p {{ color: var(--acc) !important; }}
+[class*="st-key-tile-"] .stButton button [data-testid="stMarkdownContainer"] {{ min-width: 0; }}
 /* Подпись Streamlit кладёт в два своих div/span – без этого текст встаёт по центру. */
-[class*="st-key-tile-cc-"] .stButton > button > div,
-[class*="st-key-tile-row-"] .stButton > button > div {{
+[class*="st-key-tile-cc-"] .stButton button > div,
+[class*="st-key-tile-row-"] .stButton button > div {{
   min-width: 0; max-width: 100%; display: flex; justify-content: flex-start;
 }}
-[class*="st-key-tile-cc-"] .stButton > button > div > span,
-[class*="st-key-tile-row-"] .stButton > button > div > span {{
+[class*="st-key-tile-cc-"] .stButton button > div > span,
+[class*="st-key-tile-row-"] .stButton button > div > span {{
   min-width: 0; max-width: 100%; display: flex; justify-content: flex-start;
 }}
 
 /* Тип поста: иконка над названием (.post-type-card) */
-[class*="st-key-tile-pt-"] .stButton > button {{
+[class*="st-key-tile-pt-"] .stButton button {{
   flex-direction: column; gap: 8px; padding: 16px 10px; min-height: 92px; text-align: center;
   background-image: none !important;
 }}
-[class*="st-key-tile-pt-"] .stButton > button::before {{
+[class*="st-key-tile-pt-"] .stButton button::before {{
   content: var(--ico, ""); font-size: 26px; line-height: 1; filter: grayscale(.2);
 }}
-[class*="st-key-tile-pt-"] .stButton > button[kind="primary"]::before {{ filter: none; }}
-[class*="st-key-tile-pt-"] .stButton > button p {{
+[class*="st-key-tile-pt-"] .stButton button[kind="primary"]::before {{ filter: none; }}
+[class*="st-key-tile-pt-"] .stButton button p {{
   font-size: 12.5px !important; font-weight: 600 !important; line-height: 1.25 !important;
 }}
 
 /* Страна карточкой (.country-tile): флаг слева, под названием – «N гор.» */
-[class*="st-key-tile-cc-"] .stButton > button {{
+[class*="st-key-tile-cc-"] .stButton button {{
   flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px;
   padding: 11px 13px 11px 44px; min-height: 56px; text-align: left;
   background-image: var(--flag) !important; background-repeat: no-repeat;
   background-position: 13px center; background-size: 24px 16px;
 }}
-[class*="st-key-tile-cc-"] .stButton > button p {{
+[class*="st-key-tile-cc-"] .stButton button p {{
   font-size: 13px !important; font-weight: 700 !important; line-height: 1.3 !important;
   letter-spacing: -.01em; text-align: left;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }}
-[class*="st-key-tile-cc-"] .stButton > button::after {{
+[class*="st-key-tile-cc-"] .stButton button::after {{
   content: var(--meta, ""); font-size: 11px; font-weight: 500;
   color: var(--meta-c, var(--muted));
 }}
@@ -787,38 +792,38 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
   align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
   pointer-events: none; z-index: 1;
 }}
-[class*="st-key-tile-cc-"] .stButton > button {{
+[class*="st-key-tile-cc-"] .stButton button {{
   border-color: var(--qbord, var(--border));
   background-color: var(--qbg, var(--bg-2));
 }}
-[class*="st-key-tile-cc-"] .stButton > button[kind="primary"]::after {{
+[class*="st-key-tile-cc-"] .stButton button[kind="primary"]::after {{
   color: var(--acc); font-weight: 700;
 }}
 
 /* Страна строкой (.country-row): флаг · название · отметка · действие.
    Порядок во flex задаём order, потому что ::before по умолчанию идёт первым. */
-[class*="st-key-tile-row-"] .stButton > button {{
+[class*="st-key-tile-row-"] .stButton button {{
   justify-content: flex-start; gap: 10px; padding: 9px 14px 9px 44px; min-height: 40px;
   border-radius: var(--r-sm); border-width: 1px;
   background-image: var(--flag) !important; background-repeat: no-repeat;
   background-position: 14px center; background-size: 24px 16px;
 }}
-[class*="st-key-tile-row-"] .stButton > button > div {{ order: 1; flex: 1 1 auto; }}
-[class*="st-key-tile-row-"] .stButton > button p {{
+[class*="st-key-tile-row-"] .stButton button > div {{ order: 1; flex: 1 1 auto; }}
+[class*="st-key-tile-row-"] .stButton button p {{
   font-size: 13.5px !important; font-weight: 700 !important; text-align: left;
 }}
-[class*="st-key-tile-row-"] .stButton > button::before {{
+[class*="st-key-tile-row-"] .stButton button::before {{
   content: var(--mark, ""); order: 2; font-size: 12px; font-weight: 700;
   color: var(--mark-c, var(--muted)); white-space: nowrap;
 }}
-[class*="st-key-tile-row-"] .stButton > button::after {{
+[class*="st-key-tile-row-"] .stButton button::after {{
   content: var(--act, ""); order: 3; font-size: 11.5px; font-weight: 500;
   color: var(--muted); white-space: nowrap;
 }}
-[class*="st-key-tile-row-"] .stButton > button[kind="primary"] {{
+[class*="st-key-tile-row-"] .stButton button[kind="primary"] {{
   border-color: var(--border-hi); background-color: var(--bg-3); box-shadow: none;
 }}
-[class*="st-key-tile-row-"] .stButton > button[kind="primary"] p {{ color: var(--text) !important; }}
+[class*="st-key-tile-row-"] .stButton button[kind="primary"] p {{ color: var(--text) !important; }}
 
 /* Шестерёнка правки окончаний – ровно по строке заголовка карточки */
 /* Кнопка с подсказкой обёрнута Streamlit в хост подсказки, поэтому «> button»
@@ -836,12 +841,12 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 }}
 
 /* Кнопка «Посмотреть отчёт» под сообщением об окончании прогона */
-.st-key-go-report .stButton > button {{
+.st-key-go-report .stButton button {{
   background: var(--grn-bg) !important; border: 1px solid transparent !important;
   color: var(--grn) !important; font-weight: 700 !important; box-shadow: none !important;
 }}
-.st-key-go-report .stButton > button:hover {{ border-color: var(--grn) !important; }}
-.st-key-go-report .stButton > button p {{ color: var(--grn) !important; }}
+.st-key-go-report .stButton button:hover {{ border-color: var(--grn) !important; }}
+.st-key-go-report .stButton button p {{ color: var(--grn) !important; }}
 
 /* Плашка проекта в шапке – кнопка, открывающая «Сменить проект» */
 .st-key-projbadge {{ display: flex; align-items: flex-end; }}

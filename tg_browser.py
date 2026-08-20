@@ -885,11 +885,24 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
     proxy = proxy_config()
     with sync_playwright() as pw:
         import vk_social as _vk
+        # Через прокси-с-паролем Chromium постоянное соединение Телеграма НЕ
+        # проводит (QR не рисуется, вход виснет), а Firefox – проводит. Поэтому
+        # при прокси сначала Firefox, при его отсутствии – откат на Chromium.
+        # Без прокси – как раньше, Chromium (в облаке Телеграм доступен и так).
+        browser = None
         if proxy:
             log(f"Телеграм через прокси: {proxy.get('server')}"
                 + (" (с логином)" if proxy.get("username") else ""))
-        browser = yb._launch(pw, engine, headless=headless, extra_args=_vk.ANTIBOT_ARGS,
-                             proxy=proxy)
+            try:
+                browser = pw.firefox.launch(headless=headless, proxy=proxy)
+                log("  браузер: Firefox (лучший для прокси-с-паролем)")
+            except Exception as e:  # noqa: BLE001 – Firefox не установлен
+                log(f"  Firefox не запустился ({str(e).splitlines()[0][:120]}); "
+                    "откат на Chromium — через прокси ТГ может не соединиться. "
+                    "Поставьте Firefox: python -m playwright install firefox")
+        if browser is None:
+            browser = yb._launch(pw, engine, headless=headless,
+                                 extra_args=_vk.ANTIBOT_ARGS, proxy=proxy)
         page = None
         try:
             context = browser.new_context(

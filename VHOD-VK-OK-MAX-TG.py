@@ -211,6 +211,32 @@ def _saved_tg_proxy():
         return None
 
 
+def _remember_tg_proxy(raw: str) -> None:
+    """Запомнить введённый прокси в «Настройках», чтобы больше не вводить."""
+    try:
+        import secrets_local
+        secrets_local.save({"tg_proxy": (raw or "").strip()})
+    except Exception:  # noqa: BLE001 – не смогли сохранить, не беда: на этот раз и так работает
+        pass
+
+
+def _ensure_firefox() -> None:
+    """
+    Поставить Firefox для Playwright, если его ещё нет. Нужен для прокси:
+    Chromium через прокси-с-паролем постоянное соединение Телеграма не
+    проводит, а Firefox – проводит. Если Firefox уже стоит, установка просто
+    быстро завершается. Молча переживаем любую осечку – хуже не сделаем.
+    """
+    import subprocess
+    print("   Проверяю Firefox для программы (нужен для прокси)…")
+    try:
+        subprocess.run([sys.executable, "-m", "playwright", "install", "firefox"],
+                       check=False)
+    except Exception as exc:  # noqa: BLE001
+        print(f"   (установку Firefox запустить не вышло: {exc} – если он уже "
+              "стоял, всё в порядке)")
+
+
 def _launch_tg_browser(pw, proxy: dict):
     """
     Браузер для Телеграма под прокси. Возвращает (browser, движок словами).
@@ -410,9 +436,12 @@ def main() -> int:
         raw = input("Прокси для Телеграма (Enter – взять из «Настроек» / открыть "
                     "напрямую, если не задан): ").strip()
         proxy = _parse_proxy(raw) if raw else default_proxy
+        if raw and proxy:
+            _remember_tg_proxy(raw)       # ввёл руками – запомним на будущее
 
         tg_state = None
         if proxy:
+            _ensure_firefox()             # Firefox нужен для прокси – ставим сами
             print(f"\nОткрываю Телеграм через прокси {proxy.get('server')} в ОТДЕЛЬНОМ окне.")
             print("Войдите по QR-коду: в приложении «Настройки» → «Устройства» →")
             print("«Подключить устройство». Аккаунт должен быть АДМИНОМ каналов.")

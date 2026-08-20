@@ -2577,6 +2577,14 @@ def test_tg_browser_logic() -> None:
     check("приватный инвайт поиском не ищем", tg.search_token("https://t.me/+HASH") == "")
     check("название канала – токен поиска", tg.search_token("Тест") == "Тест")
 
+    # После вложения фото открывается окно «Send Photo» со своей кнопкой
+    # отправки – её и ищем первой, иначе обычная button.send перекрыта.
+    check("кнопка окна фото в списке отправки первой",
+          tg.SEL["send"][0] == ".simple-message-input-confirm")
+    check("обычная button.send тоже осталась", "button.send" in tg.SEL["send"])
+    check("пункт «Отправить позже» ловим и в окне фото (btn-menu-item)",
+          any("btn-menu-item" in s for s in tg.SEL["schedule_item"]))
+
     # Разбор заголовка календаря Web A (h4: «Август 2026», «августа 2026 г.»).
     check("«Август 2026» разобран", tg.month_year("Август 2026") == (8, 2026))
     check("«августа 2026 г.» тоже", tg.month_year("августа 2026 г.") == (8, 2026))

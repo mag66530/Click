@@ -56,14 +56,25 @@ SEL = {
              '.message-input-wrapper [contenteditable="true"]',
              '.Composer [contenteditable="true"]'),
     # Кружок «Отправить». ЛЕВОЙ кнопкой не жмём никогда – пост уйдёт сразу.
-    "send": ("button.send", ".Composer button.send", ".send-button",
+    # ПЕРВЫМ идёт кнопка отправки из окна предпросмотра фото («Send Photo»):
+    # после вложения картинки обычная button.send перекрыта этим окном, а
+    # отложку ставим правым кликом именно по кнопке окна.
+    "send": (".simple-message-input-confirm",
+             ".AttachmentModal button.send", ".AttachmentModal .Button.send",
+             'button[aria-label="Send Photo"]', 'button[aria-label*="Отправить фото"]',
+             "button.send", ".Composer button.send", ".send-button",
              'button[aria-label*="Отправить"]', 'button[aria-label*="Send"]'),
-    # Пункт меню под правым кликом по «Отправить».
+    # Пункт меню под правым кликом по «Отправить». .MenuItem – Web A,
+    # .btn-menu-item – окно предпросмотра фото (Web K-разметка).
     "schedule_item": ('.MenuItem:has-text("Отправить позже")',
                       '[role="menuitem"]:has-text("Отправить позже")',
+                      '.btn-menu-item:has-text("Отправить позже")',
+                      '.btn-menu-item:has-text("Запланировать")',
                       'text="Отправить позже"',
                       '.MenuItem:has-text("Schedule")',
-                      'text="Schedule Message"'),
+                      '.btn-menu-item:has-text("Schedule")',
+                      'text="Schedule Message"',
+                      'text="Schedule"'),
     # Скрепка вложений.
     "attach": ('.Composer button[aria-label*="Attach"]',
                'button[aria-label*="Прикрепить"]',

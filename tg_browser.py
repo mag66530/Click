@@ -644,12 +644,19 @@ _MARK_JS = """
     r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]);
     return r;
   };
-  let done = 0, missed = 0;
+  // Куски идут в порядке текста. Ищем каждый ВПЕРЁД от конца прошлого
+  // (cursor), чтобы жирное слово не село на свой же более ранний повтор
+  // без выделения (была причина «жирных 2/6»). Не нашли впереди – пробуем
+  // с начала: вдруг реестр расставил куски не по порядку.
+  let done = 0, missed = 0, cursor = 0;
   for (const span of args.spans) {
     const map = build();
-    const idx = map.full.indexOf(span.text);
+    let idx = map.full.indexOf(span.text, cursor);
+    if (idx < 0) idx = map.full.indexOf(span.text);
     if (idx < 0) { missed++; continue; }
-    const r = rangeFor(map, idx, idx + span.text.length);
+    const from = idx, to = idx + span.text.length;
+    cursor = to;
+    const r = rangeFor(map, from, to);
     if (!r) { missed++; continue; }
     const sel = window.getSelection();
     sel.removeAllRanges(); sel.addRange(r);
@@ -664,8 +671,8 @@ _MARK_JS = """
   if (sel) sel.removeAllRanges();
   el.dispatchEvent(new Event('input', {bubbles: true}));
   return {done, missed,
-          bold: el.querySelectorAll('b, strong').length,
-          links: el.querySelectorAll('a[href]').length,
+          applied_bold: el.querySelectorAll('b, strong').length,
+          applied_links: el.querySelectorAll('a[href]').length,
           text: el.innerText || el.textContent || ''};
 }
 """
@@ -707,11 +714,17 @@ def _fill_post_text(page, sel: str, markup: str,
         return (f"В поле Телеграма не видно {missing[0]} текста после ввода "
                 f"(в поле {len(got)} знаков). Отложку не ставим")
 
-    # 2. Разметка поверх готового текста.
+    # 2. Разметка поверх готового текста. Куски идут в порядке текста – JS ищет
+    # каждый вперёд от предыдущего, поэтому жирное слово не спутается со своим
+    # же более ранним НЕжирным повтором (была причина «жирных 2/6»). Координаты
+    # не передаём: в посте эмодзи (🌐 ✉️ 📞) – суррогатные пары, и смещения
+    # Python (кодовые точки) разошлись бы с JS (UTF-16).
     spans = [{"kind": "bold", "text": t.strip()} for t, bold in chunks
              if bold and len(t.strip()) > 1]
     spans += [{"kind": "link", "text": t, "url": u}
               for t, u in post_text.anchor_spans(markup)]
+    want_bold = sum(1 for s in spans if s["kind"] == "bold")
+    want_links = sum(1 for s in spans if s["kind"] == "link")
     if spans:
         try:
             res = page.evaluate(_MARK_JS, {"sel": sel, "spans": spans}) or {}
@@ -720,10 +733,9 @@ def _fill_post_text(page, sel: str, markup: str,
         if res.get("error"):
             log(f"  разметку наложить не вышло ({res['error']}) – текст обычный")
         else:
-            want_bold = sum(1 for s in spans if s["kind"] == "bold")
-            want_links = sum(1 for s in spans if s["kind"] == "link")
-            log(f"  разметка: жирных {res.get('bold', 0)}/{want_bold}, "
-                f"ссылок {res.get('links', 0)}/{want_links}")
+            log(f"  разметка: наложено {res.get('done', 0)}/{len(spans)} "
+                f"(жирных {want_bold}, ссылок {want_links}; "
+                f"промахов {res.get('missed', 0)})")
             # Текст не должен измениться ни на букву – иначе убираем формат.
             if _letters(res.get("text", "")) != _letters(plain):
                 log("  разметка изменила текст – возвращаю обычный")
@@ -731,6 +743,60 @@ def _fill_post_text(page, sel: str, markup: str,
                 page.keyboard.insert_text(plain)
     log(f"  текст вписан ({len([l for l in got.split(chr(10)) if l.strip()])} строк)")
     return ""
+
+
+# Карточка-превью сайта в Web A живёт в своём блоке над полем ввода
+# (.WebPagePreview) со своим крестиком. Разметка ОК тут не подходит – у
+# Телеграма свой DOM, поэтому крестик ищем по его собственным признакам.
+_TG_LINK_CARD = (
+    ".WebPagePreview button.Button",
+    ".WebPagePreview button",
+    ".WebPagePreview .icon-close",
+    'button[aria-label="Cancel"]:below(.WebPagePreview)',
+    ".ComposerEmbeddedMessage button.embedded-cancel",
+)
+
+
+def _drop_link_card_tg(page, log: Callable[[str], None]) -> None:
+    """
+    Убрать превью-карточку сайта в Телеграме (как крестиком руками).
+
+    Заказчица просила: ссылка в тексте не должна разворачиваться карточкой.
+    Ошибок наружу не отдаём – нет карточки, значит и убирать нечего.
+    """
+    try:
+        if not page.locator(".WebPagePreview").count():
+            return  # карточки нет – всё хорошо
+    except Exception:  # noqa: BLE001
+        return
+    for css in _TG_LINK_CARD:
+        try:
+            loc = page.locator(css).first
+            if loc.count() and loc.is_visible():
+                loc.click(timeout=1500)
+                page.wait_for_timeout(300)
+                if not page.locator(".WebPagePreview").count():
+                    log("  карточку сайта убрал (превью ссылки закрыто)")
+                    return
+        except Exception:  # noqa: BLE001
+            continue
+    # Крайняя мера – кликнуть крестик из самой страницы.
+    try:
+        closed = page.evaluate(
+            """() => {
+              const card = document.querySelector('.WebPagePreview');
+              if (!card) return true;
+              const btn = card.querySelector('button, .icon-close, [role="button"]');
+              if (btn) { btn.click(); return !document.querySelector('.WebPagePreview'); }
+              return false;
+            }""")
+        if closed:
+            log("  карточку сайта убрал (закрыл из страницы)")
+            return
+    except Exception:  # noqa: BLE001
+        pass
+    log("  внимание: карточка сайта осталась – закройте её вручную, "
+        "если не нужна")
 
 
 # ─── Вложения ───────────────────────────────────────────────────────
@@ -1071,8 +1137,7 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "error": why}
             page.wait_for_timeout(800)
             # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
-            yb.drop_link_card(page, yb.text_domains(text), log,
-                              diag_dir=_diag_dir(project_id))
+            _drop_link_card_tg(page, log)
 
             if image_paths:
                 log(f"── ШАГ 3/6: прикрепляю фото ({len(image_paths)}) ──")

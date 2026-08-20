@@ -207,6 +207,22 @@ def test_post_text() -> None:
     check("перенос строки не попадает в маркеры",
           pt.runs_to_markup([("Заголовок\n\n", True), ("текст", False)]) == "**Заголовок**\n\nтекст")
 
+    # Гиперссылка из ячейки реестра → анкор [текст](адрес).
+    check("анкор из реестра",
+          pt.runs_to_markup_rich([("см. ", False, ""),
+                                  ("проволоку", False, "https://x.ru/p")])
+          == "см. [проволоку](https://x.ru/p)")
+    check("жирный анкор из реестра",
+          pt.runs_to_markup_rich([("проволока", True, "https://x.ru/p")])
+          == "**[проволока](https://x.ru/p)**")
+    check("пробел по краям анкора выносится наружу",
+          pt.runs_to_markup_rich([("проволока ", False, "https://x.ru/p"), ("тут", False, "")])
+          == "[проволока](https://x.ru/p) тут")
+    check("рядом жирное без ссылки собирается как обычно",
+          pt.runs_to_markup_rich([("важно", True, ""), (" и ", False, ""),
+                                  ("ссылка", False, "https://x.ru")])
+          == "**важно** и [ссылка](https://x.ru)")
+
     m = pt.autolink("Оформить заказ можно на **нашем сайте**", "stalmetural.ru")
     check("автоссылка на жирную фразу",
           m == "Оформить заказ можно на **[нашем сайте](https://stalmetural.ru)**", m)
@@ -1301,6 +1317,15 @@ def test_plan_horizon_and_past() -> None:
     import crosspost_form as cf
     import streamlit_app as app
 
+    # Click больше НЕ выдумывает анкоры сам: «нашем сайте» остаётся словами,
+    # ссылки берутся только те, что стоят в реестре.
+    check("social_markup не навешивает автоссылку",
+          cf.social_markup({"text": "Оформить на нашем сайте"}, "stalmetural.ru")
+          == "Оформить на нашем сайте")
+    check("social_markup отдаёт текст реестра как есть",
+          cf.social_markup({"text": "**Важно** [анкор](https://x.ru)"}, "a.ru")
+          == "**Важно** [анкор](https://x.ru)")
+
     # Горизонт: конец месяца, но не ближе двух недель.
     check("середина месяца – видно до конца месяца",
           app._crosspost_horizon(date(2026, 8, 11)) == date(2026, 8, 31))
@@ -1383,7 +1408,8 @@ def test_form_selection() -> None:
     check("без выбора кнопка выбранных не жмётся", "disabled=not picked" in src)
     check("в формирование уходят именно выбранные посты",
           "run(picked, picked_todo, nets_on)" in src)
-    check("можно выбрать, какие сети формировать", "cp-net-" in src and "nets_on" in src)
+    check("отдельного ряда галочек «какие сети» больше нет", "cp-net-" not in src)
+    check("формируем все доступные сети", "nets_on" in src)
     check("выбранное считается тем же счётчиком",
           "_crosspost_form_todo(project_id, config, picked, state)" in src)
 
@@ -1855,6 +1881,19 @@ def test_link_card_and_report() -> None:
     check("домены из текста собраны", doms == ["stalmetural.ru", "ok.ru"], str(doms))
     check("повторы не дублируются", len(doms) == len(set(doms)))
     check("без адресов – пусто", yb.text_domains("просто текст") == [])
+
+    # Картинка с Google Drive: uc?export=download на «тяжёлые» файлы шлёт HTML,
+    # поэтому есть запасной адрес thumbnail и проверка байтов.
+    cand = yb._drive_candidates("https://drive.google.com/file/d/ABC123/view")
+    check("для Drive два кандидата", len(cand) == 2, str(cand))
+    check("первый – прямое скачивание", "uc?export=download&id=ABC123" in cand[0])
+    check("второй – thumbnail", "thumbnail?id=ABC123" in cand[1] and "sz=" in cand[1])
+    check("для обычной ссылки один кандидат",
+          yb._drive_candidates("https://i.ibb.co/x/p.jpg") == ["https://i.ibb.co/x/p.jpg"])
+    check("JPEG узнаётся по байтам", yb._image_ext(b"\xff\xd8\xff\xe0abc") == ".jpg")
+    check("PNG узнаётся по байтам", yb._image_ext(b"\x89PNG\r\n\x1a\nrest") == ".png")
+    check("HTML-страница картинкой не считается",
+          yb._image_ext(b"<!DOCTYPE html><html>") == "")
 
     src = inspect.getsource(yb.drop_link_card)
     check("крестик ищется по значку со страницы", "M9.414 8l3.294" in yb._CLOSE_ICON_D)

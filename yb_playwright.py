@@ -287,31 +287,77 @@ def resolve_image_url(url: str) -> str:
     return url
 
 
+def _image_ext(data: bytes) -> str:
+    """Расширение по «магическим» байтам – '' если это не картинка."""
+    if data[:3] == b"\xff\xd8\xff":
+        return ".jpg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    if data[:2] == b"BM":
+        return ".bmp"
+    return ""
+
+
 def _download_direct(url: str, temp_dir: Path) -> str:
     temp_dir.mkdir(parents=True, exist_ok=True)
-    ext = Path(urllib.parse.urlparse(url).path).suffix.split("?")[0] or ".jpg"
-    if len(ext) > 5:
-        ext = ".jpg"
-    filepath = temp_dir / f"img-{int(time.time() * 1000)}{ext}"
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=30) as resp:
         if resp.status != 200:
             raise RuntimeError(f"HTTP {resp.status}")
-        filepath.write_bytes(resp.read())
+        data = resp.read()
+    # Google Drive на «тяжёлые» файлы отдаёт не картинку, а HTML-страницу
+    # («проверка на вирусы» / «нет доступа»). Молча сохранить её как .jpg –
+    # значит отдать Телеграму битый файл: превью не откроется, а пост уйдёт
+    # без фото. Поэтому проверяем по байтам, что это правда картинка.
+    ext = _image_ext(data)
+    if not ext:
+        head = data[:200].decode("latin-1", "replace").strip().replace("\n", " ")
+        if head[:1] == "<" or b"html" in data[:200].lower():
+            raise RuntimeError("сервер вернул страницу, а не картинку "
+                               "(файл не расшарен «всем, у кого есть ссылка»?)")
+        raise RuntimeError("скачанный файл не похож на картинку")
+    filepath = temp_dir / f"img-{int(time.time() * 1000)}{ext}"
+    filepath.write_bytes(data)
     return str(filepath)
+
+
+def _drive_candidates(url: str) -> list[str]:
+    """
+    Ссылки-кандидаты для картинки. Для Google Drive их две: прямое скачивание
+    и thumbnail. thumbnail (drive.google.com/thumbnail?id=…&sz=w2000) отдаёт
+    именно JPEG, минуя страницу «проверки на вирусы», – это и спасает, когда
+    uc?export=download присылает HTML вместо файла.
+    """
+    direct = resolve_image_url(url)
+    out = [direct]
+    if re.search(r"drive\.google\.com", url, re.I):
+        m = re.search(r"/d/([a-zA-Z0-9_-]+)", url) or re.search(r"id=([a-zA-Z0-9_-]+)", url)
+        if m:
+            thumb = f"https://drive.google.com/thumbnail?id={m.group(1)}&sz=w2000"
+            if thumb not in out:
+                out.append(thumb)
+    return out
 
 
 def download_image(url: str, temp_dir: Path) -> str:
     """
     До 5 попыток с нарастающей паузой – спасает от «Client network socket disconnected»,
     ETIMEDOUT, ECONNRESET и коротких провалов ImgBB. Порт downloadImage из publish.js.
+
+    Для Google Drive пробуем по очереди прямое скачивание и thumbnail: если
+    первое присылает HTML-заглушку, второе обычно отдаёт саму картинку.
     """
-    direct = resolve_image_url(url)
+    candidates = _drive_candidates(url)
     pauses = [0, 2, 5, 10, 20]
     last_err: Exception | None = None
     for attempt, pause in enumerate(pauses):
         if pause:
             time.sleep(pause)
+        direct = candidates[min(attempt, len(candidates) - 1)]
         try:
             return _download_direct(direct, temp_dir)
         except Exception as e:  # noqa: BLE001

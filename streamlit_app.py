@@ -4398,22 +4398,14 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
         time.sleep(1.2)
         st.rerun()
 
-    # Какие СЕТИ формировать. По умолчанию все, но можно снять галочку – удобно
-    # проверить только Телеграм, не ставя отложку в реальные ВК/ОК/МАКС.
+    # Какие СЕТИ формировать. По умолчанию все доступные – отдельный ряд галочек
+    # «какие сети» убрали (некрасиво жил над кнопками); нужно проверить одну сеть –
+    # отметьте нужные посты галочками в самом плане.
     net_avail = [(lbl, fam) for lbl, fam, has in (
         ("ВК", "vk", bool(vk_todo)), ("ОК", "ok", bool(ok_todo)),
         ("МАКС", "max", bool(max_todo)), ("Дзен", "zen", bool(zen_todo)),
         ("ТГ", "tg", bool(msg_todo))) if has]
     nets_on: set[str] = {fam for _, fam in net_avail}
-    if len(net_avail) > 1:
-        st.caption("В какие сети формировать (сними галочку – эту сеть пропустим):")
-        cols = st.columns(len(net_avail))
-        nets_on = set()
-        for col, (lbl, fam) in zip(cols, net_avail):
-            if col.checkbox(lbl, value=True, key=f"cp-net-{fam}-{project_id}"):
-                nets_on.add(fam)
-        if not nets_on:
-            st.caption("⚠️ Не выбрана ни одна сеть – формировать нечего.")
 
     # Выбирать не из чего (один несформированный пост) – кнопка одна и во всю
     # ширину: галочка перед единственной кнопкой была бы лишним щелчком.

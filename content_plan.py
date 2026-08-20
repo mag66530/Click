@@ -276,12 +276,15 @@ def posts_to_form(posts: list[dict], today: date | None = None) -> list[dict]:
 # ─── Живой источник: Google-таблица (тот же аккаунт, что у КП) ───────
 def _google_cell_markup(v: dict) -> str:
     """
-    Ячейка из сетки Sheets API → строка с разметкой жирного.
+    Ячейка из сетки Sheets API → строка с разметкой жирного и ссылок.
 
     Жирные куски Google отдаёт как textFormatRuns: каждый кусок начинается со
     startIndex и тянется до начала следующего. Текст до первого куска (и
     ячейка вовсе без кусков) живёт форматом самой ячейки –
-    effectiveFormat.textFormat.bold.
+    effectiveFormat.textFormat.bold. Гиперссылка ячейки тоже приходит в
+    textFormatRuns как format.link.uri – её переносим анкором [текст](адрес):
+    заказчик ставит анкоры прямо в реестре (напр. на реестр цен), Click их
+    больше не выдумывает сам.
     """
     import post_text
     base = ((v.get("userEnteredValue") or {}).get("stringValue"))
@@ -293,16 +296,18 @@ def _google_cell_markup(v: dict) -> str:
     fmt_runs = v.get("textFormatRuns")
     if not fmt_runs:
         return post_text.runs_to_markup([(base, cell_bold)])
-    runs: list[tuple[str, bool]] = []
+    runs: list[tuple[str, bool, str]] = []
     first = fmt_runs[0].get("startIndex", 0)
     if first > 0:
-        runs.append((base[:first], cell_bold))
+        runs.append((base[:first], cell_bold, ""))
     for i, run in enumerate(fmt_runs):
         start = run.get("startIndex", 0)
         end = fmt_runs[i + 1].get("startIndex", len(base)) if i + 1 < len(fmt_runs) else len(base)
-        bold = (run.get("format") or {}).get("bold")
-        runs.append((base[start:end], cell_bold if bold is None else bool(bold)))
-    return post_text.runs_to_markup(runs)
+        fmt = run.get("format") or {}
+        bold = fmt.get("bold")
+        uri = (fmt.get("link") or {}).get("uri") or ""
+        runs.append((base[start:end], cell_bold if bold is None else bool(bold), uri))
+    return post_text.runs_to_markup_rich(runs)
 
 
 def load_from_google(sheet_url: str, brand: str) -> list[dict]:
@@ -354,9 +359,11 @@ def load_from_google(sheet_url: str, brand: str) -> list[dict]:
 
     grid = requests.get(base, params={
         "ranges": f"'{title}'",
+        # link.uri – гиперссылки анкоров реестра; bold – жирное в кусках.
         "fields": ("sheets.data.rowData.values("
                    "formattedValue,userEnteredValue.stringValue,"
-                   "textFormatRuns,effectiveFormat.textFormat.bold)"),
+                   "textFormatRuns(startIndex,format(bold,link.uri)),"
+                   "effectiveFormat.textFormat.bold)"),
     }, headers=headers, timeout=90)
     if grid.status_code != 200:
         raise RuntimeError(f"Не удалось прочитать лист «{title}»: HTTP {grid.status_code}")

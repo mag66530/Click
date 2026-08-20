@@ -203,12 +203,24 @@ def _parse_proxy(raw: str):
 
 
 def _saved_tg_proxy():
-    """Прокси Телеграма из «Настроек» Click (secrets_local, ключ tg_proxy)."""
+    """
+    Прокси Телеграма: своё на этой машине («Настройки» → «Телеграм: прокси»),
+    иначе – общий для команды из хранилища click-data (repo_store). В коде
+    пароля нет: он лежит в общем хранилище.
+    """
+    raw = ""
     try:
         import secrets_local
-        return _parse_proxy(secrets_local.get("tg_proxy"))
+        raw = (secrets_local.get("tg_proxy") or "").strip()
     except Exception:  # noqa: BLE001
-        return None
+        raw = ""
+    if not raw:
+        try:
+            import repo_store
+            raw = ((repo_store.load("tg-proxy") or {}).get("tg_proxy") or "").strip()
+        except Exception:  # noqa: BLE001 – нет токена/сети: прокси не будет
+            raw = ""
+    return _parse_proxy(raw)
 
 
 def _remember_tg_proxy(raw: str) -> None:

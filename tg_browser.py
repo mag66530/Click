@@ -125,10 +125,29 @@ def parse_proxy(raw: str) -> dict | None:
     return cfg
 
 
+def shared_proxy_raw() -> str:
+    """
+    Прокси Телеграма из ОБЩЕГО хранилища команды (ветка click-data через
+    repo_store, файл app-data/tg-proxy.json). Так значение подхватывается у
+    всех, но НЕ лежит в исходниках и в рассылаемых zip-архивах.
+    """
+    try:
+        import repo_store
+        data = repo_store.load("tg-proxy") or {}
+        return (data.get("tg_proxy") or "").strip()
+    except Exception:  # noqa: BLE001 – нет токена/сети: просто не будет прокси
+        return ""
+
+
 def proxy_config() -> dict | None:
-    """Прокси для Телеграма из «Настроек» (secrets_local, ключ tg_proxy)."""
+    """
+    Прокси для Телеграма. Приоритет: своё значение на этой машине
+    («Настройки» → «Телеграм: прокси»), иначе – общий для команды из
+    хранилища click-data.
+    """
     import secrets_local
-    return parse_proxy(secrets_local.get("tg_proxy"))
+    raw = secrets_local.get("tg_proxy") or shared_proxy_raw()
+    return parse_proxy(raw)
 
 
 def session_path(project_id: str) -> Path:

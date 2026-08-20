@@ -1063,54 +1063,54 @@ def _visible_media_send(page):
     return "", None
 
 
-# Запасной поиск САМИ, по признакам, – если точный класс вдруг не совпал.
-_FIND_SEND_JS = r"""
+# Помечаем кнопку отправки и меню «More actions» прямо в DOM, чтобы потом
+# кликнуть по НИМ элементом Playwright (точно, без промаха в пустоту → без
+# меню браузера). По живому дампу окна «Send Photo» (Web A / telegram-tt):
+# кнопка отправки – это .Button.primary с иконкой в правом-нижнем углу, класс
+# у неё хэшированный и aria пустая; рядом есть кнопка aria='More actions' (⋮),
+# в её меню тоже есть «Schedule».
+_MARK_SEND_JS = r"""
 () => {
+  document.querySelectorAll('[data-click-send]').forEach(e => e.removeAttribute('data-click-send'));
+  document.querySelectorAll('[data-click-more]').forEach(e => e.removeAttribute('data-click-more'));
   const vis = el => {
     const r = el.getBoundingClientRect();
     const s = getComputedStyle(el);
     return r.width > 4 && r.height > 4 && s.visibility !== 'hidden'
            && s.display !== 'none' && s.opacity !== '0';
   };
-  // Окно вложения: Web A – класс содержит AttachmentModal; Web K – .popup
-  // (напр. .popup-new-media); запасной путь – любой видимый попап/модал с
-  // полем ввода подписи.
-  let modal = document.querySelector('[class*="AttachmentModal"]')
-           || document.querySelector('.popup-new-media, .popup.active, .popup.shown');
-  if (!modal) {
-    modal = Array.from(document.querySelectorAll(
-              '[class*="Modal"], [class*="popup"], .modal, [role="dialog"]'))
-      .find(m => vis(m) && m.querySelector('[contenteditable="true"]'));
-  }
-  const scope = modal || document;
-  const btns = Array.from(scope.querySelectorAll('button, [role="button"]')).filter(vis);
-  const desc = b => {
-    const r = b.getBoundingClientRect();
+  const btns = Array.from(document.querySelectorAll('button, [role="button"]')).filter(vis);
+  const info = b => {
+    const cls = (b.className || '').toString();
     return {
-      cls: (b.className || '').toString().slice(0, 90),
+      b, cls,
+      primary: /\bprimary\b/.test(cls),
+      icon: !!b.querySelector('[class*="icon"], .tgico, i, svg'),
       aria: b.getAttribute('aria-label') || b.getAttribute('title') || '',
-      icon: !!b.querySelector('[class*="icon-send"], [class*="send"], .tgico'),
-      x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
-      score: Math.round(r.right + r.bottom)
+      r: b.getBoundingClientRect()
     };
   };
-  const looksSend = d => {
-    const c = d.cls.toLowerCase(), a = d.aria.toLowerCase();
-    return /send|отправ|запланир|schedul/.test(a)
-        || /send|input-confirm|main-button|btn-send/.test(c)
-        || d.icon;
+  const arr = btns.map(info);
+  // Кнопка отправки: primary + иконка. Если таких нет – по aria «send/отправ».
+  let sends = arr.filter(d => d.primary && d.icon);
+  if (!sends.length) sends = arr.filter(d => /send|отправ|input-confirm/i.test(d.aria + ' ' + d.cls));
+  sends.sort((p, q) => (q.r.right + q.r.bottom) - (p.r.right + p.r.bottom));
+  const more = arr.find(d => /more actions|ещё|еще|more|schedul/i.test(d.aria));
+  if (sends[0]) sends[0].b.setAttribute('data-click-send', '1');
+  if (more) more.b.setAttribute('data-click-more', '1');
+  return {
+    send: !!sends[0], more: !!more,
+    all: arr.slice(0, 30).map(d => ({
+      cls: d.cls.slice(0, 60), aria: d.aria, primary: d.primary, icon: d.icon,
+      x: Math.round(d.r.left + d.r.width / 2), y: Math.round(d.r.top + d.r.height / 2)
+    }))
   };
-  const all = btns.map(desc);
-  const sends = all.filter(looksSend);
-  // Кнопка отправки – в правом-нижнем углу окна: берём самую «право-низкую».
-  sends.sort((p, q) => q.score - p.score);
-  return {hasModal: !!modal, best: sends[0] || null, all: all.slice(0, 30)};
 }
 """
 
 
 def _right_click_at(page, x: int, y: int) -> None:
-    """Правый клик по координатам – работает и когда селектор не поймать."""
+    """Правый клик по координатам – запасной путь, когда элемент не взять."""
     page.mouse.move(x, y)
     page.wait_for_timeout(120)
     page.mouse.click(x, y, button="right")
@@ -1130,54 +1130,51 @@ def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
     """
     last_buttons: list[dict] = []
     for attempt in range(1, 4):
-        # 1) ТОЧНАЯ кнопка окна «Send Photo» (.simple-message-input-confirm),
-        #    именно ВИДИМАЯ. Правый клик делаем по самому элементу через
-        #    Playwright – он попадает ровно в кнопку, и вылезает меню Телеграма,
-        #    а не браузера (как было, когда кликали «на глаз» по координатам).
-        sel, el = _visible_media_send(page)
-        if el is not None:
-            log(f"  кнопка окна фото найдена ({sel}), правый клик, попытка {attempt}/3")
+        # Помечаем кнопку отправки и «More actions» в DOM и кликаем ПО ЭЛЕМЕНТУ
+        # (Playwright сам попадает точно в кнопку → меню Телеграма, не браузера).
+        try:
+            info = page.evaluate(_MARK_SEND_JS) or {}
+        except Exception as e:  # noqa: BLE001
+            info = {}
+            log(f"  разметка кнопок не прошла: {str(e).splitlines()[0][:90]}")
+        last_buttons = info.get("all") or last_buttons
+
+        # 1) Правый клик по кнопке отправки окна.
+        if info.get("send"):
+            log(f"  кнопка отправки найдена, правый клик, попытка {attempt}/3")
             try:
-                el.scroll_into_view_if_needed(timeout=2_000)
-            except Exception:  # noqa: BLE001
-                pass
-            try:
-                el.click(button="right", timeout=4_000)
+                page.locator('[data-click-send="1"]').first.click(button="right", timeout=4_000)
             except Exception as e:  # noqa: BLE001
-                log(f"    правый клик по кнопке не прошёл: {str(e).splitlines()[0][:80]}")
-                # Запасной: контекстное событие ровно по этой кнопке.
-                try:
-                    box = el.bounding_box()
-                    if box:
-                        _right_click_at(page, int(box["x"] + box["width"] / 2),
-                                        int(box["y"] + box["height"] / 2))
-                except Exception:  # noqa: BLE001
-                    pass
+                log(f"    правый клик не прошёл: {str(e).splitlines()[0][:80]}")
             page.wait_for_timeout(1_000)
-            hit = _click_first(page, SEL["schedule_item"], timeout=5_000)
+            hit = _click_first(page, SEL["schedule_item"], timeout=4_000)
             if hit:
                 log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit})")
                 return True, ""
 
-        # 2) Запасной поиск кнопки скриптом (если класс не совпал).
-        try:
-            info = page.evaluate(_FIND_SEND_JS) or {}
-        except Exception:  # noqa: BLE001
-            info = {}
-        best = info.get("best")
-        last_buttons = info.get("all") or last_buttons
-        # Только если скрипт реально нашёл ОКНО вложения. Иначе «лучшая» кнопка –
-        # это отправка главного поля, и правый клик по ней даёт меню браузера
-        # (ровно та дичь, что была на скрине). Лучше честно не жать.
-        if el is None and best and info.get("hasModal"):
-            log(f"  кнопка отправки (по признакам): «{best['cls'][:50]}» "
-                f"aria='{best['aria']}' @({best['x']},{best['y']}), попытка {attempt}/3")
+        # 2) Меню «More actions» (⋮) — в нём тоже есть «Schedule».
+        if info.get("more"):
+            log(f"  пробую меню «More actions» (⋮), попытка {attempt}/3")
             try:
-                _right_click_at(page, best["x"], best["y"])
+                page.locator('[data-click-more="1"]').first.click(timeout=4_000)
             except Exception:  # noqa: BLE001
                 pass
-            page.wait_for_timeout(1_000)
-            hit = _click_first(page, SEL["schedule_item"], timeout=5_000)
+            page.wait_for_timeout(800)
+            hit = _click_first(page, SEL["schedule_item"], timeout=4_000)
+            if hit:
+                log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit})")
+                return True, ""
+
+        # 3) Совсем запасной: старый точный класс Web K, если вдруг он.
+        sel, el = _visible_media_send(page)
+        if el is not None:
+            log(f"  запасная кнопка ({sel}), правый клик, попытка {attempt}/3")
+            try:
+                el.click(button="right", timeout=3_000)
+            except Exception:  # noqa: BLE001
+                pass
+            page.wait_for_timeout(800)
+            hit = _click_first(page, SEL["schedule_item"], timeout=4_000)
             if hit:
                 log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit})")
                 return True, ""
@@ -1188,9 +1185,9 @@ def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
     # Не вышло – показываем, ЧТО было на экране: это заменяет пересылку файлов.
     if last_buttons:
         log("  кнопки окна отправки (для доводки селектора):")
-        for d in last_buttons[:12]:
+        for d in last_buttons[:14]:
             log(f"    • класс «{d['cls'][:60]}» aria='{d['aria']}' "
-                f"иконка={d['icon']} @({d['x']},{d['y']})")
+                f"primary={d.get('primary')} иконка={d['icon']} @({d['x']},{d['y']})")
     return False, ("меню «Отправить позже» не появилось. Пост НЕ отправлен – "
                    "левой кнопкой мы не жали")
 

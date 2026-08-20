@@ -2588,15 +2588,15 @@ def test_tg_browser_logic() -> None:
     # фиксированному классу Web K — и на провале пишем кнопки окна в лог.
     import inspect as _insp
     sm_src = _insp.getsource(tg._open_schedule_menu)
-    check("сначала точная кнопка окна фото", "_visible_media_send" in sm_src)
-    check("точный класс кнопки от заказчика",
-          any("simple-message-input-confirm" in s for s in tg._MEDIA_SEND))
-    check("берём кнопку внутри всплывающего окна",
-          any(".popup" in s for s in tg._MEDIA_SEND))
-    check("правый клик по самой кнопке (не по координатам вслепую)",
-          'el.click(button="right"' in sm_src)
-    check("запасной поиск скриптом остался", "_FIND_SEND_JS" in sm_src)
-    check("вслепую по главному полю не жмём", 'info.get("hasModal")' in sm_src)
+    check("кнопку отправки помечаем в DOM и жмём по элементу",
+          "_MARK_SEND_JS" in sm_src and 'data-click-send' in sm_src)
+    check("клик правой по самой кнопке (не по координатам вслепую)",
+          'click(button="right"' in sm_src)
+    check("есть запасной путь через меню ⋮ (More actions)",
+          "data-click-more" in sm_src)
+    check("скрипт метит кнопку primary с иконкой",
+          "primary" in tg._MARK_SEND_JS and "data-click-send" in tg._MARK_SEND_JS)
+    check("скрипт ищет и «More actions»", "more actions" in tg._MARK_SEND_JS.lower())
     check("на провале выводим кнопки окна в лог", "кнопки окна отправки" in sm_src)
 
     # Разбор заголовка календаря Web A (h4: «Август 2026», «августа 2026 г.»).

@@ -2584,6 +2584,15 @@ def test_tg_browser_logic() -> None:
     check("обычная button.send тоже осталась", "button.send" in tg.SEL["send"])
     check("пункт «Отправить позже» ловим и в окне фото (btn-menu-item)",
           any("btn-menu-item" in s for s in tg.SEL["schedule_item"]))
+    # Кнопку отправки в окне «Send Photo» ищем сами (координатами), а не по
+    # фиксированному классу Web K — и на провале пишем кнопки окна в лог.
+    import inspect as _insp
+    sm_src = _insp.getsource(tg._open_schedule_menu)
+    check("кнопку отправки ищем скриптом", "_FIND_SEND_JS" in sm_src)
+    check("жмём правой по координатам", "_right_click_at" in sm_src)
+    check("на провале выводим кнопки окна в лог", "кнопки окна отправки" in sm_src)
+    check("скрипт поиска ищет окно вложения",
+          "AttachmentModal" in tg._FIND_SEND_JS)
 
     # Разбор заголовка календаря Web A (h4: «Август 2026», «августа 2026 г.»).
     check("«Август 2026» разобран", tg.month_year("Август 2026") == (8, 2026))

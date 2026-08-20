@@ -1036,46 +1036,117 @@ def _modal_gone(page) -> bool:
         return False
 
 
+# Ищем кнопку отправки САМИ, по признакам, а не по фиксированному классу.
+# Причина: у окна «Send Photo» в Web A классы свои (не те, что у Web K), и
+# угадать их снаружи не выходило. Скрипт возвращает координаты лучшей кнопки
+# отправки ВНУТРИ окна вложения и список всех кнопок окна – для лога.
+_FIND_SEND_JS = r"""
+() => {
+  const vis = el => {
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return r.width > 4 && r.height > 4 && s.visibility !== 'hidden'
+           && s.display !== 'none' && s.opacity !== '0';
+  };
+  // Окно вложения: у Web A класс содержит AttachmentModal; запасной путь –
+  // видимый .Modal с полем ввода (подпись к фото).
+  let modal = document.querySelector('[class*="AttachmentModal"]');
+  if (!modal) {
+    modal = Array.from(document.querySelectorAll('[class*="Modal"], .modal, [role="dialog"]'))
+      .find(m => vis(m) && m.querySelector('[contenteditable="true"]'));
+  }
+  const scope = modal || document;
+  const btns = Array.from(scope.querySelectorAll('button, [role="button"]')).filter(vis);
+  const desc = b => {
+    const r = b.getBoundingClientRect();
+    return {
+      cls: (b.className || '').toString().slice(0, 90),
+      aria: b.getAttribute('aria-label') || b.getAttribute('title') || '',
+      icon: !!b.querySelector('[class*="icon-send"], [class*="send"], .tgico'),
+      x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
+      score: Math.round(r.right + r.bottom)
+    };
+  };
+  const looksSend = d => {
+    const c = d.cls.toLowerCase(), a = d.aria.toLowerCase();
+    return /send|отправ|запланир|schedul/.test(a)
+        || /send|input-confirm|main-button|btn-send/.test(c)
+        || d.icon;
+  };
+  const all = btns.map(desc);
+  const sends = all.filter(looksSend);
+  // Кнопка отправки – в правом-нижнем углу окна: берём самую «право-низкую».
+  sends.sort((p, q) => q.score - p.score);
+  return {hasModal: !!modal, best: sends[0] || null, all: all.slice(0, 30)};
+}
+"""
+
+
+def _right_click_at(page, x: int, y: int) -> None:
+    """Правый клик по координатам – работает и когда селектор не поймать."""
+    page.mouse.move(x, y)
+    page.wait_for_timeout(120)
+    page.mouse.click(x, y, button="right")
+
+
 # ─── Открыть меню отложки правой кнопкой ─────────────────────────────
 def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
     """
     Правой кнопкой по «Отправить» → «Отправить позже»/«Schedule Message».
 
+    Кнопку отправки ищем сами (координатами внутри окна «Send Photo»), потому
+    что её класс у Web A свой и снаружи не угадывался. Если не нашли – пишем в
+    лог все кнопки окна, чтобы доводить точно, не гоняя человека за файлами.
+
     ВАЖНО: НИКАКОГО Escape. В Телеграме Escape закрывает открытый чат – после
-    него пропадает и кнопка отправки, и введённый текст. Из-за этого правый
-    клик уходил в 30-секундный таймаут (живой прогон 16:22).
+    него пропадает и кнопка отправки, и введённый текст.
     """
+    last_buttons: list[dict] = []
     for attempt in range(1, 4):
-        send_sel = _first_visible(page, SEL["send"])
-        if not send_sel:
-            log(f"  кнопку отправки не видно (попытка {attempt}/3) – жду…")
-            page.wait_for_timeout(1_500)
-            continue
-        log(f"  правый клик по отправке ({send_sel}), попытка {attempt}/3")
-        clicked = False
+        # 1) Пробуем найти кнопку сами и правым кликом по её координатам.
         try:
-            page.locator(send_sel).first.click(button="right", timeout=5_000)
-            clicked = True
+            info = page.evaluate(_FIND_SEND_JS) or {}
         except Exception as e:  # noqa: BLE001
-            log(f"    обычный правый клик не прошёл: {str(e).splitlines()[0][:100]}")
-        if not clicked:
-            # Запасной путь: сами шлём событие contextmenu по центру кнопки.
+            info = {}
+            log(f"  поиск кнопки скриптом не прошёл: {str(e).splitlines()[0][:100]}")
+        best = info.get("best")
+        last_buttons = info.get("all") or last_buttons
+        if best:
+            log(f"  кнопка отправки: «{best['cls'][:50]}» "
+                f"aria='{best['aria']}' @({best['x']},{best['y']}), попытка {attempt}/3")
             try:
-                page.eval_on_selector(send_sel, """el => {
-                    const r = el.getBoundingClientRect();
-                    el.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true,
-                        cancelable: true, clientX: r.left + r.width/2,
-                        clientY: r.top + r.height/2}));
-                }""")
-                log("    отправил contextmenu вручную")
+                _right_click_at(page, best["x"], best["y"])
             except Exception as e:  # noqa: BLE001
-                log(f"    contextmenu вручную не прошёл: {e}")
+                log(f"    правый клик по координатам не прошёл: {str(e).splitlines()[0][:80]}")
+            page.wait_for_timeout(1_000)
+            hit = _click_first(page, SEL["schedule_item"], timeout=5_000)
+            if hit:
+                log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit})")
+                return True, ""
+
+        # 2) Запасной путь: правый клик по кандидатам-селекторам (как раньше).
+        send_sel = _first_visible(page, SEL["send"])
+        if send_sel:
+            log(f"  запасной правый клик ({send_sel}), попытка {attempt}/3")
+            try:
+                page.locator(send_sel).first.click(button="right", timeout=4_000)
+            except Exception:  # noqa: BLE001
+                pass
+            page.wait_for_timeout(1_000)
+            hit = _click_first(page, SEL["schedule_item"], timeout=4_000)
+            if hit:
+                log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit})")
+                return True, ""
+
+        log(f"  кнопку отправки/меню не поймал (попытка {attempt}/3) – жду…")
         page.wait_for_timeout(1_200)
-        hit = _click_first(page, SEL["schedule_item"], timeout=5_000)
-        if hit:
-            log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit})")
-            return True, ""
-        page.wait_for_timeout(1_000)
+
+    # Не вышло – показываем, ЧТО было на экране: это заменяет пересылку файлов.
+    if last_buttons:
+        log("  кнопки окна отправки (для доводки селектора):")
+        for d in last_buttons[:12]:
+            log(f"    • класс «{d['cls'][:60]}» aria='{d['aria']}' "
+                f"иконка={d['icon']} @({d['x']},{d['y']})")
     return False, ("меню «Отправить позже» не появилось. Пост НЕ отправлен – "
                    "левой кнопкой мы не жали")
 

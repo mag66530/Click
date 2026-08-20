@@ -4904,16 +4904,18 @@ def tab_settings(project_id: str, config: dict) -> None:
     idx = int(st.session_state.get("settings-idx", 0))
     idx = max(0, min(idx, len(_SETTINGS_GROUPS) - 1))
 
-    left, right = st.columns([1, 3.1], gap="large")
+    left, right = st.columns([1.15, 3], gap="large")
     with left:
         with st.container(key="settings-rail"):
             # Пункт меню – HTML (иконка+название слева, счётчик справа, ровно
             # по сетке), а клик ловит прозрачная кнопка поверх него.
             for i, (название, _desc, n) in enumerate(_SETTINGS_GROUPS):
                 sel = " sel" if i == idx else ""
+                иконка, _, текст = название.partition(" ")
                 with st.container(key=f"railrow-{i}"):
                     html(f'<div class="rail-item{sel}">'
-                         f'<span class="rail-name">{название}</span>'
+                         f'<span class="rail-ico">{иконка}</span>'
+                         f'<span class="rail-name">{текст}</span>'
                          f'<span class="rail-count">{n}</span></div>')
                     if st.button(название, key=f"railbtn-{i}", use_container_width=True):
                         st.session_state["settings-idx"] = i

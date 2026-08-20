@@ -390,11 +390,15 @@ hr {{ border-color: var(--border) !important; }}
 [class*="st-key-railrow-"] [data-testid="stMarkdownContainer"] {{ margin: 0; }}
 [class*="st-key-railrow-"] > div > [data-testid="stVerticalBlock"] {{ gap: 0; }}
 .rail-item {{
-  display: flex; align-items: center; gap: 8px; padding: 11px 13px;
+  display: flex; align-items: center; gap: 9px; padding: 11px 13px;
   border: 1px solid transparent; border-radius: var(--r-sm);
-  transition: background .15s var(--ease);
+  transition: background .15s var(--ease); overflow: hidden;
 }}
-.rail-name {{ flex: 1 1 auto; font-size: 13.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }}
+.rail-ico {{ flex: none; width: 18px; text-align: center; font-size: 15px; line-height: 1; }}
+/* Длинные названия переносятся по пробелам на 2 строки (как в макете),
+   а не вылезают за рамку и не рвутся посреди слова. */
+.rail-name {{ flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 600;
+  color: var(--muted); line-height: 1.3; }}
 .rail-count {{ flex: none; font-size: 12px; font-weight: 700; color: var(--dim); }}
 [class*="st-key-railrow-"]:hover .rail-item:not(.sel) {{ background: var(--bg-1); }}
 [class*="st-key-railrow-"]:hover .rail-item:not(.sel) .rail-name {{ color: var(--text); }}

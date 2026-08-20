@@ -23,7 +23,8 @@ VHOD-VK-OK-MAX-TG.py – получить ОДИН файл сессий на в
      войдите по QR-коду (в приложении: «Настройки» → «Устройства» →
      «Подключить устройство»). Аккаунт должен быть админом нужных каналов.
      Не нужен Телеграм – Enter.
-  6. Рядом появится ОДИН файл `VK-i-OK-sessii.json` – в нём все сети сразу.
+  6. В конце спросим короткое имя (бренд/аккаунт) и сохраним ОДИН файл с
+     говорящим именем, напр. `sessii_VK-OK-MAX-TG_smu.json` – в нём все сети.
      Загрузите его в Click: «Настройки» → «Файл сессий». Вставлять по
      нескольку раз не нужно, Click разложит куки по сетям сам.
 
@@ -45,6 +46,7 @@ VHOD-VK-OK-MAX-TG.py – получить ОДИН файл сессий на в
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -494,12 +496,34 @@ def main() -> int:
             state = {"cookies": (state.get("cookies") or []) + (tg_state.get("cookies") or []),
                      "origins": (state.get("origins") or []) + (tg_state.get("origins") or [])}
 
-    # ОДИН файл на обе сети. Раньше их было два, и вставлять их приходилось
-    # в два разных окошка – работа на ровном месте: куки-то снимаются одним
-    # браузером за один заход. Click сам разложит их по сетям.
+    # ОДИН файл на все сети. Куки снимаются одним браузером за один заход,
+    # Click сам разложит их по сетям. Имя файла делаем ГОВОРЯЩИМ: какие сети
+    # в нём есть (по факту входа) и метка (бренд/аккаунт), чтобы файлы разных
+    # аккаунтов не путались.
     vk, ok = _split(state)
-    BOTH_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"\n✅ Файл сессий сохранён: {BOTH_FILE}")
+    present = []
+    if _has_vk(vk["cookies"]):
+        present.append("VK")
+    if _has_ok(ok["cookies"]):
+        present.append("OK")
+    if _has_max(state):
+        present.append("MAX")
+    if _has_tg(state):
+        present.append("TG")
+
+    print("\n" + "─" * 62)
+    label = input("Короткое имя для файла (бренд/аккаунт, латиницей; Enter – без "
+                  "имени): ").strip()
+    label = re.sub(r"[^0-9A-Za-zА-Яа-я_-]+", "-", label).strip("-")
+    parts = ["sessii"]
+    if present:
+        parts.append("-".join(present))
+    if label:
+        parts.append(label)
+    out_file = HERE / ("_".join(parts) + ".json")
+
+    out_file.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"\n✅ Файл сессий сохранён: {out_file}")
 
     if _has_vk(vk["cookies"]):
         print("   ВК: вход есть")

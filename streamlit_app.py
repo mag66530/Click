@@ -5380,7 +5380,8 @@ def _both_sessions_block(project_id: str) -> None:
     if said_before:
         (st.success if said_before[0] else st.error)(said_before[1])
 
-    up = st.file_uploader("Файл сессий VK-i-OK-sessii.json – ВК, ОК, МАКС и ТГ в одном",
+    up = st.file_uploader("Файл сессий (напр. sessii_VK-OK-MAX-TG_бренд.json) – "
+                          "ВК, ОК, МАКС и ТГ в одном",
                           type=["json"], key=f"sess-both-up-{project_id}")
     if up is not None and st.button("Загрузить сессии всех сетей", type="primary",
                                     key=f"sess-both-go-{project_id}"):

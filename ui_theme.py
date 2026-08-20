@@ -253,8 +253,11 @@ hr {{ border-color: var(--border) !important; }}
 .stButton > button:disabled {{ opacity: .45; transform: none !important; }}
 .stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"],
 .stDownloadButton > button[kind="primary"] {{
-  background: var(--gradient); color: #fff; border-color: transparent;
-  box-shadow: 0 4px 14px rgba(91,124,250,.30);
+  /* Сочный горизонтальный градиент: на широких кнопках (вход) оба цвета
+     читаются так же ярко, как на узких CTA в других вкладках. */
+  background: linear-gradient(100deg, #5b7cfa 0%, #7d6bf6 46%, #a855f7 100%);
+  color: #fff; border-color: transparent;
+  box-shadow: 0 6px 18px rgba(124,92,246,.35);
 }}
 .stButton > button[kind="primary"]:hover {{ box-shadow: 0 6px 20px rgba(91,124,250,.45); color: #fff; }}
 .stButton > button[kind="primary"]:disabled, .stFormSubmitButton > button[kind="primary"]:disabled {{

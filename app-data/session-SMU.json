@@ -291,21 +291,21 @@
       "sameSite": "None"
     },
     {
-      "name": "_yasc",
-      "value": "2Dsoo4+DIr+HiPPpgMiHfCUeg/3OGf+Cchu6WwmoCmR4exxvgbtIsQ6hOT1w+86apnmrD6UlDtf8",
+      "name": "bh",
+      "value": "YO3kmtQGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1821768421.118,
+      "expires": 1821772397,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
-      "name": "bh",
-      "value": "YOjFmtQGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "name": "_yasc",
+      "value": "9k3Mpst04YT4XnV3m852/sBZaultadlD5eb/0vB+xnMAE50QNewPk21x4VEtTFaIB0ImHvgnaUDf",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1821768424,
+      "expires": 1821772398.232,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -315,7 +315,7 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1818744655,
+      "expires": 1818748398,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -521,16 +521,6 @@
       "sameSite": "None"
     },
     {
-      "name": "_yasc",
-      "value": "wGHdrgLkPm8mpZO8RA5zPpyJ09WYLM/fblG3gIneXPLolbdrz+Ha5gcVb23Ee5Ys2v3rQrRWzwpnmSxqG6FB1JvWRY3OOg+xkTBkGCIwIuFVRGf+VzrO",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1821767107.174,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "_ym_uid",
       "value": "1785825760466448648",
       "domain": ".yandex.ru",
@@ -611,41 +601,21 @@
       "sameSite": "None"
     },
     {
-      "name": "_ym_visorc",
-      "value": "b",
+      "name": "_yasc",
+      "value": "TNyu9R+pNuOo+7kO940JSMOEagiJli7mxAHVfQ33objee1eFV5Wbj9e1+v1BFJNOZwV7nJW3GAj6s6DfXS0cTLYkO0Nm6vq7MNiWF+P/MA5EbdnD/mBr",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1787210456,
+      "expires": 1821772393.765,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "bh",
-      "value": "YNPHmtQGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
+      "value": "YOjkmtQGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYPm9rNhwg=",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1821768659,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "cycada",
-      "value": "oRFPiZ01JdcIH7HD17e+ACfA5hjy39BWIgnQZ/gtJxs=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1788418260.988,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "gdpr",
-      "value": "0",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1818744662,
+      "expires": 1821772392.765,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -655,8 +625,38 @@
       "value": "1",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1818744662,
+      "expires": 1818748396,
       "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "gdpr",
+      "value": "0",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1818748398,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ym_visorc",
+      "value": "b",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1787214198,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "cycada",
+      "value": "NAfVr4fX0rGAurqMhRty1ifA5hjy39BWIgnQZ/gtJxs=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1788422008.78,
+      "httpOnly": false,
       "secure": true,
       "sameSite": "None"
     }
@@ -687,7 +687,7 @@
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "1021"
+          "value": "1023"
         },
         {
           "name": "_ym_wv2rf:85710618:0",
@@ -715,7 +715,7 @@
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "7319"
+          "value": "7334"
         },
         {
           "name": "_ym97514791:0_reqNum",
@@ -731,7 +731,7 @@
         },
         {
           "name": "_ym_retryReqs",
-          "value": "{\"1\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/39321485\",\"time\":1787208662713,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/182799585923/p/edit/reviews/\",\"charset\":\"utf-8\",\"exp\":\"9FCGqINccprhmUAZcnZWvw,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"4uoujm0trtf4ki7rfia923dshe9tqz\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2621\",\"cn\":1,\"dp\":0,\"ls\":1745412175664,\"hid\":149731668,\"z\":0,\"i\":\"20260820065102\",\"et\":1787208663,\"c\":1,\"rn\":347040260,\"rqn\":7319,\"u\":\"1785825760466448648\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1435,\"wv\":2,\"ds\":\"0,0,1069,10,4,0,,310,2,,,,1633\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1787208660987,\"t\":\"Отзывы\",\"adb\":\"2\",\"rqnl\":1,\"st\":1787208663},\"counterId\":39321485,\"ghid\":149731668,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"3722689661785825759\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}},\"2\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/56213845\",\"time\":1787208662713,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/182799585923/p/edit/reviews/\",\"charset\":\"utf-8\",\"exp\":\"9FCGqINccprhmUAZcnZWvw,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"4uoujm0trtf4ki7rfia923dshe9tqz\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2621\",\"cn\":2,\"dp\":0,\"ls\":661253842424,\"hid\":149731668,\"z\":0,\"i\":\"20260820065102\",\"et\":1787208663,\"c\":1,\"rn\":952812484,\"rqn\":6764,\"u\":\"1785825760466448648\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1435,\"wv\":2,\"ds\":\"0,0,1069,10,4,0,,310,2,,,,1633\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1787208660987,\"t\":\"Отзывы\",\"adb\":\"2\",\"rqnl\":1,\"st\":1787208663},\"counterId\":56213845,\"ghid\":149731668,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"p-1\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"3722689661785825759\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}},\"3\":{\"protocol\":\"https:\",\"host\":\"mc.yandex.com\",\"resource\":\"watch/46231566\",\"time\":1787208662713,\"counterType\":\"0\",\"params\":{\"page-url\":\"https://yandex.ru/sprav/182799585923/p/edit/reviews/\",\"charset\":\"utf-8\",\"exp\":\"9FCGqINccprhmUAZcnZWvw,,\",\"ut\":\"noindex\",\"uah\":\"che\\n0\"},\"browserInfo\":{\"pv\":1,\"vf\":\"4uoujm0trtf4ki7rfia923dshe9tqz\",\"fu\":0,\"en\":\"utf-8\",\"la\":\"ru-RU\",\"v\":\"2621\",\"cn\":3,\"dp\":0,\"ls\":1586984045777,\"hid\":149731668,\"z\":0,\"i\":\"20260820065102\",\"et\":1787208663,\"c\":1,\"rn\":228445553,\"rqn\":1755,\"u\":\"1785825760466448648\",\"w\":\"1280x900\",\"s\":\"1366x768x24\",\"sk\":1,\"fp\":1435,\"wv\":2,\"ds\":\"0,0,1069,10,4,0,,310,2,,,,1633\",\"co\":0,\"hdl\":1,\"eu\":0,\"ns\":1787208660987,\"t\":\"Отзывы\",\"adb\":\"2\",\"rqnl\":1,\"st\":1787208663},\"counterId\":46231566,\"ghid\":149731668,\"telemetry\":{\"clt\":null,\"gdpr\":\"13-0\",\"mc\":\"p-2\",\"clc\":\"0-0-0\",\"rqnt\":1,\"aw\":1,\"rcm\":0,\"yu\":\"3722689661785825759\",\"cdl\":\"na\",\"eco\":42140180,\"ti\":1}}}"
+          "value": "{}"
         },
         {
           "name": "_mt__data",
@@ -823,7 +823,7 @@
         },
         {
           "name": "_ym46231566:0_reqNum",
-          "value": "1755"
+          "value": "1758"
         },
         {
           "name": "_ym97514764:0_reqNum",
@@ -831,7 +831,7 @@
         },
         {
           "name": "_ym56213845:0_reqNum",
-          "value": "6764"
+          "value": "6778"
         },
         {
           "name": "_ym_uid",
@@ -896,6 +896,10 @@
           "value": "{\"1000337266\":1785825834553}"
         },
         {
+          "name": "_ym784657_lastHit",
+          "value": "1785825774837"
+        },
+        {
           "name": "_ym3_lsid",
           "value": "46888617236"
         },
@@ -908,16 +912,12 @@
           "value": "{}"
         },
         {
-          "name": "_ym3:0_reqNum",
-          "value": "1"
-        },
-        {
           "name": "_ym_wasSynced",
           "value": "{\"time\":1785825759927,\"params\":{\"sbp\":{\"a\":\"m1Y981VAmCENx+jHYr1blKdAkZ8T4U8lYJOoNE1jJTenAsHvcqJdZK5zIJrUGi/5\",\"b\":\"+dAsPCBj3jD4/4ckXAYrK3GuLvC44ZCanwHPLoYqvyFX+9GfRDkw0itI+dX8ZW8P\"},\"eu\":0,\"region\":\"RU\",\"hittoken\":\"1785825760_d97078c2bfe189f203f8faffb7db370acb803ca17945323ad5a60646bff3c8fb\",\"wstoken\":\"11107.gAnkRm8q5pJqTs0f2APE6hTurf7gNr8rt94UpJyLTmtJTE_HPsRysZ2GPt_z5LyZeLejy6VMgEv-fcGxyFp-OYqKUpBn-krLSnwm2A5HBJQ,.XCZqE9ZLr_dOQ22Ta-84NT1qDdw,\",\"ev\":{\"pvt\":1785825760},\"hidv2\":\"4445584901767692390\",\"ymclid\":\"4445584901767692390\"}}"
         },
         {
-          "name": "_ym784657_lastHit",
-          "value": "1785825774837"
+          "name": "_ym3:0_reqNum",
+          "value": "1"
         },
         {
           "name": "_ym_uid",

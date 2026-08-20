@@ -4887,24 +4887,32 @@ def _day_logs(project_id: str) -> None:
 # Кросспостинг → Актуализация → …), чтобы не пришлось держать в голове две
 # разные логики. Каждый _*_block живёт как жил – меняется только то, КАК их
 # собирают: не всё сразу, а раздел, выбранный в меню слева.
+# Третье число – сколько блоков в разделе; оно же счётчик у пункта меню.
 _SETTINGS_GROUPS = [
-    ("📤 Публикация", "Вход в Яндекс.Бизнес – им Click публикует посты."),
-    ("🗓 Кросспостинг", "Соцсети для кросспостинга: ВК, ОК, МАКС и общий файл сессий."),
-    ("🔄 Актуализация и города", "Откуда берутся города для прогонов и актуализации."),
-    ("🔎 Сверка · отзывы", "Вход в 2ГИС и промпт ответов на отзывы."),
-    ("🔌 Ключи и данные", "Ключи к веб-сервисам: Gemini, Google, GitHub."),
-    ("⚙️ Обслуживание", "Память, проверка браузера, хранилище и выход из проекта."),
+    ("📤 Публикация", "Вход в Яндекс.Бизнес – им Click публикует посты.", 2),
+    ("🗓 Кросспостинг", "Соцсети для кросспостинга: ВК, ОК, МАКС и общий файл сессий.", 4),
+    ("🔄 Актуализация и города", "Откуда берутся города для прогонов и актуализации.", 1),
+    ("🔎 Сверка · отзывы", "Вход в 2ГИС и промпт ответов на отзывы.", 2),
+    ("🔌 Ключи и данные", "Ключи к веб-сервисам: Gemini, Google, GitHub.", 1),
+    ("⚙️ Обслуживание", "Память, проверка браузера, хранилище и выход из проекта.", 4),
 ]
 
 
 def tab_settings(project_id: str, config: dict) -> None:
-    labels = [название for название, _ in _SETTINGS_GROUPS]
+    _settings_status_ribbon(project_id)
+
+    labels = [название for название, _, _ in _SETTINGS_GROUPS]
+    counts = {название: n for название, _, n in _SETTINGS_GROUPS}
 
     left, right = st.columns([1, 3.1], gap="large")
     with left:
         with st.container(key="settings-rail"):
+            # format_func добавляет счётчик только К ПОКАЗУ – само значение
+            # (ключ раздела) остаётся прежним, поэтому сохранённый выбор не
+            # слетает при смене вёрстки.
             выбор = st.radio("Раздел настроек", labels, label_visibility="collapsed",
-                             key="settings-group")
+                             key="settings-group",
+                             format_func=lambda l: f"{l}  {counts[l]}")
     индекс = labels.index(выбор)
 
     with right:
@@ -4943,6 +4951,51 @@ def tab_settings(project_id: str, config: dict) -> None:
             _storage_note_block()
             st.divider()
             _logout_block()
+
+    _settings_legend()
+
+
+def _settings_status_ribbon(project_id: str) -> None:
+    """
+    Лента статуса сверху: что уже настроено, а что просит внимания. Раньше
+    это можно было понять, только зайдя в каждый раздел по очереди; теперь
+    видно с порога – зелёная пилюля «готово», жёлтая «нужен вход».
+    """
+    import max_browser
+    import ok_browser
+    import vk_social
+
+    def ready(fn) -> bool:
+        try:
+            return bool(fn())
+        except Exception:  # noqa: BLE001
+            return False
+
+    проверки = [
+        ("Яндекс", ready(lambda: yb.has_saved_session(project_id))),
+        ("2ГИС", ready(lambda: gis.has_saved_session(project_id))),
+        ("ВК", ready(lambda: vk_social.has_saved_session(project_id))),
+        ("ОК", ready(lambda: ok_browser.has_saved_session(project_id))),
+        ("МАКС", ready(lambda: max_browser.has_saved_session(project_id))),
+        ("Ключи", ready(llm.is_configured)),
+    ]
+    пилюли = "".join(
+        f'<span class="pill pill-{"ok" if готово else "warn"}">'
+        f'{"✅" if готово else "⚠️"} {имя}</span>'
+        for имя, готово in проверки
+    )
+    html(f'<div class="settings-ribbon"><span class="ribbon-label">Статус</span>{пилюли}</div>')
+
+
+def _settings_legend() -> None:
+    """Что значат значки статуса – короткая подпись под разделами."""
+    html(
+        '<div class="settings-legend">'
+        '<b>Обозначения:</b>'
+        '<span class="pill pill-ok">готово</span> вход выполнен / ключ задан'
+        '<span class="pill pill-warn">внимание</span> нужен вход / не заполнено'
+        '</div>'
+    )
 
 
 def _yandex_access_block(project_id: str, config: dict) -> None:

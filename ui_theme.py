@@ -408,6 +408,27 @@ hr {{ border-color: var(--border) !important; }}
 /* Прячем кружок радио – остаётся только подпись раздела. */
 .st-key-settings-rail [data-testid="stRadioOption"] > div > div > div:first-child {{ display: none !important; }}
 
+/* ─── Настройки: лента статуса сверху и легенда снизу ──────────── */
+.settings-ribbon {{
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px 14px; margin-bottom: 16px;
+  background: var(--bg-1); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: var(--shadow-sm);
+}}
+.settings-ribbon .ribbon-label {{
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted); margin-right: 4px;
+}}
+.settings-legend {{
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border);
+  font-size: 12px; color: var(--muted);
+}}
+.settings-legend b {{ color: var(--text); font-weight: 700; margin-right: 2px; }}
+/* Внутри ленты и легенды у пилюль уже есть значок (эмодзи) или сама подпись –
+   цветную точку ::before убираем, чтобы не задваивать. */
+.settings-ribbon .pill::before, .settings-legend .pill::before {{ display: none; }}
+
 /* ─── Экспандеры → .country-section ────────────────────────────── */
 [data-testid="stExpander"] {{
   border: 1px solid var(--border) !important; border-radius: var(--r-sm) !important;

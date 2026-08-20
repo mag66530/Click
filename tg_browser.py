@@ -702,7 +702,11 @@ def _fill_post_text(page, sel: str, markup: str,
     """
     import post_text
 
-    chunks = post_text.plain_chunks(markup)
+    # visible_chunks (а не plain_chunks): в Телеграм адрес ссылки НЕ пишем
+    # словами – он уедет внутрь самой ссылки. plain_chunks дописывал «текст
+    # адрес», и в пост уходило «нихромовой проволоки stalmetural.ru/…» разом,
+    # да ещё и лишние ~44 знака давали перебор подписи («-40»).
+    chunks = post_text.visible_chunks(markup)
     plain = "".join(t for t, _ in chunks)
     filled = [ln for ln in plain.split("\n") if _probe(ln)]
     log(f"  текст к вводу: {len(plain)} знаков, строк {len(plain.splitlines())}")

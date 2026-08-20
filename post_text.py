@@ -268,6 +268,30 @@ def plain_chunks(markup: str) -> list[tuple[str, bool]]:
     return [c for c in out if c[0]]
 
 
+def visible_chunks(markup: str) -> list[tuple[str, bool]]:
+    """
+    Видимый текст кусками [(текст, жирный?)], где ссылка — ТОЛЬКО её анкор,
+    без адреса рядом.
+
+    Для площадок, которые умеют зашить ссылку в слова (Телеграм): сам адрес
+    текстом не пишем — он уедет внутрь <a>. Этим отличается от plain_chunks,
+    который дописывает адрес словами («текст адрес») для ВК/ОК/ЯБ, где ссылку
+    в слова не вшить. Из-за plain_chunks в Телеграм уходило «нихромовой
+    проволоки stalmetural.ru/catalog/…» — анкор И голый адрес разом.
+    """
+    s = ANCHOR_RX.sub(lambda m: m.group(1), markup)   # [текст](адрес) → текст
+    out: list[tuple[str, bool]] = []
+    pos = 0
+    for m in BOLD_RX.finditer(s):
+        if m.start() > pos:
+            out.append((s[pos:m.start()], False))
+        out.append((m.group(1), True))
+        pos = m.end()
+    if pos < len(s):
+        out.append((s[pos:], False))
+    return [c for c in out if c[0]]
+
+
 def render(markup: str, mode: str) -> str:
     """
     mode: 'html'  – Телеграм, МАКС;

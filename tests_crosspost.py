@@ -242,6 +242,15 @@ def test_post_text() -> None:
           pt.render("[stalmetural.ru](https://stalmetural.ru)", "plain") == "stalmetural.ru")
     check("strip_markup для превью", pt.strip_markup("**а** [б](https://в.ru)") == "а б в.ru")
 
+    # visible_chunks (Телеграм): анкор — только видимый текст, БЕЗ адреса рядом.
+    vc = pt.visible_chunks("Отгрузка [нихромовой проволоки](https://x.ru/p) 0,3 мм")
+    vis = "".join(t for t, _ in vc)
+    check("в Телеграм адрес ссылки текстом не пишем", vis == "Отгрузка нихромовой проволоки 0,3 мм")
+    check("голого адреса в кусках нет", "x.ru" not in vis)
+    vc2 = pt.visible_chunks("**[нихромовой проволоки](https://x.ru/p)** тут")
+    check("жирный анкор остаётся жирным куском",
+          ("нихромовой проволоки", True) in vc2 and "x.ru" not in "".join(t for t, _ in vc2))
+
     # ВК/ОК ссылку в слова не зашивают. Живой случай (11.08.2026): в реестре
     # адрес уже стоял, Click добавлял свой автоссылкой, и в ВК выходило
     # «на нашем сайте (inmetprom.ru) (inmetprom.ru/)» – два адреса подряд.

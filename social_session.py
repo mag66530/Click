@@ -96,7 +96,7 @@ def import_combined(project_id: str, raw: bytes) -> tuple[bool, str]:
         return False, f"Это не файл сессии: {e}"
     if not isinstance(data, dict) or "cookies" not in data:
         return False, ("В файле нет раздела cookies. Нужен storage_state "
-                       "Playwright – его сохраняет VHOD-VK-i-OK.py.")
+                       "Playwright – его сохраняет VHOD-VK-OK-MAX-TG.py.")
 
     vk_state, ok_state, max_state, tg_state = split_state(data)
     said = []

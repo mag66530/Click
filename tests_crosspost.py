@@ -1487,7 +1487,7 @@ def test_vk_captcha_on_posting() -> None:
     advice = vk_social._CAPTCHA_ADVICE
     check("сказано, что это проверка «не робот»", "не робот" in advice)
     check("сказано, что программой её не пройти", "программой" in advice)
-    check("назван файл ручного входа", "VHOD-VK-i-OK.py" in advice)
+    check("назван файл ручного входа", "VHOD-VK-OK-MAX-TG.py" in advice)
     check("сказано, куда деть готовую сессию",
           "vk-session.json" in advice and "Настройка" in advice)
     check("про права администратора здесь не поминаем",
@@ -1717,7 +1717,7 @@ def test_max_slow_load() -> None:
     # Причина отказа – по тому, что на экране.
     why = mx._why_no_editor(FakePage("Войти по номеру телефона\nПродолжить"))
     check("экран входа распознан", "сессия не действует" in why, why)
-    check("и сказано, что делать", "VHOD-VK-i-OK.py" in why, why)
+    check("и сказано, что делать", "VHOD-VK-OK-MAX-TG.py" in why, why)
 
     why = mx._why_no_editor(FakePage("Открыть в приложении\nСкачать MAX"))
     check("предложение приложения распознано", "ссылка ведёт не в канал" in why, why)

@@ -4124,7 +4124,7 @@ def _tg_session_hint(project_id: str, config: dict) -> None:
                    "механику одним постом: вкладка «🧪 Проверка отложки».")
     else:
         st.caption("⏸ Вход в Телеграм не сохранён. Соберите файл сессий "
-                   "(VHOD-VK-i-OK.py, шаг 4 – Телеграм по QR) и загрузите его в "
+                   "(VHOD-VK-OK-MAX-TG.py, шаг 4 – Телеграм по QR) и загрузите его в "
                    "«Настройки» → «Файл сессий». Один аккаунт-админ – на все сети.")
 
 
@@ -5300,7 +5300,7 @@ def _max_login_block(project_id: str, config: dict) -> None:
 
     Кнопки «Войти» здесь нет и быть не может: МАКС не пускает
     автоматический браузер – он не рисует проверку «вы не робот» вовсе.
-    Вход только через файл сессий, который делает VHOD-VK-i-OK.py.
+    Вход только через файл сессий, который делает VHOD-VK-OK-MAX-TG.py.
     """
     import max_browser
 
@@ -5333,13 +5333,13 @@ def _max_login_block(project_id: str, config: dict) -> None:
     else:
         st.warning("Сессии МАКС нет. Войти кнопкой отсюда нельзя: МАКС не пускает "
                    "автоматический браузер – он не показывает ему проверку «вы не "
-                   "робот». Запустите VHOD-VK-i-OK.py на своём компьютере и "
+                   "робот». Запустите VHOD-VK-OK-MAX-TG.py на своём компьютере и "
                    "загрузите файл сессий в блоке выше.")
 
 
 def _both_sessions_block(project_id: str) -> None:
     """
-    Один файл сессий на ВСЕ сети сразу – ВК, ОК и МАКС.
+    Один файл сессий на ВСЕ сети сразу – ВК, ОК, МАКС и Телеграм.
 
     Мысль заказчицы, и правильная: «может, одним входом оба куки собирать,
     в один файлик, и один раз вставлять». Куки-то снимаются ОДНИМ браузером
@@ -5355,19 +5355,21 @@ def _both_sessions_block(project_id: str) -> None:
     import max_browser
     import ok_browser
     import social_session
+    import tg_browser
     import vk_social
 
-    html('<div class="card-title">🔑 Файл сессий: ВК, ОК и МАКС</div>')
+    html('<div class="card-title">🔑 Файл сессий: ВК, ОК, МАКС и ТГ</div>')
     сети = ((" ВК", vk_social.has_saved_session(project_id)),
             ("ОК", ok_browser.has_saved_session(project_id)),
-            ("МАКС", max_browser.has_saved_session(project_id)))
+            ("МАКС", max_browser.has_saved_session(project_id)),
+            ("ТГ", tg_browser.has_saved_session(project_id)))
     st.caption(
         "Сейчас: "
         + " · ".join(f"{имя.strip()} – {'вход есть' if есть else 'входа нет'}"
                      for имя, есть in сети)
-        + ". Файл делает VHOD-VK-i-OK.py на вашем компьютере: вошли в сети – "
+        + ". Файл делает VHOD-VK-OK-MAX-TG.py на вашем компьютере: вошли в сети – "
           "получился ОДИН файл. Загрузите его сюда (кнопка «Выбрать файлы» "
-          "ниже), и все три сети возьмутся сразу.")
+          "ниже), и все четыре сети возьмутся сразу.")
     # Итог прошлой загрузки. Держим в session_state, а не показываем сразу:
     # после успеха страница перерисовывается (чтобы обновились «вход есть»),
     # и сообщение, написанное до перерисовки, стиралось вместе с ней. Со
@@ -5376,7 +5378,7 @@ def _both_sessions_block(project_id: str) -> None:
     if said_before:
         (st.success if said_before[0] else st.error)(said_before[1])
 
-    up = st.file_uploader("Файл сессий VK-i-OK-sessii.json – ВК, ОК и МАКС в одном",
+    up = st.file_uploader("Файл сессий VK-i-OK-sessii.json – ВК, ОК, МАКС и ТГ в одном",
                           type=["json"], key=f"sess-both-up-{project_id}")
     if up is not None and st.button("Загрузить сессии всех сетей", type="primary",
                                     key=f"sess-both-go-{project_id}"):

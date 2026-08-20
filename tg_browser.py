@@ -145,7 +145,7 @@ def import_session(project_id: str, raw: bytes) -> tuple[bool, str]:
         found = ", ".join(cookie_names(data.get("cookies") or [])[:12]) or "ни одной"
         return False, ("В файле нет признаков входа в Телеграм – похоже, он снят у "
                        f"гостя. Что нашли: {found}. Войдите в Телеграм по QR "
-                       "(web.telegram.org/a/) в окне из VHOD-VK-i-OK.py и "
+                       "(web.telegram.org/a/) в окне из VHOD-VK-OK-MAX-TG.py и "
                        "сохраните сессию заново.")
     session_path(project_id).write_text(json.dumps(data, ensure_ascii=False),
                                         encoding="utf-8")
@@ -344,7 +344,7 @@ def _why_no_composer(page) -> str:
     if any(m in body for m in LOGIN_MARKS):
         return ("Телеграм показывает экран входа (QR/номер) – сессия не "
                 "действует. Соберите файл сессий заново: войдите в "
-                "web.telegram.org/a/ по QR в окне из VHOD-VK-i-OK.py и загрузите "
+                "web.telegram.org/a/ по QR в окне из VHOD-VK-OK-MAX-TG.py и загрузите "
                 "файл в «Настройках». Пост НЕ отправлен")
     if any(m in body for m in JOIN_MARKS):
         return ("Телеграм предлагает вступить в канал – аккаунт в нём не состоит "

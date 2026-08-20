@@ -1294,7 +1294,27 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                     page.wait_for_timeout(250)
                 except Exception:  # noqa: BLE001
                     pass
-                page.locator(send_sel).first.click(button="right")
+                # ПРАВЫЙ клик по кнопке отправки. Держим КОРОТКИЙ таймаут и не
+                # роняем заход: у обычного .click() таймаут 30 c, и если кнопку
+                # перекрыла неубравшаяся карточка сайта, один такой клик висел
+                # полминуты и валил весь МАКС мимо «трёх попыток» (живой прогон
+                # 20.08.2026: Timeout 30000ms на кнопке «Отправить сообщение»).
+                # Не вышло обычным – шлём contextmenu прямо на элемент, минуя
+                # проверку «сверху ничего не лежит»: правая кнопка пост не шлёт,
+                # пробить перекрытие карточкой тут безопасно.
+                send = page.locator(send_sel).first
+                try:
+                    send.scroll_into_view_if_needed(timeout=1_500)
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    send.click(button="right", timeout=5_000)
+                except Exception:  # noqa: BLE001 – кнопку что-то перекрыло
+                    try:
+                        send.dispatch_event("contextmenu")
+                    except Exception:  # noqa: BLE001 – не достучались, повторим
+                        page.wait_for_timeout(1_000)
+                        continue
                 page.wait_for_timeout(1_500)
                 opened = _click_first(page, SEL["schedule_item"], timeout=6_000)
                 if opened:

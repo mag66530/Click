@@ -2619,6 +2619,9 @@ def test_tg_browser_logic() -> None:
           "длинн" in err_src and "too long" in err_src)
     check("жирное ищем без эмодзи (❔ в начале не мешает)",
           "Extended_Pictographic" in tg._MARK_JS)
+    fill_src = _insp.getsource(tg._fill_post_text)
+    check("жирный кусок режем по строкам (контакты из 3 строк тоже жирные)",
+          'line in t.split("\\n")' in fill_src)
 
     # Разбор заголовка календаря Web A (h4: «Август 2026», «августа 2026 г.»).
     check("«Август 2026» разобран", tg.month_year("Август 2026") == (8, 2026))

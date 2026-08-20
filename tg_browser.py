@@ -758,8 +758,17 @@ def _fill_post_text(page, sel: str, markup: str,
     # же более ранним НЕжирным повтором (была причина «жирных 2/6»). Координаты
     # не передаём: в посте эмодзи (🌐 ✉️ 📞) – суррогатные пары, и смещения
     # Python (кодовые точки) разошлись бы с JS (UTF-16).
-    spans = [{"kind": "bold", "text": t.strip()} for t, bold in chunks
-             if bold and len(t.strip()) > 1]
+    # Жирный кусок РЕЖЕМ по строкам: один диапазон через границы абзацев
+    # выделить нельзя (однострочные вопросы вставали, а блок контактов из 3
+    # строк — нет). Каждую строку выделяем отдельным куском.
+    spans: list[dict] = []
+    for t, bold in chunks:
+        if not bold:
+            continue
+        for line in t.split("\n"):
+            s = line.strip()
+            if len(s) > 1:
+                spans.append({"kind": "bold", "text": s})
     spans += [{"kind": "link", "text": t, "url": u}
               for t, u in post_text.anchor_spans(markup)]
     want_bold = sum(1 for s in spans if s["kind"] == "bold")

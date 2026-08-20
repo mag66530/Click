@@ -921,27 +921,35 @@ def caption_time_ok(caption: str, when: datetime) -> bool:
 
 
 def _click_confirm(page, caption: str) -> bool:
-    """Нажать ровно ту кнопку, чью надпись мы сверили."""
+    """
+    Нажать кнопку подтверждения НАСТОЯЩИМ кликом мыши (Playwright), а не JS:
+    программный b.click() Телеграм не принимает – окно оставалось открытым,
+    отложка не ставилась (живой прогон 16:30).
+    """
+    # 1. Кнопка ровно с той надписью, что мы сверили («Send today at 17:09»).
     if caption:
         try:
-            if page.evaluate("""(cap) => {
-                const modal = document.querySelector('.CalendarModal') || document;
-                for (const b of Array.from(modal.querySelectorAll('button'))) {
-                    if ((b.innerText || '').replace(/\\s+/g, ' ').trim() !== cap) continue;
-                    const r = b.getBoundingClientRect();
-                    if (r.width < 4 || r.height < 4) continue;
-                    b.click();
-                    return true;
-                }
-                return false;
-            }""", caption):
+            btn = page.locator(".CalendarModal button", has_text=caption).first
+            if btn.count():
+                btn.click(timeout=6_000)
                 return True
         except Exception:  # noqa: BLE001
             pass
-    return bool(_click_first(page, ('.CalendarModal button:has-text("Отправить")',
-                                    '.CalendarModal button:has-text("Заплан")',
-                                    '.CalendarModal .Button.confirm-dialog-button'),
-                             timeout=6_000))
+    # 2. Любая главная кнопка окна: Send / Отправить / Schedule / Заплан.
+    for sel in ('.CalendarModal button:has-text("Send")',
+                '.CalendarModal button:has-text("Отправить")',
+                '.CalendarModal button:has-text("Schedule")',
+                '.CalendarModal button:has-text("Заплан")',
+                '.CalendarModal .Button.confirm-dialog-button',
+                '.CalendarModal button.confirm-dialog-button'):
+        try:
+            b = page.locator(sel).first
+            if b.count() and b.is_visible():
+                b.click(timeout=6_000)
+                return True
+        except Exception:  # noqa: BLE001
+            continue
+    return False
 
 
 def _modal_gone(page) -> bool:

@@ -325,6 +325,54 @@ def _download_direct(url: str, temp_dir: Path) -> str:
     return str(filepath)
 
 
+def _drive_id(url: str) -> str:
+    """ID файла Google Drive из ссылки – '' если это не Drive."""
+    if not re.search(r"drive\.google\.com", url, re.I):
+        return ""
+    m = re.search(r"/d/([a-zA-Z0-9_-]+)", url) or re.search(r"id=([a-zA-Z0-9_-]+)", url)
+    return m.group(1) if m else ""
+
+
+def _drive_download_authed(file_id: str, temp_dir: Path) -> str | None:
+    """
+    Скачать картинку с Google Drive СЕРВИСНЫМ аккаунтом КП.
+
+    Зачем. Заказчица расшаривает папку с картинками не «всем, у кого есть
+    ссылка», а на сервисный аккаунт kp-reader@… (тот же, что читает реестр) –
+    как Читателя. Анонимному скачиванию Google тогда отдаёт HTML-страницу
+    «нет доступа», и картинка не грузится. С токеном сервисного аккаунта
+    (у него scope drive.readonly) файл отдаётся напрямую.
+
+    None – аккаунт не настроен или скачать не вышло: наверх пойдёт обычный
+    (анонимный) путь, вдруг файл всё-таки публичный.
+    """
+    try:
+        import requests
+
+        import kp_sheet
+        sa = kp_sheet.service_account_info()
+        if not sa:
+            return None
+        headers = kp_sheet._auth_headers(sa)
+        r = requests.get(f"https://www.googleapis.com/drive/v3/files/{file_id}",
+                         params={"alt": "media", "supportsAllDrives": "true"},
+                         headers=headers, timeout=60)
+        if r.status_code != 200:
+            info(f"  Drive API вернул HTTP {r.status_code} на картинку {file_id[:12]}…")
+            return None
+        data = r.content
+        ext = _image_ext(data)
+        if not ext:
+            return None
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        filepath = temp_dir / f"img-{int(time.time() * 1000)}{ext}"
+        filepath.write_bytes(data)
+        return str(filepath)
+    except Exception as e:  # noqa: BLE001 – это лишь предпочтительный путь
+        info(f"  скачать картинку сервисным аккаунтом не вышло: {e}")
+        return None
+
+
 def _drive_candidates(url: str) -> list[str]:
     """
     Ссылки-кандидаты для картинки. Для Google Drive их две: прямое скачивание
@@ -348,9 +396,16 @@ def download_image(url: str, temp_dir: Path) -> str:
     До 5 попыток с нарастающей паузой – спасает от «Client network socket disconnected»,
     ETIMEDOUT, ECONNRESET и коротких провалов ImgBB. Порт downloadImage из publish.js.
 
-    Для Google Drive пробуем по очереди прямое скачивание и thumbnail: если
-    первое присылает HTML-заглушку, второе обычно отдаёт саму картинку.
+    Для Google Drive сперва пробуем скачать СЕРВИСНЫМ аккаунтом (папка с
+    картинками расшарена на него, а не «всем со ссылкой»); не вышло – обычные
+    прямое скачивание и thumbnail.
     """
+    did = _drive_id(url)
+    if did:
+        authed = _drive_download_authed(did, temp_dir)
+        if authed:
+            return authed
+
     candidates = _drive_candidates(url)
     pauses = [0, 2, 5, 10, 20]
     last_err: Exception | None = None
@@ -370,6 +425,12 @@ def download_image(url: str, temp_dir: Path) -> str:
             f"Сеть нестабильна – не удалось скачать картинку за {len(pauses)} попыток. "
             "Проверьте интернет / антивирус, либо попробуйте через несколько минут."
         )
+    if did and re.search(r"страниц|не похож|доступ|расшарен", reason, re.I):
+        raise RuntimeError(
+            "Картинку с Google Drive не отдать: папка не расшарена. Откройте "
+            "«Доступ» у папки с картинками и добавьте Читателем сервисный "
+            "аккаунт КП (kp-reader@…gserviceaccount.com) — тот же, что читает "
+            "реестр; или включите «Все, у кого есть ссылка»")
     raise RuntimeError(f"Не удалось скачать картинку: {reason}")
 
 

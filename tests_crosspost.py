@@ -1894,6 +1894,17 @@ def test_link_card_and_report() -> None:
     check("PNG узнаётся по байтам", yb._image_ext(b"\x89PNG\r\n\x1a\nrest") == ".png")
     check("HTML-страница картинкой не считается",
           yb._image_ext(b"<!DOCTYPE html><html>") == "")
+    # Папку с картинками расшаривают на сервисный аккаунт КП, а не «всем со
+    # ссылкой» – Drive-файл сперва качаем с токеном этого аккаунта.
+    check("ID файла Drive из ссылки", yb._drive_id(
+        "https://drive.google.com/file/d/1LMQz9I6jwSuMDg2IWabc/view") == "1LMQz9I6jwSuMDg2IWabc")
+    check("не-Drive ссылка id не даёт", yb._drive_id("https://i.ibb.co/x/p.jpg") == "")
+    dl_src = inspect.getsource(yb.download_image)
+    check("Drive сперва качаем сервисным аккаунтом", "_drive_download_authed" in dl_src)
+    authed_src = inspect.getsource(yb._drive_download_authed)
+    check("берём тот же сервисный аккаунт, что и реестр",
+          "kp_sheet.service_account_info()" in authed_src)
+    check("качаем через Drive API alt=media", '"alt": "media"' in authed_src)
 
     src = inspect.getsource(yb.drop_link_card)
     check("крестик ищется по значку со страницы", "M9.414 8l3.294" in yb._CLOSE_ICON_D)

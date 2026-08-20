@@ -445,7 +445,8 @@ hr {{ border-color: var(--border) !important; }}
 }}
 
 .panel-chip {{
-  display: inline-flex; align-items: center; padding: 3px 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 22px; padding: 0 12px; line-height: 1;
   border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap;
 }}
 .panel-ok {{ background: var(--grn-bg); color: var(--grn); }}

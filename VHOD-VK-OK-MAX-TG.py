@@ -211,6 +211,37 @@ def _saved_tg_proxy():
         return None
 
 
+def _launch_tg_browser(pw, proxy: dict):
+    """
+    Браузер для Телеграма под прокси. Возвращает (browser, движок словами).
+
+    ВАЖНО про прокси-с-паролем. Chromium НЕ логинится в SOCKS-прокси с
+    паролем вовсе, а на HTTP-прокси с паролем у него давняя беда: обычные
+    страницы грузятся, а постоянное соединение Телеграма (то, что рисует
+    QR-код и делает вход) через прокси не проходит – и QR не появляется.
+    Firefox эти прокси держит правильно. Поэтому при прокси СНАЧАЛА пробуем
+    Firefox, и только если его нет – откатываемся на Chromium.
+    """
+    # 1) Firefox – лучший для прокси-с-паролем.
+    try:
+        return pw.firefox.launch(headless=False, proxy=proxy), "Firefox"
+    except Exception as exc:  # noqa: BLE001 – Firefox не установлен или не завёлся
+        print("   (Firefox для Playwright не найден – это лучший вариант для "
+              "прокси с паролем.")
+        print("    Один раз установите его командой:  python -m playwright install firefox )")
+        print(f"    Подробность: {str(exc).splitlines()[0][:140]}")
+    # 2) Откат на Chromium (обычный/edge/встроенный).
+    for channel in CHANNELS:
+        try:
+            kw = dict(headless=False, args=ANTIBOT_ARGS, proxy=proxy)
+            if channel:
+                kw["channel"] = channel
+            return pw.chromium.launch(**kw), "Chromium"
+        except Exception:  # noqa: BLE001 – нет такого браузера, пробуем следующий
+            continue
+    raise RuntimeError("не удалось запустить браузер с прокси (ни Firefox, ни Chromium)")
+
+
 def _capture_telegram(pw, proxy: dict):
     """
     Снять сессию Телеграма в ОТДЕЛЬНОМ окне под прокси (ВК/ОК/МАКС остаются
@@ -220,18 +251,8 @@ def _capture_telegram(pw, proxy: dict):
     браузер, а гнать через заграничный прокси ещё и ВК с ОК незачем – они и
     так открываются, а через чужую страну могут насторожиться.
     """
-    browser = None
-    for channel in CHANNELS:
-        try:
-            kw = dict(headless=False, args=ANTIBOT_ARGS, proxy=proxy)
-            if channel:
-                kw["channel"] = channel
-            browser = pw.chromium.launch(**kw)
-            break
-        except Exception:  # noqa: BLE001 – нет такого браузера, пробуем следующий
-            browser = None
-    if browser is None:
-        raise RuntimeError("не удалось запустить браузер с прокси")
+    browser, engine = _launch_tg_browser(pw, proxy)
+    print(f"   Телеграм открываю в {engine}.")
     try:
         ctx = browser.new_context(locale="ru-RU", timezone_id="Asia/Yekaterinburg",
                                   viewport={"width": 1280, "height": 900})
@@ -239,6 +260,7 @@ def _capture_telegram(pw, proxy: dict):
         page = ctx.new_page()
         page.goto("https://web.telegram.org/a/", wait_until="domcontentloaded",
                   timeout=60_000)
+        print("   Ждите QR-код 20-40 секунд (через прокси он рисуется не сразу).")
         input("\nВошли в Телеграм по QR (в этом отдельном окне)? Нажмите Enter здесь… ")
         return ctx.storage_state()
     finally:

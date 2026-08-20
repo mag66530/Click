@@ -1,144 +1,154 @@
 {
   "cookies": [
     {
-      "name": "__ddg1_",
-      "value": "bL6inEiYWHbK3rYavn5c",
-      "domain": ".2gis.com",
+      "name": "spid",
+      "value": "1786705231685_e494f0f45f1fd14d85939df52ae6195e_tv2h2ve43is82qk8",
+      "domain": "account.2gis.com",
       "path": "/",
-      "expires": 1818763091.533,
-      "httpOnly": true,
-      "secure": false,
+      "expires": 1821265231.310479,
+      "httpOnly": false,
+      "secure": true,
       "sameSite": "None"
     },
     {
-      "name": "dg_country_code",
-      "value": "US",
+      "name": "dg_session_id",
+      "value": "56d7de86-f13d-4f32-a0ab-502a50fc733e",
       "domain": "account.2gis.com",
       "path": "/",
-      "expires": 1787227151.533,
+      "expires": 1786707338,
       "httpOnly": false,
       "secure": false,
-      "sameSite": "None"
+      "sameSite": "Lax"
     },
     {
       "name": "dg_session_token",
-      "value": "c5a00ccc7ca45cdf642489d14f5744e0b46b515e",
+      "value": "ba7163070de0c660677ae17e8cc13e97822b5776",
       "domain": ".2gis.com",
       "path": "/",
-      "expires": 1787399899,
+      "expires": 1786878037,
       "httpOnly": false,
       "secure": false,
-      "sameSite": "None"
+      "sameSite": "Lax"
     },
     {
       "name": "dg_refresh_token",
-      "value": "93daf7e3b423cc30bc431d066739daa4f6178f55",
+      "value": "791110b446110b3d4e398220a0ec2963ee2250be",
       "domain": ".2gis.com",
       "path": "/",
-      "expires": 1789819099,
+      "expires": 1789297237,
       "httpOnly": false,
       "secure": false,
-      "sameSite": "None"
+      "sameSite": "Lax"
     },
     {
       "name": "dg_user_locale",
       "value": "ru",
       "domain": "account.2gis.com",
       "path": "/",
-      "expires": 1795175901,
+      "expires": 1794654335,
       "httpOnly": false,
       "secure": false,
-      "sameSite": "None"
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga",
+      "value": "GA1.3.1024683378.1786705240",
+      "domain": ".account.2gis.com",
+      "path": "/",
+      "expires": 1821265535.68851,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
     },
     {
       "name": "_gid",
-      "value": "GA1.3.645317149.1787227102",
+      "value": "GA1.3.856816283.1786705240",
       "domain": ".account.2gis.com",
       "path": "/",
-      "expires": 1787313501,
+      "expires": 1786791935,
       "httpOnly": false,
       "secure": false,
-      "sameSite": "None"
+      "sameSite": "Lax"
+    },
+    {
+      "name": "add_firms_popup",
+      "value": "hidden",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1794654055,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "banner_advert_version_photos_70000001079192862",
+      "value": "2.11",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786791655,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "dg_country_code",
+      "value": "RU",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786705595.032286,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
     },
     {
       "name": "_gat",
       "value": "1",
       "domain": ".account.2gis.com",
       "path": "/",
-      "expires": 1787227161,
+      "expires": 1786705586,
       "httpOnly": false,
       "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "_ga",
-      "value": "GA1.3.429998559.1787227102",
-      "domain": ".account.2gis.com",
-      "path": "/",
-      "expires": 1821787101.659,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
+      "sameSite": "Lax"
     },
     {
       "name": "_gat_gtag_UA_159862647_1",
       "value": "1",
       "domain": ".account.2gis.com",
       "path": "/",
-      "expires": 1787227161,
+      "expires": 1786705586,
       "httpOnly": false,
       "secure": false,
-      "sameSite": "None"
+      "sameSite": "Lax"
+    },
+    {
+      "name": "dg_banner_company-top_70000001079192862",
+      "value": "rocketdata-1",
+      "domain": "account.2gis.com",
+      "path": "/",
+      "expires": 1786791928,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
     },
     {
       "name": "_ga_DEN30CPV6D",
-      "value": "GS2.3.s1787227101$o1$g0$t1787227101$j60$l0$h0",
+      "value": "GS2.3.s1786705240$o1$g1$t1786705535$j51$l0$h0",
       "domain": ".account.2gis.com",
       "path": "/",
-      "expires": 1821787101.817,
+      "expires": 1821265535.760441,
       "httpOnly": false,
       "secure": false,
-      "sameSite": "None"
+      "sameSite": "Lax"
     },
     {
-      "name": "__ddg8_",
-      "value": "d4eEPChRu69XwHys",
-      "domain": ".2gis.com",
-      "path": "/",
-      "expires": 1787236433.088,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "__ddg10_",
-      "value": "1787227102",
-      "domain": ".2gis.com",
-      "path": "/",
-      "expires": 1787236433.088,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "__ddg9_",
-      "value": "34.19.100.134",
-      "domain": ".2gis.com",
-      "path": "/",
-      "expires": 1787236433.088,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "None"
-    },
-    {
-      "name": "dg_session_id",
-      "value": "e96b07dd-a2c1-4839-9eb4-05b0d28cc720",
+      "name": "banner_advert_version_reviews_70000001079192862",
+      "value": "2.1",
       "domain": "account.2gis.com",
       "path": "/",
-      "expires": 1787228902,
+      "expires": 1786791937,
       "httpOnly": false,
       "secure": false,
-      "sameSite": "None"
+      "sameSite": "Lax"
     }
   ],
   "origins": [
@@ -146,11 +156,11 @@
       "origin": "https://account.2gis.com",
       "localStorage": [
         {
-          "name": "dg_is_pending_update_role",
+          "name": "dg_is_pending_nominee_promo",
           "value": "true"
         },
         {
-          "name": "dg_is_pending_nominee_promo",
+          "name": "dg_is_pending_update_role",
           "value": "true"
         }
       ]

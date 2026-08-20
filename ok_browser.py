@@ -311,7 +311,7 @@ def import_session(project_id: str, raw: bytes) -> tuple[bool, str]:
         found = ", ".join(cookie_names(cookies)[:12]) or "ни одной"
         return False, ("В файле только гостевые куки ОК – похоже, вход не "
                        f"завершился. Что нашли: {found}. Войдите в ОК "
-                       "(в окне из VHOD-VK-i-OK.py) и сохраните сессию заново.")
+                       "(в окне из VHOD-VK-OK-MAX-TG.py) и сохраните сессию заново.")
     session_path(project_id).write_text(json.dumps(data, ensure_ascii=False),
                                         encoding="utf-8")
     return True, f"Сессия ОК принята: {len(cookies)} куки, признак входа на месте."

@@ -49,8 +49,16 @@ def pending_for(posts: list[dict], state: dict, network: str,
 
 # ─── Текст и время ──────────────────────────────────────────────────
 def social_markup(post: dict, site: str) -> str:
-    """Разметка поста для соцсетей: готовый текст реестра + автоссылка на сайт."""
-    return post_text.autolink(post.get("text") or "", site or "")
+    """
+    Разметка поста для соцсетей — ровно то, что лежит в реестре.
+
+    Раньше поверх текста накидывалась автоссылка «нашем сайте» → сайт бренда
+    (post_text.autolink). Договорились: Click НЕ выдумывает анкоры сам. Все
+    ссылки и анкоры уже проставлены в реестре (в т.ч. гиперссылки в ячейке) –
+    их и берём, ничего не добавляя. `site` больше не используется, но параметр
+    оставлен для совместимости вызовов.
+    """
+    return post.get("text") or ""
 
 
 def when_local(post: dict) -> datetime:
@@ -63,10 +71,14 @@ def form_messengers(project_id: str, posts: list[dict], site: str,
                     channels: dict[str, str],
                     progress: Callable[[str], None] | None = None) -> list[dict]:
     """
-    Поставить задания планировщику для Телеграма и МАКС.
+    Поставить задания планировщику для МАКС-через-бота (запасной путь).
 
-    channels: {"tg-client": "@канал", "tg-staff": "@канал", "max": "id чата"} –
-    что не заполнено, то молча пропускается (эта площадка ещё не подключена).
+    Телеграм сюда больше не попадает: его отложку Click ставит браузером
+    (form_tg_client_all / form_tg_staff_all), как у ВК/ОК/МАКС – время держит
+    сам Телеграм. Остался только МАКС-бот: он нужен, когда ссылки на канал в
+    веб-версии нет, а id для бота есть (см. _crosspost_channels в UI).
+
+    channels: {"max": "id чата"} – что не заполнено, то молча пропускается.
     Задание идемпотентно по id (ключ поста + сеть): переформирование обновляет
     текст, но выполненное задание вторым разом не поедет.
     """
@@ -75,7 +87,7 @@ def form_messengers(project_id: str, posts: list[dict], site: str,
     progress = progress or (lambda m: None)
     state = cps.load(project_id)
     results: list[dict] = []
-    for network in ("tg-client", "tg-staff", "max"):
+    for network in ("max",):
         chat = (channels.get(network) or "").strip()
         if not chat:
             continue
@@ -148,12 +160,19 @@ def _form_browser_all(project_id: str, network: str, schedule_fn,
 
         progress(f"{label}: готовлю текст и фото")
         markup = social_markup(post, site)
-        # ОК и МАКС накладывают форматирование на уже введённый текст,
-        # выделяя куски настоящей мышью (жирный – кнопкой/Ctrl+B, ссылку –
-        # Ctrl+K). Им отдаём РАЗМЕТКУ – по ней площадка сама решит, что
-        # выделить. ВК форматирования в посте не умеет – ему плоский текст,
-        # как и было. Плоский из разметки площадка при нужде получит сама.
-        text = markup if network in ("ok", "max") else post_text.render(markup, "plain")
+        # ОК, МАКС и Телеграм накладывают форматирование на введённый текст
+        # сами: ОК и МАКС выделяют куски настоящей мышью (жирный – кнопкой/
+        # Ctrl+B, ссылку – Ctrl+K), Телеграм вшивает жирный и ссылку-в-слова
+        # прямо в поле. Всем троим отдаём РАЗМЕТКУ – по ней площадка сама
+        # решит, что выделить. ВК форматирования в посте не умеет – ему
+        # плоский текст, как и было. Плоский из разметки площадка получит сама.
+        #
+        # МАКС попал в список разметки 19.08.2026 («анкор как в ОК»); ветка
+        # Телеграма отвилась раньше и держала МАКС на плоском тексте – при
+        # слиянии вернули МАКС в разметку, иначе жирный анкор в МАКС пропадал.
+        family = network.split("-")[0]
+        text = markup if (network in ("ok", "max") or family == "tg") \
+            else post_text.render(markup, "plain")
 
         local: list[str] = []
         if post.get("images"):
@@ -281,4 +300,27 @@ def form_max_all(project_id: str, chat_url: str, posts: list[dict], site: str,
     """
     import max_browser
     return _form_browser_all(project_id, "max", max_browser.schedule_postponed_post,
+                             chat_url, posts, site, progress, headless)
+
+
+def form_tg_client_all(project_id: str, chat_url: str, posts: list[dict], site: str,
+                       progress: Callable[[str], None] | None = None,
+                       headless: bool = True) -> list[dict]:
+    """
+    Телеграм (канал клиентов) – родной отложкой через веб-версию под аккаунтом.
+
+    Как у МАКС: у бота Телеграма отложки нет, а через web.telegram.org пост
+    держит и публикует сам Телеграм. Пишем с аккаунта-админа, время – его.
+    """
+    import tg_browser
+    return _form_browser_all(project_id, "tg-client", tg_browser.schedule_postponed_post,
+                             chat_url, posts, site, progress, headless)
+
+
+def form_tg_staff_all(project_id: str, chat_url: str, posts: list[dict], site: str,
+                      progress: Callable[[str], None] | None = None,
+                      headless: bool = True) -> list[dict]:
+    """Телеграм (канал сотрудников) – родной отложкой, тем же аккаунтом-админом."""
+    import tg_browser
+    return _form_browser_all(project_id, "tg-staff", tg_browser.schedule_postponed_post,
                              chat_url, posts, site, progress, headless)

@@ -112,10 +112,12 @@ def test_posts_to_form() -> None:
     if not to_form:
         return
     nets = sorted(t["network"] for t in to_form[0]["targets"])
-    check("в будущем формируем vk, ok и дзен", nets == ["ok", "vk", "zen"], str(nets))
-    # Телеграм Click пока не формирует вовсе (13.08.2026): отложки у бота
-    # нет, а публиковать в час выхода он больше не должен.
-    check("телеграм не формируем", "tg-client" not in nets, str(nets))
+    check("в будущем формируем vk, ok, дзен и телеграм",
+          nets == ["ok", "tg-client", "vk", "zen"], str(nets))
+    # Телеграм теперь формируется браузером (родная отложка через веб),
+    # оба его канала – в SUPPORTED. Обобщённый «tg» без канала – по-прежнему нет.
+    check("телеграм-канал теперь формируем", "tg-client" in nets, str(nets))
+    check("обобщённый tg без канала не формируем", "tg" not in nets, str(nets))
 
     # Статья – материал Дзена, и только его. ВК с МАКСом лонгрид не берут:
     # у них в той же таблице свой короткий пост.
@@ -326,6 +328,22 @@ def test_post_text() -> None:
     check("перенос строки не попадает в маркеры",
           pt.runs_to_markup([("Заголовок\n\n", True), ("текст", False)]) == "**Заголовок**\n\nтекст")
 
+    # Гиперссылка из ячейки реестра → анкор [текст](адрес).
+    check("анкор из реестра",
+          pt.runs_to_markup_rich([("см. ", False, ""),
+                                  ("проволоку", False, "https://x.ru/p")])
+          == "см. [проволоку](https://x.ru/p)")
+    check("жирный анкор из реестра",
+          pt.runs_to_markup_rich([("проволока", True, "https://x.ru/p")])
+          == "**[проволока](https://x.ru/p)**")
+    check("пробел по краям анкора выносится наружу",
+          pt.runs_to_markup_rich([("проволока ", False, "https://x.ru/p"), ("тут", False, "")])
+          == "[проволока](https://x.ru/p) тут")
+    check("рядом жирное без ссылки собирается как обычно",
+          pt.runs_to_markup_rich([("важно", True, ""), (" и ", False, ""),
+                                  ("ссылка", False, "https://x.ru")])
+          == "**важно** и [ссылка](https://x.ru)")
+
     m = pt.autolink("Оформить заказ можно на **нашем сайте**", "stalmetural.ru")
     check("автоссылка на жирную фразу",
           m == "Оформить заказ можно на **[нашем сайте](https://stalmetural.ru)**", m)
@@ -344,6 +362,15 @@ def test_post_text() -> None:
     check("plain: текст-адрес не дублируется",
           pt.render("[stalmetural.ru](https://stalmetural.ru)", "plain") == "stalmetural.ru")
     check("strip_markup для превью", pt.strip_markup("**а** [б](https://в.ru)") == "а б в.ru")
+
+    # visible_chunks (Телеграм): анкор — только видимый текст, БЕЗ адреса рядом.
+    vc = pt.visible_chunks("Отгрузка [нихромовой проволоки](https://x.ru/p) 0,3 мм")
+    vis = "".join(t for t, _ in vc)
+    check("в Телеграм адрес ссылки текстом не пишем", vis == "Отгрузка нихромовой проволоки 0,3 мм")
+    check("голого адреса в кусках нет", "x.ru" not in vis)
+    vc2 = pt.visible_chunks("**[нихромовой проволоки](https://x.ru/p)** тут")
+    check("жирный анкор остаётся жирным куском",
+          ("нихромовой проволоки", True) in vc2 and "x.ru" not in "".join(t for t, _ in vc2))
 
     # ВК/ОК ссылку в слова не зашивают. Живой случай (11.08.2026): в реестре
     # адрес уже стоял, Click добавлял свой автоссылкой, и в ВК выходило
@@ -1000,11 +1027,12 @@ def test_plan_rows() -> None:
     only_link, empty_tail = plan._split_text("https://docs.google.com/document/d/1Q97")
     check("ссылка не рвётся", only_link.startswith("https://") and empty_tail == "")
 
-    # «Что сделать» – тихо там, где делать нечего.
+    # «Что сделать» – тихо там, где делать нечего. Обе площадки (ВК и ТГ)
+    # теперь с родной отложкой: раз обе запланированы – делать нечего вовсе.
     ready = plan.rows([post("2025-08-19")], {cps.post_key(post("2025-08-19")): {
         "targets": {"vk": {"state": cps.SCHEDULED}, "tg-client": {"state": cps.SCHEDULED}}}},
         today)["rows"][0]
-    check("готовому – про ручные площадки", ready["todo"]["text"] == "ТГ клиенты – вручную",
+    check("всё запланировано – «всё готово»", ready["todo"]["text"] == "всё готово",
           ready["todo"]["text"])
     check("и без крика", ready["todo"]["kind"] == "quiet")
 
@@ -1021,17 +1049,19 @@ def test_plan_rows() -> None:
           broken["todo"]["text"].startswith("ВК:") and "сессия" in broken["todo"]["text"],
           broken["todo"]["text"])
 
-    # Знаки площадок: у ВК и ОК отложку держит сама сеть, у ТГ и МАКС – Click.
+    # Знаки площадок: у ВК, ОК и теперь Телеграма отложку держит сама сеть
+    # (ТГ – браузером через веб-версию). У МАКС бывает и так, и так.
     p = post("2025-08-19", nets=("vk", "tg-client"))
     state = {cps.post_key(p): {"targets": {"vk": {"state": cps.SCHEDULED},
                                            "tg-client": {"state": cps.SCHEDULED}}}}
     marks = {n["code"]: n for n in plan.post_view(p, state)["nets"]}
     check("ВК: отложка стоит в соцсети", marks["vk"]["cls"] == "set" and marks["vk"]["mark"] == "✓")
-    check("ТГ: помечен ручным, а не «отправит Click»",
-          marks["tg-client"].get("manual") and marks["tg-client"]["mark"] == "✎",
+    check("ТГ: отложка стоит в соцсети, а не «отправит Click»",
+          marks["tg-client"]["cls"] == "set" and marks["tg-client"]["mark"] == "✓"
+          and not marks["tg-client"].get("manual"),
           str(marks["tg-client"]))
-    check("у знака есть подпись словами", "вручную" in marks["tg-client"]["note"])
-    check("ручная площадка не делает пост несформированным",
+    check("у знака есть подпись словами", "соцсети" in marks["tg-client"]["note"])
+    check("запланированный пост – «set»",
           plan.post_view(p, state)["state"] == "set",
           plan.post_view(p, state)["state"])
 
@@ -1053,7 +1083,7 @@ def test_plan_rows() -> None:
     nearest = plan.next_out([p], state, "2025-08-18T10:00:00+05:00")
     check("ближайший пост найден", nearest is not None and nearest["when"].startswith("2025-08-19"))
     check("названы ждущие площадки",
-          nearest is not None and sorted(n["code"] for n in nearest["pending"]) == ["vk"],
+          nearest is not None and sorted(n["code"] for n in nearest["pending"]) == ["tg-client", "vk"],
           str(sorted(n["code"] for n in (nearest or {}).get("pending", []))))
     check("вышедшее в ближайшие не попадает",
           plan.next_out([post("2025-08-19", link="https://vk.com/wall-1_2")], {},
@@ -1206,8 +1236,8 @@ def test_probe_networks() -> None:
 
     import streamlit_app as app
 
-    check("описаны все четыре сети с родной отложкой",
-          set(app.PROBE_NETWORKS) == {"vk", "ok", "max", "zen"},
+    check("описаны все сети с родной отложкой (включая оба канала ТГ)",
+          set(app.PROBE_NETWORKS) == {"vk", "ok", "max", "zen", "tg-staff", "tg-client"},
           str(sorted(app.PROBE_NETWORKS)))
     # У Дзена вход не свой, а яндексовый, и почту проекта пробе надо передать
     # отдельно – иначе паспорт с несколькими аккаунтами не поймёт, чей он.
@@ -1249,7 +1279,7 @@ def test_combined_session_file() -> None:
         {"name": "_ga", "value": "junk", "domain": ".google-analytics.com"},
     ], "origins": [{"origin": "https://ok.ru"}, {"origin": "https://vk.ru"}]}
 
-    vk, ok, _ = ss.split_state(state)
+    vk, ok, _, _ = ss.split_state(state)
     vk_names = {c["name"] for c in vk["cookies"]}
     ok_names = {c["name"] for c in ok["cookies"]}
     check("кука ВК ушла в ВК", "remixsid" in vk_names and "remixsid" not in ok_names)
@@ -1266,7 +1296,7 @@ def test_combined_session_file() -> None:
     max_state = {"cookies": [{"name": "max_token", "value": "m", "domain": ".max.ru"}],
                  "origins": [{"origin": "https://web.max.ru",
                               "localStorage": [{"name": "auth", "value": "t"}]}]}
-    _, _, mx = ss.split_state({**state, **{
+    _, _, mx, _ = ss.split_state({**state, **{
         "cookies": state["cookies"] + max_state["cookies"],
         "origins": state["origins"] + max_state["origins"]}})
     check("кука МАКС ушла в МАКС",
@@ -1278,6 +1308,23 @@ def test_combined_session_file() -> None:
               {"cookies": [{"name": "_ga", "value": "x"}], "origins": []}))
     check("origins разложены по сетям",
           len(ok["origins"]) == 1 and len(vk["origins"]) == 1)
+
+    # Телеграм – четвёртая сеть в том же файле. Вход, как у МАКС, в
+    # localStorage домена web.telegram.org (Web A).
+    import tg_browser
+    tg_state = {"cookies": [{"name": "stel_ssid", "value": "z", "domain": ".telegram.org"}],
+                "origins": [{"origin": "https://web.telegram.org",
+                             "localStorage": [{"name": "dc1_auth_key", "value": "k"}]}]}
+    _, _, _, tg = ss.split_state({**state, **{
+        "cookies": state["cookies"] + tg_state["cookies"],
+        "origins": state["origins"] + tg_state["origins"]}})
+    check("кука Телеграма ушла в Телеграм",
+          "stel_ssid" in {c["name"] for c in tg["cookies"]})
+    check("localStorage Телеграма сохранён", len(tg["origins"]) == 1)
+    check("вход Телеграма по localStorage распознан", tg_browser.looks_logged_in(tg))
+    check("гостевой Телеграм за вход не считаем",
+          not tg_browser.looks_logged_in(
+              {"cookies": [{"name": "stel_ln", "value": "ru"}], "origins": []}))
 
     # Приём файла целиком – в отдельной папке данных, чтобы не задеть рабочие.
     tmp = tempfile.mkdtemp()
@@ -1480,6 +1527,15 @@ def test_plan_horizon_and_past() -> None:
     import crosspost_form as cf
     import streamlit_app as app
 
+    # Click больше НЕ выдумывает анкоры сам: «нашем сайте» остаётся словами,
+    # ссылки берутся только те, что стоят в реестре.
+    check("social_markup не навешивает автоссылку",
+          cf.social_markup({"text": "Оформить на нашем сайте"}, "stalmetural.ru")
+          == "Оформить на нашем сайте")
+    check("social_markup отдаёт текст реестра как есть",
+          cf.social_markup({"text": "**Важно** [анкор](https://x.ru)"}, "a.ru")
+          == "**Важно** [анкор](https://x.ru)")
+
     # Горизонт: конец месяца, но не ближе двух недель.
     check("середина месяца – видно до конца месяца",
           app._crosspost_horizon(date(2026, 8, 11)) == date(2026, 8, 31))
@@ -1560,7 +1616,10 @@ def test_form_selection() -> None:
     check("подпись кнопки – словами заказчицы",
           "Поставить выбранные посты на отложку" in src)
     check("без выбора кнопка выбранных не жмётся", "disabled=not picked" in src)
-    check("в формирование уходят именно выбранные посты", "run(picked, picked_todo)" in src)
+    check("в формирование уходят именно выбранные посты",
+          "run(picked, picked_todo, nets_on)" in src)
+    check("отдельного ряда галочек «какие сети» больше нет", "cp-net-" not in src)
+    check("формируем все доступные сети", "nets_on" in src)
     check("выбранное считается тем же счётчиком",
           "_crosspost_form_todo(project_id, config, picked, state)" in src)
 
@@ -1666,7 +1725,7 @@ def test_vk_captcha_on_posting() -> None:
     advice = vk_social._CAPTCHA_ADVICE
     check("сказано, что это проверка «не робот»", "не робот" in advice)
     check("сказано, что программой её не пройти", "программой" in advice)
-    check("назван файл ручного входа", "VHOD-VK-i-OK.py" in advice)
+    check("назван файл ручного входа", "VHOD-VK-OK-MAX-TG.py" in advice)
     check("сказано, куда деть готовую сессию",
           "vk-session.json" in advice and "Настройка" in advice)
     check("про права администратора здесь не поминаем",
@@ -1896,7 +1955,7 @@ def test_max_slow_load() -> None:
     # Причина отказа – по тому, что на экране.
     why = mx._why_no_editor(FakePage("Войти по номеру телефона\nПродолжить"))
     check("экран входа распознан", "сессия не действует" in why, why)
-    check("и сказано, что делать", "VHOD-VK-i-OK.py" in why, why)
+    check("и сказано, что делать", "VHOD-VK-OK-MAX-TG.py" in why, why)
 
     why = mx._why_no_editor(FakePage("Открыть в приложении\nСкачать MAX"))
     check("предложение приложения распознано", "ссылка ведёт не в канал" in why, why)
@@ -2032,6 +2091,30 @@ def test_link_card_and_report() -> None:
     check("домены из текста собраны", doms == ["stalmetural.ru", "ok.ru"], str(doms))
     check("повторы не дублируются", len(doms) == len(set(doms)))
     check("без адресов – пусто", yb.text_domains("просто текст") == [])
+
+    # Картинка с Google Drive: uc?export=download на «тяжёлые» файлы шлёт HTML,
+    # поэтому есть запасной адрес thumbnail и проверка байтов.
+    cand = yb._drive_candidates("https://drive.google.com/file/d/ABC123/view")
+    check("для Drive два кандидата", len(cand) == 2, str(cand))
+    check("первый – прямое скачивание", "uc?export=download&id=ABC123" in cand[0])
+    check("второй – thumbnail", "thumbnail?id=ABC123" in cand[1] and "sz=" in cand[1])
+    check("для обычной ссылки один кандидат",
+          yb._drive_candidates("https://i.ibb.co/x/p.jpg") == ["https://i.ibb.co/x/p.jpg"])
+    check("JPEG узнаётся по байтам", yb._image_ext(b"\xff\xd8\xff\xe0abc") == ".jpg")
+    check("PNG узнаётся по байтам", yb._image_ext(b"\x89PNG\r\n\x1a\nrest") == ".png")
+    check("HTML-страница картинкой не считается",
+          yb._image_ext(b"<!DOCTYPE html><html>") == "")
+    # Папку с картинками расшаривают на сервисный аккаунт КП, а не «всем со
+    # ссылкой» – Drive-файл сперва качаем с токеном этого аккаунта.
+    check("ID файла Drive из ссылки", yb._drive_id(
+        "https://drive.google.com/file/d/1LMQz9I6jwSuMDg2IWabc/view") == "1LMQz9I6jwSuMDg2IWabc")
+    check("не-Drive ссылка id не даёт", yb._drive_id("https://i.ibb.co/x/p.jpg") == "")
+    dl_src = inspect.getsource(yb.download_image)
+    check("Drive сперва качаем сервисным аккаунтом", "_drive_download_authed" in dl_src)
+    authed_src = inspect.getsource(yb._drive_download_authed)
+    check("берём тот же сервисный аккаунт, что и реестр",
+          "kp_sheet.service_account_info()" in authed_src)
+    check("качаем через Drive API alt=media", '"alt": "media"' in authed_src)
 
     src = inspect.getsource(yb.drop_link_card)
     check("крестик ищется по значку со страницы", "M9.414 8l3.294" in yb._CLOSE_ICON_D)
@@ -2749,27 +2832,139 @@ def test_max_text_on_real_field() -> None:
             browser.close()
 
 
+def test_tg_browser_logic() -> None:
+    """
+    Чистая логика браузерного Телеграма: адрес канала → deep-link Web A,
+    разбор месяца календаря, сверка времени на кнопке. Всё без браузера.
+    """
+    print("\nТелеграм (браузер): адрес, календарь, время")
+    import tg_browser as tg
+    from datetime import datetime
+
+    # Адрес канала принимаем в любом виде и приводим к ссылке t.me.
+    check("@имя → t.me", tg.canonical_tme("@stalmetural") == "https://t.me/stalmetural")
+    check("голое имя → t.me", tg.canonical_tme("stalmetural") == "https://t.me/stalmetural")
+    check("инвайт остаётся инвайтом",
+          tg.canonical_tme("https://t.me/+6S1VTeBvGAhmZTM6") == "https://t.me/+6S1VTeBvGAhmZTM6")
+    check("прямой адрес веб-Телеграма не трогаем",
+          tg.canonical_tme("https://web.telegram.org/a/#-100123") == "")
+
+    # deep-link открывает канал сразу при загрузке приложения.
+    check("deep-link публичного канала",
+          tg.deep_link("@stalmetural").startswith("https://web.telegram.org/a/#?tgaddr="))
+    check("deep-link приватного инвайта тоже собран",
+          "t.me%2F%2B6S1VTeBvGAhmZTM6" in tg.deep_link("https://t.me/+6S1VTeBvGAhmZTM6"))
+    check("прямой веб-адрес идёт как есть",
+          tg.deep_link("https://web.telegram.org/a/#-100123") == "https://web.telegram.org/a/#-100123")
+
+    # Поиском находим по имени; приватный инвайт поиском не найти – честный ноль.
+    check("токен поиска – имя канала", tg.search_token("@stalmetural") == "stalmetural")
+    check("приватный инвайт поиском не ищем", tg.search_token("https://t.me/+HASH") == "")
+    check("название канала – токен поиска", tg.search_token("Тест") == "Тест")
+
+    # После вложения фото открывается окно «Send Photo» со своей кнопкой
+    # отправки – её и ищем первой, иначе обычная button.send перекрыта.
+    check("кнопка окна фото в списке отправки первой",
+          tg.SEL["send"][0] == ".simple-message-input-confirm")
+    check("обычная button.send тоже осталась", "button.send" in tg.SEL["send"])
+    check("пункт «Отправить позже» ловим и в окне фото (btn-menu-item)",
+          any("btn-menu-item" in s for s in tg.SEL["schedule_item"]))
+    # Кнопку отправки в окне «Send Photo» ищем сами (координатами), а не по
+    # фиксированному классу Web K — и на провале пишем кнопки окна в лог.
+    import inspect as _insp
+    sm_src = _insp.getsource(tg._open_schedule_menu)
+    check("кнопку отправки помечаем в DOM и жмём по элементу",
+          "_MARK_SEND_JS" in sm_src and 'data-click-send' in sm_src)
+    check("клик правой по самой кнопке (не по координатам вслепую)",
+          'click(button="right"' in sm_src)
+    check("меню ⋮ больше не жмём (в нём нет Schedule и оно блокирует повтор)",
+          "data-click-more" not in sm_src)
+    check("скрипт метит кнопку primary с иконкой",
+          "primary" in tg._MARK_SEND_JS and "data-click-send" in tg._MARK_SEND_JS)
+    check("на провале выводим кнопки окна в лог", "кнопки окна отправки" in sm_src)
+
+    # Длинная подпись: считаем перебор по счётчику Телеграма («-40»).
+    check("перебор подписи из отрицательного счётчика 0", tg.caption_overflow is not None)
+    sched_src = _insp.getsource(tg.schedule_postponed_post)
+    check("успех = окно закрылось и нет попапа-ошибки", "_schedule_error" in sched_src)
+    check("предупреждаем про длину подписи", "caption_overflow" in sched_src)
+    check("держим паузу в конце, чтобы видеть экран", "человек смотрит на результат" in sched_src)
+    check("на видимом браузере не схлопываем окно сразу", "not headless" in sched_src)
+    err_src = _insp.getsource(tg._schedule_error)
+    check("ловим ошибку «слишком длинная подпись»",
+          "длинн" in err_src and "too long" in err_src)
+    check("жирное ищем без эмодзи (❔ в начале не мешает)",
+          "Extended_Pictographic" in tg._MARK_JS)
+    fill_src = _insp.getsource(tg._fill_post_text)
+    check("жирный кусок режем по строкам (контакты из 3 строк тоже жирные)",
+          'line in t.split("\\n")' in fill_src)
+
+    # Разбор заголовка календаря Web A (h4: «Август 2026», «августа 2026 г.»).
+    check("«Август 2026» разобран", tg.month_year("Август 2026") == (8, 2026))
+    check("«августа 2026 г.» тоже", tg.month_year("августа 2026 г.") == (8, 2026))
+    check("«Март 2026» не спутали с маем", tg.month_year("Март 2026") == (3, 2026))
+    check("пустой заголовок – честный ноль", tg.month_year("") == (0, 0))
+
+    # Сверка времени на кнопке «Отправить … в ЧЧ:ММ» перед нажатием.
+    when = datetime(2026, 8, 19, 11, 0)
+    check("время на кнопке сходится", tg.caption_time_ok("Отправить сегодня в 11:00", when))
+    check("другое время – не жмём", not tg.caption_time_ok("Отправить сегодня в 12:00", when))
+    check("час без ведущего нуля тоже узнаём",
+          tg.caption_time_ok("Отправить 19 августа в 9:05", datetime(2026, 8, 19, 9, 5)))
+    check("нет надписи – не мешаем", tg.caption_time_ok("", when))
+
+    # Прокси для Телеграма (у части провайдеров он заблокирован).
+    p = tg.parse_proxy("socks5://user:pass@1.2.3.4:1080")
+    check("socks5 с логином разобран",
+          p == {"server": "socks5://1.2.3.4:1080", "username": "user", "password": "pass"}, str(p))
+    check("http без логина разобран",
+          tg.parse_proxy("http://1.2.3.4:8080") == {"server": "http://1.2.3.4:8080"})
+    check("голый host:port достраивается до socks5",
+          tg.parse_proxy("1.2.3.4:1080") == {"server": "socks5://1.2.3.4:1080"})
+    check("пусто – прокси нет", tg.parse_proxy("") is None and tg.parse_proxy("  ") is None)
+    check("без порта – не прокси", tg.parse_proxy("socks5://1.2.3.4") is None)
+
+    # Признак входа: вход Web A живёт в localStorage (как у МАКС), а не в куках.
+    check("вход по localStorage распознан",
+          tg.looks_logged_in({"cookies": [], "origins": [
+              {"origin": "https://web.telegram.org",
+               "localStorage": [{"name": "dc1_auth_key", "value": "k"}]}]}))
+    check("гостевые куки за вход не считаем",
+          not tg.looks_logged_in({"cookies": [{"name": "stel_ln", "value": "ru"}],
+                                  "origins": []}))
+
+
 def test_publish_off() -> None:
     """
-    Click в час выхода ничего не публикует (13.08.2026, решение заказчицы).
+    Телеграм переехал с бота на родную отложку через веб (19.08.2026).
 
-    Телеграм уходил не тем видом, а раздел писал «вышло» – неправда. Пока
-    площадку не доделали: Телеграм в плане – «вручную», задания планировщику
-    не ставятся, а уже стоящие отменяются, не отправляясь.
+    Раньше ТГ шёл ботом: отложки у бота нет, время держал Click, пост уходил
+    не тем видом. Теперь оба канала ТГ формируются браузером под аккаунтом
+    (как ВК/ОК/МАКС) – время держит сам Телеграм. Планировщик к бот-путям
+    (ТГ и МАКС-бот) по-прежнему не притрагивается: это его страховка.
     """
-    print("\nПубликация в час выхода выключена")
+    print("\nТелеграм: родная отложка вместо бота")
     import content_plan as cp
+    import crosspost_form as cf
     import scheduler
 
-    check("Телеграм не формируется",
-          not any(n.startswith("tg") for n in cp.SUPPORTED), str(cp.SUPPORTED))
-    # Дзен добавился 14.08.2026 – он публикует статьи родной отложкой, и к
-    # выключенной публикации Телеграма отношения не имеет.
+    check("оба канала Телеграма формируются",
+          {"tg-staff", "tg-client"} <= set(cp.SUPPORTED), str(cp.SUPPORTED))
+    check("обобщённый tg без канала – не формируется",
+          "tg" not in cp.SUPPORTED, str(cp.SUPPORTED))
     check("ВК, ОК, МАКС и Дзен остались",
-          set(cp.SUPPORTED) == {"vk", "ok", "max", "zen"}, str(cp.SUPPORTED))
+          {"vk", "ok", "max", "zen"} <= set(cp.SUPPORTED), str(cp.SUPPORTED))
     check("реестр Телеграм по-прежнему понимает",
           cp.canonical_network("Телеграм клиенты") == "tg-client")
-    check("планировщик не шлёт ТГ и бот МАКС",
+    check("есть браузерные обёртки обоих каналов ТГ",
+          hasattr(cf, "form_tg_client_all") and hasattr(cf, "form_tg_staff_all"))
+    # form_messengers теперь ставит задания планировщику ТОЛЬКО для МАКС-бота
+    # (запасной путь). Телеграм туда не попадает – он идёт браузером.
+    import inspect
+    src = inspect.getsource(cf.form_messengers)
+    check("form_messengers больше не ставит ТГ в планировщик",
+          'for network in ("max",)' in src, src[:0])
+    check("планировщик не шлёт бот-пути ТГ и МАКС",
           set(scheduler.PUBLISH_OFF) == {"tg", "max"}, str(scheduler.PUBLISH_OFF))
 
 
@@ -2865,6 +3060,7 @@ def main() -> int:
     test_form_log_is_fresh()
     test_max_feed_redraw_is_not_a_send()
     test_report_only_click_work()
+    test_tg_browser_logic()
     test_publish_off()
     test_max_native_scheduling()
     test_sessions_in_store()

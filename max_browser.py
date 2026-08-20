@@ -132,7 +132,7 @@ def import_session(project_id: str, raw: bytes) -> tuple[bool, str]:
         found = ", ".join(cookie_names(data.get("cookies") or [])[:12]) or "ни одной"
         return False, ("В файле нет признаков входа в МАКС – похоже, он снят у "
                        f"гостя. Что нашли: {found}. Войдите в МАКС "
-                       "(в окне из VHOD-VK-i-OK.py) и сохраните сессию заново.")
+                       "(в окне из VHOD-VK-OK-MAX-TG.py) и сохраните сессию заново.")
     session_path(project_id).write_text(json.dumps(data, ensure_ascii=False),
                                         encoding="utf-8")
     return True, f"Сессия МАКС принята: {len(data.get('cookies') or [])} куки."
@@ -226,7 +226,7 @@ def _why_no_editor(page) -> str:
 
     if any(m in body for m in LOGIN_MARKS):
         return ("МАКС показывает экран входа – сессия не действует. Соберите "
-                "файл сессий заново (VHOD-VK-i-OK.py) и загрузите его в "
+                "файл сессий заново (VHOD-VK-OK-MAX-TG.py) и загрузите его в "
                 "«Настройках». Пост НЕ отправлен")
     if any(m in body for m in APP_MARKS):
         return ("МАКС предлагает открыть приложение вместо чата – похоже, "

@@ -80,6 +80,45 @@ def runs_to_markup(runs: list[tuple[str, bool]]) -> str:
     return "".join(out)
 
 
+def runs_to_markup_rich(runs: list[tuple[str, bool, str]]) -> str:
+    """
+    Куски (текст, жирный?, адрес|"") → разметка с жирным И ссылками.
+
+    Ссылки берутся ИЗ реестра: заказчик проставляет гиперссылку прямо в
+    ячейке (например, анкор на «нихромовую проволоку» ведёт в реестр цен) –
+    её и переносим, ничего не выдумывая. Кусок со ссылкой становится
+    «[текст](адрес)», жирный+ссылка – «**[текст](адрес)**» (to_html это
+    понимает). Куски без ссылки собираются обычным runs_to_markup, чтобы
+    сохранить склейку соседнего жирного и вынос пробелов наружу.
+    """
+    out: list[str] = []
+    buf: list[tuple[str, bool]] = []
+
+    def flush() -> None:
+        if buf:
+            out.append(runs_to_markup(buf))
+            buf.clear()
+
+    for text, bold, uri in runs:
+        if not text:
+            continue
+        if not uri:
+            buf.append((text, bold))
+            continue
+        flush()
+        # Пробелы по краям анкора выносим наружу – как и для жирного.
+        head = text[:len(text) - len(text.lstrip())]
+        tail = text[len(text.rstrip()):]
+        core = text.strip()
+        if not core:
+            out.append(text)
+            continue
+        anchor = f"[{core}]({uri})"
+        out.append(head + (f"**{anchor}**" if bold else anchor) + tail)
+    flush()
+    return "".join(out)
+
+
 # ─── Автоссылки ─────────────────────────────────────────────────────
 def autolink(markup: str, site_url: str, phrases: tuple[str, ...] = AUTOLINK_PHRASES) -> str:
     """
@@ -310,6 +349,30 @@ def inline_format(markup: str) -> tuple[str, list[str], list[tuple[str, str]]]:
     bold = [t.strip() for t, is_bold in chunks if is_bold and len(t.strip()) > 1]
     anchors = [(t.strip(), u) for t, u in anchor_spans(prepped) if t.strip()]
     return plain, bold, anchors
+
+
+def visible_chunks(markup: str) -> list[tuple[str, bool]]:
+    """
+    Видимый текст кусками [(текст, жирный?)], где ссылка — ТОЛЬКО её анкор,
+    без адреса рядом.
+
+    Для площадок, которые умеют зашить ссылку в слова (Телеграм): сам адрес
+    текстом не пишем — он уедет внутрь <a>. Этим отличается от plain_chunks,
+    который дописывает адрес словами («текст адрес») для ВК/ОК/ЯБ, где ссылку
+    в слова не вшить. Из-за plain_chunks в Телеграм уходило «нихромовой
+    проволоки stalmetural.ru/catalog/…» — анкор И голый адрес разом.
+    """
+    s = ANCHOR_RX.sub(lambda m: m.group(1), markup)   # [текст](адрес) → текст
+    out: list[tuple[str, bool]] = []
+    pos = 0
+    for m in BOLD_RX.finditer(s):
+        if m.start() > pos:
+            out.append((s[pos:m.start()], False))
+        out.append((m.group(1), True))
+        pos = m.end()
+    if pos < len(s):
+        out.append((s[pos:], False))
+    return [c for c in out if c[0]]
 
 
 def render(markup: str, mode: str) -> str:

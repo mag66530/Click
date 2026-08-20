@@ -287,31 +287,132 @@ def resolve_image_url(url: str) -> str:
     return url
 
 
+def _image_ext(data: bytes) -> str:
+    """Расширение по «магическим» байтам – '' если это не картинка."""
+    if data[:3] == b"\xff\xd8\xff":
+        return ".jpg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    if data[:2] == b"BM":
+        return ".bmp"
+    return ""
+
+
 def _download_direct(url: str, temp_dir: Path) -> str:
     temp_dir.mkdir(parents=True, exist_ok=True)
-    ext = Path(urllib.parse.urlparse(url).path).suffix.split("?")[0] or ".jpg"
-    if len(ext) > 5:
-        ext = ".jpg"
-    filepath = temp_dir / f"img-{int(time.time() * 1000)}{ext}"
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=30) as resp:
         if resp.status != 200:
             raise RuntimeError(f"HTTP {resp.status}")
-        filepath.write_bytes(resp.read())
+        data = resp.read()
+    # Google Drive на «тяжёлые» файлы отдаёт не картинку, а HTML-страницу
+    # («проверка на вирусы» / «нет доступа»). Молча сохранить её как .jpg –
+    # значит отдать Телеграму битый файл: превью не откроется, а пост уйдёт
+    # без фото. Поэтому проверяем по байтам, что это правда картинка.
+    ext = _image_ext(data)
+    if not ext:
+        head = data[:200].decode("latin-1", "replace").strip().replace("\n", " ")
+        if head[:1] == "<" or b"html" in data[:200].lower():
+            raise RuntimeError("сервер вернул страницу, а не картинку "
+                               "(файл не расшарен «всем, у кого есть ссылка»?)")
+        raise RuntimeError("скачанный файл не похож на картинку")
+    filepath = temp_dir / f"img-{int(time.time() * 1000)}{ext}"
+    filepath.write_bytes(data)
     return str(filepath)
+
+
+def _drive_id(url: str) -> str:
+    """ID файла Google Drive из ссылки – '' если это не Drive."""
+    if not re.search(r"drive\.google\.com", url, re.I):
+        return ""
+    m = re.search(r"/d/([a-zA-Z0-9_-]+)", url) or re.search(r"id=([a-zA-Z0-9_-]+)", url)
+    return m.group(1) if m else ""
+
+
+def _drive_download_authed(file_id: str, temp_dir: Path) -> str | None:
+    """
+    Скачать картинку с Google Drive СЕРВИСНЫМ аккаунтом КП.
+
+    Зачем. Заказчица расшаривает папку с картинками не «всем, у кого есть
+    ссылка», а на сервисный аккаунт kp-reader@… (тот же, что читает реестр) –
+    как Читателя. Анонимному скачиванию Google тогда отдаёт HTML-страницу
+    «нет доступа», и картинка не грузится. С токеном сервисного аккаунта
+    (у него scope drive.readonly) файл отдаётся напрямую.
+
+    None – аккаунт не настроен или скачать не вышло: наверх пойдёт обычный
+    (анонимный) путь, вдруг файл всё-таки публичный.
+    """
+    try:
+        import requests
+
+        import kp_sheet
+        sa = kp_sheet.service_account_info()
+        if not sa:
+            return None
+        headers = kp_sheet._auth_headers(sa)
+        r = requests.get(f"https://www.googleapis.com/drive/v3/files/{file_id}",
+                         params={"alt": "media", "supportsAllDrives": "true"},
+                         headers=headers, timeout=60)
+        if r.status_code != 200:
+            info(f"  Drive API вернул HTTP {r.status_code} на картинку {file_id[:12]}…")
+            return None
+        data = r.content
+        ext = _image_ext(data)
+        if not ext:
+            return None
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        filepath = temp_dir / f"img-{int(time.time() * 1000)}{ext}"
+        filepath.write_bytes(data)
+        return str(filepath)
+    except Exception as e:  # noqa: BLE001 – это лишь предпочтительный путь
+        info(f"  скачать картинку сервисным аккаунтом не вышло: {e}")
+        return None
+
+
+def _drive_candidates(url: str) -> list[str]:
+    """
+    Ссылки-кандидаты для картинки. Для Google Drive их две: прямое скачивание
+    и thumbnail. thumbnail (drive.google.com/thumbnail?id=…&sz=w2000) отдаёт
+    именно JPEG, минуя страницу «проверки на вирусы», – это и спасает, когда
+    uc?export=download присылает HTML вместо файла.
+    """
+    direct = resolve_image_url(url)
+    out = [direct]
+    if re.search(r"drive\.google\.com", url, re.I):
+        m = re.search(r"/d/([a-zA-Z0-9_-]+)", url) or re.search(r"id=([a-zA-Z0-9_-]+)", url)
+        if m:
+            thumb = f"https://drive.google.com/thumbnail?id={m.group(1)}&sz=w2000"
+            if thumb not in out:
+                out.append(thumb)
+    return out
 
 
 def download_image(url: str, temp_dir: Path) -> str:
     """
     До 5 попыток с нарастающей паузой – спасает от «Client network socket disconnected»,
     ETIMEDOUT, ECONNRESET и коротких провалов ImgBB. Порт downloadImage из publish.js.
+
+    Для Google Drive сперва пробуем скачать СЕРВИСНЫМ аккаунтом (папка с
+    картинками расшарена на него, а не «всем со ссылкой»); не вышло – обычные
+    прямое скачивание и thumbnail.
     """
-    direct = resolve_image_url(url)
+    did = _drive_id(url)
+    if did:
+        authed = _drive_download_authed(did, temp_dir)
+        if authed:
+            return authed
+
+    candidates = _drive_candidates(url)
     pauses = [0, 2, 5, 10, 20]
     last_err: Exception | None = None
     for attempt, pause in enumerate(pauses):
         if pause:
             time.sleep(pause)
+        direct = candidates[min(attempt, len(candidates) - 1)]
         try:
             return _download_direct(direct, temp_dir)
         except Exception as e:  # noqa: BLE001
@@ -324,6 +425,12 @@ def download_image(url: str, temp_dir: Path) -> str:
             f"Сеть нестабильна – не удалось скачать картинку за {len(pauses)} попыток. "
             "Проверьте интернет / антивирус, либо попробуйте через несколько минут."
         )
+    if did and re.search(r"страниц|не похож|доступ|расшарен", reason, re.I):
+        raise RuntimeError(
+            "Картинку с Google Drive не отдать: папка не расшарена. Откройте "
+            "«Доступ» у папки с картинками и добавьте Читателем сервисный "
+            "аккаунт КП (kp-reader@…gserviceaccount.com) — тот же, что читает "
+            "реестр; или включите «Все, у кого есть ссылка»")
     raise RuntimeError(f"Не удалось скачать картинку: {reason}")
 
 
@@ -338,15 +445,23 @@ _ENGINE: str | None = None
 CHROMIUM_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
 
 
-def _launch(pw, engine: str, headless: bool = True, extra_args: list[str] | None = None):
+def _launch(pw, engine: str, headless: bool = True, extra_args: list[str] | None = None,
+            proxy: dict | None = None):
     """
     Запустить браузер. `extra_args` – дополнительные ключи для конкретного
     вызова; по умолчанию пусто, то есть Яндекс и 2ГИС стартуют ровно как
     раньше. Нужен соцсетям: ВК показывает проверку «вы не робот» скрытому
     браузеру заметно чаще, и один ключ (см. vk_social) её приглушает.
+
+    `proxy` – настройки прокси Playwright ({"server": …, "username": …,
+    "password": …}) или None. Нужен только Телеграму: он у части провайдеров
+    заблокирован, и до него ходим через прокси; остальные сети – напрямую.
     """
     args = (CHROMIUM_ARGS if engine == "chromium" else []) + list(extra_args or [])
-    return getattr(pw, engine).launch(headless=headless, args=args)
+    kw = {"headless": headless, "args": args}
+    if proxy:
+        kw["proxy"] = proxy
+    return getattr(pw, engine).launch(**kw)
 
 
 def _short_error(exc: object) -> str:

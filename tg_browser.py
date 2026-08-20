@@ -773,13 +773,17 @@ def _attach_photos(page, image_paths: list[str], project_id: str,
 
 
 # ─── Календарь и время ──────────────────────────────────────────────
-_MONTHS = (("январ", 1), ("феврал", 2), ("март", 3), ("апрел", 4),
-           ("мая", 5), ("май", 5), ("июн", 6), ("июл", 7), ("август", 8),
-           ("сентябр", 9), ("октябр", 10), ("ноябр", 11), ("декабр", 12))
+# И русские, и английские названия месяцев: интерфейс Телеграма бывает любым.
+_MONTHS = (("январ", 1), ("jan", 1), ("феврал", 2), ("feb", 2),
+           ("март", 3), ("mar", 3), ("апрел", 4), ("apr", 4),
+           ("мая", 5), ("май", 5), ("may", 5), ("июн", 6), ("jun", 6),
+           ("июл", 7), ("jul", 7), ("август", 8), ("aug", 8),
+           ("сентябр", 9), ("sep", 9), ("октябр", 10), ("oct", 10),
+           ("ноябр", 11), ("nov", 11), ("декабр", 12), ("dec", 12))
 
 
 def month_year(header: str) -> tuple[int, int]:
-    """«Август 2026» / «августа 2026 г.» → (8, 2026). Не разобрали – (0, 0)."""
+    """«Август 2026» / «August 2026» → (8, 2026). Не разобрали – (0, 0)."""
     low = (header or "").lower()
     year = re.search(r"(20\d\d)", low)
     for prefix, num in _MONTHS:
@@ -949,28 +953,44 @@ def _modal_gone(page) -> bool:
 
 # ─── Открыть меню отложки правой кнопкой ─────────────────────────────
 def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
-    """Правой кнопкой по «Отправить» → «Отправить позже». (ок, причина)."""
-    send_sel = _first_visible(page, SEL["send"])
-    if not send_sel:
-        return False, "не нашли кнопку отправки"
-    log(f"  кнопка отправки найдена ({send_sel})")
+    """
+    Правой кнопкой по «Отправить» → «Отправить позже»/«Schedule Message».
+
+    ВАЖНО: НИКАКОГО Escape. В Телеграме Escape закрывает открытый чат – после
+    него пропадает и кнопка отправки, и введённый текст. Из-за этого правый
+    клик уходил в 30-секундный таймаут (живой прогон 16:22).
+    """
     for attempt in range(1, 4):
+        send_sel = _first_visible(page, SEL["send"])
+        if not send_sel:
+            log(f"  кнопку отправки не видно (попытка {attempt}/3) – жду…")
+            page.wait_for_timeout(1_500)
+            continue
+        log(f"  правый клик по отправке ({send_sel}), попытка {attempt}/3")
+        clicked = False
         try:
-            page.keyboard.press("Escape")
-            page.wait_for_timeout(300)
-        except Exception:  # noqa: BLE001
-            pass
-        log(f"  правый клик по отправке (попытка {attempt}/3)")
-        try:
-            page.locator(send_sel).first.click(button="right")
+            page.locator(send_sel).first.click(button="right", timeout=5_000)
+            clicked = True
         except Exception as e:  # noqa: BLE001
-            log(f"    правый клик не прошёл: {e}")
+            log(f"    обычный правый клик не прошёл: {str(e).splitlines()[0][:100]}")
+        if not clicked:
+            # Запасной путь: сами шлём событие contextmenu по центру кнопки.
+            try:
+                page.eval_on_selector(send_sel, """el => {
+                    const r = el.getBoundingClientRect();
+                    el.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true,
+                        cancelable: true, clientX: r.left + r.width/2,
+                        clientY: r.top + r.height/2}));
+                }""")
+                log("    отправил contextmenu вручную")
+            except Exception as e:  # noqa: BLE001
+                log(f"    contextmenu вручную не прошёл: {e}")
         page.wait_for_timeout(1_200)
         hit = _click_first(page, SEL["schedule_item"], timeout=5_000)
         if hit:
-            log(f"  нашёл и нажал «Отправить позже» ({hit})")
+            log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit})")
             return True, ""
-        page.wait_for_timeout(1_200)
+        page.wait_for_timeout(1_000)
     return False, ("меню «Отправить позже» не появилось. Пост НЕ отправлен – "
                    "левой кнопкой мы не жали")
 

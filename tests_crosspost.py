@@ -1381,7 +1381,9 @@ def test_form_selection() -> None:
     check("подпись кнопки – словами заказчицы",
           "Поставить выбранные посты на отложку" in src)
     check("без выбора кнопка выбранных не жмётся", "disabled=not picked" in src)
-    check("в формирование уходят именно выбранные посты", "run(picked, picked_todo)" in src)
+    check("в формирование уходят именно выбранные посты",
+          "run(picked, picked_todo, nets_on)" in src)
+    check("можно выбрать, какие сети формировать", "cp-net-" in src and "nets_on" in src)
     check("выбранное считается тем же счётчиком",
           "_crosspost_form_todo(project_id, config, picked, state)" in src)
 

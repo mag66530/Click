@@ -4311,7 +4311,10 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
     by_key = {cps.post_key(c["post"]): c["post"] for c in choices}
     picked = [by_key[k] for k in (picked_keys or []) if k in by_key]
 
-    def run(posts: list[dict], what: dict) -> None:
+    def run(posts: list[dict], what: dict, nets_on: set[str] | None = None) -> None:
+        # nets_on – какие СЕТИ формировать (vk/ok/max/zen/tg). None – все.
+        # Нужно, чтобы можно было проверить только Телеграм, не трогая ВК/ОК/МАКС.
+        nets_on = nets_on if nets_on is not None else {"vk", "ok", "max", "zen", "tg"}
         site = ((project_endings(project_id).get("contacts") or {})
                 .get("Россия") or {}).get("site", "")
         # Свёрнутый статус: заголовок меняется по ходу («ВК: пост 2 из 4…»),
@@ -4350,24 +4353,28 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
             if len(m) <= 60:
                 box.update(label=f"Формирую… {m}")
 
-        msg_results = crosspost_form.form_messengers(
-            project_id, posts, site, channels, progress=say)
-        ok += len(msg_results)
+        # МАКС-через-бота (запасной путь) – только если МАКС выбран.
+        if "max" in nets_on:
+            msg_results = crosspost_form.form_messengers(
+                project_id, posts, site, channels, progress=say)
+            ok += len(msg_results)
         # Дзену дополнительно нужна почта проекта: у человека в Яндексе
         # несколько аккаунтов, и паспорт спрашивает, каким входить.
         zen_former = functools.partial(crosspost_form.form_zen_all,
                                        email=(config.get("email") or "").strip())
         msg_by_net = what.get("msg_by_net") or {}
-        for net_name, net_todo, former, url_key in (
-                ("ВК", what["vk"], crosspost_form.form_vk_all, "vkGroupUrl"),
-                ("ОК", what["ok"], crosspost_form.form_ok_all, "okGroupUrl"),
-                ("МАКС", what["max"], crosspost_form.form_max_all, "maxWebUrl"),
-                ("Дзен", what.get("zen") or [], zen_former, "zenStudioUrl"),
+        for fam, net_name, net_todo, former, url_key in (
+                ("vk", "ВК", what["vk"], crosspost_form.form_vk_all, "vkGroupUrl"),
+                ("ok", "ОК", what["ok"], crosspost_form.form_ok_all, "okGroupUrl"),
+                ("max", "МАКС", what["max"], crosspost_form.form_max_all, "maxWebUrl"),
+                ("zen", "Дзен", what.get("zen") or [], zen_former, "zenStudioUrl"),
                 # Телеграм – два канала, оба родной отложкой через веб-версию.
-                ("ТГ клиенты", msg_by_net.get("tg-client") or [],
+                ("tg", "ТГ клиенты", msg_by_net.get("tg-client") or [],
                  crosspost_form.form_tg_client_all, "tgChannelClient"),
-                ("ТГ сотрудники", msg_by_net.get("tg-staff") or [],
+                ("tg", "ТГ сотрудники", msg_by_net.get("tg-staff") or [],
                  crosspost_form.form_tg_staff_all, "tgChannelStaff")):
+            if fam not in nets_on:
+                continue
             if not net_todo:
                 continue
             say(f"— {net_name}: постов к формированию {len(net_todo)}")
@@ -4391,12 +4398,30 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
         time.sleep(1.2)
         st.rerun()
 
+    # Какие СЕТИ формировать. По умолчанию все, но можно снять галочку – удобно
+    # проверить только Телеграм, не ставя отложку в реальные ВК/ОК/МАКС.
+    net_avail = [(lbl, fam) for lbl, fam, has in (
+        ("ВК", "vk", bool(vk_todo)), ("ОК", "ok", bool(ok_todo)),
+        ("МАКС", "max", bool(max_todo)), ("Дзен", "zen", bool(zen_todo)),
+        ("ТГ", "tg", bool(msg_todo))) if has]
+    nets_on: set[str] = {fam for _, fam in net_avail}
+    if len(net_avail) > 1:
+        st.caption("В какие сети формировать (сними галочку – эту сеть пропустим):")
+        cols = st.columns(len(net_avail))
+        nets_on = set()
+        for col, (lbl, fam) in zip(cols, net_avail):
+            if col.checkbox(lbl, value=True, key=f"cp-net-{fam}-{project_id}"):
+                nets_on.add(fam)
+        if not nets_on:
+            st.caption("⚠️ Не выбрана ни одна сеть – формировать нечего.")
+
     # Выбирать не из чего (один несформированный пост) – кнопка одна и во всю
     # ширину: галочка перед единственной кнопкой была бы лишним щелчком.
     if len(choices) <= 1:
         if st.button(f"📌 Поставить отложенные посты ({', '.join(parts)})", type="primary",
-                     key=f"cp-form-all-{project_id}", use_container_width=True):
-            run(upcoming, todo)
+                     key=f"cp-form-all-{project_id}", use_container_width=True,
+                     disabled=not nets_on):
+            run(upcoming, todo, nets_on)
         return
 
     # Что уедет по выбранным – считаем тем же кодом, что и по всему плану:
@@ -4415,13 +4440,14 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
     with left:
         if st.button("📌 Поставить выбранные посты на отложку",
                      key=f"cp-form-picked-{project_id}", use_container_width=True,
-                     disabled=not picked,
+                     disabled=not picked or not nets_on,
                      help="Отметьте посты галочками в плане" if not picked else None):
-            run(picked, picked_todo)
+            run(picked, picked_todo, nets_on)
     with right:
         if st.button(f"📌 Поставить все ({', '.join(parts)})", type="primary",
-                     key=f"cp-form-all-{project_id}", use_container_width=True):
-            run(upcoming, todo)
+                     key=f"cp-form-all-{project_id}", use_container_width=True,
+                     disabled=not nets_on):
+            run(upcoming, todo, nets_on)
 
 
 def _crosspost_yb_block(project_id: str, config: dict) -> None:

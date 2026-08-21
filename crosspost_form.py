@@ -182,6 +182,9 @@ def _form_browser_all(project_id: str, network: str, schedule_fn,
                 cps.set_status(project_id, post, network, cps.FAILED, error=err)
                 results.append({"post": post, "ok": False, "error": err})
                 continue
+            progress(f"{label}: фото готово ({len(local)} шт.)")
+        else:
+            progress(f"{label}: фото в реестре нет – пост без картинки")
 
         progress(f"{label}: ставлю отложку в {ru}")
         res = schedule_fn(project_id, group_url, text, local, when_local(post),

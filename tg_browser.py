@@ -1147,8 +1147,11 @@ _MARK_SEND_JS = r"""
   const more = arr.find(d => /more actions|ещё|еще|more|schedul/i.test(d.aria));
   if (sends[0]) sends[0].b.setAttribute('data-click-send', '1');
   if (more) more.b.setAttribute('data-click-more', '1');
+  const sr = sends[0] ? sends[0].r : null;
   return {
     send: !!sends[0], more: !!more,
+    sx: sr ? Math.round(sr.left + sr.width / 2) : 0,
+    sy: sr ? Math.round(sr.top + sr.height / 2) : 0,
     all: arr.slice(0, 30).map(d => ({
       cls: d.cls.slice(0, 60), aria: d.aria, primary: d.primary, icon: d.icon,
       x: Math.round(d.r.left + d.r.width / 2), y: Math.round(d.r.top + d.r.height / 2)
@@ -1163,6 +1166,37 @@ def _right_click_at(page, x: int, y: int) -> None:
     page.mouse.move(x, y)
     page.wait_for_timeout(120)
     page.mouse.click(x, y, button="right")
+
+
+# Разослать событие contextmenu прямо в кнопку отправки – когда обычный правый
+# клик не проходит из-за «прыгающей» страницы (окно «Send Photo» ещё едет,
+# сверху всплыл баннер «новый вход» – Playwright ждёт устойчивости и падает по
+# таймауту, живой прогон 21.08.2026). Синтетическое событие ждать анимацию не
+# обязано: telegram-tt слушает contextmenu на кнопке и открывает то же меню
+# отложки. Ниже реальных кликов, чтобы «как рукой» оставалось первым.
+_DISPATCH_CONTEXTMENU_JS = r"""
+() => {
+  const b = document.querySelector('[data-click-send="1"]');
+  if (!b) return false;
+  const r = b.getBoundingClientRect();
+  const x = Math.round(r.left + r.width / 2);
+  const y = Math.round(r.top + r.height / 2);
+  const opts = {bubbles: true, cancelable: true, view: window,
+                button: 2, buttons: 2, clientX: x, clientY: y};
+  b.dispatchEvent(new MouseEvent('mousedown', {...opts, button: 2}));
+  b.dispatchEvent(new MouseEvent('mouseup', {...opts, button: 2}));
+  b.dispatchEvent(new MouseEvent('contextmenu', opts));
+  return true;
+}
+"""
+
+
+def _dispatch_contextmenu(page) -> bool:
+    """Синтетический contextmenu по помеченной кнопке отправки. True – ушло."""
+    try:
+        return bool(page.evaluate(_DISPATCH_CONTEXTMENU_JS))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 # Счётчик подписи Телеграма. Когда подпись длиннее лимита (1024 у обычного
@@ -1242,18 +1276,33 @@ def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
             log(f"  разметка кнопок не прошла: {str(e).splitlines()[0][:90]}")
         last_buttons = info.get("all") or last_buttons
 
-        # 1) Правый клик по кнопке отправки окна.
+        # 1) Правый клик по кнопке отправки окна. Три способа подряд, каждый
+        #    жёстче предыдущего – окно «Send Photo» едет, сверху всплывает
+        #    баннер «новый вход», и обычный клик Playwright падает по таймауту
+        #    (ждёт устойчивости, живой прогон 21.08.2026):
+        #      а) клик по элементу с force=True – без проверки «устойчива ли»;
+        #      б) правый клик по координатам кнопки (мышью, мимо проверок);
+        #      в) синтетический contextmenu прямо в кнопку (анимацию не ждёт).
         if info.get("send"):
             log(f"  кнопка отправки найдена, правый клик, попытка {attempt}/3")
-            try:
-                page.locator('[data-click-send="1"]').first.click(button="right", timeout=4_000)
-            except Exception as e:  # noqa: BLE001
-                log(f"    правый клик не прошёл: {str(e).splitlines()[0][:80]}")
-            page.wait_for_timeout(1_000)
-            hit = _click_first(page, SEL["schedule_item"], timeout=4_000)
-            if hit:
-                log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit})")
-                return True, ""
+            sx, sy = int(info.get("sx") or 0), int(info.get("sy") or 0)
+            hit = ""
+            for way, action in (
+                ("force", lambda: page.locator('[data-click-send="1"]').first.click(
+                    button="right", force=True, timeout=2_500)),
+                ("координаты", lambda: _right_click_at(page, sx, sy) if sx or sy else None),
+                ("contextmenu", lambda: _dispatch_contextmenu(page)),
+            ):
+                try:
+                    action()
+                except Exception as e:  # noqa: BLE001
+                    log(f"    правый клик ({way}) не прошёл: {str(e).splitlines()[0][:70]}")
+                    continue
+                page.wait_for_timeout(900)
+                hit = _click_first(page, SEL["schedule_item"], timeout=3_000)
+                if hit:
+                    log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit}, {way})")
+                    return True, ""
 
         # (Меню ⋮ «More actions» НЕ трогаем: в нём нет «Schedule» — только Add /
         # Move Caption / Send as Files и т.п., а открытое меню ещё и перекрывает

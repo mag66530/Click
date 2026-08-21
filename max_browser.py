@@ -1056,6 +1056,53 @@ def _collapse_selection(page, sel: str) -> None:
         pass
 
 
+def _wait_field_settled(page, sel: str, tries: int = 10) -> None:
+    """
+    Подождать, пока текст в поле МАКС перестанет меняться.
+
+    Lexical достраивает абзацы асинхронно после набора; пока длина текста
+    растёт/скачет, DOM «недорисован» и выделение по нему промахивается.
+    Читаем длину текста несколько раз подряд: два одинаковых замера – поле
+    устоялось. Всё в try: замер не должен ронять прогон.
+    """
+    prev = -1
+    stable = 0
+    for _ in range(max(2, tries)):
+        try:
+            cur = len(_editor_text(page, sel) or "")
+        except Exception:  # noqa: BLE001
+            cur = prev
+        if cur == prev and cur > 0:
+            stable += 1
+            if stable >= 2:
+                return
+        else:
+            stable = 0
+        prev = cur
+        page.wait_for_timeout(200)
+
+
+def _select_span(page, text_sel: str, t: str,
+                 log: Callable[[str], None]) -> bool:
+    """
+    Выделить кусок текста для разметки – мышью, затем диапазоном, с повторами.
+
+    Одно выделение с первой попытки на поле Lexical ненадёжно: узлы могли ещё
+    перестраиваться (после автоссылки контакта, после соседней разметки).
+    Поэтому пробуем оба способа, а при неудаче – ждём и повторяем: к следующему
+    заходу поле обычно устаканивается. Мышь первой (её «видит» панель МАКС),
+    диапазон запасным (находит по нормализованному тексту, без эмодзи).
+    """
+    for attempt in range(3):
+        if yb.select_text_by_mouse(page, text_sel, t, log=log):
+            return True
+        if yb.select_text_by_range(page, text_sel, t):
+            return True
+        if attempt < 2:
+            page.wait_for_timeout(350)
+    return False
+
+
 def _apply_max_format(page, text_sel: str, markup: str,
                       log: Callable[[str], None]) -> None:
     """
@@ -1081,12 +1128,21 @@ def _apply_max_format(page, text_sel: str, markup: str,
     if not bold and not anchors:
         return
 
+    # Перед разметкой ДАЁМ ПОЛЮ УСТОЯТЬСЯ. Редактор МАКС (Lexical) собирает
+    # абзацы асинхронно: сразу после набора многострочного текста узлы ещё
+    # перестраиваются, и первые же выделения бьют по «недорисованному» DOM –
+    # ни мышь (координаты устарели), ни диапазон (узлы не финальные) кусок не
+    # ловят. На живом прогоне 21.08.2026 из-за этого пропали ПЕРВЫЕ 6 кусков
+    # (ссылка, «г. Воронеж», три вопроса), а ПОСЛЕДНИЕ (контакты) встали –
+    # к ним поле уже устоялось. Ждём, пока текст в поле перестанет меняться.
+    _wait_field_settled(page, text_sel)
+
     # ПОРЯДОК ВАЖЕН: сначала ссылки, потом жирный. Ctrl+K, создавая ссылку,
     # сбрасывает уже наложенный на кусок жирный – и «нашем сайте» выходило
     # ссылкой, но не жирным (заказчица: «надо жирным, как в ОК»). Жирный,
     # наложенный ПОСЛЕ ссылки, ложится поверх неё и уцелевает.
     for t, url in anchors:
-        if not yb.select_text_by_mouse(page, text_sel, t, log=log):
+        if not _select_span(page, text_sel, t, log):
             log(f"  ссылка пропущена – не выделилось «{t[:32]}»")
             continue
         if _add_max_link(page, url, log):
@@ -1095,12 +1151,11 @@ def _apply_max_format(page, text_sel: str, markup: str,
             log(f"  окно «Ссылка» не открылось – «{t[:24]}» осталось текстом")
 
     for t in bold:
-        # Мышь – основной путь (проверено на длинных кусках-вопросах). Не
-        # вышло – выделяем ДИАПАЗОНОМ (JS, поиск без эмодзи), как в ТГ: именно
-        # так наконец берутся контакты «🌐 сайт / 📩 почта / 📞 телефон», по
-        # которым мышь промахивалась (МАКС их автоссылит и перерисовывает поле).
-        if (yb.select_text_by_mouse(page, text_sel, t, log=log)
-                or yb.select_text_by_range(page, text_sel, t)):
+        # Выделяем кусок (мышь → диапазон, с повторами: см. _select_span). Так
+        # берутся и контакты «🌐 сайт / 📩 почта / 📞 телефон» (мышь по ним
+        # промахивается – МАКС их автоссылит), и длинные вопросы, и обычные
+        # слова, которые раньше пропадали на «недорисованном» поле.
+        if _select_span(page, text_sel, t, log):
             page.keyboard.press("Control+b")   # безопасно: не Enter, не отправит
             page.wait_for_timeout(150)
             log(f"  жирным: «{t[:32]}»")

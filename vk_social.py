@@ -1295,6 +1295,82 @@ def _advance_to_schedule(page, dlg: str, project_id: str,
           "найдётся точно.")
 
 
+# Вставка картинки В САМЫЙ ВЕРХ поста – курсором к первому слову, как просила
+# заказчица (21.08.2026: «вставлял в самый верх, то есть курсор к самому
+# первому слову»). Прикреплённое через скрытый input фото ВК всегда кладёт
+# ОТДЕЛЬНЫМ блоком ВНИЗУ, под текстом, – это его вёрстка, порядком загрузки её
+# не сдвинуть. А картинка, «вставленная» в поле (Ctrl+V) при курсоре в начале
+# текста, встаёт ВСТРОЕННОЙ перед первым словом – и в опубликованном посте
+# оказывается сверху. Шлём НАСТОЯЩЕЕ событие paste с файлом в DataTransfer –
+# тот же проверенный приём, что у МАКСа (_PASTE_JS): работает и в скрытом
+# браузере, системный буфер не нужен. Перед вставкой ставим каретку в самое
+# начало поля.
+_PASTE_TOP_JS = r"""
+(args) => {
+  const el = document.querySelector(args.sel);
+  if (!el) return false;
+  el.focus();
+  // каретку – в самое начало поля, к первому слову
+  try {
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(true);
+    const s = window.getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+  } catch (e) {}
+  const bin = atob(args.b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  const file = new File([arr], args.name, {type: args.mime});
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  let ev;
+  try { ev = new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData: dt}); }
+  catch (e) { ev = new Event('paste', {bubbles: true, cancelable: true}); }
+  try { Object.defineProperty(ev, 'clipboardData', {value: dt}); } catch (e) {}
+  el.dispatchEvent(ev);
+  return true;
+}
+"""
+
+
+def _has_inline_photo(page, text_sel: str) -> bool:
+    """Есть ли ВСТРОЕННАЯ картинка прямо в поле текста (значит – сверху)."""
+    try:
+        return bool(page.eval_on_selector(
+            text_sel, "el => el && el.querySelector('img') ? 1 : 0"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _has_attachment(page, dlg: str) -> bool:
+    """Есть ли фото отдельным блоком-вложением (ВК кладёт его ПОД текстом)."""
+    try:
+        return bool(page.locator(f'{dlg} {SEL["photo_remove"]}').count())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _paste_image_at_top(page, dlg: str, text_sel: str, image_paths: list[str],
+                        log: Callable[[str], None]) -> bool:
+    """Вставить фото В НАЧАЛО поста (Ctrl+V при курсоре у первого слова)."""
+    import base64
+    import mimetypes
+    sent = False
+    for p in image_paths[:10]:
+        try:
+            b64 = base64.b64encode(Path(p).read_bytes()).decode()
+            mime = mimetypes.guess_type(p)[0] or "image/png"
+            ok = page.evaluate(_PASTE_TOP_JS, {"sel": text_sel, "b64": b64,
+                                               "mime": mime, "name": Path(p).name})
+            sent = sent or bool(ok)
+            page.wait_for_timeout(1200)
+        except Exception as e:  # noqa: BLE001 – вставка не должна ронять прогон
+            log(f"  вставка фото в начало не удалась: {e}")
+    return sent
+
+
 def schedule_postponed_post(project_id: str, group_url: str, text: str,
                             image_paths: list[str], when: datetime,
                             log: Callable[[str], None] | None = None,
@@ -1366,14 +1442,9 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                 page.keyboard.press("Backspace")
                 page.wait_for_timeout(200)
 
-            if image_paths:
-                log(f"Прикрепляю фото: {len(image_paths)}")
-                inp = page.locator(f'{dlg} {SEL["file_input"]}')
-                if not inp.count():
-                    inp = page.locator(f'{dlg} {SEL["file_input_any"]}')
-                inp.first.set_input_files(image_paths[:10])
-                page.wait_for_timeout(2500)
-
+            # Текст ВВОДИМ ПЕРВЫМ, картинку вставляем ПОСЛЕ – в начало текста
+            # (см. ниже). Раньше фото цепляли скрытым input ДО текста, и ВК
+            # всегда клал его отдельным блоком ВНИЗУ; заказчице нужно СВЕРХУ.
             log(f"Ввожу текст ({len(text)} знаков)")
             page.click(f'{dlg} {SEL["text"]}')
             page.type(f'{dlg} {SEL["text"]}', text, delay=8)
@@ -1392,6 +1463,30 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             diag = paths.data_root() / project_id / "crosspost"
             closed = yb.drop_link_card(page, yb.text_domains(text), log, scope=dlg,
                                        diag_dir=diag)
+
+            # Картинка – В САМЫЙ ВЕРХ поста: ставим каретку к первому слову и
+            # «вставляем» фото (Ctrl+V) прямо в поле, встроенным элементом. Так
+            # оно оказывается НАД текстом (заказчица 21.08.2026). Если встроить
+            # не удалось (поле не приняло paste) – цепляем скрытым input, чтобы
+            # фото хотя бы БЫЛО (пусть отдельным блоком внизу), а не пропало.
+            if image_paths:
+                log(f"Прикрепляю фото: {len(image_paths)} (в начало поста)")
+                text_full = f'{dlg} {SEL["text"]}'
+                _paste_image_at_top(page, dlg, text_full, image_paths, log)
+                page.wait_for_timeout(1_500)
+                if _has_inline_photo(page, text_full):
+                    log("  фото встало в начало поста (над текстом)")
+                elif _has_attachment(page, dlg):
+                    # ВК принял картинку, но встроить в текст не дал – значит,
+                    # она встанет отдельным блоком под текстом. Дубль НЕ цепляем.
+                    log("  ВК положил фото вложением (под текстом) – встроить в начало не дал")
+                else:
+                    log("  вставка не принялась – цепляю фото обычным способом")
+                    inp = page.locator(f'{dlg} {SEL["file_input"]}')
+                    if not inp.count():
+                        inp = page.locator(f'{dlg} {SEL["file_input_any"]}')
+                    inp.first.set_input_files(image_paths[:10])
+                    page.wait_for_timeout(2500)
 
             # «Далее» – к экрану, где живёт «Запланировать». Устойчиво: если
             # шаг уже пройден или ВК его убрал – идём дальше без ошибки.

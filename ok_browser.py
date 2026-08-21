@@ -1477,6 +1477,73 @@ def _fix_space_before_punct(page, text_sel: str,
         log(f"  убрал лишний пробел перед знаком препинания ({n})")
 
 
+# Схлопнуть двойной пробел (ОК ставит &nbsp; сразу за «ярлыком» ссылки).
+#
+# Вшивая ссылку своим ярлыком, ОК дописывает вплотную за ним неразрывный
+# пробел `&nbsp;`, а в исходном тексте после этого слова УЖЕ стоял обычный
+# пробел – и выходит двойной («…нихромовой проволоки␠␠0,3 мм», DOM заказчицы
+# 21.08.2026: <span …>нихромовой проволоки</span>&nbsp;<b></b> 0,3 мм). Глазу
+# это «двойной пробел в поле анкора». В русской прозе двойных пробелов между
+# словами не бывает никогда, поэтому любой ряд из 2+ пробелов (обычный, nbsp,
+# таб) схлопываем в один. Перенос строки (`\n`) пробелом НЕ считаем – ряды
+# через границу строки не склеиваем. Работаем по склеенному тексту всех узлов
+# с картой «символ → узел»: nbsp и пробел ОК рвёт по соседним узлам
+# («…проволоки»+« »+« 0,3 мм»), поузельная проверка их не поймала бы.
+_COLLAPSE_SPACE_JS = r"""
+(sel) => {
+  const el = document.querySelector(sel);
+  if (!el) return 0;
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  let w;
+  while ((w = walker.nextNode())) nodes.push(w);
+  let full = '';
+  const owner = [];   // owner[k] = индекс узла символа k
+  const off = [];     // off[k]   = позиция символа внутри узла
+  for (let ni = 0; ni < nodes.length; ni++) {
+    const v = nodes[ni].nodeValue || '';
+    for (let o = 0; o < v.length; o++) { full += v[o]; owner.push(ni); off.push(o); }
+  }
+  const isSpace = (c) => c === ' ' || c === ' ' || c === '\t';
+  const perNode = new Map();   // ni -> [позиции на удаление]
+  let total = 0;
+  let k = 0;
+  while (k < full.length) {
+    if (!isSpace(full[k])) { k++; continue; }
+    let j = k + 1;
+    while (j < full.length && isSpace(full[j])) j++;
+    // ряд пробелов [k, j) длиной (j-k); первый оставляем, остальные удаляем
+    for (let p = k + 1; p < j; p++) {
+      const ni = owner[p];
+      if (!perNode.has(ni)) perNode.set(ni, []);
+      perNode.get(ni).push(off[p]);
+      total++;
+    }
+    k = j;
+  }
+  if (!total) return 0;
+  for (const [ni, offs] of perNode) {
+    offs.sort((a, b) => b - a);   // с конца, чтобы позиции не сползали
+    let v = nodes[ni].nodeValue || '';
+    for (const o of offs) v = v.slice(0, o) + v.slice(o + 1);
+    nodes[ni].nodeValue = v;
+  }
+  return total;
+}
+"""
+
+
+def _collapse_double_space(page, text_sel: str,
+                           log: Callable[[str], None]) -> None:
+    """Схлопнуть двойной пробел после «ярлыка» ссылки ОК (nbsp + пробел)."""
+    try:
+        n = page.evaluate(_COLLAPSE_SPACE_JS, text_sel)
+    except Exception:  # noqa: BLE001
+        return
+    if n:
+        log(f"  убрал двойной пробел ({n})")
+
+
 # Проверка, что анкор с нашим адресом реально появился в поле.
 #
 # ОК кладёт ссылку НЕ тегом <a>, а своим «ярлыком»:
@@ -1817,6 +1884,7 @@ def _type_post_text(page, text_sel: str, text: str,
     # тексте без ссылок эта чистка всё равно ничего не находит.
     if link_spans:
         _fix_space_before_punct(page, text_sel, log)
+        _collapse_double_space(page, text_sel, log)
 
     # Погасить выделение и панель форматирования ОК. Она всплывает на любое
     # выделение (и от жирного, и от попытки ссылки) и, оставшись, перекрывает
@@ -2514,6 +2582,7 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             if project_id:
                 _save_editor_markup(page, text_sel, project_id, log)
             _fix_space_before_punct(page, text_sel, log)
+            _collapse_double_space(page, text_sel, log)
             page.wait_for_timeout(200)
 
             log("Сохраняю отложку")

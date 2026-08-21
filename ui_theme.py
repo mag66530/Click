@@ -1035,7 +1035,8 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
    на 14 и 54 пикселя ниже рамки карточки. Теперь 118px – это минимум, а
    дальше зона растёт под содержимое. */
 .st-key-img-row [data-testid="stFileUploaderDropzone"],
-.st-key-goods-row [data-testid="stFileUploaderDropzone"] {{
+.st-key-goods-row [data-testid="stFileUploaderDropzone"],
+.st-key-gis-only-row [data-testid="stFileUploaderDropzone"] {{
   min-height: 118px; height: auto; padding: 8px 12px;
   align-items: center; justify-content: center; flex-direction: column; gap: 6px;
 }}
@@ -1051,7 +1052,8 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 /* Подпись поля слева занимает место – у загрузчика подписи нет, компенсируем,
    чтобы обе рамки начинались и заканчивались на одной высоте. */
 .st-key-img-row [data-testid="stFileUploader"],
-.st-key-goods-row [data-testid="stFileUploader"] {{ margin-top: 30px; }}
+.st-key-goods-row [data-testid="stFileUploader"],
+.st-key-gis-only-row [data-testid="stFileUploader"] {{ margin-top: 30px; }}
 
 /* Поле со ссылками тянется вслед за загрузчиком: тот растёт под список файлов,
    и без этого слева оставалась пустая дыра высотой в этот список. Колонки
@@ -1059,16 +1061,21 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
    цепочку до самой textarea – каждое звено по отдельности высоту не наследует. */
 .st-key-img-row [data-testid="stColumn"] > [data-testid="stVerticalBlock"],
 .st-key-goods-row [data-testid="stColumn"] > [data-testid="stVerticalBlock"],
+.st-key-gis-only-row [data-testid="stColumn"] > [data-testid="stVerticalBlock"],
 .st-key-img-row [data-testid="stColumn"] [data-testid="stElementContainer"]:has(.stTextArea),
-.st-key-goods-row [data-testid="stColumn"] [data-testid="stElementContainer"]:has(.stTextArea) {{
+.st-key-goods-row [data-testid="stColumn"] [data-testid="stElementContainer"]:has(.stTextArea),
+.st-key-gis-only-row [data-testid="stColumn"] [data-testid="stElementContainer"]:has(.stTextArea) {{
   height: 100%;
 }}
 .st-key-img-row .stTextArea,
-.st-key-goods-row .stTextArea {{ height: 100%; display: flex; flex-direction: column; }}
+.st-key-goods-row .stTextArea,
+.st-key-gis-only-row .stTextArea {{ height: 100%; display: flex; flex-direction: column; }}
 .st-key-img-row [data-testid="stTextAreaRootElement"],
-.st-key-goods-row [data-testid="stTextAreaRootElement"] {{ flex: 1 1 auto; }}
+.st-key-goods-row [data-testid="stTextAreaRootElement"],
+.st-key-gis-only-row [data-testid="stTextAreaRootElement"] {{ flex: 1 1 auto; }}
 .st-key-img-row .stTextArea textarea,
-.st-key-goods-row .stTextArea textarea {{ height: 100% !important; min-height: 118px; }}
+.st-key-goods-row .stTextArea textarea,
+.st-key-gis-only-row .stTextArea textarea {{ height: 100% !important; min-height: 118px; }}
 
 /* ─── Превью текста поста ──────────────────────────────────────── */
 .preview-box {{

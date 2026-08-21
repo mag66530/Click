@@ -1425,6 +1425,81 @@ def _schedule_error(page) -> str:
     return ""
 
 
+# Нажать пункт «Отправить позже»/«Schedule» в ВЫПАВШЕМ меню — жёстко.
+# Правый клик по кнопке отправки меню открывает, но обычный клик по пункту
+# падал, пока страница ещё «едет» (прогон 21:16: меню не поймали 3 раза). Тут:
+#   1) обычным Playwright-кликом с force (без ожидания устойчивости);
+#   2) если не вышло — кликаем пункт прямо в DOM (JS), мимо всех «прыжков».
+_CLICK_MENU_ITEM_JS = r"""
+(needles) => {
+  const items = document.querySelectorAll(
+    '.MenuItem, [role="menuitem"], .btn-menu-item, .Menu li, .ListItem');
+  for (const it of items) {
+    const t = (it.textContent || '').trim().toLowerCase();
+    if (!t) continue;
+    if (needles.some(n => t.includes(n))) {
+      const hit = it.closest('.MenuItem, [role="menuitem"], .btn-menu-item, li') || it;
+      hit.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}));
+      hit.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, cancelable: true}));
+      hit.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+      return t.slice(0, 40);
+    }
+  }
+  return '';
+}
+"""
+
+# Что за меню (если хоть какое-то) выскочило — для точной диагностики в логе.
+_MENU_DUMP_JS = r"""
+() => {
+  const out = [];
+  const items = document.querySelectorAll(
+    '.MenuItem, [role="menuitem"], .btn-menu-item, .Menu li');
+  for (const it of items) {
+    const r = it.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) continue;
+    const t = (it.textContent || '').trim();
+    if (t) out.push(t.slice(0, 40));
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+"""
+
+_SCHED_NEEDLES = ("отправить позже", "запланировать", "schedule")
+
+
+def _click_schedule_item(page) -> str:
+    """Нажать пункт «Отправить позже»/«Schedule» в меню. Возвращает как нажали."""
+    for sel in SEL["schedule_item"]:
+        try:
+            el = page.locator(sel).first
+            if el.count() and el.is_visible():
+                el.click(force=True, timeout=2_000)
+                return sel
+        except Exception:  # noqa: BLE001
+            continue
+    try:
+        hit = page.evaluate(_CLICK_MENU_ITEM_JS, list(_SCHED_NEEDLES))
+        if hit:
+            return f"js:{hit}"
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def _dump_open_menu(page, log: Callable[[str], None]) -> None:
+    """Написать в лог, какое меню (если есть) открылось после правого клика."""
+    try:
+        items = page.evaluate(_MENU_DUMP_JS) or []
+    except Exception:  # noqa: BLE001
+        items = []
+    if items:
+        log("  меню после правого клика содержит: " + " | ".join(items))
+    else:
+        log("  после правого клика меню не появилось вовсе")
+
+
 # ─── Открыть меню отложки правой кнопкой ─────────────────────────────
 def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
     """
@@ -1471,14 +1546,26 @@ def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
                     log(f"    правый клик ({way}) не прошёл: {str(e).splitlines()[0][:70]}")
                     continue
                 page.wait_for_timeout(900)
-                hit = _click_first(page, SEL["schedule_item"], timeout=3_000)
+                hit = _click_schedule_item(page)
                 if hit:
                     log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit}, {way})")
                     return True, ""
+                if attempt == 1 and way == "force":
+                    _dump_open_menu(page, log)   # в лог: какое меню открылось
 
-        # (Меню ⋮ «More actions» НЕ трогаем: в нём нет «Schedule» — только Add /
-        # Move Caption / Send as Files и т.п., а открытое меню ещё и перекрывает
-        # кнопку на следующей попытке. Отложку даёт только правый клик по отправке.)
+        # Запас: меню ⋮ «More actions» в шапке окна «Send Photo». В некоторых
+        # сборках Web A пункт «Schedule» лежит именно тут, а не под правым кликом.
+        if info.get("more"):
+            try:
+                page.locator('[data-click-more="1"]').first.click(force=True, timeout=2_000)
+                page.wait_for_timeout(700)
+                hit = _click_schedule_item(page)
+                if hit:
+                    log(f"  нашёл «Schedule» в меню ⋮ «More actions» ({hit})")
+                    return True, ""
+                _dump_open_menu(page, log)
+            except Exception as e:  # noqa: BLE001
+                log(f"    меню ⋮ не открылось: {str(e).splitlines()[0][:70]}")
 
         # 2) Запас: берём кнопку окна прямо по точному классу
         #    (.simple-message-input-confirm и т.п.) и правый клик — тоже жёстко:
@@ -1500,7 +1587,7 @@ def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
                     log(f"    правый клик ({way}) не прошёл: {str(e).splitlines()[0][:70]}")
                     continue
                 page.wait_for_timeout(800)
-                hit = _click_first(page, SEL["schedule_item"], timeout=3_000)
+                hit = _click_schedule_item(page)
                 if hit:
                     log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({sel}, {way})")
                     return True, ""

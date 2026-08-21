@@ -2375,9 +2375,21 @@ def drop_link_card(page, domains: list[str],
         return args.doms.some(d => h.includes(d)) && !a.closest('[contenteditable], textarea');
       });
       if (!link) return null;
+      // Главное поле поста – самое длинное редактируемое на странице. По нему
+      // отличаем настоящее поле ввода от «своих» редактируемых у карточки: у
+      // сниппета ОК заголовок и описание – ТОЖЕ contenteditable, и прежний
+      // подъём «до первого contenteditable» замирал сразу, пометив крестиком не
+      // карточку, а крохотный <a> внутри неё (link-card.html заказчицы,
+      // 21.08.2026). Поднимаемся, пока блок не вберёт именно ГЛАВНОЕ поле.
+      let main = null, mainLen = -1;
+      for (const f of root.querySelectorAll('[contenteditable="true"], textarea, input[type="text"]')) {
+        const len = (f.value || f.textContent || '').length;
+        if (len > mainLen) { mainLen = len; main = f; }
+      }
       let card = link, p = link.parentElement;
       for (let i = 0; i < 8 && p; i++, p = p.parentElement) {
-        if (p.querySelector('[contenteditable], textarea, input[type="text"]')) break;
+        if (main ? p.contains(main)
+                 : p.querySelector('[contenteditable], textarea, input[type="text"]')) break;
         card = p;
       }
       card.setAttribute('data-click-card', '1');

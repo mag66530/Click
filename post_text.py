@@ -346,7 +346,15 @@ def inline_format(markup: str) -> tuple[str, list[str], list[tuple[str, str]]]:
     label = ANCHOR_RX.sub(r"\1", prepped)            # [нашем сайте](url) → нашем сайте (** остаются)
     chunks = plain_chunks(label)
     plain = "".join(t for t, _ in chunks)
-    bold = [t.strip() for t, is_bold in chunks if is_bold and len(t.strip()) > 1]
+    # Жирный кусок РЕЖЕМ по строкам: один диапазон через границы абзацев
+    # настоящей мышью не выделить — однострочные вопросы вставали, а блок
+    # контактов из трёх строк («🌐 …\n📩 …\n📞 …») нет, и жирный по нему
+    # пропадал в ОК и МАКС (лог заказчицы 21.08.2026). Так же чинили ТГ.
+    # Каждую строку отдаём отдельным жирным куском.
+    bold = [ln.strip()
+            for t, is_bold in chunks if is_bold
+            for ln in t.split("\n")
+            if len(ln.strip()) > 1]
     anchors = [(t.strip(), u) for t, u in anchor_spans(prepped) if t.strip()]
     return plain, bold, anchors
 

@@ -1230,8 +1230,16 @@ def _advance_to_schedule(page, dlg: str, project_id: str,
         сразу) и считаем успехом появление кнопки отложки, а не сам клик;
       • не дошли – сохраняем разметку окна, чтобы следующая правка была точной.
     """
-    if page.locator(SEL["postponed_open"]).count():
-        return
+    # ВИДИМА, а не просто «есть в DOM». ВК держит кнопку отложки в разметке и
+    # на экране набора (скрытой), и прежняя проверка .count() считала, что мы
+    # уже на экране планирования, «Далее» не жала – а потом _set_schedule
+    # висел, ожидая КЛИКАБЕЛЬНУЮ кнопку, которой на том экране нет (живой
+    # прогон 21.08.2026: Timeout на posting_postponed_button visible).
+    try:
+        if page.locator(SEL["postponed_open"]).first.is_visible():
+            return
+    except Exception:  # noqa: BLE001 – нет кнопки/оторвалась: идём жать «Далее»
+        pass
     candidates = (
         SEL["next"],                                  # точный data-testid – главный
         'button:has-text("Далее")',                   # запас: по подписи, на всю страницу

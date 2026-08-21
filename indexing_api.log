@@ -1,0 +1,135 @@
+2026-06-29 13:04:02,832 - INFO - 📋 Загружено URL из файла: 200
+2026-06-29 13:04:02,832 - INFO - 🚀 Всего URL к обработке: 200
+2026-06-29 13:04:03,696 - INFO - ✅ Аутентификация успешна
+2026-06-29 13:04:03,696 - INFO - 📊 Статус квоты:
+2026-06-29 13:04:03,697 - INFO -    Дневная: 0/200 (осталось: 200)
+2026-06-29 13:04:03,697 - INFO -    Минутная: 0/100 (осталось: 100)
+2026-06-29 13:04:03,697 - INFO -    Всего в сессии: 0
+2026-06-29 13:04:03,697 - WARNING - ⚠️ Квоты хватит только на 100 из 200 URL
+2026-06-29 13:04:06,536 - INFO - 🚀 Начинаем обработку 200 URL с типом 'URL_UPDATED'
+2026-06-29 13:04:06,536 - INFO - 📦 Пакет 1/2 (100 URL)
+2026-06-29 13:04:07,708 - INFO - ✅ Пакет обработан (100 URL)
+2026-06-29 13:04:08,708 - WARNING - ⏳ Минутный лимит. Ожидание 60 сек...
+2026-06-29 13:04:51,692 - INFO - 📋 Загружено URL из файла: 200
+2026-06-29 13:04:51,692 - INFO - 🚀 Всего URL к обработке: 200
+2026-06-29 13:04:51,692 - INFO - 📊 Загружена история квоты: 100/200 URL сегодня
+2026-06-29 13:04:52,460 - INFO - ✅ Аутентификация успешна
+2026-06-29 13:04:52,460 - INFO - 📊 Статус квоты:
+2026-06-29 13:04:52,460 - INFO -    Дневная: 100/200 (осталось: 100)
+2026-06-29 13:04:52,460 - INFO -    Минутная: 0/100 (осталось: 100)
+2026-06-29 13:04:52,460 - INFO -    Всего в сессии: 0
+2026-06-29 13:04:52,460 - WARNING - ⚠️ Квоты хватит только на 100 из 200 URL
+2026-06-29 13:04:59,999 - INFO - 🚀 Начинаем обработку 200 URL с типом 'URL_UPDATED'
+2026-06-29 13:04:59,999 - INFO - 📦 Пакет 1/2 (100 URL)
+2026-06-29 13:05:01,145 - INFO - ✅ Пакет обработан (100 URL)
+2026-06-29 13:05:02,146 - ERROR - ❌ Дневной лимит исчерпан: 200/200 URL
+2026-06-29 13:05:02,146 - INFO - ==================================================
+2026-06-29 13:05:02,146 - INFO - ✅ Успешно: 100
+2026-06-29 13:05:02,146 - INFO - ❌ Ошибок: 100
+2026-06-29 13:05:02,146 - INFO - ==================================================
+2026-06-29 13:05:02,146 - INFO - 📊 Статус квоты:
+2026-06-29 13:05:02,146 - INFO -    Дневная: 200/200 (осталось: 0)
+2026-06-29 13:05:02,146 - INFO -    Минутная: 100/100 (осталось: 0)
+2026-06-29 13:05:02,146 - INFO -    Всего в сессии: 100
+2026-06-29 13:05:02,148 - INFO - 💾 Результаты сохранены в: indexing_results.json
+2026-06-29 13:05:02,148 - INFO - URL с ошибками:
+2026-06-29 13:05:02,148 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metalloprokat-bu/ugolok-bu/: Дневная квота исчерпана
+2026-06-29 13:05:02,148 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metalloprokat-bu/shveller-bu/: Дневная квота исчерпана
+2026-06-29 13:05:02,148 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metalloprokat-bu/shestigrannik-bu/: Дневная квота исчерпана
+2026-06-29 13:05:02,149 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/: Дневная квота исчерпана
+2026-06-29 13:05:02,149 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/gubchatyj-titan/: Дневная квота исчерпана
+2026-06-29 13:05:02,149 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/kremnij/: Дневная квота исчерпана
+2026-06-29 13:05:02,149 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/kremnij/kremnievyj-prutok/: Дневная квота исчерпана
+2026-06-29 13:05:02,149 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/kremnij/kremnij-v-kuskah/: Дневная квота исчерпана
+2026-06-29 13:05:02,149 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/kremnij/kremnij-v-chushkah/: Дневная квота исчерпана
+2026-06-29 13:05:02,149 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/kremnij/poroshok-kremniya/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/kremnij/tehnicheskij-kremnij/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ligatura/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/metall-v-slitkah-i-chushkah/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/metall-v-slitkah-i-chushkah/babbity-v-chushkah/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/metallicheskaya-pudra/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/metallicheskaya-pudra/bronzovaya-pudra/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/metallicheskaya-pudra/mednaya-pudra/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/metallicheskij-poroshok/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/metallicheskij-poroshok/bronzovyj-poroshok/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/metallicheskij-poroshok/vanadievyj-poroshok/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/metallicheskij-poroshok/geleznyj-poroshok/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/metallicheskij-poroshok/poroshok-latuni/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/metallicheskij-tsink/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/nikel-metallicheskij/: Дневная квота исчерпана
+2026-06-29 13:05:02,150 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/nikel-metallicheskij/nikel-granulirovannyj/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/rafinirovannyj-svinets/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/med-fosforistaya/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/silikokaltsij/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferrobor/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferrovanadij/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferrovolfram/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferromarganets/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferromolibden/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferroniobij/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferrosilikobarij/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferrosilikomagnij/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferrosilikomarganets/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferrosilikotitan/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferrosilitsij/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferrotitan/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferrofosfor/: Дневная квота исчерпана
+2026-06-29 13:05:02,151 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferrohrom/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/ferrosplavy/ferrotserij/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/metallurgicheskoe-syre/tsirkonievyj-kontsentrat/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/narugnaya-kanalizatsiya/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/narugnaya-kanalizatsiya/kanalizatsionnyj-lyuk/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/narugnaya-kanalizatsiya/kanalizatsionnyj-lyuk/lyuk-plastikovyj-kanalizatsionnyj/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/narugnaya-kanalizatsiya/kanalizatsionnyj-lyuk/lyuk-polimernyj-kanalizatsionnyj/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/narugnaya-kanalizatsiya/kanalizatsionnyj-lyuk/lyuk-chugunnyj-kanalizatsionnyj/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/narugnaya-kanalizatsiya/pogarnaya-armatura/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/narugnaya-kanalizatsiya/pogarnaya-armatura/golovka-soedinitelnaya-pogarnaya/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/narugnaya-kanalizatsiya/pogarnaya-armatura/pogarnaya-podstavka/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/narugnaya-kanalizatsiya/pogarnaya-armatura/pogarnyj-gidrant/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/balka-nergaveyuschaya-dvutavrovaya/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/lenta-nergaveyuschaya/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/nergaveyuschie-slitki-i-chushki/: Дневная квота исчерпана
+2026-06-29 13:05:02,152 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/polosa-nergaveyuschaya/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/poroshkovaya-nergavejka/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/prutok-nergaveyuschij/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/prutok-nergaveyuschij/kvadrat-nergaveyuschij/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/prutok-nergaveyuschij/krug-nergaveyuschij/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/prutok-nergaveyuschij/shestigrannik-nergaveyuschij/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/ugolok-nergaveyuschij/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/folga-nergaveyuschaya/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/nergaveyuschij-metalloprokat/shveller-nergaveyuschij/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/viniplast/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/viniplast-listovoj/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/getinaks/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/getinaks/getinaks-listovoj/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/getinaks/getinaksovaya-truba/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/kaprolon/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/kaprolon/kaprolon-listovoj/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/kaprolon/kaprolon-stergnevoj/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/list-iz-orgstekla: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/orgsteklo/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/plastikovye-koltsa/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/plastikovye-koltsa/koltso-pvh/: Дневная квота исчерпана
+2026-06-29 13:05:02,153 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/plastikovye-koltsa/koltso-pp-polipropilenovoe/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/plastikovye-koltsa/polietilenovoe-koltso/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/plastikovye-fitingi/plastikovoe-koleno-ugolnik/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/plastikovye-fitingi/plastikovye-zaglushki/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/plastikovye-fitingi/plastikovyj-ventil/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/poliatsetal/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/poliatsetal/poliatsetal-listovoj/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/poliatsetal/poliatsetal-stergen/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/polivinilhlorid-pvh/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/polivinilhlorid-pvh/stergen-pvh/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/polikarbonat/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/polikarbonat/polikarbonat-stergen/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/polimernye-listy/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/polimernye-stergni/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/poliuretan/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/poliuretan/poliuretan-listovoj/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/poliuretan/poliuretan-plastina/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/poliuretan/poliuretan-polosa/: Дневная квота исчерпана
+2026-06-29 13:05:02,154 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/poliuretan/poliuretan-stergen/: Дневная квота исчерпана
+2026-06-29 13:05:02,155 - INFO -   • https://novosibirsk.inmetprom.ru/catalog/polimernye-materialy/poliuretan/poliuretan-tsilindr/: Дневная квота исчерпана

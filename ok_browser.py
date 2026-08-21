@@ -2289,13 +2289,35 @@ _PASTE_TOP_JS = r"""
 """
 
 
-def _has_inline_photo(page, text_sel: str) -> bool:
-    """Есть ли ВСТРОЕННАЯ картинка прямо в поле темы (значит – сверху)."""
+def _has_photo_in_form(page, text_sel: str) -> bool:
+    """
+    Есть ли в форме ПРИКРЕПЛЁННОЕ фото – встроенное или блоком.
+
+    Вставка (paste) у ОК создаёт блок фото с подсказкой «Добавьте подпись к
+    фото» – по ней и узнаём, что фото УЖЕ встало, и второй раз его цеплять НЕ
+    надо (иначе выходило два фото – живой прогон 21.08.2026 20:22). Плюс
+    смотрим на КРУПНУЮ картинку в поле/форме (не аватар-иконку).
+    """
+    # Главный признак — подсказка «Добавьте подпись к фото»: ОК рисует её
+    # ТОЛЬКО у реально загруженного фото, ложной тревоги не даст.
     try:
-        return bool(page.eval_on_selector(
-            text_sel, "el => el && el.querySelector('img') ? 1 : 0"))
+        if page.get_by_text("одпись к фото").count():
+            return True
     except Exception:  # noqa: BLE001
-        return False
+        pass
+    # Запасной — крупная картинка ВНУТРИ поля темы (не по всей форме: там могут
+    # быть посторонние картинки, и по ним мы бы решили, что фото есть, когда его
+    # нет, — и не прикрепили бы вовсе).
+    if text_sel:
+        try:
+            n = page.eval_on_selector_all(
+                f"{text_sel} img",
+                "els => els.filter(e => (e.naturalWidth || e.width || 0) > 120).length")
+            if n:
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+    return False
 
 
 def _paste_image_at_top(page, text_sel: str, image_paths: list[str],
@@ -2336,8 +2358,8 @@ def _pick_photos(page, image_paths: list[str], log: Callable[[str], None],
     """
     if text_sel and _paste_image_at_top(page, text_sel, image_paths, log):
         page.wait_for_timeout(1_200)
-        if _has_inline_photo(page, text_sel):
-            log("  фото встало в начало темы (над текстом)")
+        if _has_photo_in_form(page, text_sel):
+            log("  фото прикреплено вставкой в начало темы — второй раз не цепляю")
             return ""
         log("  поле не приняло вставку – добавляю фото обычным путём")
 

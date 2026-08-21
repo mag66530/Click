@@ -75,14 +75,17 @@ SEL = {
                       '.btn-menu-item:has-text("Schedule")',
                       'text="Schedule Message"',
                       'text="Schedule"'),
-    # Скрепка вложений. В Web A это .AttachMenu--button (подтверждено дампом
-    # окна отправки 21.08.2026) – она открывает меню «Photo or Video».
-    "attach": ('button.AttachMenu--button', '.AttachMenu--button',
+    # Скрепка вложений Web A. Первым — СТАБИЛЬНЫЙ id (#attach-menu-button,
+    # подтверждён дампом 21.08.2026): по нему кнопка берётся всегда, а прежний
+    # отбор по классу иногда не срабатывал и клик уходил на соседнюю кнопку
+    # (прогон 20:22: взял button:has(.icon-attach) — и окно выбора не открылось).
+    "attach": ('#attach-menu-button', 'button#attach-menu-button',
+               'button[aria-label="Add an attachment"]',
+               'button.AttachMenu--button', '.AttachMenu--button',
                '.Composer button[aria-label*="Attach"]',
                'button[aria-label*="Attach"]', 'button[aria-label*="Прикрепить"]',
-               '.Composer .icon-attach', 'button:has(.icon-attach)',
-               'button:has(use[href="#icon-attach"])',
-               '.composer-action-button:has(i)'),
+               'button:has(.icon-attach)',
+               'button:has(use[href="#icon-attach"])'),
     "file_input": 'input[type="file"]',
     # Окно календаря отложки Web A.
     "modal": (".CalendarModal",),
@@ -857,33 +860,57 @@ def _attach_photos(page, image_paths: list[str], project_id: str,
     """
     Прикрепить фото. '' при успехе, иначе причина.
 
-    В Web A самый надёжный путь – отдать файлы скрытому input[type=file],
-    а не гонять меню «Фото или видео»: меню у сборок разное, а скрытый input
-    один. После выбора Телеграм открывает окно предпросмотра с полем подписи
-    и своей кнопкой отправки – её и будем искать дальше.
+    Порядок (Web A, telegram-tt):
+      1. открываем меню вложений СТАБИЛЬНОЙ скрепкой (#attach-menu-button);
+      2. отдаём файл скрытому input[type=file] НАПРЯМУЮ – это детерминировано
+         и не зависит от системного окна выбора файла. В Web A инпуты живут в
+         DOM, только когда меню открыто, поэтому сначала меню, потом input
+         (прежний запас искал input при закрытом меню и не находил – прогон
+         21.08.2026 20:22, «Не нашли, куда отдать файлы»);
+      3. запас – клик «Photo or Video» с перехватом окна выбора файла (так
+         бралось на прогоне 19:11).
+    После выбора Телеграм открывает окно предпросмотра с полем подписи и своей
+    кнопкой отправки – её ищем дальше.
     """
-    try:
-        with page.expect_file_chooser(timeout=6_000) as picked:
-            hit = _click_first(page, SEL["attach"], timeout=5_000)
-            if not hit:
-                raise RuntimeError("нет скрепки")
-            log(f"  нажал скрепку вложений ({hit})")
-            # Часть сборок сразу открывает выбор файла, часть – меню с пунктом.
-            _click_first(page, ('text="Photo or Video"', 'text="Фото или видео"',
-                                'text="Фото или Видео"'), timeout=2_500)
-        picked.value.set_files(image_paths)
-        log("  файлы отданы через окно выбора файла")
-    except Exception as e:  # noqa: BLE001 – пробуем скрытое поле напрямую
-        log(f"  окно выбора файла не сработало ({e}) – пробую скрытое поле input")
-        inp = page.locator(SEL["file_input"])
+    # 1. Открыть меню вложений.
+    hit = _click_first(page, SEL["attach"], timeout=6_000)
+    if not hit:
+        _save_diag(project_id, page, "no-attach-button", log)
+        return "Не нашли скрепку вложений в Телеграме"
+    log(f"  нажал скрепку вложений ({hit})")
+    page.wait_for_timeout(900)   # дать меню «Photo or Video / File» раскрыться
+
+    # 2. Отдать файл скрытому input напрямую (сначала тому, что принимает фото).
+    for isel in ('input[type="file"][accept*="image"]',
+                 'input[type="file"][accept*="video"]',
+                 'input[type="file"]'):
+        inp = page.locator(isel)
         if not inp.count():
-            _save_diag(project_id, page, "no-file-input", log)
-            return "Не нашли, куда отдать файлы фото в Телеграме"
+            continue
         try:
             inp.first.set_input_files(image_paths)
-            log("  файлы отданы через скрытое поле input")
-        except Exception as e2:  # noqa: BLE001
-            return f"Файл фото не принялся: {e2}"
+            log(f"  файлы отданы напрямую в input вложений ({isel})")
+            page.wait_for_timeout(2_000)
+            log("  жду окно предпросмотра/подписи Телеграма")
+            _log_screen(page, log, "после вложения фото")
+            return ""
+        except Exception as e:  # noqa: BLE001 – пойдём через окно выбора
+            log(f"  input не принял ({str(e).splitlines()[0][:70]}) – пробую окно выбора")
+            break
+
+    # 3. Запас: клик «Photo or Video» и перехват системного окна выбора файла.
+    try:
+        with page.expect_file_chooser(timeout=6_000) as picked:
+            if not _click_first(page, ('text="Photo or Video"', 'text="Фото или видео"',
+                                       'text="Фото или Видео"', 'text="Photo"'),
+                                timeout=4_000):
+                raise RuntimeError("пункт «Photo or Video» не нашёлся")
+        picked.value.set_files(image_paths)
+        log("  файлы отданы через окно выбора файла")
+    except Exception as e:  # noqa: BLE001
+        log(f"  окно выбора файла не сработало ({str(e).splitlines()[0][:70]})")
+        _save_diag(project_id, page, "no-file-input", log)
+        return "Не нашли, куда отдать файлы фото в Телеграме"
     page.wait_for_timeout(2_000)
     log("  жду окно предпросмотра/подписи Телеграма")
     _log_screen(page, log, "после вложения фото")
@@ -1211,27 +1238,33 @@ def _dismiss_login_banner(page, log: Callable[[str], None]) -> None:
     Подтверждаем «YES, IT'S ME» — вход действительно наш, — баннер исчезает,
     страница успокаивается. ЖМЁМ ТОЛЬКО «YES»/«Это я»: «NO/Это не я» — никогда.
     """
-    # Сначала убеждаемся, что баннер ЕСТЬ (чтобы не нажать случайное «YES»
-    # где-то ещё): ищем его опознавательный текст.
+    # Баннер всплывает НЕ мгновенно, а через пару секунд после загрузки — с
+    # одной проверки его легко проглядеть (прогон 20:22: баннер на экране был,
+    # а проверка сразу после открытия канала его ещё не видела). Поэтому
+    # заглядываем несколько раз. Сначала убеждаемся, что баннер ЕСТЬ (чтобы не
+    # нажать случайное «YES» где-то ещё): ищем его опознавательный текст.
     marks = ("got access to your messages", "new login to your account",
              "доступ к вашим сообщени", "новый вход")
-    try:
-        body = (page.inner_text("body", timeout=1_500) or "").lower()
-    except Exception:  # noqa: BLE001
-        return
-    if not any(m in body for m in marks):
-        return
-    for sel in ('button:has-text("YES")', 'button:has-text("Это я")',
-                'button:has-text("Да, это я")', 'button:has-text("ЭТО Я")'):
+    for _ in range(3):
         try:
-            b = page.locator(sel).first
-            if b.count() and b.is_visible():
-                b.click(timeout=2_000)
-                page.wait_for_timeout(600)
-                log("  убрал баннер «новый вход» (это наш вход) — страница успокоилась")
-                return
+            body = (page.inner_text("body", timeout=1_500) or "").lower()
         except Exception:  # noqa: BLE001
+            return
+        if not any(m in body for m in marks):
+            page.wait_for_timeout(1_000)
             continue
+        for sel in ('button:has-text("YES")', 'button:has-text("Это я")',
+                    'button:has-text("Да, это я")', 'button:has-text("ЭТО Я")'):
+            try:
+                b = page.locator(sel).first
+                if b.count() and b.is_visible():
+                    b.click(timeout=2_000)
+                    page.wait_for_timeout(600)
+                    log("  убрал баннер «новый вход» (это наш вход) — страница успокоилась")
+                    return
+            except Exception:  # noqa: BLE001
+                continue
+        return
 
 
 # Счётчик подписи Телеграма. Когда подпись длиннее лимита (1024 у обычного

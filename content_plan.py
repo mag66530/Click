@@ -167,8 +167,25 @@ def when_iso(d: date, hhmm: str) -> str:
 
 # ─── Картинки ───────────────────────────────────────────────────────
 def _split_images(cell: str) -> list[str]:
-    """Одна или несколько ссылок на фото из ячейки (разделители: перенос, пробел, запятая, ;)."""
-    parts = re.split(r"[\s,;]+", (cell or "").strip())
+    """
+    Ссылки на фото из ячейки (разделители: перенос, пробел, запятая, ;).
+
+    Заказчица держит в ячейке ДВА варианта, помеченные словами: «ЛОГО: <url>»
+    и «БЕЗ ЛОГО: <url>» (картинка с логотипом на ней или без). Постим ВСЕГДА
+    вариант С логотипом: если в ячейке есть пометка «ЛОГО», берём адреса из
+    строк с ней и выкидываем строки «БЕЗ ЛОГО». Нет пометок – как раньше: все
+    ссылки подряд. Слово «ЛОГО» ищем по-русски, поэтому latin «logo» в самом
+    адресе (имя файла) отбор не путает.
+    """
+    text = (cell or "").strip()
+    if not text:
+        return []
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if any(re.search(r"лого", ln, re.I) for ln in lines):
+        lines = [ln for ln in lines
+                 if re.search(r"лого", ln, re.I)
+                 and not re.search(r"без\s*лого", ln, re.I)]
+    parts = re.split(r"[\s,;]+", "\n".join(lines))
     return [p for p in parts if p.startswith("http")]
 
 

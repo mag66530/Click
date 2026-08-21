@@ -276,7 +276,11 @@ _KEPT = ("countries", "countriesGis", "email", "kpSheetUrl", "kpSheetTitle",
         # система временная, а наружу уезжали только города. Заказчица
         # вбивала два десятка ссылок заново.
         "vkGroupUrl", "okGroupUrl", "tgChannelClient", "tgChannelStaff",
-        "maxWebUrl", "maxChatId", "zenUrl", "zenStudioUrl", "planSheetUrl")
+        "maxWebUrl", "maxChatId", "zenUrl", "zenStudioUrl", "planSheetUrl",
+        # Пауза по сети: какие площадки СЕЙЧАС не формировать. Держим списком,
+        # а не стиранием канала: пустой канал заготовка бренда возвращает назад
+        # (см. _fill_social), и «стёр – вернулось» выглядело поломкой.
+        "crosspostSkip")
 
 
 def _fill_social(project_id: str, sub: dict) -> dict:
@@ -4157,6 +4161,31 @@ def _crosspost_channels_block(project_id: str, config: dict) -> None:
         if any(vals[k].strip() != (config.get(k) or "") for k in vals):
             config.update({k: v.strip() for k, v in vals.items()})
             save_config(project_id)
+
+        # Пауза по сети. «Пока не выкладывать ТГ клиентов» человек делал
+        # стиранием канала – а заготовка бренда (SOCIAL в projects_data)
+        # возвращала его на место при следующем открытии, и это выглядело
+        # поломкой («стёр – после обновления снова появился»). Поэтому канал не
+        # трогаем, а помечаем сеть «не формировать»: снятая галочка живёт в
+        # конфиге (crosspostSkip) и держится после перезапуска.
+        skip = set(config.get("crosspostSkip") or [])
+        st.caption("Пауза по сети: снимите галочку — эта сеть сейчас не "
+                   "формируется, а канал остаётся на месте.")
+        new_skip = set(skip)
+        for (net, label), col in zip(
+                (("tg-client", "ТГ клиенты"), ("tg-staff", "ТГ сотрудники")),
+                st.columns(2)):
+            on = col.checkbox(f"Формировать «{label}»", value=(net not in skip),
+                              key=f"cp-on-{net}-{project_id}")
+            if on:
+                new_skip.discard(net)
+            else:
+                new_skip.add(net)
+        if new_skip != skip:
+            config["crosspostSkip"] = sorted(new_skip)
+            save_config(project_id)
+            st.rerun()
+
         _tg_session_hint(project_id, config)
 
 
@@ -4258,8 +4287,12 @@ def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
     # Телеграм – теперь тоже родной отложкой через веб. Сессия одна на аккаунт
     # (тот же файл сессий, что ВК/ОК/МАКС), а каналов два – клиенты и сотрудники.
     tg_ready = tg_browser.has_saved_session(project_id)
+    # Пауза по сети: сеть на паузе входы не теряет (готовность честная), но в
+    # работу СЕЙЧАС не идёт – её постов к формированию нет. Так «не выкладывать
+    # пока ТГ клиентов» держится после обновления, а канал остаётся на месте.
+    skip = set(config.get("crosspostSkip") or [])
     tg_nets = {net: chat for net, chat in channels.items()
-               if net in ("tg-client", "tg-staff") and chat}
+               if net in ("tg-client", "tg-staff") and chat and net not in skip}
     msg_by_net = ({net: crosspost_form.pending_for(upcoming, state, net)
                    for net in tg_nets} if tg_ready else {})
     return {
@@ -4269,10 +4302,10 @@ def _crosspost_form_todo(project_id: str, config: dict, upcoming: list[dict],
         "max_ready": max_ready,
         "zen_ready": zen_ready,
         "tg_ready": tg_ready,
-        "vk": crosspost_form.pending_for(upcoming, state, "vk") if vk_ready else [],
-        "ok": crosspost_form.pending_for(upcoming, state, "ok") if ok_ready else [],
-        "max": crosspost_form.pending_for(upcoming, state, "max") if max_ready else [],
-        "zen": crosspost_form.pending_for(upcoming, state, "zen") if zen_ready else [],
+        "vk": crosspost_form.pending_for(upcoming, state, "vk") if (vk_ready and "vk" not in skip) else [],
+        "ok": crosspost_form.pending_for(upcoming, state, "ok") if (ok_ready and "ok" not in skip) else [],
+        "max": crosspost_form.pending_for(upcoming, state, "max") if (max_ready and "max" not in skip) else [],
+        "zen": crosspost_form.pending_for(upcoming, state, "zen") if (zen_ready and "zen" not in skip) else [],
         # Плоским списком – для счётчика «ТГ: 6» (пост×канал), по сетям –
         # чтобы у выбора постов было видно, в какой канал поедет этот пост.
         "msg_by_net": msg_by_net,
@@ -4471,6 +4504,19 @@ def _crosspost_form_block(project_id: str, config: dict, upcoming: list[dict],
         ("МАКС", "max", bool(max_todo)), ("Дзен", "zen", bool(zen_todo)),
         ("ТГ", "tg", bool(msg_todo))) if has]
     nets_on: set[str] = {fam for _, fam in net_avail}
+
+    # Показать окно браузера во время формирования. Галочка та же (HEADED_KEY),
+    # что у публикации и у проверки отложки: включил здесь – увидишь, как Click
+    # ставит отложки. В облаке экрана нет, поэтому только на своём компьютере.
+    if can_show_browser():
+        st.checkbox("👁 Показывать окно браузера — видно каждый шаг формирования",
+                    value=bool(st.session_state.get(HEADED_KEY)),
+                    key=f"cp-show-browser-{project_id}",
+                    on_change=lambda: st.session_state.__setitem__(
+                        HEADED_KEY,
+                        bool(st.session_state.get(f"cp-show-browser-{project_id}"))),
+                    help="Только на своём компьютере: в облаке экрана нет, "
+                         "показывать окно негде.")
 
     # Выбирать не из чего (один несформированный пост) – кнопка одна и во всю
     # ширину: галочка перед единственной кнопкой была бы лишним щелчком.
@@ -4930,7 +4976,7 @@ def _day_logs(project_id: str) -> None:
 # Третье число – сколько блоков в разделе; оно же счётчик у пункта меню.
 _SETTINGS_GROUPS = [
     ("📤 Публикация", "Вход в Яндекс.Бизнес – им Click публикует посты.", 2),
-    ("🗓 Кросспостинг", "Соцсети для кросспостинга: ВК, ОК, МАКС и общий файл сессий.", 4),
+    ("🗓 Кросспостинг", "Соцсети для кросспостинга: ВК, ОК, МАКС, Телеграм и общий файл сессий.", 5),
     ("🔄 Актуализация и города", "Откуда берутся города для прогонов и актуализации.", 1),
     ("🔎 Сверка · отзывы", "Вход в 2ГИС и промпт ответов на отзывы.", 2),
     ("🔌 Ключи и данные", "Ключи к веб-сервисам: Gemini, Google, GitHub.", 1),
@@ -4991,7 +5037,10 @@ def tab_settings(project_id: str, config: dict) -> None:
             if _panel("max", "🔒", "МАКС", вход(статус["max"]),
                       s(статус["max"]), attention=not статус["max"]):
                 _max_login_block(project_id, config)
-            if _panel("sessions", "🔑", "Файл сессий: ВК, ОК и МАКС",
+            if _panel("tg", "🔒", "Телеграм", вход(статус["tg"]),
+                      s(статус["tg"]), attention=not статус["tg"]):
+                _tg_settings_block(project_id, config)
+            if _panel("sessions", "🔑", "Файл сессий: ВК, ОК, МАКС и ТГ",
                       "Резервный вход, если форма не проходит", СЕРВ, attention=False):
                 _both_sessions_block(project_id)
 
@@ -5034,6 +5083,7 @@ def _settings_statuses(project_id: str, config: dict) -> dict:
     """Готовность каждой площадки – одним словарём: и для ленты, и для карточек."""
     import max_browser
     import ok_browser
+    import tg_browser
     import vk_social
 
     def ready(fn) -> bool:
@@ -5048,6 +5098,7 @@ def _settings_statuses(project_id: str, config: dict) -> dict:
         "vk": ready(lambda: vk_social.has_saved_session(project_id)),
         "ok": ready(lambda: ok_browser.has_saved_session(project_id)),
         "max": ready(lambda: max_browser.has_saved_session(project_id)),
+        "tg": ready(lambda: tg_browser.has_saved_session(project_id)),
         "keys": ready(llm.is_configured),
         "email": bool((config.get("email") or "").strip()),
     }
@@ -5087,7 +5138,8 @@ def _settings_status_ribbon(статус: dict) -> None:
     """Лента статуса сверху: что уже настроено, а что просит внимания."""
     проверки = [
         ("Яндекс", статус["yandex"]), ("2ГИС", статус["gis"]), ("ВК", статус["vk"]),
-        ("ОК", статус["ok"]), ("МАКС", статус["max"]), ("Ключи", статус["keys"]),
+        ("ОК", статус["ok"]), ("МАКС", статус["max"]), ("ТГ", статус["tg"]),
+        ("Ключи", статус["keys"]),
     ]
     пилюли = "".join(
         f'<span class="pill pill-{"ok" if готово else "warn"}">'
@@ -5583,6 +5635,46 @@ def _max_login_block(project_id: str, config: dict) -> None:
                    "автоматический браузер – он не показывает ему проверку «вы не "
                    "робот». Запустите VHOD-VK-OK-MAX-TG.py на своём компьютере и "
                    "загрузите файл сессий в блоке выше.")
+
+
+def _tg_settings_block(project_id: str, config: dict) -> None:
+    """
+    Телеграм в кросспостинге. Отдельной кнопки входа у ТГ нет: аккаунт пускает
+    по QR из мастера VHOD-VK-OK-MAX-TG.py и живёт в общем «Файле сессий» ниже,
+    как ВК/ОК/МАКС. Здесь – готовность, прокси (если ТГ заблокирован) и куда
+    заданы каналы. Раньше нового интерфейса настроек Телеграма не было вовсе –
+    он остался в старой версии и при слиянии не попал в новые разделы.
+    """
+    import tg_browser
+
+    if tg_browser.has_saved_session(project_id):
+        st.caption("✅ Вход в Телеграм есть – отложку можно ставить. Проверить "
+                   "механику одним постом: вкладка «Кросспостинг» → «🧪 Проверка "
+                   "отложки».")
+    else:
+        st.caption("⏸ Входа в Телеграм нет. Соберите общий файл сессий "
+                   "(VHOD-VK-OK-MAX-TG.py на своём компьютере, шаг 4 – Телеграм по "
+                   "QR) и загрузите его в блоке «Файл сессий» ниже. Один "
+                   "аккаунт-админ – на все сети.")
+
+    # Прокси. Постинг ТГ по прокси-с-паролем идёт через Firefox (Chromium его
+    # не тянет), поэтому если прокси задан – напоминаем поставить Firefox.
+    prox = ""
+    try:
+        import secrets_local
+        prox = (secrets_local.get("tg_proxy") or tg_browser.shared_proxy_raw() or "").strip()
+    except Exception:  # noqa: BLE001
+        prox = ""
+    if prox:
+        st.caption(f"Прокси задан ({T.esc(prox.split('@')[-1][:40])}). Постинг ТГ "
+                   "идёт через Firefox – поставьте его один раз: "
+                   "`python -m playwright install firefox`.")
+    else:
+        st.caption("Если Телеграм заблокирован у провайдера (сайт не открывается) – "
+                   "задайте прокси в разделе «🔌 Ключи и данные» → «Телеграм: прокси».")
+
+    st.caption("Каналы бренда (клиенты / сотрудники) и пауза по ветке – во вкладке "
+               "«Кросспостинг» → «💬 Каналы Телеграма и МАКС».")
 
 
 def _both_sessions_block(project_id: str) -> None:

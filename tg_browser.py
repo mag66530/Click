@@ -328,6 +328,19 @@ def _dump(project_id: str, page, name: str, log: Callable[[str], None]):
     return blob
 
 
+def _step_shot(project_id: str, page, name: str) -> None:
+    """
+    Снимок шага на УСПЕШНОМ пути – чтобы в диагностике был виден весь путь
+    целиком, а не только кадр падения. Тихий и безопасный: любую ошибку
+    глушим, прогон не трогаем (снимок – не повод ронять отложку).
+    """
+    try:
+        blob = page.screenshot(type="png", full_page=False)
+        (_diag_dir(project_id) / f"tg-{name}.png").write_bytes(blob)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _log_screen(page, log: Callable[[str], None], where: str) -> None:
     """
     Подробно: где сейчас браузер и что на экране. Это главный ориентир «на
@@ -1333,6 +1346,7 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                 return {"ok": False,
                         "shot": _dump(project_id, page, "no-channel", log),
                         "error": _why_no_composer(page)}
+            _step_shot(project_id, page, "step1-kanal")
 
             log(f"── ШАГ 2/6: ввожу текст ({len(text)} знаков) ──")
             why = _fill_post_text(page, text_sel, text, log)
@@ -1340,6 +1354,7 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                 return {"ok": False,
                         "shot": _dump(project_id, page, "bad-text", log),
                         "error": why}
+            _step_shot(project_id, page, "step2-tekst")
             page.wait_for_timeout(800)
             # Карточка сайта по ссылке из текста – убираем крестиком, как руками.
             _drop_link_card_tg(page, log)
@@ -1354,6 +1369,7 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                 page.wait_for_timeout(1_500)   # дать окну «Send Photo» устояться
             else:
                 log("── ШАГ 3/6: фото нет, пропускаю ──")
+            _step_shot(project_id, page, "step3-foto")
 
             # Подпись длиннее лимита Телеграма? Тогда отложка может «принять» окно,
             # а сообщение не создать. Пишем это в лог явно (счётчик «-40» на экране
@@ -1378,6 +1394,7 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "shot": _dump(project_id, page, "no-modal", log),
                         "error": "Окно отложки Телеграма не открылось"}
             log("  окно отложки (.CalendarModal) открылось")
+            _step_shot(project_id, page, "step4-menu-otlozhki")
 
             log(f"── ШАГ 5/6: выбираю дату и время {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург) ──")
             picked, why = _pick_day(page, when, log)
@@ -1405,6 +1422,7 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "error": (f"Телеграм понял время иначе: на кнопке «{cap}», "
                                   f"а нужно {when.strftime('%d.%m %H:%M')}. "
                                   "Ничего не отправили")}
+            _step_shot(project_id, page, "step5-data-vremya")
 
             log("── ШАГ 6/6: подтверждаю отложку ──")
             if not _click_confirm(page, cap):
@@ -1427,6 +1445,7 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
             log("  держу паузу, чтобы было видно экран…")
             page.wait_for_timeout(3_500)          # человек смотрит на результат
             yb._save_storage_state(context, session_path(project_id))
+            _step_shot(project_id, page, "step6-itog")
 
             if err:
                 _dump(project_id, page, "schedule-error", log)

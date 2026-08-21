@@ -2511,6 +2511,70 @@ def test_form_log_is_fresh() -> None:
     check("в заголовке лога видно его время", 'f" – {when}"' in head)
 
 
+def test_diag_bundle() -> None:
+    """
+    Кнопка «собрать всю диагностику» пакует лог+скриншоты+разметку в один zip.
+
+    Проверяем офлайн: во временную папку кладём лог и «скриншот», подменяем
+    корень данных — и убеждаемся, что build() собрал архив с ОПИСАНИЕ.txt и
+    всеми файлами внутри, а имя — с проектом и временем.
+    """
+    print("\nДиагностика: сборка в один архив")
+    import io
+    import zipfile
+    from datetime import datetime, timezone
+    from pathlib import Path
+    import tempfile
+
+    import diag_bundle
+    import paths as _paths
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        orig = _paths.data_root
+        _paths.data_root = lambda: root  # type: ignore[assignment]
+        try:
+            d = root / "SMU" / "crosspost"
+            d.mkdir(parents=True)
+            (d / "form-last.log").write_text(
+                "Формирование 20.08.2026 11:00\n[11:00] ШАГ 1/6: открываю канал\n"
+                "  правый клик по отправке @(797,656)\n  разметка: наложено 7/7\n",
+                encoding="utf-8")
+            (d / "tg-step1-kanal.png").write_bytes(b"\x89PNG\r\n\x1a\nfake")
+            (d / "tg-no-scheduled.html").write_text("<div>разметка</div>", encoding="utf-8")
+
+            check("диагностика найдена", diag_bundle.has_diagnostics("SMU"))
+            now = datetime(2026, 8, 20, 6, 0, tzinfo=timezone.utc)   # 11:00 Екб
+            name, data = diag_bundle.build("SMU", now=now)
+            check("имя архива с проектом и датой",
+                  name.startswith("diagnostika-SMU-") and name.endswith(".zip"), name)
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                names = z.namelist()
+                check("внутри есть ОПИСАНИЕ.txt", "ОПИСАНИЕ.txt" in names, str(names))
+                check("внутри лог", "form-last.log" in names, str(names))
+                check("внутри скриншот шага", "tg-step1-kanal.png" in names, str(names))
+                check("внутри разметка страницы", "tg-no-scheduled.html" in names, str(names))
+                manifest = z.read("ОПИСАНИЕ.txt").decode("utf-8")
+                check("в описании — сборка", "Сборка:" in manifest)
+                check("в описании — хвост лога с координатами", "@(797,656)" in manifest)
+            # Пустой проект — не падаем, но и собирать нечего.
+            check("нет диагностики — нечего собирать",
+                  not diag_bundle.has_diagnostics("IMP"))
+        finally:
+            _paths.data_root = orig  # type: ignore[assignment]
+
+    import inspect
+    import tg_browser
+    src = inspect.getsource(tg_browser.schedule_postponed_post)
+    for step in ("step1-kanal", "step2-tekst", "step3-foto",
+                 "step4-menu-otlozhki", "step5-data-vremya", "step6-itog"):
+        check(f"скриншот шага {step} снимается", f'"{step}"' in src)
+    import streamlit_app as app
+    ui = inspect.getsource(app._crosspost_diag_bundle_block)  # noqa: SLF001
+    check("кнопка собирает по нажатию, а не на каждой перерисовке",
+          "if st.button(" in ui and "diag_bundle.build" in ui)
+
+
 def test_forget_target() -> None:
     """
     Сброс одной площадки: ошибка убирается, соседние отложки не трогаются.
@@ -3052,6 +3116,7 @@ def main() -> int:
     test_mouse_selection_wiring()
     test_ok_bold_and_probe()
     test_forget_target()
+    test_diag_bundle()
     test_build_bumped()
     test_max_text_entry()
     test_max_text_on_real_field()

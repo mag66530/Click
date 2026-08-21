@@ -3907,6 +3907,40 @@ def _crosspost_form_last_log(project_id: str) -> None:
                            key=f"cp-form-log-dl-{project_id}")
 
 
+def _crosspost_diag_bundle_block(project_id: str) -> None:
+    """
+    Одна кнопка «собрать всю диагностику» → один .zip.
+
+    Внутри: пошаговый лог, скриншоты каждого шага, разметка страниц и
+    описание окружения. Заказчице больше не нужно искать файлы по папкам и
+    слать их по одному — жмёт, скачивает, присылает, и по одному файлу видно
+    всё: и что было на экране, и что «под капотом». Собираем ТОЛЬКО по нажатию
+    (а не на каждой перерисовке) — чтение и упаковка файлов не должны тормозить
+    страницу; готовый архив держим в session_state до следующей сборки.
+    """
+    import diag_bundle
+    if not diag_bundle.has_diagnostics(project_id):
+        return
+    key = f"cp-diagzip-{project_id}"
+    with st.expander("🧷 Собрать всю диагностику в один файл", expanded=False):
+        st.caption("Пошаговый лог + скриншоты каждого шага + разметка страниц + "
+                   "окружение — одним архивом. Пришлите его — по нему правка "
+                   "делается с первого раза, без пересылки скринов по одному.")
+        if st.button("📦 Собрать диагностику", key=f"cp-diagzip-btn-{project_id}"):
+            try:
+                st.session_state[key] = diag_bundle.build(project_id)
+            except Exception as e:  # noqa: BLE001 – сбор не должен ронять раздел
+                st.session_state.pop(key, None)
+                st.error(f"Не удалось собрать диагностику: {e}")
+        packed = st.session_state.get(key)
+        if packed:
+            name, data = packed
+            st.download_button(
+                f"⬇ Скачать {name} ({len(data) / 1024:.0f} КБ)",
+                data=data, file_name=name, mime="application/zip",
+                key=f"cp-diagzip-dl-{project_id}")
+
+
 def _crosspost_diag_block(project_id: str) -> None:
     """
     Разметка площадки для разбора – кнопкой, а не поиском по папкам.
@@ -3964,6 +3998,7 @@ def _crosspost_tools(project_id: str, config: dict, posts: list[dict],
     with t3:
         _crosspost_report_block(project_id, posts, state)
         _crosspost_form_last_log(project_id)
+        _crosspost_diag_bundle_block(project_id)
         _crosspost_diag_block(project_id)
         _crosspost_scheduler_journal()
         # Прошлые посты – архив, а не рабочий список. Блок живёт ЗДЕСЬ, где

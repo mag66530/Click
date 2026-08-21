@@ -275,7 +275,7 @@
       "value": "1",
       "domain": ".yandex.com",
       "path": "/",
-      "expires": 1818830866,
+      "expires": 1818830917,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -591,21 +591,11 @@
       "sameSite": "None"
     },
     {
-      "name": "cycada",
-      "value": "KfRRP13R6x0chVVQCHRhvCfA5hjy39BWIgnQZ/gtJxs=",
-      "domain": ".yandex.ru",
-      "path": "/",
-      "expires": 1788504464.413,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
       "name": "receive-cookie-deprecation",
       "value": "1",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1818830865,
+      "expires": 1818830916,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
@@ -615,7 +605,7 @@
       "value": "0",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1818830867,
+      "expires": 1818830918,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -625,7 +615,17 @@
       "value": "b",
       "domain": ".yandex.ru",
       "path": "/",
-      "expires": 1787296667,
+      "expires": 1787296718,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "cycada",
+      "value": "USxbFhXoBr06ukHHaFwT6yfA5hjy39BWIgnQZ/gtJxs=",
+      "domain": ".yandex.ru",
+      "path": "/",
+      "expires": 1788504529.025,
       "httpOnly": false,
       "secure": true,
       "sameSite": "None"
@@ -649,7 +649,7 @@
         },
         {
           "name": "_ym85710618:0_reqNum",
-          "value": "251"
+          "value": "253"
         },
         {
           "name": "_ym_wv2rf:85710618:0",
@@ -669,11 +669,11 @@
         },
         {
           "name": "_ym46231566:0_reqNum",
-          "value": "439"
+          "value": "442"
         },
         {
           "name": "_ym39321485:0_reqNum",
-          "value": "1906"
+          "value": "1919"
         },
         {
           "name": "_ym10630330_lsid",
@@ -757,7 +757,7 @@
         },
         {
           "name": "_ym56213845:0_reqNum",
-          "value": "1751"
+          "value": "1763"
         },
         {
           "name": "maps_fonts_by_family",
@@ -822,15 +822,15 @@
           "value": "{\"1000337266\":1785825834553}"
         },
         {
-          "name": "_ym_uid",
-          "value": "\"1785825760466448648\""
-        },
-        {
           "name": "_ym3_lsid",
           "value": "46888617236"
         },
         {
           "name": "_ym_retryReqs",
+          "value": "{}"
+        },
+        {
+          "name": "_ym_synced",
           "value": "{}"
         },
         {
@@ -842,12 +842,12 @@
           "value": "{\"time\":1785825759927,\"params\":{\"sbp\":{\"a\":\"m1Y981VAmCENx+jHYr1blKdAkZ8T4U8lYJOoNE1jJTenAsHvcqJdZK5zIJrUGi/5\",\"b\":\"+dAsPCBj3jD4/4ckXAYrK3GuLvC44ZCanwHPLoYqvyFX+9GfRDkw0itI+dX8ZW8P\"},\"eu\":0,\"region\":\"RU\",\"hittoken\":\"1785825760_d97078c2bfe189f203f8faffb7db370acb803ca17945323ad5a60646bff3c8fb\",\"wstoken\":\"11107.gAnkRm8q5pJqTs0f2APE6hTurf7gNr8rt94UpJyLTmtJTE_HPsRysZ2GPt_z5LyZeLejy6VMgEv-fcGxyFp-OYqKUpBn-krLSnwm2A5HBJQ,.XCZqE9ZLr_dOQ22Ta-84NT1qDdw,\",\"ev\":{\"pvt\":1785825760},\"hidv2\":\"4445584901767692390\",\"ymclid\":\"4445584901767692390\"}}"
         },
         {
-          "name": "_ym_synced",
-          "value": "{}"
-        },
-        {
           "name": "_ym784657_lastHit",
           "value": "1785825774837"
+        },
+        {
+          "name": "_ym_uid",
+          "value": "\"1785825760466448648\""
         }
       ]
     }

@@ -1005,14 +1005,39 @@ def _type_picker_value(page, picker, value: int) -> None:
     page.wait_for_timeout(300)
 
 
-def _set_schedule(page, when: datetime, log: Callable[[str], None]) -> None:
+def _set_schedule(page, when: datetime, log: Callable[[str], None],
+                  project_id: str = "") -> None:
     """
     Открыть «Запланировать» и выставить дату и время в календаре ВК.
     После КАЖДОГО шага сверяем видимое значение: React мог не принять ввод,
     и тогда честная ошибка сейчас лучше «успешной» неактивной кнопки потом.
     """
-    page.wait_for_selector(SEL["postponed_open"], timeout=10_000)
-    page.click(SEL["postponed_open"])
+    # Кнопка «Запланировать». Держимся за data-testid, но у ВК он менялся, а на
+    # новом экране «Настройки» кнопка подписана словом – поэтому запас по тексту.
+    # Не нашли ни так, ни так – сохраняем разметку окна для точной доводки.
+    opened = False
+    try:
+        page.wait_for_selector(SEL["postponed_open"], state="visible", timeout=8_000)
+        page.click(SEL["postponed_open"])
+        opened = True
+    except Exception:  # noqa: BLE001 – по data-testid не вышло, пробуем по подписи
+        for sel in ('button:has-text("Запланировать")',
+                    '[role="button"]:has-text("Запланировать")'):
+            loc = page.locator(sel).first
+            try:
+                if loc.count() and loc.is_visible():
+                    loc.click(timeout=5_000)
+                    opened = True
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+    if not opened:
+        if project_id:
+            _save_dialog_html(page, SEL["dialog"], project_id, "vk-dialog.html")
+        raise RuntimeError(
+            "ВК: не нашли кнопку «Запланировать» на экране планирования. "
+            "Разметку окна сохранил (vk-dialog.html) – скачайте её в «Отчётах и "
+            "журналах» → «Разметка площадки для разбора» и пришлите.")
     page.wait_for_selector(SEL["calendar"], timeout=10_000)
     page.wait_for_timeout(400)
 
@@ -1364,21 +1389,32 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
             # ТОЛЬКО внутри формы поста: иначе крестик ищется по всей странице
             # и попадает в ссылку на сайт из боковой колонки сообщества – а клик
             # по ней закрывает форму (живой прогон 18.08.2026).
-            yb.drop_link_card(page, yb.text_domains(text), log, scope=dlg,
-                              diag_dir=paths.data_root() / project_id / "crosspost")
+            diag = paths.data_root() / project_id / "crosspost"
+            closed = yb.drop_link_card(page, yb.text_domains(text), log, scope=dlg,
+                                       diag_dir=diag)
 
             # «Далее» – к экрану, где живёт «Запланировать». Устойчиво: если
             # шаг уже пройден или ВК его убрал – идём дальше без ошибки.
             _advance_to_schedule(page, dlg, project_id, log)
             page.wait_for_timeout(1000)
 
-            # Последний заход на карточку сайта: ВК подтягивает её с задержкой
-            # и мог успеть, пока Click жал «Далее».
-            yb.drop_link_card(page, yb.text_domains(text), log, tries=1, scope=dlg,
-                              diag_dir=paths.data_root() / project_id / "crosspost")
+            # Второй заход на карточку – ТОЛЬКО если первый её НЕ убрал и экран
+            # планирования ещё не готов. На новом экране ВК («Настройки» с
+            # «Запланировать») карточки уже нет, а слепой поиск крестика по
+            # диалогу цеплял пункт «Кнопка действия» и уводил со страницы –
+            # «Запланировать» потом не находилась (живой прогон 21.08.2026:
+            # Timeout на posting_postponed_button visible). Раз карточку уже
+            # сняли или планирование готово – не трогаем экран.
+            try:
+                sched_ready = page.locator(SEL["postponed_open"]).first.is_visible()
+            except Exception:  # noqa: BLE001
+                sched_ready = False
+            if closed != "closed" and not sched_ready:
+                yb.drop_link_card(page, yb.text_domains(text), log, tries=1, scope=dlg,
+                                  diag_dir=diag)
 
             log(f"Ставлю таймер на {when.strftime('%d.%m.%Y %H:%M')} (Екатеринбург)")
-            _set_schedule(page, when, log)
+            _set_schedule(page, when, log, project_id)
 
             yb._save_storage_state(context, session_path(project_id))
             return {"ok": True}

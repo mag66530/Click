@@ -2370,11 +2370,11 @@ def drop_link_card(page, domains: list[str],
     (args) => {
       const root = args.scope ? document.querySelector(args.scope) : document;
       if (!root) return null;
-      const link = [...root.querySelectorAll('a[href]')].find(a => {
+      const links = [...root.querySelectorAll('a[href]')].filter(a => {
         const h = (a.href || '').toLowerCase();
         return args.doms.some(d => h.includes(d)) && !a.closest('[contenteditable], textarea');
       });
-      if (!link) return null;
+      if (!links.length) return null;
       // Главное поле поста – самое длинное редактируемое на странице. По нему
       // отличаем настоящее поле ввода от «своих» редактируемых у карточки: у
       // сниппета ОК заголовок и описание – ТОЖЕ contenteditable, и прежний
@@ -2385,6 +2385,22 @@ def drop_link_card(page, domains: list[str],
       for (const f of root.querySelectorAll('[contenteditable="true"], textarea, input[type="text"]')) {
         const len = (f.value || f.textContent || '').length;
         if (len > mainLen) { mainLen = len; main = f; }
+      }
+      // Ссылок на наш домен может быть НЕСКОЛЬКО: карточка текущего поста в
+      // форме И старые посты в ленте под редактором (ОК рисует ленту прямо под
+      // формой). Берём ближайшую к полю ввода – это карточка, а не чужой пост:
+      // иначе крестик искался в ленте и жал меню чужого поста (link-card.html
+      // заказчицы 21.08.2026 – там был groups_post из ленты, не media-link_c).
+      let link = links[0];
+      if (main && links.length > 1) {
+        const mb = main.getBoundingClientRect();
+        const my = mb.top + mb.height / 2;
+        let bestD = Infinity;
+        for (const a of links) {
+          const r = a.getBoundingClientRect();
+          const d = Math.abs((r.top + r.height / 2) - my);
+          if (d < bestD) { bestD = d; link = a; }
+        }
       }
       let card = link, p = link.parentElement;
       for (let i = 0; i < 8 && p; i++, p = p.parentElement) {

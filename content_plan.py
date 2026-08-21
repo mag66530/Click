@@ -113,7 +113,8 @@ _COL_MATCHERS: dict[str, Callable[[str], bool]] = {
     "format": lambda s: "формат" in s,
     "type":  lambda s: s == "тип",
     "text":  lambda s: s == "пост" or s == "текст",
-    "photo": lambda s: "фото" in s or "картинк" in s,
+    "photo": lambda s: ("фото" in s or "картинк" in s or "изображ" in s
+                        or "снимок" in s or "медиа" in s or "лого" in s),
 }
 
 

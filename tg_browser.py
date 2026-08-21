@@ -1318,9 +1318,27 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                 browser = pw.firefox.launch(headless=headless, proxy=proxy)
                 log("  браузер: Firefox (лучший для прокси-с-паролем)")
             except Exception as e:  # noqa: BLE001 – Firefox не установлен
-                log(f"  Firefox не запустился ({str(e).splitlines()[0][:120]}); "
-                    "откат на Chromium — через прокси ТГ может не соединиться. "
-                    "Поставьте Firefox: python -m playwright install firefox")
+                # Firefox нужен для прокси-с-паролем. Если его нет – ставим САМИ
+                # (как это делает resolve_engine для основного движка), один раз,
+                # и пробуем снова: заказчице не нужно помнить про ручную команду.
+                if yb._is_not_installed(e):
+                    log("  Firefox не установлен — ставлю сам (разово, 1–3 минуты)…")
+                    import subprocess
+                    import sys
+                    subprocess.run(
+                        [sys.executable, "-m", "playwright", "install", "firefox"],
+                        check=False)
+                    try:
+                        browser = pw.firefox.launch(headless=headless, proxy=proxy)
+                        log("  браузер: Firefox (поставлен и запущен)")
+                    except Exception as e2:  # noqa: BLE001
+                        log(f"  Firefox всё равно не поднялся "
+                            f"({str(e2).splitlines()[0][:100]}); откат на Chromium — "
+                            "через прокси ТГ может не соединиться")
+                else:
+                    log(f"  Firefox не запустился ({str(e).splitlines()[0][:120]}); "
+                        "откат на Chromium — через прокси ТГ может не соединиться. "
+                        "Поставьте Firefox: python -m playwright install firefox")
         if browser is None:
             browser = yb._launch(pw, engine, headless=headless,
                                  extra_args=_vk.ANTIBOT_ARGS, proxy=proxy)

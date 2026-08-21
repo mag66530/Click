@@ -20,6 +20,7 @@ from core.gpt_client import generate_reply
 from core.imap_parser import fetch_new_reviews_from_imap
 from core.google_scraper import fetch_unanswered_google_reviews, has_session
 from core.review_validator import check_review_alive, check_already_answered
+from core.yandex_api_client import fetch_answered_signatures, review_signature
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ async def process_single_review(
     brand: Brand,
     bot,
     config,
+    answered_signatures: set | None = None,
 ) -> bool:
     """
     Полный цикл обработки одного отзыва.
@@ -120,8 +122,19 @@ async def process_single_review(
             # "unknown" → обрабатываем на всякий случай
 
         # ── Шаг 1б: Проверка — уже отвечен? ─────────────────────────────
-        if url:
+        # Для Яндекса с подключённым API сверяем по сигнатуре (оценка +
+        # автор + начало текста) — это точнее, чем скрейпинг HTML SPA-страницы,
+        # которая не отдаёт содержимое ответа без выполнения JS.
+        platform = (review_data.get("platform") or "unknown").lower()
+        already_answered = False
+
+        if platform == "yandex" and answered_signatures is not None:
+            sig = review_signature(rating, review_data.get("reviewer_name"), review_text)
+            already_answered = sig in answered_signatures
+        elif url:
             already_answered = await check_already_answered(url)
+
+        if url:
             if already_answered:
                 review = Review(
                     brand_id      = brand.id,
@@ -302,11 +315,28 @@ async def run_imap_check(bot, config) -> None:
                 reviews_data.extend(google_reviews)
                 logger.info(f"[{brand.name}] Google отзывов: {len(google_reviews)}")
 
+            # Яндекс Бизнес API (если подключён) — точная сверка "уже отвечен",
+            # вместо ненадёжного скрейпинга HTML SPA-страницы (см. review_validator.py).
+            answered_signatures = None
+            if brand.yandex_oauth_token and brand.yandex_company_id:
+                try:
+                    answered_signatures = await fetch_answered_signatures(
+                        brand.yandex_oauth_token, brand.yandex_company_id,
+                    )
+                    logger.info(
+                        f"[{brand.name}] Яндекс API: {len(answered_signatures)} отвеченных отзывов"
+                    )
+                except Exception as e:
+                    logger.warning(f"[{brand.name}] Не удалось получить данные Яндекс API: {e}")
+
             logger.info(f"[{brand.name}] Всего отзывов для обработки: {len(reviews_data)}")
 
             brand_new = 0
             for review_data in reviews_data:
-                was_new = await process_single_review(review_data, brand, bot, config)
+                was_new = await process_single_review(
+                    review_data, brand, bot, config,
+                    answered_signatures=answered_signatures,
+                )
                 if was_new:
                     brand_new += 1
 

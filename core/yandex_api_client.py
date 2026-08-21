@@ -116,6 +116,68 @@ class YandexBusinessClient:
             return None
 
 
+# ---------------------------------------------------------------------------
+# Сверка "уже отвечен" с данными из API
+# ---------------------------------------------------------------------------
+#
+# Письма из IMAP не содержат ID отзыва — только оценку, автора и текст.
+# Поэтому сопоставляем отзыв из письма с отзывом из API по "сигнатуре"
+# (оценка + автор + начало текста), а не по ID.
+#
+# ВАЖНО: точные названия полей в ответе Яндекс Бизнес API (answer/reply/...)
+# не были проверены на реальном токене — проверьте на своих данных и при
+# необходимости добавьте недостающий вариант ключа в _ANSWER_KEYS.
+
+_ANSWER_KEYS = ("answer", "reply", "companyAnswer", "official_answer", "response")
+
+
+def _review_is_answered(review: dict) -> bool:
+    """Есть ли непустой ответ компании в объекте отзыва из API."""
+    for key in _ANSWER_KEYS:
+        val = review.get(key)
+        if isinstance(val, dict) and (val.get("text") or "").strip():
+            return True
+        if isinstance(val, str) and val.strip():
+            return True
+    return False
+
+
+def review_signature(rating, reviewer_name: str, review_text: str) -> tuple:
+    """
+    Сигнатура для сопоставления отзыва из письма (IMAP) с отзывом из API.
+    Специально грубая (оценка + автор + первые 80 символов текста) — email
+    и API могут чуть по-разному экранировать/обрезать текст.
+    """
+    try:
+        rating_int = int(rating)
+    except (TypeError, ValueError):
+        rating_int = 0
+    name = (reviewer_name or "").strip().lower()
+    text = (review_text or "").strip().lower()[:80]
+    return (rating_int, name, text)
+
+
+def _api_review_signature(review: dict) -> tuple:
+    author = review.get("author")
+    name = author.get("name") if isinstance(author, dict) else (
+        review.get("author_name") or review.get("reviewer_name") or ""
+    )
+    text = review.get("text") or review.get("review_text") or ""
+    rating = review.get("rating") or review.get("score") or 0
+    return review_signature(rating, name, text)
+
+
+async def fetch_answered_signatures(oauth_token: str, company_id: str) -> set:
+    """
+    Возвращает множество сигнатур уже отвеченных отзывов организации.
+    Используется как более точная замена скрейпинга HTML для проверки
+    "не ответили ли на этот отзыв уже вручную на площадке".
+    """
+    client = YandexBusinessClient(oauth_token, company_id)
+    reviews = await client.get_reviews(limit=100)
+    return {_api_review_signature(r) for r in reviews if _review_is_answered(r)}
+
+
 def extract_city_from_yandex_address(address: str) -> str:
     """
     Извлекает город из строки адреса Яндекс API.

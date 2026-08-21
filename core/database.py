@@ -30,6 +30,21 @@ class ReviewStatus(enum.Enum):
     FAILED   = "failed"    # Ошибка публикации (капча, таймаут и т.д.)
 
 
+class SubscriberRole(enum.Enum):
+    """
+    Роль получателя уведомлений в Telegram.
+
+    OWNER   — руководство: только негатив (1-3★), коротким алертом без деталей модерации.
+    MANAGER — ответственный за бренд: все отзывы этого бренда (позитив + негатив),
+              полные карточки с кнопками модерации. Привязан к конкретному brand_id.
+    VIEWER  — просто «в курсе»: однострочное уведомление о факте нового отзыва,
+              без текста и без кнопок.
+    """
+    OWNER   = "owner"
+    MANAGER = "manager"
+    VIEWER  = "viewer"
+
+
 # ---------------------------------------------------------------------------
 # Таблицы
 # ---------------------------------------------------------------------------
@@ -81,15 +96,28 @@ class City(Base):
 
 
 class Subscriber(Base):
-    """Пользователи, подписавшиеся на уведомления через /start."""
+    """
+    Пользователи, подписавшиеся на уведомления через /start.
+
+    Роль и привязка к бренду назначаются в веб-панели Click (не в самом боте):
+    пока администратор не настроит подписчика вручную, он попадает как
+    MANAGER без привязки к бренду (brand_id=None) — то есть видит всё,
+    как было раньше, пока роли не разведены.
+    """
     __tablename__ = 'subscribers'
 
     id            = Column(Integer, primary_key=True, autoincrement=True)
     chat_id       = Column(Integer, unique=True, nullable=False)
     subscribed_at = Column(DateTime, default=datetime.utcnow)
 
+    display_name  = Column(String(200), nullable=True)   # Как подписчика видно в панели Click
+    role          = Column(Enum(SubscriberRole), default=SubscriberRole.MANAGER, nullable=False)
+    brand_id      = Column(Integer, ForeignKey("brands.id"), nullable=True)  # None = все бренды
+
+    brand = relationship("Brand")
+
     def __repr__(self):
-        return f"<Subscriber chat_id={self.chat_id}>"
+        return f"<Subscriber chat_id={self.chat_id} role={self.role} brand_id={self.brand_id}>"
 
 
 class Review(Base):

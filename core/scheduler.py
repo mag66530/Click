@@ -15,7 +15,7 @@ import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from core.database import Brand, Review, ReviewStatus, Subscriber, get_session
+from core.database import Brand, Review, ReviewStatus, Subscriber, SubscriberRole, get_session
 from core.gpt_client import generate_reply
 from core.imap_parser import fetch_new_reviews_from_imap
 from core.google_scraper import fetch_unanswered_google_reviews, has_session
@@ -25,21 +25,42 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Рассылка всем подписчикам
+# Рассылка по ролям
 # ---------------------------------------------------------------------------
+#
+# Роли назначаются в веб-панели Click, не в боте:
+#   OWNER   (начальство)         — только негатив, коротким алертом
+#   MANAGER (ответственный)      — все отзывы СВОЕГО бренда, полная карточка
+#   VIEWER  (просто в курсе)     — одна строка о факте нового отзыва
+#
+# Подписчик без привязки к бренду (brand_id=None) видит все бренды —
+# это поведение по умолчанию для ещё не настроенных через панель подписчиков.
+
+def _recipients(db, brand_id: int, roles: tuple) -> list[Subscriber]:
+    """Подписчики с одной из ролей `roles`, видящие бренд brand_id."""
+    subs = db.query(Subscriber).filter(Subscriber.role.in_(roles)).all()
+    return [s for s in subs if s.brand_id in (None, brand_id)]
+
+
+async def _send_to(bot, subscribers: list[Subscriber], text: str, **kwargs) -> int | None:
+    """Шлёт текст списку подписчиков. Возвращает message_id последней отправки."""
+    last_msg_id = None
+    for sub in subscribers:
+        try:
+            sent = await bot.send_message(sub.chat_id, text, **kwargs)
+            last_msg_id = sent.message_id
+        except Exception as e:
+            logger.warning(f"Не удалось отправить подписчику {sub.chat_id}: {e}")
+    return last_msg_id
+
 
 async def notify_all_subscribers(bot, text: str, **kwargs) -> None:
-    """Отправляет сообщение всем подписчикам. Возвращает список message_id."""
+    """Отправляет сообщение всем подписчикам вне зависимости от роли.
+    Используется для служебных уведомлений (ошибки без привязки к бренду и т.п.)."""
     db = get_session()
     subscribers = db.query(Subscriber).all()
-    chat_ids = [s.chat_id for s in subscribers]
     db.close()
-
-    for chat_id in chat_ids:
-        try:
-            await bot.send_message(chat_id, text, **kwargs)
-        except Exception as e:
-            logger.warning(f"Не удалось отправить подписчику {chat_id}: {e}")
+    await _send_to(bot, subscribers, text, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -137,23 +158,41 @@ async def process_single_review(
 
         stars = "⭐" * rating if rating > 0 else "—"
 
-        # ── Шаг 3: Негатив → алерт без GPT ──────────────────────────────
+        # ── Шаг 3: Негатив → алерт без GPT, по ролям ─────────────────────
         if is_negative:
-            text = (
-                f"🚨 <b>НЕГАТИВ!</b>\n\n"
+            db3 = get_session()
+            owners   = _recipients(db3, brand.id, (SubscriberRole.OWNER,))
+            managers = _recipients(db3, brand.id, (SubscriberRole.MANAGER,))
+            viewers  = _recipients(db3, brand.id, (SubscriberRole.VIEWER,))
+            db3.close()
+
+            # Начальству — коротко и по делу, без простыни текста.
+            owner_text = (
+                f"🔴 <b>Негатив: {brand.name}</b> ({review.city})\n"
+                f"{stars} ({rating}/5) · {review.reviewer_name}\n\n"
+                f"«{(review.review_text or '')[:200]}»\n\n"
+                f"🔗 <a href='{url}'>Открыть отзыв</a>"
+            )
+            await _send_to(bot, owners, owner_text, parse_mode="HTML", disable_web_page_preview=True)
+
+            # Ответственному — полная карточка (без кнопок: ответ не генерируем автоматически).
+            manager_text = (
+                f"🔴 <b>Новый негативный отзыв</b>\n\n"
                 f"Бренд: <b>{brand.name}</b>\n"
                 f"Город: {review.city}\n"
                 f"Оценка: {stars} ({rating}/5)\n"
                 f"Автор: {review.reviewer_name}\n\n"
                 f"<i>{(review.review_text or '')[:400]}</i>\n\n"
-                f"🔗 <a href='{url}'>Открыть отзыв</a>"
+                f"🔗 <a href='{url}'>Открыть отзыв</a>\n\n"
+                f"⚠️ Ответ не генерируется автоматически — при необходимости ответьте вручную."
             )
-            await notify_all_subscribers(
-                bot, text,
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
-            logger.info(f"[{brand.name}] Негатив отправлен в Telegram: rating={rating}")
+            await _send_to(bot, managers, manager_text, parse_mode="HTML", disable_web_page_preview=True)
+
+            # Просто «в курсе» — одна строка, без текста отзыва.
+            viewer_text = f"📩 Новый отзыв: <b>{brand.name}</b>, {review.city} — {stars} (негатив)"
+            await _send_to(bot, viewers, viewer_text, parse_mode="HTML")
+
+            logger.info(f"[{brand.name}] Негатив отправлен: rating={rating}")
             return True
 
         # ── Шаг 4: Позитив → генерация ответа GPT ────────────────────────
@@ -169,8 +208,11 @@ async def process_single_review(
 
         except Exception as e:
             logger.error(f"[{brand.name}] Ошибка GPT для отзыва {review.id}: {e}")
-            await notify_all_subscribers(
-                bot,
+            db_err = get_session()
+            managers = _recipients(db_err, brand.id, (SubscriberRole.MANAGER,))
+            db_err.close()
+            await _send_to(
+                bot, managers,
                 f"⚠️ Не удалось сгенерировать ответ (GPT ошибка).\n"
                 f"Отзыв ID: {review.id} | {brand.name} | {review.city}\n"
                 f"🔗 <a href='{url}'>Открыть отзыв</a>",
@@ -179,10 +221,9 @@ async def process_single_review(
             )
             return True
 
-        # ── Шаг 5: Отправка модератору ────────────────────────────────────
+        # ── Шаг 5: Отправка ответственному (модерация) + просто «в курсе» ──
         tg_text = (
-            f"✨ <b>Новый отзыв!</b>\n\n"
-            f"Бренд: <b>{brand.name}</b>\n"
+            f"✨ <b>Новый отзыв</b> — {brand.name}\n\n"
             f"Город: {review.city}\n"
             f"Оценка: {stars} ({rating}/5)\n"
             f"Автор: {review.reviewer_name}\n\n"
@@ -196,29 +237,26 @@ async def process_single_review(
         kb = get_review_keyboard(review.id)
 
         db2 = get_session()
-        subscribers = db2.query(Subscriber).all()
-        chat_ids = [s.chat_id for s in subscribers]
+        managers = _recipients(db2, brand.id, (SubscriberRole.MANAGER,))
+        viewers  = _recipients(db2, brand.id, (SubscriberRole.VIEWER,))
         db2.close()
 
-        last_msg_id = None
-        for chat_id in chat_ids:
-            try:
-                sent = await bot.send_message(
-                    chat_id,
-                    tg_text,
-                    reply_markup=kb,
-                    parse_mode="HTML",
-                    disable_web_page_preview=True,
-                )
-                last_msg_id = sent.message_id
-            except Exception as e:
-                logger.warning(f"Не удалось отправить подписчику {chat_id}: {e}")
+        last_msg_id = await _send_to(
+            bot, managers, tg_text,
+            reply_markup=kb, parse_mode="HTML", disable_web_page_preview=True,
+        )
+        await _send_to(
+            bot, viewers,
+            f"📩 Новый отзыв: <b>{brand.name}</b>, {review.city} — {stars}",
+            parse_mode="HTML",
+        )
 
         review.telegram_msg_id = last_msg_id
         db.commit()
 
         logger.info(
-            f"[{brand.name}] Отзыв ID={review.id} отправлен {len(chat_ids)} подписчикам"
+            f"[{brand.name}] Отзыв ID={review.id} отправлен {len(managers)} ответственным, "
+            f"{len(viewers)} наблюдателям"
         )
         return True
 

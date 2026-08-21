@@ -60,7 +60,9 @@ _OWN_MODULES = ("build", "apptime", "paths", "projects_data", "repo_store", "ui_
                 "scheduler", "social_session", "vk_social", "ok_browser",
                 "ok_social", "tg_social", "tg_browser", "max_social", "max_browser",
                 # Дзен: студия автора (браузер) и разбор статьи из документа.
-                "zen_browser", "zen_doc")
+                "zen_browser", "zen_doc",
+                # Бот отзывов: панель ролей подписчиков (Telegram-уведомления).
+                "subscribers_admin")
 
 
 def _settle_imports() -> None:
@@ -130,13 +132,13 @@ st.set_page_config(page_title="Click – публикация постов", pag
 
 SALT = "click-salt-v1-2026"
 SECTIONS = ["🚀 Запуск", "📤 Публикация", "🗓 Кросспостинг", "🔄 Актуализация", "🏙 Города",
-            "📊 Отчёт", "⚙️ Настройки", "🔎 Сверка"]
+            "📊 Отчёт", "⚙️ Настройки", "🔎 Сверка", "🔔 Отзывы"]
 
 # Разделы адресуются ИМЕНАМИ, а не номерами. Раньше по коду были разбросаны
 # SECTIONS[4] и SECTIONS[2]; стоило вставить раздел в середину – и кнопка
 # «к отчёту» молча уводила в «Города». Имена от перестановки не страдают.
 (SEC_RUN, SEC_COMPOSE, SEC_CROSSPOST, SEC_ACTUALIZE,
- SEC_CITIES, SEC_REPORT, SEC_SETTINGS, SEC_AUDIT) = SECTIONS
+ SEC_CITIES, SEC_REPORT, SEC_SETTINGS, SEC_AUDIT, SEC_REVIEW_SUBS) = SECTIONS
 
 
 def _hash(password: str) -> str:
@@ -6794,6 +6796,9 @@ def show_main(project_id: str) -> None:
         tab_report(project_id)
     elif section == SEC_SETTINGS:
         tab_settings(project_id, config)
+    elif section == SEC_REVIEW_SUBS:
+        import subscribers_admin
+        subscribers_admin.render()
     else:
         tab_audit(project_id, config)
 

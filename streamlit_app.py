@@ -1731,11 +1731,12 @@ def tab_compose(project_id: str, config: dict) -> None:
       # (showProductPhotos = draft.postType === 'shipment'). У остальных типов
       # поле только путало: заливать товары к поздравлению незачем.
       product_photos_raw, goods_files, gis_photos = "", None, False
+      gis_only_raw, gis_only_files = "", None
       if post_type == "shipment":
           with st.container(key="goods-row"):
               g1, g2 = st.columns([3, 1])
               product_photos_raw = g1.text_area(
-                  "Фото в раздел «Товары» (необязательно)", height=118, key="compose-product-photos",
+                  "Фото в раздел «Товары»", height=118, key="compose-product-photos",
                   placeholder="Ссылки или пути, по одной в строке\n"
                               "Заливаются в карточку после успешной публикации поста",
               )
@@ -1758,26 +1759,26 @@ def tab_compose(project_id: str, config: dict) -> None:
               config["gisPhotosDefault"] = gis_photos
               save_config(project_id)
 
-      # ─── ВРЕМЕННО: только фото в 2ГИС, без поста ───
-      # Заказчик проверяет заливку в 2ГИС отдельно: публиковать ради этого
-      # шестьдесят постов незачем. Блок нарочно стоит особняком и помечен
-      # временным – когда проверка пройдёт, он сольётся с фото Яндекса.
-      with st.container(key="gis-only-row"):
-          d1, d2 = st.columns([3, 1])
-          gis_only_raw = d1.text_area(
-              "🟢 ВРЕМЕННО · Только фото в 2ГИС – без поста", height=118,
-              key="compose-gis-only",
-              placeholder="Ссылки или пути, по одной в строке\n"
-                          "Пост НЕ публикуется: снимки уходят только в «Фото и видео» 2ГИС",
-          )
-          gis_only_files = d2.file_uploader("Фото для 2ГИС", type=["jpg", "jpeg", "png", "webp"],
-                                            accept_multiple_files=True,
-                                            key=f"compose-gis-only-files-{st.session_state.get('upl-gen', 0)}",
-                                            label_visibility="collapsed")
-      html('<div class="hint">Заполнили этот блок – прогон не публикует посты вовсе, а только '
-           'заливает снимки в «Фото и видео» 2ГИС по выбранным городам. Город без карточки в '
-           'списке 2ГИС пропускается с пометкой. Одни и те же снимки в один и тот же город '
-           'второй раз не заливаются. gif 2ГИС не принимает.</div>')
+          # ─── Только фото в 2ГИС, без поста ───
+          # Заливка в 2ГИС отдельно от поста: публиковать ради неё десятки
+          # постов незачем. Как и «Товары», блок имеет смысл лишь у отгрузки –
+          # у остальных типов его нет, поэтому живёт внутри этого же условия.
+          with st.container(key="gis-only-row"):
+              d1, d2 = st.columns([3, 1])
+              gis_only_raw = d1.text_area(
+                  "Добавить фото в 2ГИС", height=118,
+                  key="compose-gis-only",
+                  placeholder="Ссылки или пути, по одной в строке\n"
+                              "Пост НЕ публикуется: снимки уходят только в «Фото и видео» 2ГИС",
+              )
+              gis_only_files = d2.file_uploader("Фото для 2ГИС", type=["jpg", "jpeg", "png", "webp"],
+                                                accept_multiple_files=True,
+                                                key=f"compose-gis-only-files-{st.session_state.get('upl-gen', 0)}",
+                                                label_visibility="collapsed")
+          html('<div class="hint">Заполнили этот блок – прогон не публикует посты вовсе, а только '
+               'заливает снимки в «Фото и видео» 2ГИС по выбранным городам. Город без карточки в '
+               'списке 2ГИС пропускается с пометкой. Одни и те же снимки в один и тот же город '
+               'второй раз не заливаются. gif 2ГИС не принимает.</div>')
 
     image_urls = [u.strip() for u in (image_urls_raw or "").splitlines() if u.strip()]
     product_photos = [u.strip() for u in (product_photos_raw or "").splitlines() if u.strip()]

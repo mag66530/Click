@@ -1199,6 +1199,41 @@ def _dispatch_contextmenu(page) -> bool:
         return False
 
 
+def _dismiss_login_banner(page, log: Callable[[str], None]) -> None:
+    """
+    Убрать баннер «новый вход», из-за которого страница дёргается.
+
+    Телеграм показывает «Someone just got access to your messages! … Is it
+    you? YES, IT'S ME / NO, IT'S NOT ME!» на НАШ же вход — это Click зашёл по
+    сохранённой сессии. Пока баннер висит, страница прыгает и скачет (скролл,
+    окно «Send Photo» едет), и правый клик по отправке промахивается
+    (заказчица 21.08.2026: «всё прыгает и скачет, кнопку отложенного не жмёт»).
+    Подтверждаем «YES, IT'S ME» — вход действительно наш, — баннер исчезает,
+    страница успокаивается. ЖМЁМ ТОЛЬКО «YES»/«Это я»: «NO/Это не я» — никогда.
+    """
+    # Сначала убеждаемся, что баннер ЕСТЬ (чтобы не нажать случайное «YES»
+    # где-то ещё): ищем его опознавательный текст.
+    marks = ("got access to your messages", "new login to your account",
+             "доступ к вашим сообщени", "новый вход")
+    try:
+        body = (page.inner_text("body", timeout=1_500) or "").lower()
+    except Exception:  # noqa: BLE001
+        return
+    if not any(m in body for m in marks):
+        return
+    for sel in ('button:has-text("YES")', 'button:has-text("Это я")',
+                'button:has-text("Да, это я")', 'button:has-text("ЭТО Я")'):
+        try:
+            b = page.locator(sel).first
+            if b.count() and b.is_visible():
+                b.click(timeout=2_000)
+                page.wait_for_timeout(600)
+                log("  убрал баннер «новый вход» (это наш вход) — страница успокоилась")
+                return
+        except Exception:  # noqa: BLE001
+            continue
+
+
 # Счётчик подписи Телеграма. Когда подпись длиннее лимита (1024 у обычного
 # аккаунта, 2048 у Premium), Телеграм рисует ОСТАТОК отрицательным числом
 # («-40»). Ловим самое маленькое такое число на экране.
@@ -1413,6 +1448,10 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "shot": _dump(project_id, page, "no-channel", log),
                         "error": _why_no_composer(page)}
 
+            # Баннер «новый вход» трясёт страницу – убираем его сразу, пока он
+            # не начал мешать вводу и правому клику по отправке.
+            _dismiss_login_banner(page, log)
+
             log(f"── ШАГ 2/6: ввожу текст ({len(text)} знаков) ──")
             why = _fill_post_text(page, text_sel, text, log)
             if why:
@@ -1443,6 +1482,10 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                     f"(счётчик показывает -{over}). Обычный аккаунт держит 1024 "
                     "знака в подписи к фото, Premium — 2048. Если отложка не "
                     "встанет — причина здесь: сократите пост или включите Premium")
+
+            # Ещё раз убираем баннер «новый вход»: он мог всплыть заново за
+            # время ввода/вложения и опять затрясти окно «Send Photo».
+            _dismiss_login_banner(page, log)
 
             # ПРАВОЙ кнопкой: левая отправит пост сейчас же.
             log("── ШАГ 4/6: открываю «Отправить позже» (правой кнопкой по отправке) ──")

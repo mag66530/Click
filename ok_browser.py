@@ -2251,7 +2251,76 @@ def _toast_scheduled(page, when: datetime) -> str:
     return ""
 
 
-def _pick_photos(page, image_paths: list[str], log: Callable[[str], None]) -> str:
+# Вставка картинки В САМЫЙ ВЕРХ темы – курсором к первому символу, ровно как
+# показала заказчица (21.08.2026): «кликнуть мышкой в самый верхний символ –
+# перед „О“ в „Отгрузка“ – просто поставить курсор, ничего не писать, и только
+# тогда вставлять картинку». Ставим каретку в самое начало поля и «вставляем»
+# фото (Ctrl+V) прямо туда – встроенным элементом, НАД текстом. Тот же
+# проверенный приём с настоящим событием paste, что у МАКСа и ВК: работает и в
+# скрытом браузере, системный буфер не нужен. Если поле вставку не примет –
+# откатываемся на обычный путь (плюсик/«Фото»), фото хотя бы будет.
+_PASTE_TOP_JS = r"""
+(args) => {
+  const el = document.querySelector(args.sel);
+  if (!el) return false;
+  el.focus();
+  // каретку – к самому первому символу (перед «О» в «Отгрузка»)
+  try {
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(true);
+    const s = window.getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+  } catch (e) {}
+  const bin = atob(args.b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  const file = new File([arr], args.name, {type: args.mime});
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  let ev;
+  try { ev = new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData: dt}); }
+  catch (e) { ev = new Event('paste', {bubbles: true, cancelable: true}); }
+  try { Object.defineProperty(ev, 'clipboardData', {value: dt}); } catch (e) {}
+  el.dispatchEvent(ev);
+  return true;
+}
+"""
+
+
+def _has_inline_photo(page, text_sel: str) -> bool:
+    """Есть ли ВСТРОЕННАЯ картинка прямо в поле темы (значит – сверху)."""
+    try:
+        return bool(page.eval_on_selector(
+            text_sel, "el => el && el.querySelector('img') ? 1 : 0"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _paste_image_at_top(page, text_sel: str, image_paths: list[str],
+                        log: Callable[[str], None]) -> bool:
+    """Вставить фото В НАЧАЛО темы (Ctrl+V при курсоре у первого символа)."""
+    import base64
+    import mimetypes
+    if not text_sel:
+        return False
+    sent = False
+    for p in image_paths[:10]:
+        try:
+            b64 = base64.b64encode(Path(p).read_bytes()).decode()
+            mime = mimetypes.guess_type(p)[0] or "image/png"
+            ok = page.evaluate(_PASTE_TOP_JS, {"sel": text_sel, "b64": b64,
+                                               "mime": mime, "name": Path(p).name})
+            sent = sent or bool(ok)
+            page.wait_for_timeout(1_200)
+        except Exception as e:  # noqa: BLE001 – вставка не должна ронять прогон
+            log(f"  вставка фото в начало не удалась: {e}")
+    return sent
+
+
+def _pick_photos(page, image_paths: list[str], log: Callable[[str], None],
+                 text_sel: str = "") -> str:
     """
     Прикрепить фото так, как это делает человек: плюсик → «Контентные
     блоки» → «Фотографии» → «Загрузить фото». Пусто – получилось.
@@ -2259,7 +2328,33 @@ def _pick_photos(page, image_paths: list[str], log: Callable[[str], None]) -> st
     Курсор перед этим ставим в самое начало текста: у ОК блок встаёт туда,
     где стоит курсор, и заказчица показала – фото должно оказаться НАД
     текстом, иначе пост выглядит не так, как в реестре.
+
+    СНАЧАЛА пробуем встроить фото прямо в поле (paste при курсоре у первого
+    символа) – так оно надёжно встаёт НАД текстом, как показала заказчица.
+    Плюсик/«Фото» оставляем запасным: он у ОК капризен и часто клал фото ВНИЗ
+    (живой прогон 21.08.2026: «плюсик не открылся – беру кнопку Фото»).
     """
+    if text_sel and _paste_image_at_top(page, text_sel, image_paths, log):
+        page.wait_for_timeout(1_200)
+        if _has_inline_photo(page, text_sel):
+            log("  фото встало в начало темы (над текстом)")
+            return ""
+        log("  поле не приняло вставку – добавляю фото обычным путём")
+
+    # Каретку – в самое начало поля (к первому символу), чтобы блок фото у ОК
+    # встал СВЕРХУ. Ставим и диапазоном (надёжно, не зависит от фокуса), и
+    # Control+Home – что-то одно точно сработает.
+    if text_sel:
+        try:
+            page.eval_on_selector(
+                text_sel,
+                "el => { el.focus(); const r = document.createRange();"
+                " r.selectNodeContents(el); r.collapse(true);"
+                " const s = window.getSelection(); s.removeAllRanges();"
+                " s.addRange(r); }")
+            page.wait_for_timeout(200)
+        except Exception:  # noqa: BLE001
+            pass
     try:
         page.keyboard.press("Control+Home")
         page.wait_for_timeout(300)
@@ -2502,8 +2597,8 @@ def schedule_postponed_post(project_id: str, group_url: str, text: str,
                         "shot": _debug_shot(project_id, page, "draft-left")}
 
             if image_paths:
-                log(f"Прикрепляю фото: {len(image_paths)}")
-                trouble = _pick_photos(page, image_paths, log)
+                log(f"Прикрепляю фото: {len(image_paths)} (в начало темы)")
+                trouble = _pick_photos(page, image_paths, log, text_sel)
                 if trouble:
                     shot = _debug_shot(project_id, page, "no-photo")
                     return {"ok": False, "error": trouble, "shot": shot}

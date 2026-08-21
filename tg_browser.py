@@ -75,10 +75,14 @@ SEL = {
                       '.btn-menu-item:has-text("Schedule")',
                       'text="Schedule Message"',
                       'text="Schedule"'),
-    # Скрепка вложений.
-    "attach": ('.Composer button[aria-label*="Attach"]',
-               'button[aria-label*="Прикрепить"]',
-               '.Composer .icon-attach', 'button:has(.icon-attach)'),
+    # Скрепка вложений. В Web A это .AttachMenu--button (подтверждено дампом
+    # окна отправки 21.08.2026) – она открывает меню «Photo or Video».
+    "attach": ('button.AttachMenu--button', '.AttachMenu--button',
+               '.Composer button[aria-label*="Attach"]',
+               'button[aria-label*="Attach"]', 'button[aria-label*="Прикрепить"]',
+               '.Composer .icon-attach', 'button:has(.icon-attach)',
+               'button:has(use[href="#icon-attach"])',
+               '.composer-action-button:has(i)'),
     "file_input": 'input[type="file"]',
     # Окно календаря отложки Web A.
     "modal": (".CalendarModal",),

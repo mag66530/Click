@@ -994,6 +994,78 @@ def select_text_by_mouse(page: Page, field_sel: str, text: str,
     return False
 
 
+# Выделение куска ДИАПАЗОНОМ через JS – запас к мыши. Ищем по НОРМАЛИЗОВАННОМУ
+# тексту: эмодзи выкинуты, пробелы схлопнуты (тот же приём, что вытянул ТГ).
+# Именно этого не хватало МАКС на контактах: «🌐 stalmetural.ru», «📩 почта»,
+# «📞 телефон» МАКС оборачивает автоссылкой, поле перерисовывает, и мышь по
+# ним промахивалась – а поиск по нормализованному тексту находит их всегда.
+_SELECT_RANGE_JS = r"""
+(args) => {
+  const el = document.querySelector(args.sel);
+  if (!el) return false;
+  const nodes = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let full = '';
+  while (w.nextNode()) { nodes.push([w.currentNode, full.length]); full += w.currentNode.nodeValue; }
+  const isEmoji = ch => /\p{Extended_Pictographic}/u.test(ch)
+                     || ch === '️' || ch === '‍';
+  let norm = '', nmap = [], i = 0;
+  while (i < full.length) {
+    const cp = full.codePointAt(i);
+    const len = cp > 0xFFFF ? 2 : 1;
+    const ch = full.substr(i, len);
+    if (isEmoji(ch)) { i += len; continue; }
+    if (/\s/.test(ch)) {
+      if (!(norm.length && norm[norm.length - 1] === ' ')) { norm += ' '; nmap.push(i); }
+    } else {
+      for (let k = 0; k < len; k++) { norm += ch[k]; nmap.push(i); }
+    }
+    i += len;
+  }
+  const needle = (args.text || '')
+    .replace(/[\p{Extended_Pictographic}️‍]/gu, ' ')
+    .replace(/\s+/g, ' ').trim();
+  if (!needle) return false;
+  const nidx = norm.indexOf(needle);
+  if (nidx < 0) return false;
+  const from = nmap[nidx], to = nmap[nidx + needle.length - 1] + 1;
+  const at = (pos, end) => {
+    for (const [node, start] of nodes) {
+      const len = node.nodeValue.length;
+      if (pos >= start && pos <= start + len) {
+        if (pos === start + len && !end) continue;
+        return [node, pos - start];
+      }
+    }
+    return null;
+  };
+  const a = at(from, false), b = at(to, true);
+  if (!a || !b) return false;
+  const r = document.createRange();
+  r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]);
+  try { (a[0].parentElement || el).scrollIntoView({block: 'center', inline: 'nearest'}); }
+  catch (e) {}
+  el.focus();
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(r);
+  document.dispatchEvent(new Event('selectionchange'));
+  return true;
+}
+"""
+
+
+def select_text_by_range(page: Page, field_sel: str, text: str) -> bool:
+    """
+    Выделить кусок в поле ДИАПАЗОНОМ (JS) – запас, когда мышь промахнулась.
+    Дальше жирный жмут той же Ctrl+B, что и после мыши. Поиск по
+    нормализованному тексту (без эмодзи, пробелы схлопнуты), поэтому контакты
+    с эмодзи и автоссылками выделяются надёжно.
+    """
+    try:
+        return bool(page.evaluate(_SELECT_RANGE_JS, {"sel": field_sel, "text": text}))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def click_element(page: Page, el, what: str) -> str:
     """
     Нажать НАЙДЕННЫЙ элемент, а не точку экрана.
@@ -2372,7 +2444,15 @@ def drop_link_card(page, domains: list[str],
       if (!root) return null;
       const links = [...root.querySelectorAll('a[href]')].filter(a => {
         const h = (a.href || '').toLowerCase();
-        return args.doms.some(d => h.includes(d)) && !a.closest('[contenteditable], textarea');
+        if (!args.doms.some(d => h.includes(d))) return false;
+        if (a.closest('[contenteditable], textarea')) return false;
+        // Лента группы ПОД формой ОК: её посты тоже ведут на наш сайт, и
+        // крестик искался в ЧУЖОМ посте ленты, а не в карточке формы
+        // (link-card.html заказчицы: groups_post / loader-container из ленты,
+        // а не media-link_c формы). Ленту из поиска исключаем.
+        if (a.closest('.groups_post, .group-feed-list, .feed-i_post, '
+                    + '[class*="feed_"], [data-module="Loader"]')) return false;
+        return true;
       });
       if (!links.length) return null;
       // Главное поле поста – самое длинное редактируемое на странице. По нему

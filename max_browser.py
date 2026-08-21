@@ -1095,7 +1095,12 @@ def _apply_max_format(page, text_sel: str, markup: str,
             log(f"  окно «Ссылка» не открылось – «{t[:24]}» осталось текстом")
 
     for t in bold:
-        if yb.select_text_by_mouse(page, text_sel, t, log=log):
+        # Мышь – основной путь (проверено на длинных кусках-вопросах). Не
+        # вышло – выделяем ДИАПАЗОНОМ (JS, поиск без эмодзи), как в ТГ: именно
+        # так наконец берутся контакты «🌐 сайт / 📩 почта / 📞 телефон», по
+        # которым мышь промахивалась (МАКС их автоссылит и перерисовывает поле).
+        if (yb.select_text_by_mouse(page, text_sel, t, log=log)
+                or yb.select_text_by_range(page, text_sel, t)):
             page.keyboard.press("Control+b")   # безопасно: не Enter, не отправит
             page.wait_for_timeout(150)
             log(f"  жирным: «{t[:32]}»")

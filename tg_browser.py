@@ -1233,14 +1233,23 @@ _MARK_SEND_JS = r"""
     };
   };
   const arr = btns.map(info);
-  // Настоящая кнопка отправки web.telegram (Web A / telegram-tt) — это
-  // .Button.send.main-button, aria-label="Send Message" (при пустом поле она же
-  // микрофон, при тексте — самолётик). Она SECONDARY, не primary: прежний отбор
-  // «primary + иконка» цеплял вместо неё круглую «New Message» (карандаш над
-  // списком чатов — тоже primary и в правом-нижнем углу), и правый клик по ней
-  // уходил в пустоту → меню браузера (дамп tg-no-schedule-menu.html 21.08.2026).
+  // ГЛАВНОЕ: кнопка отправки в окне предпросмотра фото — она ОДНОЗНАЧНА.
+  // Заказчица прислала её точную разметку (21.08.2026):
+  //   Web K — button.simple-message-input-confirm (в .popup-new-media);
+  //   Web A — .AttachmentModal .Button.send.
+  // Берём ИМЕННО ЕЁ и не гадаем по «primary+иконка»: на экране есть ещё
+  // микрофон канала (тоже primary+иконка и НИЖЕ по экрану), и сортировка
+  // «правее-ниже» цепляла его, а не кнопку окна отправки — правый клик уходил
+  // в микрофон, меню отложки не открывалось (заказчица помогла руками).
+  const EXPLICIT = '.simple-message-input-confirm, ' +
+                   '.AttachmentModal .Button.send, .AttachmentModal button.send';
   const notNew = d => !/new message|новое сообщение/i.test(d.aria);
-  let sends = arr.filter(d => /\bmain-button\b/.test(d.cls) && notNew(d));
+  let sends = [];
+  for (const d of arr) {
+    try { if (d.b.matches(EXPLICIT)) { sends = [d]; break; } } catch (e) {}
+  }
+  // Запас — прежняя эвристика, если точной кнопки на экране не нашлось.
+  if (!sends.length) sends = arr.filter(d => /\bmain-button\b/.test(d.cls) && notNew(d));
   if (!sends.length) sends = arr.filter(d => /send message|отправить сообщени/i.test(d.aria) && notNew(d));
   if (!sends.length) sends = arr.filter(d => /\bsend\b/.test(d.cls) && notNew(d));
   if (!sends.length) sends = arr.filter(d => d.primary && d.icon && notNew(d));
@@ -1471,19 +1480,30 @@ def _open_schedule_menu(page, log: Callable[[str], None]) -> tuple[bool, str]:
         # Move Caption / Send as Files и т.п., а открытое меню ещё и перекрывает
         # кнопку на следующей попытке. Отложку даёт только правый клик по отправке.)
 
-        # 2) Совсем запасной: старый точный класс Web K, если вдруг он.
+        # 2) Запас: берём кнопку окна прямо по точному классу
+        #    (.simple-message-input-confirm и т.п.) и правый клик — тоже жёстко:
+        #    force, затем по координатам (страница может ещё «ехать»).
         sel, el = _visible_media_send(page)
         if el is not None:
             log(f"  запасная кнопка ({sel}), правый клик, попытка {attempt}/3")
-            try:
-                el.click(button="right", timeout=3_000)
-            except Exception:  # noqa: BLE001
-                pass
-            page.wait_for_timeout(800)
-            hit = _click_first(page, SEL["schedule_item"], timeout=4_000)
-            if hit:
-                log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({hit})")
-                return True, ""
+            for way in ("force", "координаты"):
+                try:
+                    if way == "force":
+                        el.click(button="right", force=True, timeout=2_500)
+                    else:
+                        box = el.bounding_box()
+                        if not box:
+                            continue
+                        _right_click_at(page, int(box["x"] + box["width"] / 2),
+                                        int(box["y"] + box["height"] / 2))
+                except Exception as e:  # noqa: BLE001
+                    log(f"    правый клик ({way}) не прошёл: {str(e).splitlines()[0][:70]}")
+                    continue
+                page.wait_for_timeout(800)
+                hit = _click_first(page, SEL["schedule_item"], timeout=3_000)
+                if hit:
+                    log(f"  нашёл и нажал «Отправить позже»/«Schedule» ({sel}, {way})")
+                    return True, ""
 
         log(f"  кнопку отправки/меню не поймал (попытка {attempt}/3) – жду…")
         page.wait_for_timeout(1_200)

@@ -1128,9 +1128,17 @@ _MARK_SEND_JS = r"""
     };
   };
   const arr = btns.map(info);
-  // Кнопка отправки: primary + иконка. Если таких нет – по aria «send/отправ».
-  let sends = arr.filter(d => d.primary && d.icon);
-  if (!sends.length) sends = arr.filter(d => /send|отправ|input-confirm/i.test(d.aria + ' ' + d.cls));
+  // Настоящая кнопка отправки web.telegram (Web A / telegram-tt) — это
+  // .Button.send.main-button, aria-label="Send Message" (при пустом поле она же
+  // микрофон, при тексте — самолётик). Она SECONDARY, не primary: прежний отбор
+  // «primary + иконка» цеплял вместо неё круглую «New Message» (карандаш над
+  // списком чатов — тоже primary и в правом-нижнем углу), и правый клик по ней
+  // уходил в пустоту → меню браузера (дамп tg-no-schedule-menu.html 21.08.2026).
+  const notNew = d => !/new message|новое сообщение/i.test(d.aria);
+  let sends = arr.filter(d => /\bmain-button\b/.test(d.cls) && notNew(d));
+  if (!sends.length) sends = arr.filter(d => /send message|отправить сообщени/i.test(d.aria) && notNew(d));
+  if (!sends.length) sends = arr.filter(d => /\bsend\b/.test(d.cls) && notNew(d));
+  if (!sends.length) sends = arr.filter(d => d.primary && d.icon && notNew(d));
   sends.sort((p, q) => (q.r.right + q.r.bottom) - (p.r.right + p.r.bottom));
   const more = arr.find(d => /more actions|ещё|еще|more|schedul/i.test(d.aria));
   if (sends[0]) sends[0].b.setAttribute('data-click-send', '1');

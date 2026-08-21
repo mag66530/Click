@@ -1,29 +1,13 @@
-# Зависимости
-node_modules/
 __pycache__/
 *.pyc
+venv/
 .venv/
-
-# Личные данные проекта: пароли ЯБ, сессии/куки, города, картинки,
-# скриншоты, логи, отчёты, очередь задач, реестр публикаций.
-users-data/
-
-# Старая корневая структура данных (до users-data/{project}/)
-/session/
-/logs/
-/tasks/
-/reports/
-/screenshots/
-
+cookies/
+google_sessions/
+logs/
 *.log
-
-# Файлы сессий, которые делает ВХОД-ВК.py. Это доступ к аккаунту –
-# в репозиторий им нельзя ни при каких обстоятельствах.
-vk-session.json
-ok-session.json
-*-session.json
-VK-i-OK-sessii.json
-
-# Секреты Streamlit
-.streamlit/secrets.toml
-.claude/settings.local.json
+*.db
+.env
+.quota_history.json
+indexing_api.log
+indexing_results.json

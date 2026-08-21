@@ -20,7 +20,8 @@ from core.gpt_client import generate_reply
 from core.imap_parser import fetch_new_reviews_from_imap
 from core.google_scraper import fetch_unanswered_google_reviews, has_session
 from core.review_validator import check_review_alive, check_already_answered
-from core.yandex_api_client import fetch_answered_signatures, review_signature
+from core.yandex_preload import fetch_answered_signatures as fetch_preload_signatures
+from core.yandex_api_client import fetch_answered_signatures as fetch_api_signatures, review_signature
 
 logger = logging.getLogger(__name__)
 
@@ -315,12 +316,23 @@ async def run_imap_check(bot, config) -> None:
                 reviews_data.extend(google_reviews)
                 logger.info(f"[{brand.name}] Google отзывов: {len(google_reviews)}")
 
-            # Яндекс Бизнес API (если подключён) — точная сверка "уже отвечен",
-            # вместо ненадёжного скрейпинга HTML SPA-страницы (см. review_validator.py).
+            # Точная сверка "уже отвечен" для Яндекса — вместо ненадёжного
+            # скрейпинга HTML SPA-страницы (см. review_validator.py).
+            # Приоритет способов (первый доступный побеждает):
+            #   1. window.__PRELOAD_DATA через уже залогиненную Playwright-сессию —
+            #      тот же приём, что проверен на живой карточке в yb_playwright.py.
+            #      Не требует отдельного API-токена, только сессию для публикации
+            #      (она и так нужна брендy) и Brand.yandex_permalink_id.
+            #   2. Официальный Яндекс Бизнес API (нужен отдельный OAuth-токен).
             answered_signatures = None
-            if brand.yandex_oauth_token and brand.yandex_company_id:
+            try:
+                answered_signatures = await fetch_preload_signatures(brand)
+            except Exception as e:
+                logger.warning(f"[{brand.name}] Ошибка PRELOAD-проверки отзывов: {e}")
+
+            if answered_signatures is None and brand.yandex_oauth_token and brand.yandex_company_id:
                 try:
-                    answered_signatures = await fetch_answered_signatures(
+                    answered_signatures = await fetch_api_signatures(
                         brand.yandex_oauth_token, brand.yandex_company_id,
                     )
                     logger.info(

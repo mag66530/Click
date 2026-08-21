@@ -68,6 +68,12 @@ class Brand(Base):
     yandex_company_id  = Column(String(100), nullable=True)
     yandex_last_check  = Column(DateTime, nullable=True)
 
+    # Числовой ID организации из ссылки раздела редактирования отзывов
+    # (https://yandex.ru/sprav/<ID>/p/edit/reviews/) — нужен для точной
+    # проверки "уже отвечен" через window.__PRELOAD_DATA (core/yandex_preload.py),
+    # не требует OAuth-токена, только уже существующую cookie_file_path.
+    yandex_permalink_id = Column(String(100), nullable=True)
+
     cities  = relationship("City",   back_populates="brand", cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="brand")
 

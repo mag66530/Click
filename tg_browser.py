@@ -855,24 +855,98 @@ def _drop_link_card_tg(page, log: Callable[[str], None]) -> None:
 
 
 # ─── Вложения ───────────────────────────────────────────────────────
-def _attach_photos(page, image_paths: list[str], project_id: str,
+# Вставка фото в поле поста через буфер (Ctrl+V) – ГЛАВНЫЙ путь.
+# Кликать «скрепку» на web.telegram нельзя, когда страница прыгает: клик ждёт,
+# пока кнопка «устоится», и падает по таймауту (прогон 21.08.2026 20:44 –
+# «Не нашли скрепку», хотя меню вложений на экране было). Синтетическое событие
+# paste устойчивости не ждёт: шлём картинку прямо в поле, и Телеграм открывает
+# окно «Send Photo» с подписью – ровно как при Ctrl+V руками (так и просила
+# заказчица). Тот же проверенный приём, что у МАКСа/ОК/ВК.
+_PASTE_JS = r"""
+(args) => {
+  const el = document.querySelector(args.sel);
+  if (!el) return false;
+  el.focus();
+  const bin = atob(args.b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  const file = new File([arr], args.name, {type: args.mime});
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  let ev;
+  try { ev = new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData: dt}); }
+  catch (e) { ev = new Event('paste', {bubbles: true, cancelable: true}); }
+  try { Object.defineProperty(ev, 'clipboardData', {value: dt}); } catch (e) {}
+  el.dispatchEvent(ev);
+  return true;
+}
+"""
+
+
+def _paste_photo(page, field_sel: str, image_paths: list[str],
+                 log: Callable[[str], None]) -> bool:
+    """Вставить фото в поле поста (Ctrl+V). True – событие ушло без ошибок."""
+    import base64
+    import mimetypes
+    if not field_sel:
+        return False
+    sent = False
+    for p in image_paths[:10]:
+        try:
+            b64 = base64.b64encode(Path(p).read_bytes()).decode()
+            mime = mimetypes.guess_type(p)[0] or "image/png"
+            ok = page.evaluate(_PASTE_JS, {"sel": field_sel, "b64": b64,
+                                           "mime": mime, "name": Path(p).name})
+            sent = sent or bool(ok)
+            page.wait_for_timeout(900)
+        except Exception as e:  # noqa: BLE001 – вставка не должна ронять прогон
+            log(f"  вставка фото не удалась: {str(e).splitlines()[0][:70]}")
+    return sent
+
+
+def _send_photo_open(page) -> bool:
+    """
+    Открылось ли окно «Send Photo» (предпросмотр с подписью)?
+
+    После вставки картинки Телеграм показывает окно, экран которого начинается
+    со слов «Send Photo» (прогон 19:11: «начало экрана: Send Photo Отгрузка…»).
+    По ним и по классу окна вложения и узнаём, что фото принялось.
+    """
+    try:
+        body = _body_text(page).lower()
+        if "send photo" in body or "отправить фото" in body:
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    for sel in ('.AttachmentModal', '.AttachmentModal img',
+                '.AttachmentModal .Button.send'):
+        try:
+            if page.locator(sel).first.is_visible():
+                return True
+        except Exception:  # noqa: BLE001
+            continue
+    return False
+
+
+def _attach_photos(page, text_sel: str, image_paths: list[str], project_id: str,
                    log: Callable[[str], None]) -> str:
     """
     Прикрепить фото. '' при успехе, иначе причина.
 
-    Порядок (Web A, telegram-tt):
-      1. открываем меню вложений СТАБИЛЬНОЙ скрепкой (#attach-menu-button);
-      2. отдаём файл скрытому input[type=file] НАПРЯМУЮ – это детерминировано
-         и не зависит от системного окна выбора файла. В Web A инпуты живут в
-         DOM, только когда меню открыто, поэтому сначала меню, потом input
-         (прежний запас искал input при закрытом меню и не находил – прогон
-         21.08.2026 20:22, «Не нашли, куда отдать файлы»);
-      3. запас – клик «Photo or Video» с перехватом окна выбора файла (так
-         бралось на прогоне 19:11).
-    После выбора Телеграм открывает окно предпросмотра с полем подписи и своей
-    кнопкой отправки – её ищем дальше.
+    ГЛАВНЫЙ путь – вставка (Ctrl+V) прямо в поле: не требует кликать
+    «прыгающую» скрепку и открывает то же окно «Send Photo». Запас – скрепка
+    вложений (#attach-menu-button) → скрытый input / окно выбора файла.
     """
-    # 1. Открыть меню вложений.
+    # 1. Вставка картинки в поле (Ctrl+V) – без клика по скрепке.
+    if _paste_photo(page, text_sel, image_paths, log):
+        page.wait_for_timeout(1_500)
+        if _send_photo_open(page):
+            log("  фото вставлено в поле (Ctrl+V) — открылось окно «Send Photo»")
+            _log_screen(page, log, "после вложения фото")
+            return ""
+        log("  вставка не открыла окно отправки — пробую скрепку")
+
+    # 2а. Запас (скрепка): открыть меню вложений.
     hit = _click_first(page, SEL["attach"], timeout=6_000)
     if not hit:
         _save_diag(project_id, page, "no-attach-button", log)
@@ -880,7 +954,7 @@ def _attach_photos(page, image_paths: list[str], project_id: str,
     log(f"  нажал скрепку вложений ({hit})")
     page.wait_for_timeout(900)   # дать меню «Photo or Video / File» раскрыться
 
-    # 2. Отдать файл скрытому input напрямую (сначала тому, что принимает фото).
+    # 2б. Отдать файл скрытому input напрямую (сначала тому, что принимает фото).
     for isel in ('input[type="file"][accept*="image"]',
                  'input[type="file"][accept*="video"]',
                  'input[type="file"]'):
@@ -898,7 +972,7 @@ def _attach_photos(page, image_paths: list[str], project_id: str,
             log(f"  input не принял ({str(e).splitlines()[0][:70]}) – пробую окно выбора")
             break
 
-    # 3. Запас: клик «Photo or Video» и перехват системного окна выбора файла.
+    # 2в. Запас: клик «Photo or Video» и перехват системного окна выбора файла.
     try:
         with page.expect_file_chooser(timeout=6_000) as picked:
             if not _click_first(page, ('text="Photo or Video"', 'text="Фото или видео"',
@@ -1226,6 +1300,27 @@ def _dispatch_contextmenu(page) -> bool:
         return False
 
 
+# Унять «прыжки» страницы web.telegram. Web A постоянно доигрывает анимации и
+# плавно доскраливает ленту, из-за чего кнопки уезжают из-под курсора и клики
+# промахиваются (заказчица: «всё прыгает и скачет, не успеваю»). Вырубаем
+# анимации, переходы и плавную прокрутку — страница перестаёт дёргаться, и
+# правый клик по отправке попадает точнее.
+_CALM_CSS = (
+    "*,*::before,*::after{animation-duration:0s !important;"
+    "animation-delay:0s !important;transition-duration:0s !important;"
+    "transition-delay:0s !important;scroll-behavior:auto !important;}"
+)
+
+
+def _calm_page(page, log: Callable[[str], None]) -> None:
+    """Погасить анимации/плавную прокрутку web.telegram, чтобы не «прыгало»."""
+    try:
+        page.add_style_tag(content=_CALM_CSS)
+        log("  погасил анимации страницы (чтобы не прыгала)")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _dismiss_login_banner(page, log: Callable[[str], None]) -> None:
     """
     Убрать баннер «новый вход», из-за которого страница дёргается.
@@ -1481,8 +1576,9 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                         "shot": _dump(project_id, page, "no-channel", log),
                         "error": _why_no_composer(page)}
 
-            # Баннер «новый вход» трясёт страницу – убираем его сразу, пока он
-            # не начал мешать вводу и правому клику по отправке.
+            # Гасим «прыжки» страницы (анимации/плавную прокрутку) и убираем
+            # баннер «новый вход» — оба трясут страницу и сбивают клики.
+            _calm_page(page, log)
             _dismiss_login_banner(page, log)
 
             log(f"── ШАГ 2/6: ввожу текст ({len(text)} знаков) ──")
@@ -1497,7 +1593,7 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
 
             if image_paths:
                 log(f"── ШАГ 3/6: прикрепляю фото ({len(image_paths)}) ──")
-                why = _attach_photos(page, image_paths, project_id, log)
+                why = _attach_photos(page, text_sel, image_paths, project_id, log)
                 if why:
                     return {"ok": False,
                             "shot": _dump(project_id, page, "no-photo", log),
@@ -1516,8 +1612,10 @@ def schedule_postponed_post(project_id: str, chat_url: str, text: str,
                     "знака в подписи к фото, Premium — 2048. Если отложка не "
                     "встанет — причина здесь: сократите пост или включите Premium")
 
-            # Ещё раз убираем баннер «новый вход»: он мог всплыть заново за
-            # время ввода/вложения и опять затрясти окно «Send Photo».
+            # Ещё раз гасим прыжки и баннер «новый вход»: окно «Send Photo»
+            # только что открылось и может ещё «ехать», а правый клик по кнопке
+            # отправки требует, чтобы она стояла на месте.
+            _calm_page(page, log)
             _dismiss_login_banner(page, log)
 
             # ПРАВОЙ кнопкой: левая отправит пост сейчас же.

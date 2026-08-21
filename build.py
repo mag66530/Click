@@ -18,4 +18,4 @@ build.py – метка сборки Click. Одна на всё приложе�
 меняет поведение модулей или вёрстку.
 """
 
-BUILD = "2026-08-21-ok-no-dup-tg-attach"
+BUILD = "2026-08-21-tg-photo-paste-calm"

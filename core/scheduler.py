@@ -174,22 +174,30 @@ async def process_single_review(
 
         # ── Шаг 3: Негатив → алерт без GPT, по ролям ─────────────────────
         if is_negative:
+            from bot.keyboards import get_negative_alert_keyboard  # локальный импорт
+
             db3 = get_session()
             owners   = _recipients(db3, brand.id, (SubscriberRole.OWNER,))
             managers = _recipients(db3, brand.id, (SubscriberRole.MANAGER,))
             viewers  = _recipients(db3, brand.id, (SubscriberRole.VIEWER,))
             db3.close()
 
+            negative_kb = get_negative_alert_keyboard(url)
+
             # Начальству — коротко и по делу, без простыни текста.
+            # Ссылка вынесена в кнопку — на телефоне тапать удобнее, чем по тексту.
             owner_text = (
                 f"🔴 <b>Негатив: {brand.name}</b> ({review.city})\n"
                 f"{stars} ({rating}/5) · {review.reviewer_name}\n\n"
-                f"«{(review.review_text or '')[:200]}»\n\n"
-                f"🔗 <a href='{url}'>Открыть отзыв</a>"
+                f"«{(review.review_text or '')[:200]}»"
             )
-            await _send_to(bot, owners, owner_text, parse_mode="HTML", disable_web_page_preview=True)
+            await _send_to(
+                bot, owners, owner_text,
+                reply_markup=negative_kb, parse_mode="HTML", disable_web_page_preview=True,
+            )
 
-            # Ответственному — полная карточка (без кнопок: ответ не генерируем автоматически).
+            # Ответственному — полная карточка (без кнопок модерации: ответ не
+            # генерируем автоматически, но кнопка "открыть отзыв" всё равно есть).
             manager_text = (
                 f"🔴 <b>Новый негативный отзыв</b>\n\n"
                 f"Бренд: <b>{brand.name}</b>\n"
@@ -197,10 +205,12 @@ async def process_single_review(
                 f"Оценка: {stars} ({rating}/5)\n"
                 f"Автор: {review.reviewer_name}\n\n"
                 f"<i>{(review.review_text or '')[:400]}</i>\n\n"
-                f"🔗 <a href='{url}'>Открыть отзыв</a>\n\n"
                 f"⚠️ Ответ не генерируется автоматически — при необходимости ответьте вручную."
             )
-            await _send_to(bot, managers, manager_text, parse_mode="HTML", disable_web_page_preview=True)
+            await _send_to(
+                bot, managers, manager_text,
+                reply_markup=negative_kb, parse_mode="HTML", disable_web_page_preview=True,
+            )
 
             # Просто «в курсе» — одна строка, без текста отзыва.
             viewer_text = f"📩 Новый отзыв: <b>{brand.name}</b>, {review.city} — {stars} (негатив)"

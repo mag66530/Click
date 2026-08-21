@@ -62,6 +62,19 @@ def get_brand_list_keyboard(brands: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def get_negative_alert_keyboard(review_url: str) -> InlineKeyboardMarkup | None:
+    """
+    Кнопка под алертом о негативе — только открыть отзыв/город на площадке.
+    Без "Одобрить"/"Редактировать": ответ на негатив не генерируется,
+    решение отвечать или нет — за человеком.
+    """
+    if not review_url:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🌐 Открыть отзыв", url=review_url)],
+    ])
+
+
 def get_cancel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")]

@@ -1,0 +1,36 @@
+# systemd-юнит для бота отзывов на Oracle Cloud Always Free (или любом Ubuntu-сервере).
+#
+# Установка:
+#   sudo cp deploy/review_bot.service /etc/systemd/system/review_bot.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable review_bot     # автозапуск при старте сервера
+#   sudo systemctl start review_bot
+#
+# Проверить, что живой:
+#   sudo systemctl status review_bot
+#   journalctl -u review_bot -f          # логи в реальном времени
+#
+# ВАЖНО: поправьте пути ниже (WorkingDirectory, ExecStart, User) под то,
+# куда реально склонирован репозиторий и под каким пользователем работаете.
+
+[Unit]
+Description=Telegram-бот отзывов (review_bot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Click
+ExecStart=/home/ubuntu/Click/venv/bin/python -m bot.main
+Restart=always
+RestartSec=10
+
+# Если бот упадёт больше 5 раз за 60 секунд — считаем что что-то системно
+# сломано, а не временная сетевая ошибка, и останавливаемся, чтобы не
+# заспамить логи/API бесконечными рестартами.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target
